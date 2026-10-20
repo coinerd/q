@@ -9,14 +9,16 @@
          "../../extensions/gsd/review-proof.rkt"
          "../../extensions/gsd/evidence-probe.rkt"
          "../../extensions/gsd/evidence-repair-format.rkt"
-         "../../extensions/gsd/review-audit-format.rkt")
+         "../../extensions/gsd/review-audit-format.rkt"
+         "../../extensions/gsd/review-audit-promotion.rkt")
 (provide validate-owned-audit
          validate-owned-authority
          baseline-probe-red-facts)
 ;; Called only after engine validation; all facts come from addressed bytes.
 (define (baseline-probe-red-facts bundle ref manifest)
   (define (load ref)
-    (call-with-input-file (build-path bundle (string-append (hash-ref ref 'sha256) ".json")) read-json))
+    (call-with-input-file (build-path bundle (string-append (hash-ref ref 'sha256) ".json"))
+                          read-json))
   (define spec (load (hash-ref manifest 'spec)))
   (define baseline (car (hash-ref manifest 'results)))
   (define result (load (hash-ref baseline 'structured)))
@@ -24,23 +26,40 @@
   (define failed
     (for/first ([c (in-list (hash-ref result 'cases))]
                 #:when (and (equal? (hash-ref c 'test-case-name) (hash-ref target 'test-case-name))
-                            (equal? (hash-ref c 'suite-path) (hash-ref target 'suite-path)))) c))
+                            (equal? (hash-ref c 'suite-path) (hash-ref target 'suite-path))))
+      c))
   (define paths (hash-ref manifest 'execution-paths))
-  (hasheq 'kind "baseline-probe" 'reference ref
-          'command (string-join
-                    (list (hash-ref paths 'racket) (hash-ref paths 'runner)
-                          (path->string (build-path (hash-ref paths 'work-root) "baseline"
-                                                    (car (hash-ref spec 'test-paths))))) " ")
-          'adapter-argv (list (hash-ref paths 'racket) (hash-ref paths 'runner)
-                              (path->string (build-path (hash-ref paths 'work-root) "baseline"
-                                                        (car (hash-ref spec 'test-paths)))))
-          'focused-selection (hash-ref spec 'test-paths)
-          'failure-summary (canonical-evidence-json failed)
-          'owner-job-id (hash-ref (hash-ref baseline 'job) 'id)
-          'origin "posthoc-reproduction" 'relation "baseline-with-test-overlay-v1"))
+  (hasheq 'kind
+          "baseline-probe"
+          'reference
+          ref
+          'command
+          (string-join (list (hash-ref paths 'racket)
+                             (hash-ref paths 'runner)
+                             (path->string (build-path (hash-ref paths 'work-root)
+                                                       "baseline"
+                                                       (car (hash-ref spec 'test-paths)))))
+                       " ")
+          'adapter-argv
+          (list (hash-ref paths 'racket)
+                (hash-ref paths 'runner)
+                (path->string (build-path (hash-ref paths 'work-root)
+                                          "baseline"
+                                          (car (hash-ref spec 'test-paths)))))
+          'focused-selection
+          (hash-ref spec 'test-paths)
+          'failure-summary
+          (canonical-evidence-json failed)
+          'owner-job-id
+          (hash-ref (hash-ref baseline 'job) 'id)
+          'origin
+          "posthoc-reproduction"
+          'relation
+          "baseline-with-test-overlay-v1"))
 (define (validate-owned-authority root authority #:source-repo [source-repo root])
   (unless (and (hash? authority) (equal? (hash-ref authority 'mode #f) owned-audit-mode))
     (error 'owned-audit "unknown-proof-authority"))
+  (audit-promotion-sha256 authority)
   (define relative (hash-ref authority 'bundle #f))
   (define ref (hash-ref authority 'reference #f))
   (unless (and (valid-owned-proof-reference? ref)
@@ -78,58 +97,75 @@
                 [probe-root (build-path bundle-root "probes" (hash-ref probe 'sha256))]
                 [loaded (validate-exported-baseline-probe! source-repo probe-root probe context)]
                 [spec (call-with-input-file
-                       (build-path probe-root (string-append (hash-ref (hash-ref loaded 'spec) 'sha256) ".json"))
+                       (build-path probe-root
+                                   (string-append (hash-ref (hash-ref loaded 'spec) 'sha256) ".json"))
                        read-json)])
-           (unless (and (equal? (hash-ref registration 'schema #f) "evidence-registration/v1")
-                        (equal? (hash-ref registration 'sha256 #f) (canonical-evidence-digest registration))
-                        (equal? (hash-ref authority 'evidence-registration-sha256 #f) (hash-ref registration 'sha256))
-                        (equal? context (hash-ref registration 'context))
-                        (equal? (hash-ref context 'receipt-sha256) (canonical-evidence-digest receipt))
-                        (equal? (hash-ref context 'green-proof-sha256) (hash-ref ref 'sha256))
-                        (equal? (hash-ref registration 'retained-green) (hash-ref ref 'sha256))
-                        (equal? (hash-ref context 'snapshot-sha256) (hash-ref (hash-ref ref 'binding) 'snapshot-sha256))
-                        (equal? (hash-ref context 'receipt-generation) (hash-ref authority 'generation))
-                        (equal? (hash-ref registration 'operation-id) (hash-ref loaded 'operation-id))
-                        (equal? (hash-ref loaded 'spec-sha256 (lambda () (hash-ref (hash-ref loaded 'spec) 'sha256)))
-                                (canonical-evidence-digest spec))
-                        (member (hash-ref spec 'focused-normalized-command)
-                                (map string-trim (string-split (hash-ref authority 'normalized-command) "&&")))
-                        (equal? (hash-ref registration 'previous-revision) 0)
-                        (equal? (hash-ref registration 'prior-registration-sha256) 'null)
-                        (equal? (hash-ref authority 'evidence-revision) (hash-ref registration 'revision))
-                        (equal? (hash-ref registration 'revision) 1)
-                        (for/and ([key '(plan-id wave head tree branch attempt-id attempt-fence)])
-                          (equal? (hash-ref context key) (hash-ref (hash-ref authority 'expected) key)))
-                        (equal? red (baseline-probe-red-facts probe-root probe loaded)))
+           (unless (and
+                    (equal? (hash-ref registration 'schema #f) "evidence-registration/v1")
+                    (equal? (hash-ref registration 'sha256 #f)
+                            (canonical-evidence-digest registration))
+                    (equal? (hash-ref authority 'evidence-registration-sha256 #f)
+                            (hash-ref registration 'sha256))
+                    (equal? context (hash-ref registration 'context))
+                    (equal? (hash-ref context 'receipt-sha256) (canonical-evidence-digest receipt))
+                    (equal? (hash-ref context 'green-proof-sha256) (hash-ref ref 'sha256))
+                    (equal? (hash-ref registration 'retained-green) (hash-ref ref 'sha256))
+                    (equal? (hash-ref context 'snapshot-sha256)
+                            (hash-ref (hash-ref ref 'binding) 'snapshot-sha256))
+                    (equal? (hash-ref context 'receipt-generation) (hash-ref authority 'generation))
+                    (equal? (hash-ref registration 'operation-id) (hash-ref loaded 'operation-id))
+                    (equal? (hash-ref loaded
+                                      'spec-sha256
+                                      (lambda () (hash-ref (hash-ref loaded 'spec) 'sha256)))
+                            (canonical-evidence-digest spec))
+                    (member (hash-ref spec 'focused-normalized-command)
+                            (map string-trim
+                                 (string-split (hash-ref manifest
+                                                         'effective-normalized-command
+                                                         (lambda ()
+                                                           (hash-ref authority 'normalized-command)))
+                                               "&&")))
+                    (equal? (hash-ref registration 'previous-revision) 0)
+                    (equal? (hash-ref registration 'prior-registration-sha256) 'null)
+                    (equal? (hash-ref authority 'evidence-revision) (hash-ref registration 'revision))
+                    (equal? (hash-ref registration 'revision) 1)
+                    (for/and ([key '(plan-id wave head tree branch attempt-id attempt-fence)])
+                      (equal? (hash-ref context key) (hash-ref (hash-ref authority 'expected) key)))
+                    (equal? red (baseline-probe-red-facts probe-root probe loaded)))
              (error 'owned-audit "baseline-probe-authority-mismatch"))
            loaded)
-     (let* ([red-ref (hash-ref red 'reference #f)]
-            [loaded (begin
-                      (unless (valid-owned-red-reference? red-ref)
-                        (error 'owned-audit "invalid-owned-red-reference"))
-                      (load-owned-red-proof bundle-root
-                                            red-ref
-                                            (hash-ref red-ref 'binding)
-                                            #:command (hash-ref red 'command #f)
-                                            #:focused-normalized
-                                            (hash-ref red 'focused-normalized-command #f)))]
-            [origin (hash-ref loaded 'red-origin)]
-            [expected-relation (if (equal? origin "preimplementation")
-                                   "preimplementation-ancestor"
-                                   "reproduction-ancestor")])
-       (unless (red-links-green-proof? loaded manifest)
-         (error 'owned-audit "red-proof-not-linked-to-green-execution"))
-       (unless (equal? (hash-ref red 'relation #f) expected-relation)
-         (error 'owned-audit "dishonest-red-origin-relation"))
-       (unless (and (equal? (hash-ref red 'red-head #f) (hash-ref (hash-ref loaded 'binding) 'head))
+         (let* ([red-ref (hash-ref red 'reference #f)]
+                [loaded (begin
+                          (unless (valid-owned-red-reference? red-ref)
+                            (error 'owned-audit "invalid-owned-red-reference"))
+                          (load-owned-red-proof bundle-root
+                                                red-ref
+                                                (hash-ref red-ref 'binding)
+                                                #:command (hash-ref red 'command #f)
+                                                #:focused-normalized
+                                                (hash-ref red 'focused-normalized-command #f)))]
+                [origin (hash-ref loaded 'red-origin)]
+                [expected-relation (if (equal? origin "preimplementation")
+                                       "preimplementation-ancestor"
+                                       "reproduction-ancestor")])
+           (unless (red-links-green-proof? loaded manifest)
+             (error 'owned-audit "red-proof-not-linked-to-green-execution"))
+           (unless (equal? (hash-ref red 'relation #f) expected-relation)
+             (error 'owned-audit "dishonest-red-origin-relation"))
+           (unless (and
+                    (equal? (hash-ref red 'red-head #f) (hash-ref (hash-ref loaded 'binding) 'head))
                     (equal? (hash-ref red 'red-tree #f) (hash-ref (hash-ref loaded 'binding) 'tree))
                     (equal? (hash-ref red 'failure-summary #f)
                             (owned-red-failure-summary bundle-root loaded))
                     (equal? (hash-ref red 'command #f) (hash-ref loaded 'command)))
-         (error 'owned-audit "authority-red-facts-do-not-match-retained-red"))
-       loaded))))
+             (error 'owned-audit "authority-red-facts-do-not-match-retained-red"))
+           loaded))))
   (hasheq 'green-gates gates 'red-manifest (or red-manifest #f) 'red-facts (and (hash? red) red)))
-(define (validate-owned-audit root evidence review validation authority
+(define (validate-owned-audit root
+                              evidence
+                              review
+                              validation
+                              authority
                               #:source-repo [source-repo root])
   (with-handlers ([exn:fail? (lambda (e) (list (exn-message e)))])
     (define audited (validate-owned-authority root authority #:source-repo source-repo))
@@ -139,6 +175,9 @@
     (define binding (hash-ref authority 'audit-binding #f))
     (unless (hash? binding)
       (error 'owned-audit "missing-audit-binding"))
+    (unless (equal? (hash-ref binding 'supplemental-promotion-sha256 #f)
+                    (audit-promotion-sha256 authority))
+      (error 'owned-audit "stale-supplemental-promotion-binding"))
     (define expected (hash-ref authority 'expected))
     (unless (and (equal? (hash-ref binding 'evidence-revision 0)
                          (hash-ref authority 'evidence-revision 0))
@@ -192,23 +231,28 @@
         (error 'owned-audit "model-authored-or-mismatched-owned-gate-facts")))
     (cond
       [red-manifest
-       (unless (equal? (hash-ref validation 'red-first #f)
-                       ((lambda (facts)
-                          (if (equal? (hash-ref red-facts 'relation) "baseline-with-test-overlay-v1")
-                              (hash-set* facts 'origin (hash-ref red-facts 'origin)
-                                         'relation (hash-ref red-facts 'relation))
-                              facts)) (hasheq 'command
-                               (hash-ref red-facts 'command)
-                               'failure
-                               (hash-ref red-facts 'failure-summary)
-                               'result
-                               "passed"
-                               'verification-origin
-                               "audited-owned"
-                               'owner-job-id
-                               (if (equal? (hash-ref red-facts 'relation) "baseline-with-test-overlay-v1")
-                                   (hash-ref (hash-ref (car (hash-ref red-manifest 'results)) 'job) 'id)
-                                   (hash-ref (hash-ref red-manifest 'job) 'id)))))
+       (unless (equal?
+                (hash-ref validation 'red-first #f)
+                ((lambda (facts)
+                   (if (equal? (hash-ref red-facts 'relation) "baseline-with-test-overlay-v1")
+                       (hash-set* facts
+                                  'origin
+                                  (hash-ref red-facts 'origin)
+                                  'relation
+                                  (hash-ref red-facts 'relation))
+                       facts))
+                 (hasheq 'command
+                         (hash-ref red-facts 'command)
+                         'failure
+                         (hash-ref red-facts 'failure-summary)
+                         'result
+                         "passed"
+                         'verification-origin
+                         "audited-owned"
+                         'owner-job-id
+                         (if (equal? (hash-ref red-facts 'relation) "baseline-with-test-overlay-v1")
+                             (hash-ref (hash-ref (car (hash-ref red-manifest 'results)) 'job) 'id)
+                             (hash-ref (hash-ref red-manifest 'job) 'id)))))
          (error 'owned-audit "model-authored-or-mismatched-owned-red-facts"))]
       [else
        ;; Green capture has no meaningful-RED authority: no terminal
@@ -226,7 +270,9 @@
   (unless (or (= 2 (length args))
               (and (= 4 (length args)) (equal? (third args) "--owned-source-repo")))
     (error 'owned-audit "expected <authority.json> <bundle-root> [--owned-source-repo <repo>]"))
-  (write-json (validate-owned-authority
-               (second args) (call-with-input-file (first args) read-json)
-               #:source-repo (if (= 4 (length args)) (fourth args) (second args))))
+  (write-json (validate-owned-authority (second args)
+                                        (call-with-input-file (first args) read-json)
+                                        #:source-repo (if (= 4 (length args))
+                                                          (fourth args)
+                                                          (second args))))
   (newline))

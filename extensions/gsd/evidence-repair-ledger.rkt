@@ -207,62 +207,63 @@
     (error 'ledger "an opaque promoted capability is required"))
   (unless (verify-promoted-registration-capability! capability c probe id)
     (error 'ledger "the promotion capability does not bind this context/probe/operation"))
-  (locked base
-          (hash-ref c 'plan-id)
-          (hash-ref c 'wave)
-          #:generation (hash-ref c 'receipt-generation 0)
-          (lambda (d s)
-            (define old (hash-ref s 'operation))
-            (cond
-              [(not old)
-               (define op
-                 (hasheq 'id
-                         "repair-1"
-                         'context
-                         c
-                         'spec
-                         (hash-ref probe 'sha256)
-                         'state
-                         "captured"
-                         'limits
-                         limits
-                         'reserved-jobs
-                         2
-                         'no-progress
-                         "promoted-supplemental-evidence"
-                         'probe
-                         probe
-                         'promoted
-                         (hasheq 'promotion
-                                 (promoted-registration-promotion capability)
-                                 'generation
-                                 (hash-ref c 'receipt-generation))))
-               (save! d (hash-set s 'operation op))
-               op]
-              [else
-               (unless (and (equal? (hash-ref old 'id #f) "repair-1")
-                            (equal? (hash-ref old 'context #f) c))
-                 (error 'ledger "a different operation owns this generation"))
-               (define state (hash-ref old 'state #f))
-               (cond
-                 [(equal? state "captured")
-                  ;; recovery replay: identical captured record required
-                  (unless (and (equal? (hash-ref old 'probe #f) probe)
-                               (equal? (hash-ref old 'promoted #f)
-                                       (hasheq 'promotion
-                                               (promoted-registration-promotion capability)
-                                               'generation
-                                               (hash-ref c 'receipt-generation))))
-                    (error 'ledger "conflicting promoted captured record"))
-                  old]
-                 [(equal? state "registered")
-                  ;; crash after registration: recovery reads the identical
-                  ;; existing registration instead of appending twice
-                  old]
-                 [else
-                  (error 'ledger
-                         (format "ambiguous promoted operation state ~a; refusing adoption"
-                                 state))])]))))
+  (locked
+   base
+   (hash-ref c 'plan-id)
+   (hash-ref c 'wave)
+   #:generation (hash-ref c 'receipt-generation 0)
+   (lambda (d s)
+     (define old (hash-ref s 'operation))
+     (cond
+       ;; A fresh ledger carries the JSON 'null operation (truthy in
+       ;; Racket): "no operation yet" is ANY non-hash, matching the
+       ;; reserve-evidence-repair! and load-evidence-repair idiom.
+       [(not (hash? old))
+        (define op
+          (hasheq 'id
+                  "repair-1"
+                  'context
+                  c
+                  'spec
+                  (hash-ref probe 'sha256)
+                  'state
+                  "captured"
+                  'limits
+                  limits
+                  'reserved-jobs
+                  2
+                  'no-progress
+                  "promoted-supplemental-evidence"
+                  'probe
+                  probe
+                  'promoted
+                  (hasheq 'promotion
+                          (promoted-registration-promotion capability)
+                          'generation
+                          (hash-ref c 'receipt-generation))))
+        (save! d (hash-set s 'operation op))
+        op]
+       [else
+        (unless (and (equal? (hash-ref old 'id #f) "repair-1") (equal? (hash-ref old 'context #f) c))
+          (error 'ledger "a different operation owns this generation"))
+        (define state (hash-ref old 'state #f))
+        (cond
+          [(equal? state "captured")
+           ;; recovery replay: identical captured record required
+           (unless (and (equal? (hash-ref old 'probe #f) probe)
+                        (equal? (hash-ref old 'promoted #f)
+                                (hasheq 'promotion
+                                        (promoted-registration-promotion capability)
+                                        'generation
+                                        (hash-ref c 'receipt-generation))))
+             (error 'ledger "conflicting promoted captured record"))
+           old]
+          ;; crash after registration: recovery reads the identical
+          ;; existing registration instead of appending twice
+          [(equal? state "registered") old]
+          [else
+           (error 'ledger
+                  (format "ambiguous promoted operation state ~a; refusing adoption" state))])]))))
 ;; validate : opaque-token context probe-ref operation-id -> boolean
 ;; This factory is a trusted composition port, not a model-facing API.
 (define (make-evidence-registrar validate)
@@ -349,11 +350,7 @@
         ;; consumption. Every ordinary registrar check stays identical.
         (make-evidence-registrar
          (lambda (_token context probe operation)
-           (consume-promoted-registration-capability!
-            promoted-capability
-            context
-            probe
-            operation)))
+           (consume-promoted-registration-capability! promoted-capability context probe operation)))
         (hash-ref! registrars
                    base
                    (lambda ()

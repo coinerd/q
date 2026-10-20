@@ -4,8 +4,9 @@
 ;; tool (BUG-0088 A2/C1 interface).
 ;;
 ;; TRUST BOUNDARY: this is the OPERATOR's tool, not a model/agent surface.
-;; It retains inert proposals in a private authority root (--authority-root,
-;; absolute, mode 0700, outside project/control source), reads public
+;; It retains inert proposals in the shared trusted-user default store
+;; (~/.q/agent/supplemental-evidence), or an explicit embedding --authority-root
+;; (absolute, mode 0700, outside project/control source), reads public
 ;; campaign state, and routes EVERY authorization through the existing
 ;; interactive approval broker (the trusted frontend). With no active
 ;; interactive channel it refuses honestly and exits 2 — there is no TTY,
@@ -54,7 +55,11 @@
 (define (emit value)
   (displayln (canonical-evidence-json value)))
 (define (need args key)
-  (hash-ref args key (lambda () (refuse! (format "missing required --~a" key)))))
+  (hash-ref args
+            (if (string? key)
+                (string->symbol key)
+                key)
+            (lambda () (refuse! (format "missing required --~a" key)))))
 (define (sha-arg args key)
   (define v (need args key))
   (unless (and (string? v) (= 64 (string-length v)) (regexp-match? #px"^[0-9a-f]+$" v))
@@ -69,8 +74,9 @@
 (define (absolute-dir! key)
   (simplify-path (string->path (need args key)) #f))
 
-;; Common arguments. The authority root MUST be an absolute private directory
-;; provided by the operator; nothing is ever discovered from cwd or $HOME.
+;; Common arguments. The default is shared with the trusted-user /go process.
+;; An explicit override is for embeddings/tests that bind the runtime likewise;
+;; it is never discovered from project settings or a campaign pointer.
 (define args (make-hasheq))
 (command-line
  #:program "gsd-evidence-replan"
@@ -96,11 +102,13 @@
  [("--stage") s "task|candidate|supersession (authorize)" (hash-set! args 'stage s)])
 
 (define (authority-root!)
-  (define raw (need args 'authority-root))
-  (unless (and (string? raw) (complete-path? (string->path raw)))
+  (define raw (hash-ref args 'authority-root (lambda () (current-supplemental-authority-root))))
+  (unless (and (path-string? raw) (complete-path? raw))
     (refuse! "--authority-root must be an absolute path"))
+  (when (and (not (hash-has-key? args 'authority-root)) (equal? (need args 'verb) "propose"))
+    (initialize-supplemental-authority-root!))
   (unless (directory-exists? raw)
-    (refuse! "--authority-root must exist; create it with mode 0700 outside project source"))
+    (refuse! "authority root must exist; propose provisions the default private store"))
   (unless (= #o700 (bitwise-and #o7777 (file-or-directory-permissions raw 'bits)))
     (refuse! "--authority-root must have mode 0700"))
   (simplify-path raw #f))

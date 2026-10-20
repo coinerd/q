@@ -53,7 +53,10 @@ startup variables, use an empty private HOME/config directory, and disable the
 execution plane. This is not an OS filesystem sandbox: `read` and `bash` still
 have the initiating account's filesystem permissions. Deployment requiring
 protection against a hostile reviewer reading absolute credential paths needs
-an external restricted filesystem/process boundary.
+an external restricted filesystem/process boundary. The reviewer's `bash` tool
+is a compatibility name for bounded direct-argv read-only commands, not an
+unrestricted shell (`review-tools.rkt`). It cannot run the owner authorization
+CLI or use policy auto-approval to mint supplemental authority.
 
 ### Bounded missing-evidence recovery
 
@@ -84,6 +87,147 @@ fail closed. No approval, operator authorization, source receipt replacement or
 publication permission is created by this recovery. The production reviewer
 remains exact GLM-5.3 with the unchanged 600-second cap. Local deterministic tests
 are not live model acceptance or live GitHub delivery evidence.
+
+### Governed supplemental evidence replan (BUG-0088)
+
+An exhausted automatic evidence-author allowance remains permanently spent.
+`evidence-author-allowance-exhausted` is an honest blocked state, not permission
+to retry. `/replan` changes planning mode only; a new task ID, receipt rotation,
+crash, revocation or failure does not automatically reset an allowance or issue
+a replacement grant. Supplemental recovery is a separate operator-governed,
+one-shot test-evidence task on the retained campaign checkout, not another
+implementation dispatch or a new campaign carrying old proofs forward.
+
+The governance contract separates these immutable records and decisions:
+
+- **T / task grant A:** exact source, campaign, snapshot, predecessor receipt and
+  generation, baseline/tree, control-plane identity, two model-write paths
+  (probe/helper), enumerated owner-generated paths, deadlines and bounds. An
+  authentic operator grant binds the exact retained T proposal digest.
+- **K / candidate approval:** actual committed descendant chain/tree and exact
+  blob/mode/hash manifest. Every intervening commit must stay in scope, including
+  changes later reverted. Approval of K permits verification, not delivery.
+- **C0 / C1, G1 / R1:** historical frozen Verify C0 stays unchanged. Effective C1
+  retains exactly the five approved stages, appending only the approved probe
+  to the focused positional list; original focused paths remain an ordered
+  prefix and all other normalized stages are unchanged. No sixth stage,
+  removed check or shell/flag substitution is allowed. A fresh complete owned
+  C1 GREEN G1 is mandatory; the old C0 GREEN cannot certify changed tests.
+  The versioned supplemental proof (`schema 2`,
+  `supplemental-declared-verify-green/v1`) binds the effective contract and
+  approvals; legacy readers must refuse it, not discard authority fields.
+- **S / supersession authorization:** exact predecessor receipt/generation,
+  K/G1/R1, proposed successor receipt and publication identity. This is a third
+  exact-digest operator decision, before publication/certification.
+- **P / promotion:** protected-owner attestation linking S and captured G1/R1
+  to the exact certified receipt/context/generation and registration operation.
+  Public P is an audit descriptor, not a capability or approval secret.
+
+G1 produces the exact proposed receipt r* before probing. A distinct staged
+wrapper predicts its successor evidence context E; neither is current evidence
+for the old receipt. Identical committed probe/helper bytes overlay the real
+ancestor baseline, never candidate production code. R1 must retain a genuine
+named assertion RED there and the same assertion GREEN on K. Compilation,
+setup errors, timeouts and unrelated failures are not RED. Helper discovery
+requires exact authorized literal paths and committed regular blobs, without
+executing readers during discovery; the strict probe grammar remains unchanged.
+Certification preserves r* exactly, including captured timestamp/proof reference.
+
+Protected publication uses intent/readback and guarded receipt supersession,
+preserving historical receipts/proofs/publications, the original completed
+author marker and cumulative accounting. Promotion requires actual current
+context to equal predicted E, then issues a fresh opaque single-consumption
+registration capability from protected owner origin. It admits the captured
+operation in the actual generation and registers exactly once. Receipt-certified,
+registration-pending recovery replays that same attested operation without any
+model/probe relaunch or rewritten R1. A digest, public P or caller-supplied guard
+alone is not authority. Offline audit requires an authenticated controller/owner
+anchor for the full P → S → K/G1/R1 → receipt/E chain. The required fresh review
+request and ACK must pin that chain, effective contract and registration revision;
+this is an acceptance requirement, not a claim that all consumers are accepted.
+
+The protected journal consumes launch permission **before** the single test-author
+dispatch, using a fresh monotonic owner attempt/fence allocation. Ambiguous launch
+stays spent. Shared owner locking, revision/CAS and write-ahead intents serialize
+admission, revocation and recovery. Revalidate exact source/clean checkout,
+ancestry, receipt/generation, approvals/revocation, deadlines, cancellation and
+fences at protected boundaries and after waits. Owned jobs must be confirmed
+quiescent before releasing admission. No automatic regrant, phase redispatch,
+accounting reset or unknown-cost-as-zero shortcut is permitted.
+
+#### Operator runtime and trusted TUI handoff
+
+Authority lives outside project/execution/control repositories in the trusted-user
+`~/.q/agent/supplemental-evidence` store. Owner tooling and `/go` share that fixed
+default; project JSON, XDG lookup and public campaign pointers cannot select or
+create authority. Only the owner frontend provisions validated missing directory
+components; `/go` does not create a store. Explicit embedding overrides must bind
+both processes to the same trusted absolute store; explicit `#f` denies. The root
+must be mode 0700, records mode 0600, without symlink indirection. These checks are
+trusted-process protocol controls, **not isolation from arbitrary same-uid code**.
+The launcher must supply trusted HOME, owner-process/tool separation and any
+external sandbox required by its threat model. Modes and hashes alone do not
+prove operator identity.
+
+`scripts/gsd-evidence-replan.rkt` actually parses `--verb` with values
+`propose|authorize|inspect|status|revoke`, not positional subcommands. Authorization
+uses `--verb authorize --stage task|candidate|supersession`; campaign operations
+also take `--campaign-root`, `--plan` and `--wave`. `propose` additionally requires
+`--repo`, `--test-path`, `--harness-path`, `--owner-paths`, `--baseline-head` and
+`--baseline-tree`; the authenticated receipt context supplies the execution
+checkout, not an arbitrary replacement `--repo`. `inspect` uses `--kind` and
+`--sha256`. Proposal retention and inspection grant nothing.
+
+A standalone invocation still has no active in-process interactive approval
+channel: `authorize`/`revoke` refuse with exit 2. Stdin, TTY consent, booleans,
+project files and policy/batch auto-approval are not grant paths.
+
+The trusted q TUI now supplies the owner handoff (fixture-tested, not installed
+or live-authorized). Start q in the same campaign-root project directory used by
+CLI `--verb propose`, with the same trusted-user authority store. In its keyboard
+command input use:
+
+```text
+/evidence-replan inspect task-proposal TASK-SHA256
+/evidence-replan authorize-task PLAN WAVE TASK-SHA256
+/evidence-replan revoke KIND APPROVAL-SHA256
+```
+
+`inspect` prints the full retained canonical record and digest in the transcript.
+`authorize-task` requires the exact existing campaign pointer and obtains an opaque
+broker grant only after human selection in the genuine approval overlay. It pins
+the validated task approval but launches nothing. Then invoke `/go` separately:
+its governed controller inherits the UI publisher and requests exact retained K
+and S approvals through the same digest-correlated reducer and keyboard handler.
+To inspect either record first, deny the prompt, run the displayed `inspect`
+command, then invoke `/go` again. Denial never grants authority. Each prompt
+identifies the stage and full digest; no bounded preview substitutes for inspection.
+The owner command is intercepted only on the keyboard-user path, not registered
+as a model tool or extension hook. Shared command dispatch reserves its name but
+cannot invoke it. Missing UI bus/channel fails closed.
+
+For revocation, `KIND` is `task-approval`, `candidate-approval` or
+`supersession-approval`, and `APPROVAL-SHA256` identifies the exact live private
+approval (not the proposal). Wait for session quiescence, inspect that approval,
+then use the keyboard `revoke` command. It retains an inert one-target revocation
+proposal and presents its exact digest through the same genuine approval overlay.
+Deny to inspect the displayed `revocation-proposal` bytes; repeat the same revoke
+command to request again. Only an explicit exact-digest broker grant consumed by
+protected `revoke!` installs durable revocation. Denial, cancellation and wrong
+digests do not revoke. Success reports the revocation record digest and launches
+nothing: subsequent validation, admission and recovery refuse revoked authority,
+without redispatch or resetting the spent allowance. Standalone CLI revoke still
+refuses without an active same-process interactive channel; there is no batch,
+TTY or policy approval substitute.
+
+Engineering fixtures with real broker grants do not establish live authorization,
+installation or `/go` resumption. Until independent frontend acceptance, complete
+review/audit binding, final-head gates and protected installation are accepted, recovery remains
+blocked. Live T, K and S decisions are still separately required. Only actual
+registered readiness `ready` followed by production `/go` reaching a fresh
+independent reviewer with zero author redispatch resolves the original admission
+blocker. Reviewer rejection/infra remains an honest outcome; approval, F11 and
+protected delivery remain separate gates.
 
 ### Lost author with a committed delta (BUG-0086)
 

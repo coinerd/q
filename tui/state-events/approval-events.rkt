@@ -155,20 +155,38 @@
           lines)))
   (define authoritative-view (hash-ref request 'approval-view (hasheq)))
   (define content
-    (if tool-approval?
-        (list (plain-line "⚡ Tool Approval Required")
-              (plain-line (format "  Tool: ~a" (hash-ref request 'tool-name "")))
-              (plain-line (format "  Arguments: ~a" (hash-ref request 'arguments-preview "")))
-              (plain-line (format "  Arguments digest: ~a" (hash-ref request 'arguments-digest "")))
-              (plain-line "")
-              (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel"))
-        (append (list (plain-line "⚡ Subagent Approval Required")
-                      (plain-line (format "  Capabilities: ~a" caps-str)))
-                (for/list ([line (in-list preview-lines)]
-                           [index (in-naturals)])
-                  (plain-line (format "  ~a: ~a" (if (zero? index) "Task" "    ") line)))
-                (approval-detail-lines authoritative-view)
-                (list (plain-line "") (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel")))))
+    (cond
+      [(equal? approval-kind "supplemental-evidence")
+       (list
+        (plain-line "⚡ Supplemental Evidence — Owner Authorization")
+        (plain-line (format "  Stage: ~a" (hash-ref authoritative-view 'proposal-kind "")))
+        (plain-line (format "  Exact digest: ~a" (hash-ref authoritative-view 'proposal-sha256 "")))
+        (plain-line "  Inspect full retained bytes before deciding:")
+        (plain-line (format "  /evidence-replan inspect ~a ~a"
+                            (hash-ref authoritative-view 'proposal-kind "")
+                            (hash-ref authoritative-view 'proposal-sha256 "")))
+        (plain-line
+         (if (equal? (hash-ref authoritative-view 'proposal-kind "") "revocation-proposal")
+             "  [n] Deny to inspect first; repeat the owner revoke command to request again."
+             "  [n] Deny to inspect first; /go requests the same pending stage again."))
+        (plain-line (if (equal? (hash-ref authoritative-view 'proposal-kind "") "revocation-proposal")
+                        "  [y] Revoke exact approval   [n] Deny   [Esc] Cancel"
+                        "  [y] Authorize exact record   [n] Deny   [Esc] Cancel")))]
+      [tool-approval?
+       (list (plain-line "⚡ Tool Approval Required")
+             (plain-line (format "  Tool: ~a" (hash-ref request 'tool-name "")))
+             (plain-line (format "  Arguments: ~a" (hash-ref request 'arguments-preview "")))
+             (plain-line (format "  Arguments digest: ~a" (hash-ref request 'arguments-digest "")))
+             (plain-line "")
+             (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel"))]
+      [else
+       (append (list (plain-line "⚡ Subagent Approval Required")
+                     (plain-line (format "  Capabilities: ~a" caps-str)))
+               (for/list ([line (in-list preview-lines)]
+                          [index (in-naturals)])
+                 (plain-line (format "  ~a: ~a" (if (zero? index) "Task" "    ") line)))
+               (approval-detail-lines authoritative-view)
+               (list (plain-line "") (plain-line "  [y] Approve   [n] Deny   [Esc] Cancel")))]))
   (overlay-state 'approval-prompt
                  content
                  ""
@@ -308,3 +326,5 @@
 (register-event-reducer! "mas.spawn-approval-terminal" handle-spawn-approval-terminal)
 (register-event-reducer! "tool.approval-requested" handle-tool-approval-requested)
 (register-event-reducer! "tool.approval-terminal" handle-tool-approval-terminal)
+(register-event-reducer! "supplemental-evidence.approval-requested" handle-spawn-approval-requested)
+(register-event-reducer! "supplemental-evidence.approval-terminal" handle-spawn-approval-terminal)

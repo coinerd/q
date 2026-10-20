@@ -35,8 +35,10 @@
          "gsd-gates/owned-audit.rkt"
          "../extensions/gsd/review-proof.rkt"
          "../extensions/gsd/review-audit-format.rkt"
+         "../extensions/gsd/review-audit-promotion.rkt"
          (only-in "../extensions/gsd/delivery-journal.rkt"
                   load-delivery-journal
+                  load-supplemental-promotion-intent
                   reconcile-merged-tip-receipt!))
 (provide read-hash-datum
          read-any-datum
@@ -388,11 +390,13 @@
                    (member code '("legacy-red-ready" "registered-probe-ready")))
               (and (equal? status "repair-required")
                    (member code '("missing-meaningful-red-proof" "unsupported-harness"))))
-    (error 'delivery "evidence-readiness ~a: ~a: ~a"
-           status code (hash-ref readiness 'message "inconsistent readiness")))
+    (error 'delivery
+           "evidence-readiness ~a: ~a: ~a"
+           status
+           code
+           (hash-ref readiness 'message "inconsistent readiness")))
   (define legacy? (and (equal? status "ready") (equal? code "legacy-red-ready")))
-  (define registered?
-    (and (equal? status "ready") (equal? code "registered-probe-ready")))
+  (define registered? (and (equal? status "ready") (equal? code "registered-probe-ready")))
   (define ref (hash-ref receipt 'owned-proof))
   (define frozen (frozen-verify-binding base plan wave))
   (define normalized (hash-ref frozen 'normalized-command))
@@ -400,7 +404,7 @@
   ;; This manifest has already been authenticated against the owner receipt.
   (define manifest (call-with-input-file (build-path root (hash-ref ref 'path)) read-json))
   (define command
-    (expand-frozen-command normalized
+    (expand-frozen-command (hash-ref manifest 'effective-normalized-command normalized)
                            (hash-ref manifest 'execution-base)
                            (hash-ref manifest 'execution-cwd)
                            (hash-ref manifest 'execution-worktree)
@@ -459,46 +463,70 @@
     (define probe (hash-ref (hash-ref readiness 'registration) 'probe))
     (define destination (build-path staging relative "probes" (hash-ref probe 'sha256)))
     (export-baseline-probe! (hash-ref context 'repo) probe context destination)
-    (define loaded (validate-exported-baseline-probe! (hash-ref context 'repo) destination probe context))
+    (define loaded
+      (validate-exported-baseline-probe! (hash-ref context 'repo) destination probe context))
     (set! red-facts (baseline-probe-red-facts destination probe loaded)))
-  (define authority (hasheq 'mode
-          owned-audit-mode
-          'reference
-          ref
-          'expected
-          (hash-ref ref 'binding)
-          'command
-          command
-          'normalized-command
-          normalized
-          'bundle
-          relative
-          'generation
-          (length (hash-ref journal 'receipt-history '()))
-          'receipt
-          receipt
-          'log-reference
-          (hash-ref manifest 'log)
-          'red
-          red-facts
-          'green-gates
-          (owned-green-gates manifest)))
+  (define authority
+    (hasheq 'mode
+            owned-audit-mode
+            'reference
+            ref
+            'expected
+            (hash-ref ref 'binding)
+            'command
+            command
+            'normalized-command
+            normalized
+            'bundle
+            relative
+            'generation
+            (length (hash-ref journal 'receipt-history '()))
+            'receipt
+            receipt
+            'log-reference
+            (hash-ref manifest 'log)
+            'red
+            red-facts
+            'green-gates
+            (owned-green-gates manifest)))
   (define enriched
     (if registered?
         (hash-set* authority
-                   'evidence-context (hash-ref readiness 'context)
-                   'evidence-registration (hash-ref readiness 'registration)
-                   'evidence-revision (hash-ref readiness 'evidence-revision)
-                   'evidence-registration-sha256 (hash-ref (hash-ref readiness 'registration) 'sha256))
+                   'evidence-context
+                   (hash-ref readiness 'context)
+                   'evidence-registration
+                   (hash-ref readiness 'registration)
+                   'evidence-revision
+                   (hash-ref readiness 'evidence-revision)
+                   'evidence-registration-sha256
+                   (hash-ref (hash-ref readiness 'registration) 'sha256))
         (hash-set authority 'evidence-revision 0)))
-  (hash-set enriched 'publication-files
+  ;; Readiness has authenticated the promoted operation against this owner
+  ;; intent. Export its public descriptor, not a bundle-selected authority root.
+  (define pinned
+    (if (hash-has-key? ref 'supplemental-contract)
+        (let* ([intent (load-supplemental-promotion-intent base plan wave)]
+               [p (and intent (hash-ref intent 'promotion #f))])
+          (unless (hash? p)
+            (error 'delivery "missing-supplemental-promotion"))
+          (hash-set* enriched
+                     'supplemental-promotion
+                     p
+                     'supplemental-promotion-sha256
+                     (hash-ref p 'sha256)))
+        enriched))
+  (audit-promotion-sha256 pinned)
+  (hash-set pinned
+            'publication-files
             (sort (for/list ([p (in-directory (build-path staging relative))]
-                            ;; This derived envelope is written by publication,
-                            ;; not an input to its own authority. Including it
-                            ;; makes repeat authentication depend on publication.
-                            #:when (and (file-exists? p)
-                                        (not (equal? p (build-path staging relative "authority.json")))))
-                    (path->string (find-relative-path staging p))) string<?)))
+                             ;; This derived envelope is written by publication,
+                             ;; not an input to its own authority. Including it
+                             ;; makes repeat authentication depend on publication.
+                             #:when
+                             (and (file-exists? p)
+                                  (not (equal? p (build-path staging relative "authority.json")))))
+                    (path->string (find-relative-path staging p)))
+                  string<?)))
 
 (module+ main
   (define args (vector->list (current-command-line-arguments)))

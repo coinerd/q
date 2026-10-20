@@ -2406,6 +2406,15 @@ AUDIT_KEYS = ('plan-id', 'wave', 'generation', 'head', 'tree', 'branch',
 
 def _audit_binding(request):
     binding = {key: request.get(key) for key in AUDIT_KEYS}
+    authority = request.get('owned-authority', {})
+    reference = authority.get('reference', {})
+    promotion = request.get('supplemental-promotion-sha256')
+    expected = authority.get('supplemental-promotion-sha256')
+    if 'supplemental-contract' in reference or promotion is not None or expected is not None:
+        if not (isinstance(promotion, str) and re.fullmatch(r'[0-9a-f]{64}', promotion)
+                and promotion == expected):
+            raise _ReviewInfra('missing or mismatched supplemental promotion binding')
+        binding['supplemental-promotion-sha256'] = promotion
     revision = request.get('evidence-revision', 0)
     if revision:
         binding['evidence-revision'] = revision
@@ -2445,8 +2454,12 @@ def _bind_owned_request(request, campaign_root, plan, wave, staging, manual=Fals
         request['evidence-registration-sha256'] = authority['evidence-registration-sha256']
     else:
         request.pop('evidence-registration-sha256', None)
-    authority['audit-binding'] = _audit_binding(request)
+    if 'supplemental-promotion-sha256' in authority:
+        request['supplemental-promotion-sha256'] = authority['supplemental-promotion-sha256']
+    else:
+        request.pop('supplemental-promotion-sha256', None)
     request['owned-authority'] = authority
+    authority['audit-binding'] = _audit_binding(request)
     request['prompt'] += ('\nPinned audit binding: '
                           + json.dumps(_audit_binding(request), sort_keys=True)
                           + '\nOwned manifest/raw log bundle: ' + str(staging / authority['bundle'])
@@ -2476,7 +2489,9 @@ def _reauthenticate_owned_request(request, campaign_root, plan, wave, staging, m
         raise _ReviewInfra('stale owned receipt/generation before publication')
     if (request.get('evidence-revision', 0) != fresh.get('evidence-revision', 0) or
             request.get('evidence-registration-sha256') !=
-            fresh.get('evidence-registration-sha256')):
+            fresh.get('evidence-registration-sha256') or
+            request.get('supplemental-promotion-sha256') !=
+            fresh.get('supplemental-promotion-sha256')):
         raise _ReviewInfra('evidence registration drifted since prepare')
     fresh['audit-binding'] = _audit_binding(request)
     if fresh != request.get('owned-authority'):
@@ -2721,6 +2736,8 @@ def _recover_rejected_artifact(repo, tip, relative, plan, wave, generation, rece
         request['evidence-revision'] = authority.get('evidence-revision', 0)
         if request['evidence-revision']:
             request['evidence-registration-sha256'] = authority['evidence-registration-sha256']
+        if 'supplemental-promotion-sha256' in authority:
+            request['supplemental-promotion-sha256'] = authority['supplemental-promotion-sha256']
         request['owned-authority'] = authority
         red = authority.get('red')
         require(datum.get('owned-red') ==

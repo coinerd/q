@@ -19,23 +19,19 @@
                   canonical-evidence-digest
                   evidence-context-digest
                   valid-evidence-context?)
-         (only-in "supplemental-evidence-format.rkt"
-                  seal-supplemental-record
-                  valid-supplemental-record?)
+         (only-in "supplemental-evidence-format.rkt" seal-supplemental-record valid-supplemental-record?)
          (only-in "supplemental-evidence-authority.rkt"
                   supplemental-reference?
                   load-supplemental-record
                   validate-supplemental-approval
                   call-with-supplemental-admission)
-         (only-in "supplemental-evidence-journal.rkt" load-supplemental-operation)
+         (only-in "supplemental-evidence-journal.rkt" load-supplemental-operation reconcile-supplemental-operation!)
          (only-in "supplemental-evidence-publication.rkt"
                   load-supplemental-staged-evidence
                   supplemental-staged-evidence
                   supplemental-staged-evidence-record
                   supplemental-staged-probe-transition!)
-         (only-in "delivery-journal.rkt"
-                  load-supplemental-promotion-intent
-                  record-supplemental-promotion-intent!)
+         (only-in "delivery-journal.rkt" load-supplemental-promotion-intent record-supplemental-promotion-intent!)
          (only-in "review-proof.rkt" current-owned-proof-root)
          "evidence-probe.rkt"
          (submod "evidence-probe.rkt" protected-owner)
@@ -43,9 +39,7 @@
                   admit-promoted-captured-evidence!
                   load-evidence-repair
                   register-owned-evidence!)
-         (only-in "evidence-readiness.rkt"
-                  current-evidence-context
-                  evidence-readiness))
+         (only-in "evidence-readiness.rkt" current-evidence-context evidence-readiness))
 (provide promote-supplemental-evidence!
          recover-supplemental-promotion!
          supplemental-promotion-record)
@@ -74,50 +68,54 @@
                (hash? (hash-ref record 'green-proof-ref #f)))
     (refuse "staged wrapper lacks a promotable R1/G1 context"))
   (define contract (hash-ref record 'contract))
-  (seal-supplemental-record
-   (hasheq 'kind
-           "supplemental-evidence-promotion/v1"
-           'context
-           E
-           'task-sha256
-           (hash-ref record 'task-sha256)
-           'task-proposal
-           (hash-ref contract 'task-proposal)
-           'task-approval
-           (hash-ref contract 'task-approval)
-           'candidate-proposal
-           (hash-ref contract 'candidate-proposal)
-           'candidate-approval
-           (hash-ref contract 'candidate-approval)
-           'supersession-proposal
-           sproposal-ref
-           'supersession-approval
-           sapref
-           'green-proof-ref
-           (hash-ref record 'green-proof-ref)
-           'red-proof-ref
-           red-ref
-           'receipt-sha256
-           (hash-ref E 'receipt-sha256)
-           'generation
-           (hash-ref E 'receipt-generation)
-           'operation-id
-           registration-operation-id
-           'staged-context-digest
-           (evidence-context-digest E))))
+  (seal-supplemental-record (hasheq 'kind
+                                    "supplemental-evidence-promotion/v1"
+                                    'context
+                                    E
+                                    'task-sha256
+                                    (hash-ref record 'task-sha256)
+                                    'task-proposal
+                                    (hash-ref contract 'task-proposal)
+                                    'task-approval
+                                    (hash-ref contract 'task-approval)
+                                    'candidate-proposal
+                                    (hash-ref contract 'candidate-proposal)
+                                    'candidate-approval
+                                    (hash-ref contract 'candidate-approval)
+                                    'supersession-proposal
+                                    sproposal-ref
+                                    'supersession-approval
+                                    sapref
+                                    'green-proof-ref
+                                    (hash-ref record 'green-proof-ref)
+                                    'red-proof-ref
+                                    red-ref
+                                    'receipt-sha256
+                                    (hash-ref E 'receipt-sha256)
+                                    'generation
+                                    (hash-ref E 'receipt-generation)
+                                    'operation-id
+                                    registration-operation-id
+                                    'staged-context-digest
+                                    (evidence-context-digest E))))
 (define (promote!/core base plan wave sapref live-guard)
-  (unless (and (supplemental-reference? sapref)
-               (equal? (hash-ref sapref 'kind) "supersession-approval"))
+  (unless (and (supplemental-reference? sapref) (equal? (hash-ref sapref 'kind) "supersession-approval"))
     (refuse "invalid supersession approval reference"))
   (unless (and (procedure? live-guard) (live-guard))
     (refuse "the campaign lease/live guard is stale"))
   (define staged (load-supplemental-staged-evidence base plan wave))
-  (unless staged (refuse "no staged supplemental evidence"))
+  (unless staged
+    (refuse "no staged supplemental evidence"))
   (define record (supplemental-staged-evidence-record staged))
   (unless (equal? (hash-ref record 'supersession-approval #f) sapref)
     (refuse "the staged wrapper does not carry this S authorization"))
-  (define sproposal-ref
-    (hasheq 'kind "supersession-proposal" 'sha256 (hash-ref sapref 'sha256)))
+  ;; The approval record's own digest is NOT the proposal's digest: the
+  ;; actual supersession-proposal reference is the one the staged wrapper
+  ;; carries (the exact S the operator approved).
+  (define sproposal-ref (hash-ref record 'supersession-proposal #f))
+  (unless (and (supplemental-reference? sproposal-ref)
+               (equal? (hash-ref sproposal-ref 'kind #f) "supersession-proposal"))
+    (refuse "the staged wrapper lacks its supersession proposal reference"))
   (define refs (hash-ref record 'contract))
   (define grant-ref (hash-ref refs 'task-approval))
   ;; Live operator authorization before the admitted effect: the S approval
@@ -137,7 +135,8 @@
      (define (admit!)
        (unless (and (validate-supplemental-approval sapref sproposal-ref)
                     (validate-supplemental-approval (hash-ref refs 'task-approval) (hash-ref refs 'task-proposal))
-                    (validate-supplemental-approval (hash-ref refs 'candidate-approval) (hash-ref refs 'candidate-proposal)))
+                    (validate-supplemental-approval (hash-ref refs 'candidate-approval)
+                                                    (hash-ref refs 'candidate-proposal)))
          (refuse "the private authority changed during the promotion"))
        (unless (live-guard)
          (refuse "the campaign lease/live guard went stale during the promotion"))
@@ -158,14 +157,15 @@
      ;; 3. The protected operation must carry the certified receipt and be
      ;;    past publication; its facts may never name a different receipt.
      (admit!)
-     (define operation (load-supplemental-operation grant-ref))
-     (unless (member (hash-ref operation 'state #f)
-                     '("receipt-certified" "registered" "completed"))
-       (refuse
-        (format "the protected operation is ~a; certification is required before promotion"
-                (hash-ref operation 'state #f))))
-     (unless (equal? (hash-ref (hash-ref operation 'facts #f) 'receipt #f)
-                     (hash-ref E 'receipt-sha256))
+     (define observed (load-supplemental-operation grant-ref))
+     (define operation
+       (if (equal? (hash-ref observed 'state) "recover-pending-registration")
+           (reconcile-supplemental-operation! grant-ref (hash-ref observed 'revision) (hash-ref observed 'state))
+           observed))
+     (unless (member (hash-ref operation 'state #f) '("receipt-certified" "registered" "completed"))
+       (refuse (format "the protected operation is ~a; certification is required before promotion"
+                       (hash-ref operation 'state #f))))
+     (unless (equal? (hash-ref (hash-ref operation 'facts #f) 'receipt #f) (hash-ref E 'receipt-sha256))
        (refuse "the protected operation retained a different certified receipt"))
      ;; 4. Seal P and record the journal promotion intent BEFORE consumption.
      (define promotion (supplemental-promotion-record staged sproposal-ref sapref))
@@ -195,13 +195,7 @@
      ;; 5. Mint the fresh opaque single-consumption capability from the
      ;;    attested protected origin ONLY (the mint cross-checks the intent).
      (define capability
-       (mint-promoted-registration-capability! base
-                                               plan
-                                               wave
-                                               registration-operation-id
-                                               E
-                                               red-ref
-                                               promotion))
+       (mint-promoted-registration-capability! base plan wave registration-operation-id E red-ref promotion))
      ;; 6. Explicit promoted-captured ledger admission in the ACTUAL
      ;;    generation (install-or-verify; the ordinary registrar's captured
      ;;    checks stay unchanged).
@@ -219,24 +213,25 @@
                                  #:authorization capability
                                  #:operation-id registration-operation-id
                                  #:promoted-capability capability))
-     ;; 8. Protected operation transitions (idempotent at target), then
-     ;;    readiness. Ready is admitted ONLY after the promoted registration
-     ;;    validates against the current certified context.
-     (supplemental-staged-probe-transition!
-      grant-ref
-      "receipt-certified"
-      "registered"
-      (hasheq 'registration (hash-ref registration 'sha256)))
+     ;; 8. Protected operation transitions (idempotent at target AND at the
+     ;;    terminal completed state, so a full recovery replay is a no-op),
+     ;;    then readiness. Ready is admitted ONLY after the promoted
+     ;;    registration validates against the current certified context.
+     (define already-completed? (equal? (hash-ref (load-supplemental-operation grant-ref) 'state #f) "completed"))
+     (unless already-completed?
+       (supplemental-staged-probe-transition! grant-ref
+                                              "receipt-certified"
+                                              "registered"
+                                              (hasheq 'registration (hash-ref registration 'sha256))))
      (define readiness (evidence-readiness base plan wave))
      (unless (and (equal? (hash-ref readiness 'status #f) "ready")
                   (equal? (hash-ref readiness 'code #f) "registered-probe-ready"))
-       (refuse (format "readiness is not ready for the promoted registration: ~a"
-                       (hash-ref readiness 'code #f))))
-     (supplemental-staged-probe-transition!
-      grant-ref
-      "registered"
-      "completed"
-      (hasheq 'readiness (hash-ref readiness 'code)))
+       (refuse (format "readiness is not ready for the promoted registration: ~a" (hash-ref readiness 'code #f))))
+     (unless already-completed?
+       (supplemental-staged-probe-transition! grant-ref
+                                              "registered"
+                                              "completed"
+                                              (hasheq 'readiness (hash-ref readiness 'code))))
      readiness)))
 (define (promote-supplemental-evidence! base plan wave sapref live-guard)
   ;; The full protected owner transition, from certification to a promoted,

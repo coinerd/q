@@ -69,6 +69,8 @@ During execution:
 ### `/replan`
 
 Return to planning mode from `plan-written` or `executing` state. Use when the plan needs fundamental changes.
+This changes planning mode only: it does not rewrite a frozen campaign contract,
+replace receipts or replenish consumed author/evidence allowances.
 
 ```
 /replan
@@ -163,6 +165,44 @@ Each repair reruns the complete declared Verify chain. Cancellation, exhausted
 budgets, or non-repairable provenance failures stop the campaign without
 advancing. A local pass still does not waive protected delivery or independent
 review. Completed verification clears the running status, even on rejection.
+
+### Governed supplemental evidence recovery
+
+An exhausted evidence-author allowance stays spent. The typed
+`evidence-author-allowance-exhausted` stop is not another automatic retry, and
+`/replan`, a new task ID, failure or crash cannot reset it. A supplemental task
+requires separate exact-digest operator decisions for task **T**, committed
+candidate **K** and receipt supersession **S**. Historical frozen Verify **C0**
+stays intact; effective **C1** only appends the approved probe to the existing
+focused stage, retaining all five gates. Fresh complete owned GREEN and genuine
+baseline-overlay assertion RED/same-candidate GREEN are mandatory. Protected
+promotion **P** then links the certified successor receipt to its one-use evidence
+registration; only authenticated readiness `ready` admits fresh review. None of
+these steps grants merge authorization or delivery.
+
+The owner CLI is `scripts/gsd-evidence-replan.rkt` with `--verb`
+`propose|authorize|inspect|status|revoke`; authorization selects
+`--stage task|candidate|supersession`. Proposals and inspection are not grants.
+Authority uses the trusted `~/.q/agent/supplemental-evidence` store shared with
+`/go`, never project configuration. `/go` does not provision it. The operator
+runtime must own trusted HOME and keep author/reviewer tools outside the private
+owner/broker boundary; private modes are not a hostile same-user sandbox.
+
+Standalone CLI authorization/revocation refuses (exit 2) without a same-process
+interactive broker channel. There is no batch, stdin, TTY or policy auto-approval
+route. The trusted keyboard-only TUI handoff supports
+`/evidence-replan authorize-task PLAN WAVE TASK-SHA256`; `/go` then requests
+candidate and supersession approval separately. To revoke, wait for quiescence
+and use `/evidence-replan revoke KIND APPROVAL-SHA256`, where KIND is
+`task-approval`, `candidate-approval` or `supersession-approval`. Inspect the exact
+approval first; the overlay binds the retained one-target revocation proposal's
+full digest. Deny to inspect that proposal, then repeat the revoke command.
+Only genuine interactive selection and protected grant consumption durably revoke;
+shared/model command dispatch cannot invoke this route. Revocation launches nothing,
+resets no allowance, and makes downstream admission/validation/recovery refuse
+without redispatch. Fixture coverage is not installation or live authorization;
+remaining engineering acceptance gates still apply. See the
+[governance contract and frontend limits](automatic-review.md#governed-supplemental-evidence-replan-bug-0088).
 
 ## State Machine
 

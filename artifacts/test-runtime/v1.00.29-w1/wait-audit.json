@@ -927,6 +927,54 @@
    ],
    "suite": "fast"
   },
+  "tests/test-gsd-supplemental-evidence-authority.rkt": {
+   "occurrences": [
+    {
+     "class": "C",
+     "disposition": "retained-canary",
+     "line": 413,
+     "reason": "lock-exclusion canary (BUG-0088): the bounded 0.1s window gives a broken lock every chance to let thread B in before the assertion proves B stayed out (counter 0); the OS flock under test exposes no completion event and fake time cannot model its exclusion",
+     "text": "(sleep 0.1) ; give a broken lock every chance to let B in"
+    }
+   ],
+   "suite": "unit-fast"
+  },
+  "tests/test-gsd-supplemental-evidence-frontend.rkt": {
+   "occurrences": [
+    {
+     "class": "C",
+     "disposition": "retained-canary",
+     "line": 148,
+     "reason": "BUG-0088 keyboard/broker integration: after the actual approval key event, poll the durable pointer for the asynchronously consumed exact grant, at most 100 times with 0.01s waits; success requires validated task approval, not elapsed time. The frontend launches a worker and exposes no completion event to this test; logical clock advancement cannot schedule that worker.",
+     "text": "(sleep 0.01)"
+    }
+   ],
+   "suite": "fast"
+  },
+  "tests/test-gsd-supplemental-evidence-journal.rkt": {
+   "occurrences": [
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 412,
+     "reason": "operator-expiry canary (BUG-0088): the sleep advances real wall time just past the (current-seconds)-derived approval expiry so the transition's expiry refusal is exercised; the second-granularity kernel clock the production check reads has no injectable seam and fake time cannot cross its deadline",
+     "text": "(sleep (max 0 (+ 0.05 (- expiry (/ (current-inexact-milliseconds) 1000)))))"
+    }
+   ],
+   "suite": "unit-fast"
+  },
+  "tests/test-gsd-supplemental-evidence-promotion.rkt": {
+   "occurrences": [
+    {
+     "class": "A",
+     "disposition": "retained-canary",
+     "line": 294,
+     "reason": "logical-timing canary (BUG-0088): bounded 0.02s poll waits for the second-granularity kernel clock to advance past prior-at before pinning the promotion intent's 'at semantics; the (current-seconds) boundary the assertion observes has no injectable seam",
+     "text": "(let loop () (when (<= (current-seconds) prior-at) (sleep 0.02) (loop)))"
+    }
+   ],
+   "suite": "other"
+  },
   "tests/test-gsd-transaction-contract.rkt": {
    "occurrences": [
     {
@@ -2183,10 +2231,10 @@
   "sha256-at-w0": "6fbd4343b95217f847fd6a05d946d064f1ef98d3110266451cc651ab8d549166"
  },
  "summary": {
-  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions",
-  "total-occurrences": 241,
-  "unit-fast-files": 1,
-  "unit-fast-occurrences": 1,
+  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and the bounded frontend approval-worker pointer poll",
+  "total-occurrences": 245,
+  "unit-fast-files": 3,
+  "unit-fast-occurrences": 3,
   "unjustified-unit-fast-sleeps": 0
  },
  "target-families": [

@@ -359,7 +359,11 @@
   (define input-text (unbox (cmd-ctx-input-text-box cctx)))
   (define cmd-name (parse-extension-command input-text))
   (log-debug "command dispatch: cmd=~a has-ext-reg=~a" cmd-name (and ext-reg #t))
-  (define ext-result (validate-extension-command ext-reg cmd-name input-text))
+  ;; Reserved owner surface: only keyboard-user dispatch in message-dispatch
+  ;; may invoke it. Model execute-command hooks and shared dispatch cannot.
+  (define ext-result
+    (and (not (equal? cmd-name "/evidence-replan"))
+         (validate-extension-command ext-reg cmd-name input-text)))
   (log-debug "command dispatch result: action=~a" (and ext-result (hook-result-action ext-result)))
   (cond
     [(and ext-result (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))

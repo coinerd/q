@@ -91,6 +91,8 @@ the trusted operator frontend; batch/CLI contexts refuse honestly")
   (define channel (current-approval-channel))
   (unless channel
     (error 'supplemental-evidence-operator "~a" (supplemental-operator-refusal)))
+  (unless (procedure? publisher)
+    (error 'supplemental-evidence-operator "trusted operator UI publisher unavailable"))
   ;; Authenticating read first: a wrong/foreign/revoked reference never
   ;; reaches the operator UI as if it were pending.
   (define presentation (supplemental-approval-presentation ref))
@@ -113,6 +115,8 @@ the trusted operator frontend; batch/CLI contexts refuse honestly")
                                             request-id
                                             'proposal-kind
                                             (hash-ref ref 'kind)
+                                            'commitment-digest
+                                            digest
                                             'proposal-sha256
                                             digest
                                             'presentation-digest
@@ -128,6 +132,8 @@ the trusted operator frontend; batch/CLI contexts refuse honestly")
                                           request-id
                                           'proposal-kind
                                           (hash-ref ref 'kind)
+                                          'commitment-digest
+                                          digest
                                           'proposal-sha256
                                           digest
                                           'terminal-status

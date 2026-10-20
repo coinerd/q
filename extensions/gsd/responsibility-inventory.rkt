@@ -435,6 +435,12 @@
                '()
                '("racket/list" "racket/string" "util/json/checksum"))
    (make-entry "verify-command-format.rkt" 'transition-logic '() '() '("racket/list" "racket/string"))
+   ;; Public promotion audit validation delegates to pure format modules.
+   (make-entry "review-audit-promotion.rkt"
+               'transition-logic
+               '()
+               '()
+               '("supplemental-evidence-format" "evidence-repair-format"))
    (make-entry "review-audit-format.rkt"
                'transition-logic
                '()
@@ -499,8 +505,7 @@
                         "util/loop-result"
                         "util/message/message"
                         "util/content/content-parts"
-                        "tools/tool"
-                        "tools/registry-defaults"
+                        "review-tools"
                         "tools/permission-gate"
                         "sandbox/subprocess"
                         "sandbox/gateway-bridge"
@@ -511,6 +516,8 @@
                         "review-usage"
                         "review-proof"
                         "review-audit-format"
+                        "review-audit-promotion"
+                        "../gsd-planning/execution-policy"
                         "runtime/provider/model-registry"
                         "runtime/auth/auth-store"
                         "util/hash-helpers"
@@ -979,7 +986,7 @@
    ;; in-process capability; retained bytes live outside the project root.
    (make-entry "supplemental-evidence-authority.rkt"
                'persistence
-               '(fs-write fs-read fs-rename fs-delete dir-list sha256 make-param path-ops)
+               '(fs-write fs-read fs-rename fs-delete mkdir dir-list sha256 make-param path-ops)
                '(current-supplemental-authority-root)
                '("json" "racket/file"
                         "racket/list"

@@ -22,10 +22,7 @@
          racket/runtime-path
          racket/string
          (only-in "../../util/json/checksum.rkt" sha256-string)
-         (only-in "review-proof-format.rkt"
-                  proof-hex?
-                  valid-owned-proof-reference?
-                  supplemental-owned-proof?)
+         (only-in "review-proof-format.rkt" proof-hex? valid-owned-proof-reference? supplemental-owned-proof?)
          (only-in "evidence-repair-format.rkt"
                   canonical-evidence-digest
                   valid-evidence-context?
@@ -44,6 +41,8 @@
                   validate-supplemental-approval)
          (only-in "supplemental-evidence-journal.rkt"
                   load-supplemental-operation
+                  reconcile-supplemental-operation!
+                  recovery-pending-state-name
                   transition-supplemental-operation!)
          (only-in "review-proof.rkt" current-owned-proof-root frozen-verify-binding))
 (provide (struct-out supplemental-staged-evidence)
@@ -51,6 +50,7 @@
          stage-supplemental-evidence!
          load-supplemental-staged-evidence
          stage-supplemental-red!
+         consume-supplemental-staged-probe!
          stage-supplemental-supersession-authorization!
          supplemental-contract-refs
          supplemental-staged-probe-transition!
@@ -124,24 +124,13 @@
   (when (link-exists? path)
     (error 'delivery-journal "symlinked remote-pending marker refused"))
   (make-parent-directory* path)
-  (call-with-atomic-output-file path
-                                (lambda (out _)
-                                  (write-json (hasheq 'schema-version
-                                                      1
-                                                      'plan-id
-                                                      plan
-                                                      'wave
-                                                      wave
-                                                      'branch
-                                                      branch
-                                                      'head
-                                                      head
-                                                      'at
-                                                      (current-seconds)
-                                                      'reason
-                                                      reason)
-                                              out)
-                                  (newline out))))
+  (call-with-atomic-output-file
+   path
+   (lambda (out _)
+     (write-json
+      (hasheq 'schema-version 1 'plan-id plan 'wave wave 'branch branch 'head head 'at (current-seconds) 'reason reason)
+      out)
+     (newline out))))
 
 (define (clear-remote-pending! root plan wave)
   (define path (remote-pending-path root plan wave))
@@ -180,8 +169,7 @@
        (valid-owned-proof-reference? (hash-ref r 'owned-proof #f))
        (for/and ([k '(attempt-id attempt-fence branch origin head tree)])
          (equal? (hash-ref c k) (hash-ref r k #f)))
-       (equal? (hash-ref c 'green-proof-sha256)
-               (hash-ref (hash-ref r 'owned-proof (hasheq)) 'sha256 #f))))
+       (equal? (hash-ref c 'green-proof-sha256) (hash-ref (hash-ref r 'owned-proof (hasheq)) 'sha256 #f))))
 (define (valid-delivery-receipt?/checked r)
   ;; Loaded dynamically to keep this module outside the journal's static
   ;; import graph; the journal remains the sole validator of receipt shape.
@@ -203,8 +191,7 @@
                        (not (equal? (hash-ref m 'successor-attempt) (hash-ref c 'attempt-id)))
                        (exact-nonnegative-integer? (hash-ref m 'successor-fence #f))
                        (>= (hash-ref m 'successor-fence) (hash-ref c 'attempt-fence))))))
-       (or (not (equal? (hash-ref m 'state) "completed"))
-           (hex? (hash-ref m 'successor-receipt-sha256 #f) 64))
+       (or (not (equal? (hash-ref m 'state) "completed")) (hex? (hash-ref m 'successor-receipt-sha256 #f) 64))
        (or (not (equal? (hash-ref m 'state) "retained"))
            (and (member (hash-ref m 'disposition #f) '("no-edit" "session-lost"))
                 (hex? (hash-ref m 'retained-tree-sha256 #f) 40)))))
@@ -218,12 +205,9 @@
               (if (equal? (hash-ref m 'state) "completed")
                   (and (< (add1 generation) (length receipts))
                        (let ([successor (list-ref receipts (add1 generation))])
-                         (and (equal? (hash-ref successor 'attempt-id #f)
-                                      (hash-ref m 'successor-attempt))
-                              (equal? (hash-ref successor 'attempt-fence #f)
-                                      (hash-ref m 'successor-fence))
-                              (equal? (canonical-evidence-digest successor)
-                                      (hash-ref m 'successor-receipt-sha256)))))
+                         (and (equal? (hash-ref successor 'attempt-id #f) (hash-ref m 'successor-attempt))
+                              (equal? (hash-ref successor 'attempt-fence #f) (hash-ref m 'successor-fence))
+                              (equal? (canonical-evidence-digest successor) (hash-ref m 'successor-receipt-sha256)))))
                   (= generation (length history)))))))
 (define (journal-evidence-author-repair j)
   (define m (and (hash? j) (hash-ref j 'evidence-author-repair #f)))
@@ -291,9 +275,7 @@
             ;; probe canonicalization of the authenticated execution cwd.
             (let ([r (hash-ref receipt 'repo)])
               (if (regexp-match? #px"/+$" r)
-                  (string-append
-                   (regexp-replace #px"/+$" r "")
-                   (if (equal? (regexp-replace #px"/+$" r "") "/") "/" ""))
+                  (string-append (regexp-replace #px"/+$" r "") (if (equal? (regexp-replace #px"/+$" r "") "/") "/" ""))
                   r))
             'branch
             (hash-ref receipt 'branch)
@@ -320,10 +302,25 @@
 (struct supplemental-staged-evidence (record path) #:transparent)
 (define staged-kind "supplemental-staged-evidence/v1")
 (define staged-pinned-keys
-  '(kind plan-id wave contract task-sha256 candidate-sha256 attempt-id attempt-fence
-                                                         receipt old-receipt-sha256 old-generation context
-                                                         green-proof-ref baseline-head baseline-tree test-path
-                                                         harness-path harness-files operation-id snapshot-sha256))
+  '(kind plan-id
+         wave
+         contract
+         task-sha256
+         candidate-sha256
+         attempt-id
+         attempt-fence
+         receipt
+         old-receipt-sha256
+         old-generation
+         context
+         green-proof-ref
+         baseline-head
+         baseline-tree
+         test-path
+         harness-path
+         harness-files
+         operation-id
+         snapshot-sha256))
 (define (staging-path plan)
   (build-path (current-owned-proof-root) plan "supplemental-staging" "staged.json"))
 (define (valid-staged-record? s)
@@ -349,7 +346,9 @@
        (text? (hash-ref s 'test-path #f))
        (text? (hash-ref s 'harness-path #f))
        (let ([h (hash-ref s 'harness-files #f)])
-         (and (list? h) (pair? h) (andmap (lambda (e) (and (hash? e) (text? (hash-ref e 'path #f)) (hex? (hash-ref e 'sha256 #f) 64))) h)))
+         (and (list? h)
+              (pair? h)
+              (andmap (lambda (e) (and (hash? e) (text? (hash-ref e 'path #f)) (hex? (hash-ref e 'sha256 #f) 64))) h)))
        (equal? (hash-ref s 'operation-id #f) "repair-1")
        (hex? (hash-ref s 'snapshot-sha256 #f) 64)
        (let ([red (hash-ref s 'red-proof-ref #f)])
@@ -366,36 +365,36 @@
 (define (immutable-json v)
   (cond
     [(hash? v)
-     (for/hasheq ([(k x) (in-hash v)]) (values k (immutable-json x)))]
+     (for/hasheq ([(k x) (in-hash v)])
+       (values k (immutable-json x)))]
     [(list? v) (map immutable-json v)]
     [(string? v) (string->immutable-string v)]
     [else v]))
 (define (read-staged path)
   (and (file-exists? path)
-       (let ([data
-              (begin
-                (when (link-exists? path) (refuse "symlinked staged wrapper"))
-                (immutable-json (call-with-input-file path read-json)))])
-         (unless (and (valid-staged-record? data)
-                      (equal? (hash-ref data 'sha256) (canonical-evidence-digest data)))
+       (let ([data (begin
+                     (when (link-exists? path)
+                       (refuse "symlinked staged wrapper"))
+                     (immutable-json (call-with-input-file path read-json)))])
+         (unless (and (valid-staged-record? data) (equal? (hash-ref data 'sha256) (canonical-evidence-digest data)))
            (refuse "staged wrapper is malformed or altered"))
          data)))
 (define (write-staged! path record)
   (make-parent-directory* path)
   (define temp (make-temporary-file ".staged-~a.tmp" #f (path-only path)))
-  (dynamic-wind
-   void
-   (lambda ()
-     (call-with-output-file temp
-                            (lambda (out)
-                              (write-json (hash-set record 'sha256 (canonical-evidence-digest record)) out)
-                              (newline out))
-                            #:exists 'truncate)
-     (rename-file-or-directory temp path #t))
-   (lambda ()
-     (when (file-exists? temp)
-       (delete-file temp)))))
-(define (seal-staged record) (hash-set record 'sha256 (canonical-evidence-digest record)))
+  (dynamic-wind void
+                (lambda ()
+                  (call-with-output-file temp
+                                         (lambda (out)
+                                           (write-json (hash-set record 'sha256 (canonical-evidence-digest record)) out)
+                                           (newline out))
+                                         #:exists 'truncate)
+                  (rename-file-or-directory temp path #t))
+                (lambda ()
+                  (when (file-exists? temp)
+                    (delete-file temp)))))
+(define (seal-staged record)
+  (hash-set record 'sha256 (canonical-evidence-digest record)))
 ;; UPDATE supplies the fields being added; every pinned field already staged
 ;; must repeat byte-identically (monotonic fill-in of R1/S only).
 (define (merge-staged! path update)
@@ -403,8 +402,7 @@
   (define next
     (if prior
         (for/fold ([rec prior]) ([(k v) (in-hash update)])
-          (when (and (member k staged-pinned-keys)
-                     (not (equal? (hash-ref prior k) v)))
+          (when (and (member k staged-pinned-keys) (not (equal? (hash-ref prior k) v)))
             (refuse (format "staged pinned field ~a may not change" k)))
           (hash-set rec k v))
         update))
@@ -438,11 +436,10 @@
     (call-with-supplemental-authority-lock
      (lambda ()
        (define journal ((dynamic-journal 'load-delivery-journal) base plan wave))
-       (unless journal (refuse "missing authenticated journal"))
-       (define context
-         (predict-supplemental-context journal receipt frozen plan wave))
-       (unless (and (equal? (hash-ref context 'attempt-id) attempt-id)
-                    (equal? (hash-ref context 'attempt-fence) fence))
+       (unless journal
+         (refuse "missing authenticated journal"))
+       (define context (predict-supplemental-context journal receipt frozen plan wave))
+       (unless (and (equal? (hash-ref context 'attempt-id) attempt-id) (equal? (hash-ref context 'attempt-fence) fence))
          (refuse "staged context does not carry the live allocation"))
        (unless (and (equal? (hash-ref task 'baseline-head) (hash-ref task 'baseline-head #f))
                     (hex? (hash-ref task 'baseline-head #f) 40))
@@ -453,49 +450,65 @@
            (hasheq 'path (hash-ref e 'path) 'sha256 (hash-ref e 'sha256))))
        (unless (pair? harness-files)
          (refuse "candidate manifest lacks the approved harness entry"))
-       (seal-staged
-        (hasheq 'kind
-                staged-kind
-                'plan-id
-                plan
-                'wave
-                wave
-                'contract
-                contract
-                'task-sha256
-                (hash-ref task 'sha256)
-                'candidate-sha256
-                (hash-ref (hash-ref contract 'candidate-proposal) 'sha256)
-                'attempt-id
-                attempt-id
-                'attempt-fence
-                fence
-                'receipt
-                receipt
-                'old-receipt-sha256
-                (canonical-evidence-digest (hash-ref journal 'receipt))
-                'old-generation
-                (length (hash-ref journal 'receipt-history '()))
-                'context
-                context
-                'green-proof-ref
-                green-ref
-                'baseline-head
-                (hash-ref task 'baseline-head)
-                'baseline-tree
-                (hash-ref task 'baseline-tree)
-                'test-path
-                (hash-ref task 'test-path)
-                'harness-path
-                (hash-ref task 'harness-path)
-                'harness-files
-                harness-files
-                'operation-id
-                "repair-1"
-                'snapshot-sha256
-                (hash-ref frozen 'snapshot-sha256))))))
+       (seal-staged (hasheq 'kind
+                            staged-kind
+                            'plan-id
+                            plan
+                            'wave
+                            wave
+                            'contract
+                            contract
+                            'task-sha256
+                            (hash-ref task 'sha256)
+                            'candidate-sha256
+                            (hash-ref (hash-ref contract 'candidate-proposal) 'sha256)
+                            'attempt-id
+                            attempt-id
+                            'attempt-fence
+                            fence
+                            'receipt
+                            receipt
+                            'old-receipt-sha256
+                            (canonical-evidence-digest (hash-ref journal 'receipt))
+                            'old-generation
+                            (length (hash-ref journal 'receipt-history '()))
+                            'context
+                            context
+                            'green-proof-ref
+                            green-ref
+                            'baseline-head
+                            (hash-ref task 'baseline-head)
+                            'baseline-tree
+                            (hash-ref task 'baseline-tree)
+                            'test-path
+                            (hash-ref task 'test-path)
+                            'harness-path
+                            (hash-ref task 'harness-path)
+                            'harness-files
+                            harness-files
+                            'operation-id
+                            "repair-1"
+                            'snapshot-sha256
+                            (hash-ref frozen 'snapshot-sha256))))))
   (merge-staged! path staged)
   (load-supplemental-staged-evidence base plan wave))
+;; The staged probe validator requires green-captured throughout its jobs.
+;; Consume its one launch here before those jobs, rather than falsely moving
+;; the operation to probing (which that validator must reject). An ambiguous
+;; interruption stays spent; only an already retained R1 can be resumed.
+(define (consume-supplemental-staged-probe! base plan wave)
+  (call-with-supplemental-authority-lock
+   (lambda ()
+     (define staged (load-supplemental-staged-evidence base plan wave))
+     (unless staged
+       (refuse "missing staged probe wrapper"))
+     (define record (supplemental-staged-evidence-record staged))
+     (when (hash-ref record 'probe-launch-consumed #f)
+       (refuse "staged probe launch consumed without retained R1; no relaunch"))
+     (define refs (hash-ref record 'contract))
+     (call-with-supplemental-admission (list (hash-ref refs 'task-approval) (hash-ref refs 'candidate-approval))
+                                       (lambda ()
+                                         (merge-staged! (staging-path plan) (hasheq 'probe-launch-consumed #t)))))))
 (define (stage-supplemental-red! base plan wave red-ref)
   (unless (and (hash? red-ref) (hex? (hash-ref red-ref 'sha256 #f) 64) (text? (hash-ref red-ref 'path #f)))
     (refuse "invalid red proof reference"))
@@ -504,9 +517,7 @@
   (load-supplemental-staged-evidence base plan wave))
 (define (stage-supplemental-supersession-authorization! base plan wave sref sapref)
   (define path (staging-path plan))
-  (merge-staged!
-   path
-   (hasheq 'kind staged-kind 'supersession-proposal sref 'supersession-approval sapref))
+  (merge-staged! path (hasheq 'kind staged-kind 'supersession-proposal sref 'supersession-approval sapref))
   (load-supplemental-staged-evidence base plan wave))
 (define (supplemental-contract-refs staged)
   (hash-ref (supplemental-staged-evidence-record staged) 'contract))
@@ -517,30 +528,37 @@
 ;; observing the target state returns instead of double-writing.
 
 (define (supplemental-staged-probe-transition! grant-ref from to facts)
-  (define operation (load-supplemental-operation grant-ref))
+  (define observed (load-supplemental-operation grant-ref))
+  (define operation
+    (if (equal? (hash-ref observed 'state) (recovery-pending-state-name to))
+        (reconcile-supplemental-operation! grant-ref (hash-ref observed 'revision) (hash-ref observed 'state))
+        observed))
   (cond
     [(equal? (hash-ref operation 'state) to) operation]
     [(equal? (hash-ref operation 'state) from)
-     (transition-supplemental-operation! grant-ref
-                                         (hash-ref operation 'revision)
-                                         from
-                                         to
-                                         facts)]
+     (transition-supplemental-operation! grant-ref (hash-ref operation 'revision) from to facts)]
     [else
-     (refuse
-      (format "protected operation is ~a, expected ~a to advance to ~a"
-              (hash-ref operation 'state)
-              from
-              to))]))
+     (refuse (format "protected operation is ~a, expected ~a to advance to ~a" (hash-ref operation 'state) from to))]))
 
 ;; ============================================================
 ;; Sealed supersession proposal S.
 
 (define supersession-payload-keys
-  '(kind context task-sha256 receipt old-receipt-sha256 old-generation
-                                                         attempt-id attempt-fence green-proof-ref red-proof-ref
-                                                         task-proposal task-approval candidate-proposal
-                                                         candidate-approval snapshot-sha256 sha256))
+  '(kind context
+         task-sha256
+         receipt
+         old-receipt-sha256
+         old-generation
+         attempt-id
+         attempt-fence
+         green-proof-ref
+         red-proof-ref
+         task-proposal
+         task-approval
+         candidate-proposal
+         candidate-approval
+         snapshot-sha256
+         sha256))
 (define (build-supplemental-supersession-record staged)
   (define record (supplemental-staged-evidence-record staged))
   (unless (hash-ref record 'red-proof-ref #f)
@@ -548,44 +566,44 @@
   (unless (and (valid-evidence-context? (hash-ref record 'context #f))
                ((dynamic-journal 'valid-delivery-receipt?) (hash-ref record 'receipt #f)))
     (refuse "staged wrapper lacks the exact proposed receipt/context"))
-  (seal-supplemental-record
-   (hasheq 'kind
-           "supplemental-evidence-supersession/v1"
-           'context
-           (hash-ref record 'context)
-           'task-sha256
-           (hash-ref record 'task-sha256)
-           'receipt
-           (hash-ref record 'receipt)
-           'old-receipt-sha256
-           (hash-ref record 'old-receipt-sha256)
-           'old-generation
-           (hash-ref record 'old-generation)
-           'attempt-id
-           (hash-ref record 'attempt-id)
-           'attempt-fence
-           (hash-ref record 'attempt-fence)
-           'green-proof-ref
-           (hash-ref record 'green-proof-ref)
-           'red-proof-ref
-           (hash-ref record 'red-proof-ref)
-           'task-proposal
-           (hash-ref (hash-ref record 'contract) 'task-proposal)
-           'task-approval
-           (hash-ref (hash-ref record 'contract) 'task-approval)
-           'candidate-proposal
-           (hash-ref (hash-ref record 'contract) 'candidate-proposal)
-           'candidate-approval
-           (hash-ref (hash-ref record 'contract) 'candidate-approval)
-           'snapshot-sha256
-           (hash-ref record 'snapshot-sha256))))
+  (seal-supplemental-record (hasheq 'kind
+                                    "supplemental-evidence-supersession/v1"
+                                    'context
+                                    (hash-ref record 'context)
+                                    'task-sha256
+                                    (hash-ref record 'task-sha256)
+                                    'receipt
+                                    (hash-ref record 'receipt)
+                                    'old-receipt-sha256
+                                    (hash-ref record 'old-receipt-sha256)
+                                    'old-generation
+                                    (hash-ref record 'old-generation)
+                                    'attempt-id
+                                    (hash-ref record 'attempt-id)
+                                    'attempt-fence
+                                    (hash-ref record 'attempt-fence)
+                                    'green-proof-ref
+                                    (hash-ref record 'green-proof-ref)
+                                    'red-proof-ref
+                                    (hash-ref record 'red-proof-ref)
+                                    'task-proposal
+                                    (hash-ref (hash-ref record 'contract) 'task-proposal)
+                                    'task-approval
+                                    (hash-ref (hash-ref record 'contract) 'task-approval)
+                                    'candidate-proposal
+                                    (hash-ref (hash-ref record 'contract) 'candidate-proposal)
+                                    'candidate-approval
+                                    (hash-ref (hash-ref record 'contract) 'candidate-approval)
+                                    'snapshot-sha256
+                                    (hash-ref record 'snapshot-sha256))))
 (define (retain-supplemental-supersession! record)
   (unless (valid-supplemental-record? record)
     (refuse "sealed supersession record is invalid"))
   (propose-retain! "supersession-proposal" record))
 (define (seal-supplemental-supersession-proposal! base plan wave)
   (define staged (load-supplemental-staged-evidence base plan wave))
-  (unless staged (refuse "no staged supplemental evidence"))
+  (unless staged
+    (refuse "no staged supplemental evidence"))
   (define record (build-supplemental-supersession-record staged))
   (retain-supplemental-supersession! record))
 (define (load-supplemental-supersession-proposal! sref)
@@ -594,12 +612,12 @@
   (define proposal (load-supplemental-record sref))
   (define payload (hash-ref proposal 'payload #f))
   (unless (and (hash? payload)
-                (equal? (hash-ref payload 'kind #f) "supplemental-evidence-supersession/v1")
-                (valid-supplemental-record? payload)
-                ;; sref digests the wrapped proposal; the payload's own seal
-                ;; is what must be internally consistent.
-                (equal? (hash-ref payload 'sha256 #f) (supplemental-record-digest payload))
-                (andmap (lambda (k) (hash-has-key? payload k)) supersession-payload-keys))
+               (equal? (hash-ref payload 'kind #f) "supplemental-evidence-supersession/v1")
+               (valid-supplemental-record? payload)
+               ;; sref digests the wrapped proposal; the payload's own seal
+               ;; is what must be internally consistent.
+               (equal? (hash-ref payload 'sha256 #f) (supplemental-record-digest payload))
+               (andmap (lambda (k) (hash-has-key? payload k)) supersession-payload-keys))
     (refuse "sealed supersession payload is malformed"))
   payload)
 
@@ -611,28 +629,37 @@
 ;; already-published/already-superseded identities. It NEVER restarts a
 ;; probe, a model dispatch, or an unconstrained publication.
 (define (replay-supplemental-supersession! base plan wave read-current sapref live-guard)
-  (unless (and (supplemental-reference? sapref)
-               (equal? (hash-ref sapref 'kind) "supersession-approval"))
+  (unless (and (supplemental-reference? sapref) (equal? (hash-ref sapref 'kind) "supersession-approval"))
     (refuse "invalid supersession approval reference"))
   ;; The approval record names the exact S proposal; its own digest is not
   ;; the proposal's digest.
   (define approval-record (validate-supplemental-approval sapref))
   (unless (and approval-record
                (supplemental-reference? (hash-ref approval-record 'proposal #f))
-               (equal? (hash-ref (hash-ref approval-record 'proposal #f) 'kind)
-                       "supersession-proposal"))
+               (equal? (hash-ref (hash-ref approval-record 'proposal #f) 'kind) "supersession-proposal"))
     (refuse "supersession approval is missing, revoked or foreign"))
   (define sproposal-ref (hash-ref approval-record 'proposal))
   (define payload (load-supplemental-supersession-proposal! sproposal-ref))
   (unless (validate-supplemental-approval sapref sproposal-ref)
     (refuse "supersession approval is missing, revoked or foreign"))
   (define staged (load-supplemental-staged-evidence base plan wave))
-  (unless (and staged
-               (equal? (hash-ref (supplemental-staged-evidence-record staged) 'supersession-approval #f)
-                       sapref))
+  (unless (and staged (equal? (hash-ref (supplemental-staged-evidence-record staged) 'supersession-approval #f) sapref))
     (refuse "staged wrapper does not carry this S authorization"))
-  ((dynamic-publication 'publish-supplemental-supersession!)
-   base plan wave read-current sapref payload live-guard))
+  (define grant-ref (hash-ref payload 'task-approval))
+  (call-with-supplemental-admission
+   (list grant-ref sapref)
+   (lambda ()
+     ((dynamic-publication 'publish-supplemental-supersession!) base plan wave read-current sapref payload live-guard)
+     ;; The publication owner has confirmed readback and installed the exact
+     ;; receipt. Only now may its protected operation tail advance. Replays
+     ;; revalidate that same S and never repeat a confirmed remote effect.
+     (unless (live-guard)
+       (refuse "stale live guard after supersession"))
+     (complete-supplemental-supersession! grant-ref payload)
+     (hasheq 'publication
+             ((dynamic-publication 'load-approved-publication) base plan wave)
+             'receipt
+             (hash-ref payload 'receipt)))))
 
 ;; Idempotent protected-operation advance through the publication tail
 ;; (supersession-approved -> published -> receipt-certified). A replay that
@@ -640,22 +667,20 @@
 (define (complete-supplemental-supersession! grant-ref payload)
   (define receipt (hash-ref payload 'receipt))
   (define (current-state)
-    (hash-ref (load-supplemental-operation grant-ref) 'state #f))
+    (define operation (load-supplemental-operation grant-ref))
+    (when (member (hash-ref operation 'state) '("recover-pending-published" "recover-pending-receipt-certified"))
+      (set! operation
+            (reconcile-supplemental-operation! grant-ref (hash-ref operation 'revision) (hash-ref operation 'state))))
+    (hash-ref operation 'state #f))
   (when (equal? (current-state) "supersession-approved")
     (supplemental-staged-probe-transition!
      grant-ref
      "supersession-approved"
      "published"
      (hasheq 'publication
-             (hasheq 'status
-                     "confirmed"
-                     'branch
-                     (hash-ref receipt 'branch)
-                     'head
-                     (hash-ref receipt 'head)))))
+             (hasheq 'status "confirmed" 'branch (hash-ref receipt 'branch) 'head (hash-ref receipt 'head)))))
   (when (equal? (current-state) "published")
-    (supplemental-staged-probe-transition!
-     grant-ref
-     "published"
-     "receipt-certified"
-     (hasheq 'receipt (canonical-evidence-digest receipt)))))
+    (supplemental-staged-probe-transition! grant-ref
+                                           "published"
+                                           "receipt-certified"
+                                           (hasheq 'receipt (canonical-evidence-digest receipt)))))

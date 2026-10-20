@@ -12,7 +12,12 @@
 ;; owner-frontend only CONSUMES its real opaque interactive grant for exact digest.
 ;; No CLI, request auto-approval, grant constructor or live authorization here.
 ;;
-;; Main API (no root discovery): propose-retain! stores only inert proposals;
+;; Trusted-user composition: the process launcher owns HOME (not project settings).
+;; Owner CLI and /go use the same fixed ~/.q/agent/supplemental-evidence store. No
+;; project config, XDG override or ancestor search selects authority. The default
+;; is a location, NOT approval; only the owner CLI provisions it, and all normal
+;; private-root/origin/broker checks still apply. Explicit #f always denies.
+;; Main API: propose-retain! stores only inert proposals;
 ;; load-supplemental-record reads deeply immutable canonical records;
 ;; validate-supplemental-approval ref [expected-proposal-ref] returns an immutable
 ;; owner record or #f, rechecking root origin, proposal bytes and revocation each
@@ -67,7 +72,12 @@
          call-with-supplemental-authority-lock
          call-with-supplemental-admission)
 
-(define current-supplemental-authority-root (make-parameter #f))
+;; Resolve once at process composition, never from a wave's current-directory.
+;; Embeddings with an untrusted environment must bind this parameter to their
+;; trusted absolute store (or #f) before loading/using campaign state. Same-uid
+;; arbitrary processes remain outside the security boundary described above.
+(define current-supplemental-authority-root
+  (make-parameter (build-path (find-system-path 'home-dir) ".q" "agent" "supplemental-evidence")))
 (define-runtime-path control-source-root "../..")
 (define max-record-bytes (* 1024 1024))
 (define approval-kinds '("task-approval" "candidate-approval" "supersession-approval"))
@@ -538,12 +548,34 @@
         (unless (equal? revocation-ref (revocation-at root approval-ref))
           (refuse "approval already revoked by a different proposal"))
         revocation-ref)))))
+(define (initialize-supplemental-authority-root!)
+  ;; Only the trusted owner frontend provisions the single private directory.
+  ;; /go reads existing authority and never creates a store implicitly.
+  (check-owner-phase!)
+  (define raw (current-supplemental-authority-root))
+  (unless (and (path-string? raw) (complete-path? raw) (not (member 'up (explode-path raw))))
+    (refuse "trusted embedding must provide an absolute authority root"))
+  (define root (simplify-path raw #f))
+  (when (or (within? root (current-directory)) (within? root control-source-root))
+    (refuse "authority root is inside project/execution/control source"))
+  ;; Provision missing standard runtime parents without following links or
+  ;; changing permissions of existing directories. Every existing component
+  ;; is validated before creating its child; no project/XDG discovery occurs.
+  (define (ensure-directory! path)
+    (unless (file-or-directory-type path #f)
+      (ensure-directory! (path-only path))
+      (with-handlers ([exn:fail:filesystem:exists? void])
+        (make-directory path #o700)))
+    (check-directory-chain! path))
+  (ensure-directory! root)
+  (private-root!))
 (module+ owner-frontend
   ;; Loaded only by the trusted embedding/frontend, not exposed as model tools.
   ;; The frontend registers/presents the exact proposal sha256 with the existing
   ;; broker and obtains a grant after an explicit operator decision. No boolean,
   ;; TTY/stdin, arbitrary supplied guard or auto-approval alternative is accepted.
   (provide approve-supplemental-proposal!
+           initialize-supplemental-authority-root!
            revoke!)
   (define approve-supplemental-proposal! approve-proposal!)
   (define revoke! revoke-proposal!))

@@ -11,6 +11,7 @@
 (require "tui-keybindings.rkt"
          "submit-handler.rkt"
          "input.rkt"
+         "commands/evidence-owner.rkt"
          (only-in "state-types.rkt"
                   ui-state-active-overlay
                   overlay-state?
@@ -74,7 +75,12 @@
                 (if (>= (length result) 3)
                     (caddr result)
                     ""))
-              (process-slash-command ctx cmd raw-text)]
+              ;; This branch is keyboard-user provenance. Shared/model extension
+              ;; dispatch must never reach the owner command or mint its authority.
+              (unless (handle-owner-evidence-command! ctx raw-text)
+                (call-with-owner-approval-publisher ctx
+                                                    (lambda ()
+                                                      (process-slash-command ctx cmd raw-text))))]
              [else (void)])])])]
     ;; Resize event: signal caller
     [(resize) 'resize]

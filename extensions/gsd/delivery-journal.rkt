@@ -15,8 +15,7 @@
          ;; re-provided here for every existing consumer.
          "supplemental-evidence-publication.rkt"
          ;; Coordinated shared owner lock (exclusive, same-root reentrant).
-         (only-in "supplemental-evidence-authority.rkt"
-                  call-with-supplemental-authority-lock))
+         (only-in "supplemental-evidence-authority.rkt" call-with-supplemental-authority-lock))
 (provide journal-evidence-author-repair
          evidence-author-repair-pending?
          save!
@@ -749,9 +748,11 @@
   (call-with-supplemental-authority-lock
    (lambda ()
      (define old (load-delivery-journal root plan wave))
-     (unless old (error 'delivery-journal "supersession requires a durable journal"))
+     (unless old
+       (error 'delivery-journal "supersession requires a durable journal"))
      (define old-receipt (hash-ref old 'receipt #f))
-     (unless (hash? old-receipt) (error 'delivery-journal "journal carries no receipt"))
+     (unless (hash? old-receipt)
+       (error 'delivery-journal "journal carries no receipt"))
      (define history (hash-ref old 'receipt-history '()))
      (unless (valid-receipt-history? history)
        (error 'delivery-journal "existing receipt history is malformed"))
@@ -760,9 +761,7 @@
        (error 'delivery-journal (format "stage ~a is terminal for supplemental supersession" stage)))
      (cond
        ;; Idempotent replay: the exact receipt is already current.
-       [(and (equal? old-receipt new-receipt)
-             (= (length history) (add1 expected-generation)))
-        old]
+       [(and (equal? old-receipt new-receipt) (= (length history) (add1 expected-generation))) old]
        [else
         (unless (= (length history) expected-generation)
           (error 'delivery-journal
@@ -822,27 +821,26 @@
        (hex? (hash-ref i 'context-digest #f) 64)
        (text? (hash-ref i 'operation-id #f))
        (hash? (hash-ref i 'promotion #f))
-       (equal? (hash-ref (hash-ref i 'promotion #f) 'kind #f)
-               "supplemental-evidence-promotion/v1")
+       (equal? (hash-ref (hash-ref i 'promotion #f) 'kind #f) "supplemental-evidence-promotion/v1")
        (equal? (hash-ref (hash-ref i 'promotion #f) 'sha256 #f)
                (canonical-evidence-digest (hash-ref i 'promotion #f)))
        (exact-nonnegative-integer? (hash-ref i 'at #f))
-       (= (hash-count i) 8)))
+       ;; Exactly the nine write-ahead intent fields checked above: the
+       ;; eight attested fields plus the 'at write stamp.
+       (= (hash-count i) 9)))
 (define (load-supplemental-promotion-intent root plan wave)
   (define path (supplemental-promotion-path root plan wave))
   (and (file-exists? path)
-       (let ([intent
-              (begin
-                (when (link-exists? path)
-                  (error 'delivery-journal "symlinked promotion intent refused"))
-                (with-handlers ([exn:fail? (lambda (_) #f)])
-                  (call-with-input-file path read-json)))])
+       (let ([intent (begin
+                       (when (link-exists? path)
+                         (error 'delivery-journal "symlinked promotion intent refused"))
+                       (with-handlers ([exn:fail? (lambda (_) #f)])
+                         (call-with-input-file path read-json)))])
          (unless (valid-supplemental-promotion-intent? intent plan wave)
            (error 'delivery-journal "promotion intent is malformed; refusing"))
          (define journal (load-delivery-journal root plan wave))
          (and journal
-              (= (hash-ref intent 'generation)
-                 (length (hash-ref journal 'receipt-history '())))
+              (= (hash-ref intent 'generation) (length (hash-ref journal 'receipt-history '())))
               (equal? (hash-ref intent 'receipt-sha256)
                       (canonical-evidence-digest (hash-ref journal 'receipt)))
               intent))))
@@ -852,9 +850,9 @@
   (call-with-supplemental-authority-lock
    (lambda ()
      (define journal (load-delivery-journal root plan wave))
-     (unless journal (error 'delivery-journal "promotion intent requires a durable journal"))
-     (unless (and (= (hash-ref intent 'generation)
-                     (length (hash-ref journal 'receipt-history '())))
+     (unless journal
+       (error 'delivery-journal "promotion intent requires a durable journal"))
+     (unless (and (= (hash-ref intent 'generation) (length (hash-ref journal 'receipt-history '())))
                   (equal? (hash-ref intent 'receipt-sha256)
                           (canonical-evidence-digest (hash-ref journal 'receipt))))
        (error 'delivery-journal "promotion intent does not match the certified journal"))
@@ -864,21 +862,26 @@
      (cond
        [(file-exists? path)
         (define prior (call-with-input-file path read-json))
-        (unless (equal? prior intent)
+        ;; The ATTESTED content is immutable: a genuine replay of the same
+        ;; promotion must match it in every field. Only the 'at write stamp
+        ;; may differ (a replay in a later wall-clock second rebuilds it
+        ;; fresh); the original durable record stays in place.
+        (unless (and (hash? prior)
+                     (exact-nonnegative-integer? (hash-ref prior 'at #f))
+                     (equal? (hash-remove prior 'at) (hash-remove intent 'at)))
           (error 'delivery-journal "a different promotion intent is already recorded"))
-        intent]
+        prior]
        [else
         (define temp (make-temporary-file ".promotion-~a.tmp" #f (path-only path)))
-        (dynamic-wind
-         void
-         (lambda ()
-           (call-with-output-file temp
-                                  (lambda (out)
-                                    (write-json intent out)
-                                    (newline out))
-                                  #:exists 'truncate)
-           (rename-file-or-directory temp path #t))
-         (lambda ()
-           (when (file-exists? temp)
-             (delete-file temp))))
+        (dynamic-wind void
+                      (lambda ()
+                        (call-with-output-file temp
+                                               (lambda (out)
+                                                 (write-json intent out)
+                                                 (newline out))
+                                               #:exists 'truncate)
+                        (rename-file-or-directory temp path #t))
+                      (lambda ()
+                        (when (file-exists? temp)
+                          (delete-file temp))))
         intent]))))

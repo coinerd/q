@@ -91,7 +91,14 @@
                                           ;; trusted operational --jobs knob for Verify
                                           ;; (never a command/profile override).
                                           (current-gsd-delivery-verify-jobs . CONFIGURATION)
-                                          (current-owned-verify-observer . ITERATION_LOCAL))
+                                          (current-owned-verify-observer . ITERATION_LOCAL)
+                                          ;; BUG-0088: inert supplemental-verification request,
+                                          ;; authenticated against private authority immediately
+                                          ;; before launch. Bound by the owned proof wrapper for
+                                          ;; exactly one verification attempt (alongside
+                                          ;; current-owned-verify-observer), unwound after; never
+                                          ;; a command override.
+                                          (current-owned-supplemental-verification . ITERATION_LOCAL))
  ("extensions/gsd/go-orchestrator.rkt" (current-gsd-wave-cancel! . SERVICE_HANDLE))
  ;; v1.00.33 recovery continuation: origin-policy DI seam for the recovery
  ;; candidate resolver's independent-clone production check (tests relax
@@ -109,6 +116,19 @@
  ;; (default shells the trusted gsd-delivery.py controller through the ONE
  ;; controller-environment credential boundary); never set in prod.
  ("extensions/gsd/delivery-publication.rkt" (current-gsd-approved-head-publisher . OTHER_REVIEWED))
+ ;; BUG-0088 governed supplemental evidence replan: trusted host
+ ;; configuration locating the operator's private authority store (never a
+ ;; model/command-supplied path); the journal's durable-cut hook may only
+ ;; interrupt storage, never supply authority or facts; the owner-UI
+ ;; publisher receives immutable correlation hashes only — it can neither
+ ;; decide, grant, nor present a different proposal than the registered
+ ;; bytes.
+ ("extensions/gsd/supplemental-evidence-authority.rkt"
+  (current-supplemental-authority-root . CONFIGURATION))
+ ("extensions/gsd/supplemental-evidence-journal.rkt"
+  (current-supplemental-journal-crash-cut . SERVICE_HANDLE))
+ ("extensions/gsd/supplemental-evidence-operator.rkt"
+  (current-supplemental-operator-publisher . SERVICE_HANDLE))
  ("extensions/gsd/stall-policy.rkt" (current-gsd-stall-steerer . SERVICE_HANDLE))
  ("extensions/gsd/campaign-budgets.rkt" (current-campaign-usage-observation . TURN_LOCAL))
  ;; Request-scoped fresh reviewer port, carried by production /go requests

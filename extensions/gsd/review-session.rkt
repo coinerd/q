@@ -31,6 +31,7 @@
          "review-proof.rkt"
          (only-in "../gsd-planning/execution-policy.rkt" current-gsd-author-phase)
          "review-audit-format.rkt"
+         "review-audit-promotion.rkt"
          (only-in "review-worktree.rkt" resolve-review-checkout))
 (provide make-auto-review-runner
          resolve-review-checkout
@@ -179,7 +180,24 @@
       (define audit? (equal? mode owned-audit-mode))
       (unless (or audit? (equal? mode "manual-compatibility"))
         (error 'review-session "production review requires owned-proof audit mode"))
+      (define (promotion-live?)
+        (cond
+          [(and audit?
+                (hash-has-key? (hash-ref receipt 'owned-proof (hasheq)) 'supplemental-contract))
+           (define authority (hash-ref request 'owned-authority (hasheq)))
+           (define intent (load-supplemental-promotion-intent root plan wave))
+           (and (equal? (hash-ref authority 'reference #f) (hash-ref receipt 'owned-proof))
+                (audit-promotion-sha256 authority)
+                (hash? intent)
+                (equal? (hash-ref authority 'supplemental-promotion #f)
+                        (hash-ref intent 'promotion #f))
+                (equal? (hash-ref request 'supplemental-promotion-sha256 #f)
+                        (hash-ref authority 'supplemental-promotion-sha256 #f)))]
+          [else #t]))
       (when audit?
+        (audit-binding request)
+        (unless (promotion-live?)
+          (error 'review-session "stale supplemental promotion pin"))
         (validate-receipt-owned-proof! receipt root plan wave)
         (unless (and (hash? (hash-ref receipt 'owned-proof #f))
                      (equal? (hash-ref request 'proof-sha256 #f)
@@ -196,6 +214,7 @@
              (not (campaign-record-budget-pause rec))
              (= (campaign-fence-token rec) (hash-ref receipt 'attempt-fence))
              (equal? receipt (and current (hash-ref current 'receipt #f)))
+             (promotion-live?)
              (or (not audit?)
                  (equal? (hash-ref request 'generation #f)
                          (length (hash-ref current 'receipt-history '()))))
