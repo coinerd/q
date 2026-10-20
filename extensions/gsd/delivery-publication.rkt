@@ -13,6 +13,23 @@
          racket/string
          racket/runtime-path
          (only-in "../../util/json/checksum.rkt" sha256-string)
+         (only-in "../../sandbox/subprocess.rkt"
+                  run-subprocess
+                  subprocess-result-stdout
+                  subprocess-result-stderr
+                  subprocess-result-exit-code
+                  subprocess-result-timed-out?
+                  subprocess-result-truncated?)
+         (only-in "supplemental-evidence-authority.rkt"
+                  supplemental-reference?
+                  load-supplemental-record
+                  validate-supplemental-approval
+                  call-with-supplemental-authority-lock
+                  call-with-supplemental-admission)
+         (only-in "supplemental-evidence-journal.rkt" load-supplemental-operation)
+         (only-in "evidence-repair-format.rkt" canonical-evidence-digest)
+         (only-in "supplemental-evidence-publication.rkt"
+                  load-supplemental-supersession-proposal!)
          (only-in "delivery-handoff.rkt" controller-environment redact-delivery-text)
          (only-in "campaign-state.rkt"
                   campaign-record?
@@ -30,11 +47,13 @@
          (only-in "delivery-receipt.rkt" certify-publication-receipt!)
          (only-in "delivery-journal.rkt"
                   load-delivery-journal
+                  supersede-supplemental-receipt!
                   journal-evidence-author-repair
                   evidence-author-repair-pending?)
          (only-in "review-proof.rkt"
                   load-receipt-owned-proof
                   valid-owned-proof-reference?
+                  supplemental-owned-proof?
                   proof-reference-matches-receipt?)
          (only-in "attempt-artifacts.rkt" record-delivered-branches)
          (only-in "../../sandbox/subprocess.rkt"
@@ -54,7 +73,8 @@
          delivery-git
          current-gsd-approved-head-publisher
          default-approved-head-publisher
-         publish-approved-head!)
+         publish-approved-head!
+         publish-supplemental-supersession!)
 
 (define-runtime-path default-delivery-controller-script "../../scripts/gsd-delivery.py")
 
@@ -310,7 +330,9 @@
     (run-subprocess "git"
                     #:args (append (list "-C" (path->string (path->complete-path root))) args)
                     #:directory root
-                    #:timeout 15 #:process-group? #t #:encoding 'utf-8/strict))
+                    #:timeout 15
+                    #:process-group? #t
+                    #:encoding 'utf-8/strict))
   (and (not (subprocess-result-timed-out? r))
        (not (subprocess-result-truncated? r))
        (equal? (subprocess-result-exit-code r) 0)
@@ -421,7 +443,7 @@
     [(same-publication-identity? prior intent) prior]
     [(or (repair-tail-publication? prior intent) (author-publication? base plan wave prior intent))
      (save! base plan wave (with-publication-history intent prior))]
-    [else (error 'delivery-publication "publication identity changed; refusing replay")]))
+    [else (error 'delivery-publication "publication identity changed; refusing replay prior=~s intent=~s" prior intent)]))
 
 (define (publish-approved-head! base
                                 plan
@@ -433,6 +455,14 @@
                                 evidence
                                 [read-current #f]
                                 #:owned-proof [owned-proof #f])
+  ;; This legacy entry point constructs its own receipt timestamp and has only
+  ;; ordinary author/rejection authority. A supplemental GREEN is readable via
+  ;; load-receipt-owned-proof, but cannot authorize publication or reconstruct
+  ;; the staged exact receipt. The supplemental owner transition must supply S
+  ;; and preserve r* through its dedicated publication/certification route.
+  (when (supplemental-owned-proof? owned-proof)
+    (error 'delivery-publication
+           "supplemental publication requires the exact supersession owner transition"))
   (unless (and (hash? snapshot)
                (text? (hash-ref snapshot 'repo #f))
                (text? (hash-ref snapshot 'origin #f))
@@ -632,3 +662,267 @@
   (remove-duplicates (append (record-delivered-branches rec)
                              (approved-publication-branches root (campaign-plan-id rec)))
                      string=?))
+
+;; ============================================================
+;; BUG-0088 sections 7-8: the EXACT S-authorized supplemental publication.
+;;
+;; The legacy publish-approved-head! refuses supplemental GREEN: it
+;; constructs its own receipt timestamp and carries only ordinary
+;; authority. This route preserves the EXACT proposed receipt r* (its
+;; captured verified-at, evidence and owned-proof bytes) through the
+;; existing durable publication intent -> branch/push/readback ->
+;; confirmed-record protocol, then installs r* through the delivery
+;; journal's CAS supersession. Every boundary revalidates the LIVE
+;; private operator authorization (never a stored boolean or a digest
+;; match) through the late-cut admission guard, and the journal CAS
+;; re-derives the generation from the authenticated journal.
+(define (supplemental-intent-record plan wave receipt active-fence snapshot-digest sapref sproposal)
+  (hasheq 'schema-version
+          1
+          'plan-id
+          plan
+          'wave
+          wave
+          'status
+          "intent"
+          'repo
+          (hash-ref receipt 'repo)
+          'origin
+          (hash-ref receipt 'origin)
+          'branch
+          (hash-ref receipt 'branch)
+          'head
+          (hash-ref receipt 'head)
+          'tree
+          (hash-ref receipt 'tree)
+          'attempt-id
+          (hash-ref receipt 'attempt-id)
+          'attempt-fence
+          (hash-ref receipt 'attempt-fence)
+          'coordinator-fence
+          active-fence
+          'snapshot-digest
+          snapshot-digest
+          'evidence-digest
+          (sha256-string (hash-ref receipt 'evidence))
+          'receipt-candidate
+          receipt
+          'supersession-proposal
+          sproposal
+          'supersession-approval
+          sapref
+          'publication-history
+          '()
+          'recorded-at
+          (current-seconds)))
+(define (supplemental-supersession-publication? base plan wave prior intent)
+  ;; Live S authorization for the EXACT new receipt candidate, against the
+  ;; EXACT retained prior publication. A matching digest alone never
+  ;; re-authorizes; approvals are reloaded and revocation is honored at
+  ;; each evaluation.
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define candidate (hash-ref intent 'receipt-candidate #f))
+    (define ref (and (hash? candidate) (hash-ref candidate 'owned-proof #f)))
+    (define sapref (hash-ref intent 'supersession-approval #f))
+    (define sproposal (hash-ref intent 'supersession-proposal #f))
+    (and (equal? (hash-ref prior 'status #f) "confirmed")
+         (same-keys? prior intent '(plan-id wave repo origin branch))
+         (not (equal? (hash-ref prior 'attempt-id #f) (hash-ref intent 'attempt-id #f)))
+         (strict-descendant? (hash-ref intent 'repo #f)
+                             (hash-ref prior 'head #f)
+                             (hash-ref intent 'head #f))
+         (hash? candidate)
+         (supplemental-owned-proof? ref)
+         (supplemental-reference? sapref)
+         (supplemental-reference? sproposal)
+         (equal? (hash-ref sproposal 'kind) "supersession-proposal")
+         (validate-supplemental-approval sapref sproposal)
+         (let* ([s (load-supplemental-supersession-proposal! sproposal)]
+                [contract (hash-ref (hash-ref candidate 'owned-proof) 'supplemental-contract #f)]
+                [operation
+                 (and (hash? contract)
+                      (load-supplemental-operation (hash-ref contract 'task-approval #f)))]
+                [journal (load-delivery-journal base plan wave)])
+           (and s
+                (equal? (hash-ref s 'receipt) candidate)
+                ;; the S-pinned predecessor is still the journal's current
+                ;; receipt at the pinned generation (late cut)
+                journal
+                (equal? (canonical-evidence-digest (hash-ref journal 'receipt #f))
+                        (hash-ref s 'old-receipt-sha256 #f))
+                (= (length (hash-ref journal 'receipt-history '()))
+                   (hash-ref s 'old-generation -1))
+                ;; the S-pinned predecessor is exactly the retained prior
+                ;; publication's receipt candidate, matched by the immutable
+                ;; receipt binding (candidates intentionally normalize the
+                ;; verified-at timestamp away — see delivery-receipt).
+                ;; The retained prior publication's candidate is exactly the
+                ;; S-pinned predecessor: the journal's CURRENT (pre-supersession)
+                ;; receipt, compared on the immutable candidate subset.
+                (for/and ([k '(repo origin branch head tree attempt-id attempt-fence)])
+                  (equal? (hash-ref (hash-ref prior 'receipt-candidate #f) k #f)
+                          (hash-ref (hash-ref journal 'receipt #f) k #f)))
+                (hash? operation)
+                (member (hash-ref operation 'state #f)
+                        '("supersession-approved" "published"))
+                (equal? (hash-ref (hash-ref operation 'facts #f)
+                                  'supersession-approval-ref #f)
+                        sapref))))))
+;; One serialized intent transition. Idempotent at the already-intended and
+;; already-confirmed identities; refuses any other drift.
+(define (save-supplemental-intent! base plan wave intent)
+  (call-with-supplemental-authority-lock
+   (lambda ()
+     (define current (load-approved-publication base plan wave))
+     (cond
+       [(not current)
+        (error 'delivery-publication
+               "supplemental publication requires the retained prior publication record")]
+       [(same-publication-identity? current intent)
+        current]
+       [(and (equal? (hash-ref current 'status #f) "confirmed")
+            (equal? (hash-ref current 'receipt-candidate #f)
+                    (hash-ref intent 'receipt-candidate #f)))
+        ;; the exact receipt is already published and confirmed
+        current]
+       [(supplemental-supersession-publication? base plan wave current intent)
+        (save! base plan wave (with-publication-history intent current))]
+       [else
+        (error 'delivery-publication
+               "supplemental publication identity changed; refusing replay")]))))
+(define (publish-supplemental-supersession! base plan wave read-current sapref payload live-guard)
+  (unless (and (procedure? read-current) (procedure-arity-includes? read-current 0))
+    (error 'delivery-publication "authoritative current-record callback is required"))
+  (unless (and (procedure? live-guard) (procedure-arity-includes? live-guard 0))
+    (error 'delivery-publication "supplemental publication requires a live guard"))
+  (unless (hash? payload)
+    (error 'delivery-publication "supersession payload required"))
+  (define receipt (hash-ref payload 'receipt #f))
+  (unless (and (hash? receipt)
+               (text? (hash-ref receipt 'repo #f))
+               (text? (hash-ref receipt 'origin #f))
+               (text? (hash-ref receipt 'branch #f))
+               (hex? (hash-ref receipt 'head #f) 40)
+               (hex? (hash-ref receipt 'tree #f) 40)
+               (text? (hash-ref receipt 'attempt-id #f))
+               (exact-nonnegative-integer? (hash-ref receipt 'attempt-fence #f)))
+    (error 'delivery-publication "proposed receipt identity is incomplete"))
+  (define attempt-id (hash-ref receipt 'attempt-id))
+  (define attempt-fence (hash-ref receipt 'attempt-fence))
+  (define snapshot
+    (for/hasheq ([key (in-list '(repo origin branch head tree))])
+      (values key (hash-ref receipt key))))
+  ;; sapref digests the approval record; the approval names the exact S
+  ;; proposal, whose retained payload must be byte-identical to the one the
+  ;; coordinator captured before authorization.
+  (define approval-record (validate-supplemental-approval sapref))
+  (define sproposal (and approval-record (hash-ref approval-record 'proposal #f)))
+  (unless (and (supplemental-reference? sapref)
+               (equal? (hash-ref sapref 'kind) "supersession-approval")
+               approval-record
+               (supplemental-reference? sproposal)
+               (equal? (hash-ref sproposal 'kind) "supersession-proposal")
+               (validate-supplemental-approval sapref sproposal)
+               ;; The loader returns the authenticated S payload itself.
+               (equal? (load-supplemental-supersession-proposal! sproposal) payload))
+    (error 'delivery-publication
+           "supersession authorization changed, was revoked, or names different bytes"))
+  (define operation-grant
+    (hash-ref (hash-ref (hash-ref receipt 'owned-proof) 'supplemental-contract)
+              'task-approval
+              #f))
+  (unless (supplemental-reference? operation-grant)
+    (error 'delivery-publication "the proposed receipt lacks its private contract"))
+  ;; The coordinated admission holds the shared owner critical section for
+  ;; the whole guarded effect: a concurrent revocation can never interleave
+  ;; with the intent, the remote readback, the confirmation or the CAS
+  ;; supersession. The nested authority lock (same root) is reentrant.
+  (call-with-supplemental-admission
+   (list operation-grant sapref)
+   (lambda ()
+     (define (guard! phase)
+       (unless (validate-supplemental-approval sapref sproposal)
+         (error 'delivery-publication
+                "supersession authorization changed, was revoked, or names different bytes"))
+       (unless (live-guard)
+         (error 'delivery-publication (format "stale live guard at ~a" phase)))
+       ;; BUG-0079 discipline: the SAME captured active fence + frozen
+       ;; snapshot digest is re-verified at every boundary; a takeover since
+       ;; the intent refuses instead of authorizing the next effect.
+       (capture-active-authorization! plan
+                                      wave
+                                      snapshot
+                                      attempt-id
+                                      attempt-fence
+                                      read-current
+                                      phase
+                                      active-fence
+                                      snapshot-digest)
+       (void))
+     (unless (live-guard)
+       (error 'delivery-publication "stale live guard before supplemental publication"))
+     (define-values (active-fence snapshot-digest)
+       (capture-active-authorization! plan
+                                      wave
+                                      snapshot
+                                      attempt-id
+                                      attempt-fence
+                                      read-current
+                                      'supplemental-intent))
+     (define intent
+       (supplemental-intent-record
+        plan wave receipt active-fence snapshot-digest sapref sproposal))
+     (define current (save-supplemental-intent! base plan wave intent))
+     (define already-confirmed?
+       (and (equal? (hash-ref current 'status #f) "confirmed")
+            (equal? (hash-ref current 'receipt-candidate #f) receipt)))
+     (unless already-confirmed?
+       (guard! 'before-push)
+       (define outcome
+         ((current-gsd-approved-head-publisher) base
+                                                plan
+                                                wave
+                                                snapshot
+                                                attempt-id
+                                                attempt-fence
+                                                active-fence
+                                                (hash-ref receipt 'evidence)))
+       (guard! 'after-effect)
+       (define status (and (hash? outcome) (hash-ref outcome 'status #f)))
+       (unless (and (member status '("published" "already-published" "confirmed"))
+                    (equal? (hash-ref outcome 'branch #f) (hash-ref snapshot 'branch))
+                    (equal? (hash-ref outcome 'head #f) (hash-ref snapshot 'head)))
+         (error 'delivery-publication
+                (format "supplemental publication refused: ~a"
+                        (or (and (hash? outcome) (hash-ref outcome 'reason #f))
+                            "exact remote readback missing"))))
+       (guard! 'before-certification)
+       ;; Confirm flips the durable record in place: the write-ahead intent
+       ;; already carries the prior publication history, so a replay can
+       ;; never append a second history entry.
+       (save! base
+              plan
+              wave
+              (hash-set* current
+                         'status
+                         "confirmed"
+                         'confirmed-at
+                         (current-seconds)
+                         'coordinator-fence
+                         active-fence)))
+     ;; Exact-receipt CAS supersession; the journal derives the new
+     ;; generation inside the authority lock and preserves the spent
+     ;; evidence-author marker byte-identically.
+     (guard! 'before-supersession)
+     (supersede-supplemental-receipt!
+      base
+      plan
+      wave
+      receipt
+      #:expected-old-receipt-sha256 (hash-ref payload 'old-receipt-sha256)
+      #:expected-generation (hash-ref payload 'old-generation)
+      #:expected-attempt-id attempt-id
+      #:expected-attempt-fence attempt-fence
+      #:head-ancestor?
+      (lambda (old-head new-head)
+        (strict-descendant? (hash-ref receipt 'repo) old-head new-head))))))

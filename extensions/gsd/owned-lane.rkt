@@ -25,9 +25,15 @@
          (only-in "delivery-receipt.rkt" current-wave-for-attempt)
          (only-in "author-execution.rkt" run-proactive-author-phases! run-retained-author-phases!)
          (only-in "author-checkpoint.rkt" author-repair-pending? author-repair-running?)
+         (only-in "supplemental-evidence-controller.rkt"
+                  run-supplemental-author-phases!
+                  supplemental-author-pending?
+                  supplemental-entry-outcome)
          (only-in "composition-root.rkt" current-gsd-verification-registry)
          (only-in "verification-job.rkt" make-verification-registry verification-close-registry!))
-(provide make-owned-runner-port owned-lane? owned-entry-block)
+(provide make-owned-runner-port
+         owned-lane?
+         owned-entry-block)
 
 ;; Lane decision: a pending evidence-author permission or the fresh
 ;; owned-red-v1 execution policy selects the owned phase lane.
@@ -35,13 +41,17 @@
   (or author-pending? (eq? (campaign-record-execution-policy active) 'owned-red-v1)))
 
 ;; Honest stop when the author repair already launched: ambiguous or lost
-;; model responses are never redispatched.
+;; model responses are never redispatched. A supplemental operation past its
+;; launch boundary owns the same guarantee: the entry resumes its protected
+;; flow WITHOUT beginning a new attempt (never re-reserves) and returns the
+;; typed controller outcome instead of a dead-end block.
 (define (owned-entry-block base-dir active wave-idx)
-  (and (author-repair-running? base-dir (campaign-plan-id active) wave-idx)
-       (campaign-result
-        'wave-blocked
-        '()
-        "author repair already launched; ambiguous/lost model response is not redispatched")))
+  (or (and (author-repair-running? base-dir (campaign-plan-id active) wave-idx)
+           (campaign-result
+            'wave-blocked
+            '()
+            "author repair already launched; ambiguous/lost model response is not redispatched"))
+      (supplemental-entry-outcome base-dir (campaign-plan-id active) wave-idx)))
 
 ;; observe : -> fresh campaign record (or #f). base-dir/plan-id/wave-idx
 ;; identify the campaign; expected-id/fence the live attempt. The returned
@@ -73,21 +83,23 @@
     (verification-close-registry! phase-registry))
   (make-wave-runner-port
    (lambda (idx)
-     (dynamic-wind void
-                   (lambda ()
-                     (parameterize ([current-gsd-verification-registry phase-registry])
-                       ((if (author-repair-pending? base-dir plan-id wave-idx)
-                            run-retained-author-phases!
-                            run-proactive-author-phases!)
-                        base-dir
-                        plan-id
-                        idx
-                        expected-id
-                        fence
-                        (lambda () ((gsd-wave-runner-port-run source-runner-port) idx))
-                        #:guard phase-live?
-                        #:after-phase account-phase!)))
-                   close-phase-jobs!))
+     (dynamic-wind
+      void
+      (lambda ()
+        (parameterize ([current-gsd-verification-registry phase-registry])
+          ((cond
+             [(supplemental-author-pending? base-dir plan-id idx) run-supplemental-author-phases!]
+             [(author-repair-pending? base-dir plan-id idx) run-retained-author-phases!]
+             [else run-proactive-author-phases!])
+           base-dir
+           plan-id
+           idx
+           expected-id
+           fence
+           (lambda () ((gsd-wave-runner-port-run source-runner-port) idx))
+           #:guard phase-live?
+           #:after-phase account-phase!)))
+      close-phase-jobs!))
    #:cancel! (lambda ()
                (close-phase-jobs!)
                ((gsd-wave-runner-port-cancel! source-runner-port)))

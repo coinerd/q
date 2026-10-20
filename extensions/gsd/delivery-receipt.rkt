@@ -21,6 +21,7 @@
          default-remote-published?
          verify-with-delivery-receipt
          verify-campaign-delivery
+         capture-supplemental-delivery-verification
          certify-publication-receipt!
          recover-legacy-delivery-receipt!
          delivery-receipt-blocker)
@@ -56,7 +57,9 @@
     (run-subprocess "git"
                     #:args (append (list "-C" (path->string (path->complete-path root))) args)
                     #:directory root
-                    #:timeout 15 #:process-group? #t #:encoding 'utf-8/strict))
+                    #:timeout 15
+                    #:process-group? #t
+                    #:encoding 'utf-8/strict))
   (and (not (subprocess-result-timed-out? r))
        (not (subprocess-result-truncated? r))
        (equal? (subprocess-result-exit-code r) 0)
@@ -644,6 +647,58 @@
                       (hash-ref before 'head))]
            [else (log-warning "delivery receipt withheld: ~a; publication refused" reason)])])))
   result)
+;; Staging ONLY: no publication, receipt rotation, refresh, or journal mutation.
+;; The controller must hold its lease, bind the actual branch context and pass
+;; its active monotonic allocation. The private resolver authenticates T/A/K/CAp
+;; and operation admission before any job. Return the EXACT proposed receipt;
+;; certification must preserve its timestamp, evidence and owned-proof bytes.
+(define (capture-supplemental-delivery-verification base
+                                                    plan
+                                                    wave
+                                                    cwd
+                                                    attempt-id
+                                                    fence
+                                                    contract
+                                                    thunk)
+  (define before (committed-delivery-snapshot cwd))
+  (unless before
+    (error 'delivery-receipt "supplemental capture requires clean source"))
+  (define-values (result capture)
+    (call-with-owned-proof-capture base
+                                   plan
+                                   wave
+                                   before
+                                   attempt-id
+                                   fence
+                                   thunk
+                                   #:cwd cwd
+                                   #:supplemental-contract contract))
+  (unless (and (delivery-verification? result)
+               (delivery-verification-approved? result)
+               capture
+               (equal? before (committed-delivery-snapshot cwd)))
+    ;; Carry the verifier's own evidence so a failed C1 capture is
+    ;; diagnosable without touching the retained logs.
+    (error 'delivery-receipt
+           "supplemental capture did not complete owned GREEN: ~a"
+           (if (delivery-verification? result)
+               (delivery-verification-message result)
+               "no structured verifier result")))
+  (define text (format "~a" (redact-credential-data (delivery-verification-evidence result))))
+  (define receipt
+    (hash-set* before
+               'attempt-id
+               attempt-id
+               'attempt-fence
+               fence
+               'verified-at
+               (current-seconds)
+               'evidence
+               (substring text 0 (min 8192 (string-length text)))
+               'owned-proof
+               (owned-proof-capture-reference capture)))
+  (validate-receipt-owned-proof! receipt base plan wave)
+  (values result receipt capture))
 ;; Thin orchestration seam: context and verdict interpretation stay beside
 ;; receipt capture. `current-record` rejects stale attempts before persistence.
 (define (verify-campaign-delivery base

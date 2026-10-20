@@ -8,6 +8,9 @@
          valid-proof-file-reference?
          valid-owned-proof-reference?
          valid-owned-proof-manifest?
+         valid-legacy-owned-proof-reference?
+         valid-legacy-owned-proof-manifest?
+         supplemental-owned-proof?
          proof-reference-matches-receipt?
          expand-frozen-command
          apply-verify-jobs
@@ -145,21 +148,25 @@
   #px"^(?:raco test|racket|racket scripts/run-tests[.]rkt) tests/[^ ;&|]+[.]rkt(?: tests/[^ ;&|]+[.]rkt)*$")
 (define (owned-red-focused-command? command)
   (and (text? command) (regexp-match? owned-red-focused-rx command)))
-(define (valid-owned-proof-reference? r)
+(define (valid-legacy-owned-proof-reference? r)
   (and (valid-proof-file-reference? r ".json")
        (equal? (hash-ref r 'schema-version #f) 1)
        (equal? (hash-ref r 'kind #f) "declared-verify-green")
+       (not (hash-has-key? r 'supplemental-contract))
+       (not (hash-has-key? r 'effective-normalized-command))
        (binding? (hash-ref r 'binding #f))))
 (define (proof-reference-matches-receipt? ref receipt)
   (and (valid-owned-proof-reference? ref)
        (hash? receipt)
        (for/and ([k '(repo branch origin head tree attempt-id attempt-fence)])
          (equal? (hash-ref (hash-ref ref 'binding) k #f) (hash-ref receipt k #f)))))
-(define (valid-owned-proof-manifest? m)
+(define (valid-legacy-owned-proof-manifest? m)
   (and
    (hash? m)
    (equal? (hash-ref m 'schema-version #f) 1)
    (equal? (hash-ref m 'kind #f) "declared-verify-green")
+   (not (hash-has-key? m 'supplemental-contract))
+   (not (hash-has-key? m 'effective-normalized-command))
    (equal? (hash-ref m 'verification-origin #f) "owned-registry")
    (binding? (hash-ref m 'binding #f))
    (equal? (hash-ref m 'before #f) (hash-ref m 'after #f))
@@ -200,6 +207,41 @@
           (andmap (lambda (k) (and (real? (hash-ref j k #f)) (< 0 (hash-ref j k) +inf.0)))
                   '(start-ms end-ms))
           (<= (hash-ref j 'start-ms) (hash-ref j 'end-ms))))))
+;; New envelope is deliberately NOT accepted by the legacy predicates. These
+;; dispatchers check structural job facts only; private authority is reloaded by
+;; supplemental-evidence-proof before live capture/receipt acceptance.
+(define (supplemental-owned-proof? v)
+  (and (hash? v)
+       (equal? (hash-ref v 'schema-version #f) 2)
+       (equal? (hash-ref v 'kind #f) "supplemental-declared-verify-green/v1")))
+(define (supplemental-envelope? v)
+  (and (supplemental-owned-proof? v)
+       (hash? (hash-ref v 'supplemental-contract #f))
+       (for/and ([k '(task-proposal task-approval candidate-proposal candidate-approval)])
+         (define r (hash-ref (hash-ref v 'supplemental-contract) k #f))
+         (and (hash? r)
+              (= (hash-count r) 2)
+              (equal? (hash-ref r 'kind #f) (symbol->string k))
+              (proof-hex? (hash-ref r 'sha256 #f) 64)))))
+(define (legacy-view v manifest?)
+  (define plain
+    (hash-set* (hash-remove (hash-remove v 'supplemental-contract) 'effective-normalized-command)
+               'schema-version
+               1
+               'kind
+               "declared-verify-green"))
+  (if manifest?
+      (hash-set plain 'frozen-normalized-command (hash-ref v 'effective-normalized-command #f))
+      plain))
+(define (valid-owned-proof-reference? r)
+  (or (valid-legacy-owned-proof-reference? r)
+      (and (supplemental-envelope? r) (valid-legacy-owned-proof-reference? (legacy-view r #f)))))
+(define (valid-owned-proof-manifest? m)
+  (or (valid-legacy-owned-proof-manifest? m)
+      (and (supplemental-envelope? m)
+           (text? (hash-ref m 'frozen-normalized-command #f))
+           (text? (hash-ref m 'effective-normalized-command #f))
+           (valid-legacy-owned-proof-manifest? (legacy-view m #t)))))
 ;; ---------------------------------------------------------------------------
 ;; Owned behavioral RED. A separate, weaker-but-real negative proof: a
 ;; fresh registered focused test runner execution that terminated in an

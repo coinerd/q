@@ -29,6 +29,38 @@
   #t)
 (define (stop code message)
   (hasheq 'status "paused" 'code code 'message message 'author-work-started #f))
+(define (existing-author-report marker)
+  (define exhausted? (member (hash-ref marker 'state) '("completed" "retained")))
+  (for/fold ([report
+              (hash-set*
+               (stop
+                (if exhausted?
+                    "evidence-author-allowance-exhausted"
+                    "evidence-author-recovery-required")
+                (if exhausted?
+                    (string-append
+                     "The permanent one-per-wave evidence-author allowance is spent; still blocked. "
+                     "Any further evidence work requires an explicit operator-authorized governed supplemental replan; "
+                     "this report grants no authority and does not establish readiness or resolution")
+                    (string-append
+                     "An existing evidence-author reservation requires owner recovery, not a new reservation; "
+                     "resume only through the existing owner recovery route without redispatch")))
+               'status
+               (if exhausted? "blocked" "paused")
+               'marker-state
+               (hash-ref marker 'state)
+               'marker-context
+               (hash-ref marker 'context)
+               'new-reservation-allowed
+               #f
+               'next-action
+               (if exhausted? "explicit-governed-supplemental-replan" "existing-owner-recovery"))])
+            ([key '(disposition successor-attempt
+                                successor-fence
+                                successor-receipt-sha256
+                                retained-tree-sha256)]
+             #:when (hash-has-key? marker key))
+    (hash-set report key (hash-ref marker key))))
 (define (evidence-author-repair-preflight base plan wave #:guard live?)
   (with-handlers ([exn:fail? (lambda (e) (stop "evidence-author-contract-blocked" (exn-message e)))])
     (cond
@@ -44,11 +76,13 @@
        (define files
          (with-handlers ([exn:fail? (lambda (_) #f)])
            (frozen-author-files base plan wave)))
+       (define marker (journal-evidence-author-repair (load-delivery-journal base plan wave)))
        (cond
          [(not (live?)) (stop "stale-live-guard" "Author preflight lost campaign authority")]
          [(or (not files) (not (ormap (lambda (p) (string-prefix? p "tests/")) files)))
           (stop "evidence-author-frozen-scope-blocked"
                 "Frozen FILES has no literal test-author scope; no work launched or scope expanded")]
+         [marker (existing-author-report marker)]
          [else
           (hash-set*
            (stop

@@ -16,7 +16,8 @@
          (only-in "policy.rkt" current-gsd-wave-failure-context)
          (only-in "../gsd-planning/execution-policy.rkt" current-gsd-author-phase))
 (provide run-proactive-author-phases!
-         run-retained-author-phases!)
+         run-retained-author-phases!
+         run-supplemental-test-author!)
 (define (need value message)
   (unless value
     (error 'author-execution "~a" message))
@@ -187,6 +188,30 @@
               'done
               "Evidence author returned without edits; implementation retained; fresh review is next"))
            implemented)])))
+(define supplemental-test-author-instructions
+  (string-append
+   "\nGOVERNED SUPPLEMENTAL EVIDENCE TASK (operator-authorized, one-shot; NOT a review rejection).\n"
+   "Write the new regression witness in the TWO approved FILES only; do not implement any fix and do not\n"
+   "touch any other path. Use an exported literal RackUnit evidence-suite whose module+ test runs that same\n"
+   "suite. The witness must fail behaviorally on the pinned baseline and pass on the current candidate via\n"
+   "the approved helper. No fabricated output, exits, skipped checks or weakened expectations.\n"
+   "Bash and custom mutation tools are unavailable. The owner commits and runs the approved C1 Verify.\n"
+   "There is NO implementation phase for this task. Return when the two files are authored.\n"))
+
+;; Supplemental evidence task: exactly ONE test-author dispatch, restricted to
+;; the two approved write paths under the ordinary hook guard. No implementation
+;; phase exists; the owner commits through the ordinary scoped commit path.
+(define (run-supplemental-test-author! repo files attempt run guard after-phase)
+  (dispatch-phase! repo
+                   files
+                   files
+                   'test-author
+                   attempt
+                   run
+                   guard
+                   after-phase
+                   #:instructions supplemental-test-author-instructions))
+
 (define (run-proactive-author-phases! base
                                       plan
                                       wave

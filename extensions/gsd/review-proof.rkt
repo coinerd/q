@@ -8,6 +8,7 @@
          racket/port
          racket/string
          "review-proof-format.rkt"
+         "supplemental-evidence-proof.rkt"
          "delivery-verifier.rkt"
          "verification-job.rkt"
          "composition-root.rkt"
@@ -37,6 +38,7 @@
 (struct owned-proof-capture (reference used root command normalized))
 (define (consume-owned-proof-refresh! capture ref)
   (and (owned-proof-capture? capture)
+       (not (supplemental-owned-proof? ref)) ; supersession is a separate owner transition
        (equal? ref (owned-proof-capture-reference capture))
        (not (unbox (owned-proof-capture-used capture)))
        (begin
@@ -185,12 +187,39 @@
                                    log-ref)
                            out)
                (newline out)))))
-(define (capture! observation base plan wave before attempt-id fence frozen expected-cwd)
+(define (capture! observation
+                  base
+                  plan
+                  wave
+                  before
+                  attempt-id
+                  fence
+                  frozen
+                  expected-cwd
+                  [effective #f])
   (unless (consume-owned-verify-observation! observation)
     (refuse "not a live unused owned observation"))
   (define job (owned-verify-observation-job observation))
   (define command (owned-verify-observation-command observation))
   (define cwd (owned-verify-observation-cwd observation))
+  (define normalized
+    (if effective
+        (hash-ref effective 'effective-normalized-command)
+        (hash-ref frozen 'normalized-command)))
+  (when effective
+    (define reloaded
+      (resolve-supplemental-verify-binding (hash-ref effective 'supplemental-contract)
+                                           frozen
+                                           base
+                                           plan
+                                           wave
+                                           before
+                                           attempt-id
+                                           fence
+                                           cwd))
+    (unless (and (equal? reloaded effective)
+                 (equal? (current-gsd-delivery-verify-jobs) (hash-ref effective 'operational-jobs)))
+      (refuse "supplemental authority changed during owned job")))
   (unless (and (equal? cwd (path->string (simplify-path (path->complete-path expected-cwd))))
                (owned-verify-observation-fresh? observation)
                (owned-verify-observation-declared? observation)
@@ -200,12 +229,20 @@
                (equal? before (owned-verify-observation-before observation))
                (equal? before (owned-verify-observation-after observation))
                (equal? frozen (frozen-verify-binding base plan wave))
-               (equal? command (expand-project-base (hash-ref frozen 'normalized-command) base))
+               (equal? command (expand-project-base normalized base))
                (eq? (verification-job-state job) 'completed)
                (equal? (verification-job-exit-code job) 0)
                (verification-job-reaped? job)
                (verification-job-proc-start-ticks job))
-    (refuse "stale/failed/override/drifted owned execution"))
+    (refuse
+     (format
+      "stale/failed/override/drifted owned execution (fresh=~a declared=~a unchanged=~a command=~a state=~a exit=~a)"
+      (owned-verify-observation-fresh? observation)
+      (owned-verify-observation-declared? observation)
+      (equal? before (owned-verify-observation-after observation))
+      (equal? command (expand-project-base normalized base))
+      (verification-job-state job)
+      (verification-job-exit-code job))))
   (define digest (sha256-string (string-join (list "/bin/sh" "-c" command) "\u0")))
   (unless (equal? digest (verification-job-command-digest job))
     (refuse "job command digest mismatch"))
@@ -234,7 +271,7 @@
                fence
                'snapshot-sha256
                (hash-ref frozen 'snapshot-sha256)))
-  (define manifest
+  (define legacy-manifest
     (hasheq 'schema-version
             1
             'kind
@@ -269,6 +306,18 @@
             log-ref
             'job
             (job-facts job #t)))
+  (define manifest
+    (if effective
+        (hash-set* legacy-manifest
+                   'schema-version
+                   2
+                   'kind
+                   "supplemental-declared-verify-green/v1"
+                   'supplemental-contract
+                   (hash-ref effective 'supplemental-contract)
+                   'effective-normalized-command
+                   normalized)
+        legacy-manifest))
   (unless (valid-owned-proof-manifest? manifest)
     (refuse "invalid owned manifest"))
   (define file-ref
@@ -277,23 +326,72 @@
              (lambda (out)
                (write-json manifest out)
                (newline out))))
+  (define reference
+    (hash-set* file-ref
+               'schema-version
+               (hash-ref manifest 'schema-version)
+               'kind
+               (hash-ref manifest 'kind)
+               'binding
+               binding))
   (owned-proof-capture
-   (hash-set* file-ref 'schema-version 1 'kind "declared-verify-green" 'binding binding)
+   (if effective
+       (hash-set reference 'supplemental-contract (hash-ref effective 'supplemental-contract))
+       reference)
    (box #f)
    root
    command
    (hash-ref frozen 'normalized-command)))
 ;; Returns two values. Failure to acquire proof does not relabel an ordinary
 ;; legacy Verify result; the receipt remains ineligible for proof audit.
-(define (call-with-owned-proof-capture base plan wave before attempt-id fence thunk #:cwd cwd)
+(define (call-with-owned-proof-capture base
+                                       plan
+                                       wave
+                                       before
+                                       attempt-id
+                                       fence
+                                       thunk
+                                       #:cwd cwd
+                                       #:supplemental-contract [contract #f])
   (define proof #f)
   (define seen? #f)
   (define frozen
     (with-handlers ([exn:fail? (lambda (_) #f)])
       (frozen-verify-binding base plan wave)))
+  (define effective
+    (and contract
+         (resolve-supplemental-verify-binding
+          contract
+          frozen
+          base
+          plan
+          wave
+          before
+          attempt-id
+          fence
+          (path->string (simplify-path (path->complete-path cwd))))))
+  (define request
+    (and contract
+         (hasheq 'admission-used
+                 (box #f)
+                 'contract
+                 contract
+                 'frozen
+                 frozen
+                 'plan
+                 plan
+                 'before
+                 before
+                 'attempt-id
+                 attempt-id
+                 'attempt-fence
+                 fence
+                 'cwd
+                 (path->string (simplify-path (path->complete-path cwd))))))
   (define result
     (parameterize
-        ([current-owned-verify-observer
+        ([current-owned-supplemental-verification request]
+         [current-owned-verify-observer
           (lambda (o)
             (cond
               [seen? (set! proof #f)]
@@ -306,10 +404,13 @@
                                                                (log-warning
                                                                 "diagnostic retention failed: ~a"
                                                                 (exn-message d)))])
-                                    (retain-diagnostic! o plan attempt-id fence)))])
+                                    (retain-diagnostic! o plan attempt-id fence))
+                                  (when contract
+                                    (raise e)))])
                  (cond
                    [(and before frozen attempt-id (exact-nonnegative-integer? fence))
-                    (set! proof (capture! o base plan wave before attempt-id fence frozen cwd))]
+                    (set! proof
+                          (capture! o base plan wave before attempt-id fence frozen cwd effective))]
                    [else (retain-diagnostic! o plan attempt-id fence)]))]))])
       (thunk)))
   (values result proof))
@@ -323,7 +424,9 @@
     (refuse "missing/tampered proof file"))
   path)
 ;; ROOT is the managed plan store, or an offline bundle directory. EXPECTED
-;; must include every binding field, including frozen snapshot hash.
+;; must include every binding field, including frozen snapshot hash. Supplemental
+;; loading here yields portable FACTS only, not operator permission; live receipt
+;; admission must use load-receipt-owned-proof to reload private authority.
 (define (load-owned-review-proof root ref expected #:command command #:normalized-command normalized)
   (unless (and (valid-owned-proof-reference? ref) (equal? (hash-ref ref 'binding) expected))
     (refuse "proof reference/live binding mismatch"))
@@ -338,8 +441,15 @@
   (unless (and (valid-owned-proof-manifest? m)
                (equal? (hash-ref m 'binding) expected)
                (equal? (hash-ref m 'command) command)
-               (equal? (hash-ref m 'frozen-normalized-command) normalized))
+               (equal? (hash-ref m 'frozen-normalized-command) normalized)
+               (equal? (hash-ref m 'supplemental-contract #f)
+                       (hash-ref ref 'supplemental-contract #f)))
     (refuse "manifest/command binding mismatch"))
+  (when (supplemental-owned-proof? m)
+    (supplemental-proof-offline-facts
+     m
+     ref
+     (hasheq 'normalized-command normalized 'snapshot-sha256 (hash-ref expected 'snapshot-sha256))))
   (read-addressed root (hash-ref m 'log) ".log")
   m)
 ;; Write boundary validator. Receipt readers can still inspect missing/legacy
@@ -365,16 +475,20 @@
            (refuse "invalid owned manifest"))
          (define normalized (hash-ref frozen 'normalized-command))
          (define command
-           (expand-frozen-command normalized
+           (expand-frozen-command (hash-ref m 'effective-normalized-command normalized)
                                   (hash-ref m 'execution-base)
                                   (hash-ref m 'execution-cwd)
                                   (hash-ref m 'execution-worktree)
                                   #:jobs (hash-ref m 'operational-jobs #f)))
-         (load-owned-review-proof (store-root plan)
-                                  ref
-                                  b
-                                  #:command command
-                                  #:normalized-command normalized))))
+         (define loaded
+           (load-owned-review-proof (store-root plan)
+                                    ref
+                                    b
+                                    #:command command
+                                    #:normalized-command normalized))
+         (when (supplemental-owned-proof? loaded)
+           (validate-supplemental-proof-authority! loaded ref frozen base plan wave))
+         loaded)))
 (define (receipt-owned-proof-blocker receipt base plan wave #:command command)
   (define ref (and (hash? receipt) (hash-ref receipt 'owned-proof #f)))
   (cond
@@ -399,11 +513,14 @@
                     (hash-ref receipt 'attempt-fence)
                     'snapshot-sha256
                     (hash-ref frozen 'snapshot-sha256)))
-       (load-owned-review-proof (store-root plan)
-                                ref
-                                expected
-                                #:command command
-                                #:normalized-command (hash-ref frozen 'normalized-command))
+       (define loaded
+         (load-owned-review-proof (store-root plan)
+                                  ref
+                                  expected
+                                  #:command command
+                                  #:normalized-command (hash-ref frozen 'normalized-command)))
+       (when (supplemental-owned-proof? loaded)
+         (validate-supplemental-proof-authority! loaded ref frozen base plan wave))
        #f)]))
 ;; Trusted export after validation; consumers publish these two portable files
 ;; into excluded validation directories. No head/generation rebinding occurs.

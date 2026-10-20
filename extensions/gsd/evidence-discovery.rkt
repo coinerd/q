@@ -306,8 +306,11 @@
                     (car targets)
                     'runtime
                     (hasheq 'racket-version (version) 'platform (symbol->string (system-type 'os)))
+                    ;; A cold first compilation of a #lang racket regression
+                    ;; module routinely costs tens of seconds; 300 seconds is
+                    ;; the plan's initial per-job ceiling (schema cap 600).
                     'timeout-sec
-                    30))))
+                    300))))
       (if (not (eq? test-path unselected))
           (and (member test-path paths) (candidate test-path))
           (for/or ([p (in-list (remove-duplicates paths))])

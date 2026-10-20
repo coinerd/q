@@ -9,9 +9,19 @@
          racket/runtime-path
          "evidence-repair-format.rkt"
          "evidence-runner-coverage.rkt"
+         "evidence-discovery.rkt"
          "review-proof.rkt"
          "verification-job.rkt"
          "composition-root.rkt"
+         (only-in "supplemental-evidence-authority.rkt"
+                  supplemental-reference?
+                  load-supplemental-record
+                  validate-supplemental-approval)
+         (only-in "supplemental-evidence-journal.rkt" load-supplemental-operation)
+         (only-in "supplemental-evidence-publication.rkt"
+                  supplemental-staged-evidence
+                  supplemental-staged-evidence-record
+                  predict-supplemental-context)
          "../../util/json/checksum.rkt")
 (provide prepare-baseline-probe!
          run-baseline-probe!
@@ -20,11 +30,25 @@
          validate-exported-baseline-probe!
          recover-evidence-registration-authorization
          authorize-evidence-registration
-         consume-evidence-registration-authorization!)
+         consume-evidence-registration-authorization!
+         run-staged-supplemental-probe!
+         promoted-registration?
+         promoted-registration-context
+         promoted-registration-probe
+         promoted-registration-operation
+         promoted-registration-promotion
+         verify-promoted-registration-capability!
+         consume-promoted-registration-capability!)
 (define-runtime-path runner "../../scripts/gsd-evidence-probe-runner.rkt")
+(define-runtime-path journal-module "delivery-journal.rkt")
+(define-runtime-path receipt-module "delivery-receipt.rkt")
 (define (need x message)
   (unless x
     (error 'evidence-probe message)))
+;; Tail a job log for diagnostics; a missing log is reported, never fatal.
+(define (call-with-try-input-file path proc)
+  (with-handlers ([exn:fail? (lambda (_) "<log unavailable>")])
+    (call-with-input-file path proc)))
 (define (read-structured-output raw)
   (define in (open-input-string raw))
   (define value (read-json in))
@@ -245,7 +269,14 @@
                        (equal? (verification-job-exit-code job) 0)
                        (verification-job-reaped? job)
                        (verification-job-proc-start-ticks job))
-                  "nonterminal or failed adapter job")
+                  (format "nonterminal or failed adapter job (~a): ~a"
+                          role
+                          (call-with-try-input-file (verification-job-log-path job)
+                                                    (lambda (in)
+                                                      (define raw (port->string in))
+                                                      (substring raw
+                                                                 (max 0 (- (string-length raw) 400))
+                                                                 (string-length raw))))))
             (clean cwd)
             (need (equal? before (git cwd "rev-parse" "HEAD")) "checkout changed during job")
             (manifest cwd (append (hash-ref s 'test-files) (hash-ref s 'harness-files)))
@@ -598,3 +629,148 @@
   (need (equal? (git base "rev-parse" "HEAD") (hash-ref c 'head)) "stale capability")
   (hash-remove! issued token)
   #t)
+
+;; ============================================================
+;; BUG-0088 (a): owner-only STAGED supplemental probe path.
+;;
+;; This path NEVER reads current readiness as authority and never touches
+;; the current evidence context. It validates the live private approved
+;; T/K/A/CAp references, the current protected operation (green-captured,
+;; same GREEN, live allocation), the OLD receipt at the pinned generation,
+;; and the byte-exact predicted staged context E (recomputed from the EXACT
+;; proposed receipt r* and the authenticated journal) before discovering a
+;; spec and running the EXISTING owned baseline-overlay probe machinery
+;; (fresh real RED at the overlay baseline, identical-candidate GREEN, real
+;; verification-registry jobs). The guard revalidates everything at every
+;; launch/wait/retention boundary.
+(define (staged-supplemental-context! base plan wave cwd staged)
+  (define record (supplemental-staged-evidence-record staged))
+  (define refs (hash-ref record 'contract))
+  (unless (and (validate-supplemental-approval (hash-ref refs 'task-approval)
+                                               (hash-ref refs 'task-proposal))
+               (validate-supplemental-approval (hash-ref refs 'candidate-approval)
+                                               (hash-ref refs 'candidate-proposal)))
+    (need #f "staged probe requires live private operator approvals"))
+  (define task
+    (hash-ref (hash-ref (load-supplemental-record (hash-ref refs 'task-proposal)) 'payload) 'task))
+  (define candidate-record (load-supplemental-record (hash-ref refs 'candidate-proposal)))
+  (unless (and (equal? (hash-ref task 'sha256 #f) (hash-ref record 'task-sha256))
+               (equal? (hash-ref (hash-ref refs 'candidate-proposal) 'sha256)
+                       (hash-ref record 'candidate-sha256))
+               (hash? candidate-record))
+    (need #f "staged wrapper does not bind the retained T/K records"))
+  (define operation (load-supplemental-operation (hash-ref refs 'task-approval)))
+  (need operation "no protected supplemental operation")
+  (need (equal? (hash-ref operation 'state #f) "green-captured")
+        "supplemental operation is not at green-captured")
+  (define facts (hash-ref operation 'facts))
+  (need (equal? (hash-ref facts 'green-proof-ref #f) (hash-ref record 'green-proof-ref))
+        "the operation retained a different GREEN proof")
+  (define allocation (hash-ref facts 'allocation #f))
+  (need (and (hash? allocation)
+             (equal? (hash-ref allocation 'attempt-id #f) (hash-ref record 'attempt-id))
+             (equal? (hash-ref allocation 'attempt-fence #f) (hash-ref record 'attempt-fence)))
+        "the staged allocation is stale")
+  (define journal ((dynamic-require journal-module 'load-delivery-journal) base plan wave))
+  (need journal "missing authenticated journal")
+  (need (equal? (canonical-evidence-digest (hash-ref journal 'receipt #f))
+                (hash-ref record 'old-receipt-sha256))
+        "the old receipt changed under the staged probe")
+  (need (= (length (hash-ref journal 'receipt-history '())) (hash-ref record 'old-generation))
+        "the journal generation changed under the staged probe")
+  (define frozen (frozen-verify-binding base plan wave))
+  (define E (predict-supplemental-context journal (hash-ref record 'receipt) frozen plan wave))
+  (need (equal? E (hash-ref record 'context)) "the staged predicted context drifted")
+  (define before ((dynamic-require receipt-module 'committed-delivery-snapshot) cwd))
+  (need before "staged probe requires a clean execution checkout")
+  (define (checkout-identity k v)
+    ;; The committed snapshot marks directories with a trailing separator;
+    ;; the evidence context carries the exact execution checkout string.
+    (if (and (eq? k 'repo) (string? v))
+        (regexp-replace #px"/+$" v "")
+        v))
+  (for ([k '(repo branch origin head tree)])
+    (need (equal? (checkout-identity k (hash-ref before k #f))
+                  (checkout-identity k (hash-ref E k #f)))
+          "the staged checkout drifted"))
+  (values E task candidate-record))
+(define (run-staged-supplemental-probe! base plan wave cwd staged id #:guard live-guard)
+  (id! id)
+  (unless (and (procedure? live-guard) (live-guard))
+    (need #f "staged probe requires a live guard"))
+  (need (equal? id (hash-ref (supplemental-staged-evidence-record staged) 'operation-id))
+        "operation mismatch")
+  (define-values (E task candidate-record) (staged-supplemental-context! base plan wave cwd staged))
+  (define record (supplemental-staged-evidence-record staged))
+  (define spec
+    (discover-evidence-probe-spec cwd
+                                  E
+                                  (hash-ref task 'effective-command)
+                                  #:harness-files (hash-ref record 'harness-files)
+                                  #:baseline-head (hash-ref record 'baseline-head)
+                                  #:test-path (hash-ref record 'test-path)))
+  (need spec "staged probe discovery refused")
+  (need (equal? (hash-ref spec 'context #f) E) "discovered spec context drift")
+  (need (equal? (hash-ref (hash-ref spec 'target #f) 'test-path #f) (hash-ref record 'test-path))
+        "discovered probe target drift")
+  (define (guard)
+    (and (live-guard)
+         (with-handlers ([exn:fail? (lambda (_) #f)])
+           (call-with-values (lambda () (staged-supplemental-context! base plan wave cwd staged))
+                             (lambda _ #t)))))
+  (define prepared (prepare-baseline-probe! cwd spec id))
+  (need (guard) "stale guard after staged preparation")
+  (run-baseline-probe! cwd prepared id #:guard guard))
+
+;; ============================================================
+;; BUG-0088 (d): the fresh, opaque, single-consumption registration
+;; capability of the protected owner transition. The constructor is NOT
+;; provided: only the protected owner module (supplemental-evidence-
+;; promotion.rkt) can mint capabilities, and only through the protected-
+;; owner submodule after the delivery journal's durable promotion intent
+;; has attested the exact P/operation/generation/receipt. Callers can
+;; neither forge one, nor recover one with a guard or a digest match, nor
+;; consume one twice.
+(struct promoted-registration (base plan wave id context probe operation promotion used) #:authentic)
+(define issued-promoted (make-weak-hasheq))
+(define (verify-promoted-registration-capability! cap context probe operation-id)
+  (and (promoted-registration? cap)
+       (hash-ref issued-promoted cap #f)
+       (equal? (promoted-registration-context cap) context)
+       (equal? (promoted-registration-probe cap) probe)
+       (equal? (promoted-registration-operation cap) operation-id)
+       (not (unbox (promoted-registration-used cap)))))
+(define (consume-promoted-registration-capability! cap context probe operation-id)
+  (need (verify-promoted-registration-capability! cap context probe operation-id)
+        "invalid, stale or double-consumed promotion capability")
+  (set-box! (promoted-registration-used cap) #t)
+  #t)
+(module+ protected-owner
+  (provide mint-promoted-registration-capability!)
+  (define (mint-promoted-registration-capability! base plan wave operation-id context probe promotion)
+    ;; Protected origin check: the delivery journal's write-ahead promotion
+    ;; intent must attest exactly this P/operation/generation/receipt
+    ;; BEFORE any capability can exist.
+    (define intent
+      ((dynamic-require journal-module 'load-supplemental-promotion-intent) base plan wave))
+    (need (hash? promotion) "sealed promotion record required")
+    (need (and intent
+               (equal? (hash-ref (hash-ref intent 'promotion #f) 'sha256 #f)
+                       (hash-ref promotion 'sha256 #f))
+               (equal? (hash-ref intent 'operation-id #f) operation-id)
+               (= (hash-ref intent 'generation -1) (hash-ref context 'receipt-generation -1))
+               (equal? (hash-ref intent 'receipt-sha256 #f) (hash-ref context 'receipt-sha256 #f))
+               (equal? (hash-ref intent 'context-digest #f) (evidence-context-digest context)))
+          "no attested protected promotion origin for this operation")
+    (define token
+      (promoted-registration base
+                             plan
+                             wave
+                             operation-id
+                             context
+                             probe
+                             operation-id
+                             (hash-ref promotion 'sha256)
+                             (box #f)))
+    (hash-set! issued-promoted token #t)
+    token))

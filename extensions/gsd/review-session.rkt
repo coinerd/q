@@ -19,8 +19,7 @@
          "../../util/loop-result.rkt"
          "../../util/message/message.rkt"
          "../../util/content/content-parts.rkt"
-         "../../tools/tool.rkt"
-         "../../tools/registry-defaults.rkt"
+         "review-tools.rkt"
          "../../tools/permission-gate.rkt"
          "../../sandbox/subprocess.rkt"
          "../../sandbox/gateway-bridge.rkt"
@@ -142,7 +141,8 @@
 ;; Private test/probe interface, not part of the extension's public runner API.
 (module+ test-support
   (provide resolve-review-model
-           build-review-provider))
+           build-review-provider
+           make-review-tool-registry))
 (define (run-review-session session prompt)
   (define-values (_updated result) (run-prompt! session prompt #:max-iterations 80))
   result)
@@ -310,8 +310,7 @@
                                       ;; reviewer's own read/bash tools (the
                                       ;; live W1 incident). Pin #f explicitly.
                                       [current-gsd-author-phase #f])
-                         (define tools (make-tool-registry))
-                         (register-default-tools! tools #:only '("read" "bash"))
+                         (define tools (make-review-tool-registry cwd))
                          (set! session
                                (make-agent-session
                                 (hasheq 'provider

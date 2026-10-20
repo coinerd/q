@@ -4,7 +4,9 @@
          racket/path
          racket/string
          racket/system
-         "delivery-journal.rkt"
+         (only-in "delivery-journal.rkt"
+                  load-delivery-journal
+                  load-supplemental-promotion-intent)
          "review-proof.rkt"
          "evidence-repair-format.rkt"
          "evidence-repair-ledger.rkt"
@@ -103,7 +105,31 @@
                    (equal? (hash-ref registration 'retained-green)
                            (hash-ref context 'green-proof-sha256)))
         (error 'evidence-readiness "stale-registration-context"))
-      (validate-baseline-probe! (hash-ref context 'repo) (hash-ref registration 'probe) context))
+      (validate-baseline-probe! (hash-ref context 'repo) (hash-ref registration 'probe) context)
+      ;; BUG-0088 (e): a PROMOTED registration is ready only when the
+      ;; journal's durable promotion intent attests its provenance against
+      ;; the CURRENT certified context/generation/receipt. A registration
+      ;; whose P provenance cannot be re-anchored now never reads ready.
+      (define promoted
+        (and (hash? (hash-ref ledger 'operation #f))
+             (hash-ref (hash-ref ledger 'operation) 'promoted #f)))
+      (when promoted
+        (define intent (load-supplemental-promotion-intent base plan wave))
+        (unless (and (hash? intent)
+                     (hash? (hash-ref intent 'promotion #f))
+                     (equal? (hash-ref promoted 'promotion #f)
+                             (hash-ref (hash-ref intent 'promotion) 'sha256 #f))
+                     (equal? (hash-ref promoted 'generation #f)
+                             (hash-ref intent 'generation #f))
+                     (equal? (hash-ref intent 'generation #f)
+                             (hash-ref context 'receipt-generation))
+                     (equal? (hash-ref intent 'receipt-sha256 #f)
+                             (hash-ref context 'receipt-sha256))
+                     (equal? (hash-ref intent 'context-digest #f)
+                             (evidence-context-digest context))
+                     (equal? (hash-ref intent 'operation-id #f)
+                             (hash-ref (hash-ref ledger 'operation) 'id #f)))
+          (error 'evidence-readiness "unattested-promoted-registration"))))
     (define linked
       (for/first ([pair (in-list (find-owned-red-proofs root manifest))]
                   #:when (string=? (git (hash-ref context 'repo)

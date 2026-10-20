@@ -8,7 +8,15 @@
          racket/path
          "review-proof.rkt"
          "author-scope.rkt"
-         "evidence-repair-format.rkt")
+         "evidence-repair-format.rkt"
+         ;; Module-size law (BUG-0088): the remote-pending marker and the
+         ;; permanent evidence-author marker blocks live in the supplemental
+         ;; publication module; their public contracts are unchanged and
+         ;; re-provided here for every existing consumer.
+         "supplemental-evidence-publication.rkt"
+         ;; Coordinated shared owner lock (exclusive, same-root reentrant).
+         (only-in "supplemental-evidence-authority.rkt"
+                  call-with-supplemental-authority-lock))
 (provide journal-evidence-author-repair
          evidence-author-repair-pending?
          save!
@@ -45,7 +53,15 @@
          load-remote-pending
          record-remote-pending!
          clear-remote-pending!
-         remote-pending-blocker)
+         remote-pending-blocker
+         ;; BUG-0088 sections 7-8: exact S-authorized supersession and the
+         ;; write-ahead promotion intent consumed by the protected owner
+         ;; transition.
+         supersede-supplemental-receipt!
+         supplemental-promotion-path
+         load-supplemental-promotion-intent
+         record-supplemental-promotion-intent!
+         valid-supplemental-promotion-intent?)
 (define delivery-stages
   '("context-ready" "implementation-review"
                     "implementation-pr"
@@ -116,10 +132,10 @@
 (define (journal-review-rejection-count journal)
   (define n (and (hash? journal) (hash-ref journal 'review-rejection-count #f)))
   (if (exact-nonnegative-integer? n) n 0))
-;; EXACT authorization test: the marker must name the given receipt's
-;; attempt-id, attempt-fence, branch and head verbatim. Anything less would
-;; let a stale marker authorize supersession of a different receipt.
 (define (review-rejection-matches-receipt? m r)
+  ;; EXACT authorization test: the marker must name the given receipt's
+  ;; attempt-id, attempt-fence, branch and head verbatim. Anything less would
+  ;; let a stale marker authorize supersession of a different receipt.
   (and (valid-review-rejection? m)
        (hash? r)
        (equal? (hash-ref m 'attempt-id #f) (hash-ref r 'attempt-id #f))
@@ -668,75 +684,12 @@
      (load-delivery-journal root plan wave)]))
 
 ;; Independent evidence authoring has a permanent, separate one-per-wave slot.
-(define (literal-files? fs)
-  (and (list? fs)
-       (pair? fs)
-       (= (length fs) (length (remove-duplicates fs)))
-       (andmap (lambda (f)
-                 (and (text? f)
-                      (regexp-match? #px"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$" f)
-                      (not (regexp-match? #px"(?:^|/)[.][.]?(?:/|$)" f))))
-               fs)))
-(define (context-receipt? c r plan wave generation)
-  (and (valid-evidence-context? c)
-       (valid-delivery-receipt? r)
-       (equal? (hash-ref c 'plan-id) plan)
-       (equal? (hash-ref c 'wave) wave)
-       (equal? (hash-ref c 'receipt-generation) generation)
-       (equal? (hash-ref c 'receipt-sha256) (canonical-evidence-digest r))
-       (valid-owned-proof-reference? (hash-ref r 'owned-proof #f))
-       (for/and ([k '(attempt-id attempt-fence branch origin head tree)])
-         (equal? (hash-ref c k) (hash-ref r k #f)))
-       (equal? (hash-ref c 'green-proof-sha256)
-               (hash-ref (hash-ref r 'owned-proof (hasheq)) 'sha256 #f))))
-(define (valid-author-marker? m plan wave)
-  (and (hash? m)
-       (equal? (hash-ref m 'schema-version #f) 1)
-       ;; BUG-0084: "retained" is the honest no-edit terminal — the author
-       ;; examined the wave and returned without edits; the old receipt stays
-       ;; current and the loop routes to a fresh review.
-       (member (hash-ref m 'state #f) '("pending" "running" "completed" "retained"))
-       (literal-files? (hash-ref m 'frozen-files #f))
-       (let ([c (hash-ref m 'context #f)]
-             [r (hash-ref m 'old-receipt #f)])
-         (and (valid-evidence-context? c)
-              (context-receipt? c r plan wave (hash-ref c 'receipt-generation))
-              (or (equal? (hash-ref m 'state) "pending")
-                  (and (text? (hash-ref m 'successor-attempt #f))
-                       (not (equal? (hash-ref m 'successor-attempt) (hash-ref c 'attempt-id)))
-                       (exact-nonnegative-integer? (hash-ref m 'successor-fence #f))
-                       (>= (hash-ref m 'successor-fence) (hash-ref c 'attempt-fence))))))
-       (or (not (equal? (hash-ref m 'state) "completed"))
-           (hex? (hash-ref m 'successor-receipt-sha256 #f) 64))
-       (or (not (equal? (hash-ref m 'state) "retained"))
-           (and (member (hash-ref m 'disposition #f) '("no-edit" "session-lost"))
-                (hex? (hash-ref m 'retained-tree-sha256 #f) 40)))))
-(define (author-marker-matches-journal? m j)
-  (and (valid-author-marker? m (hash-ref j 'plan-id #f) (hash-ref j 'wave #f))
-       (let* ([history (hash-ref j 'receipt-history '())]
-              [receipts (append history (list (hash-ref j 'receipt)))]
-              [generation (hash-ref (hash-ref m 'context) 'receipt-generation)])
-         (and (< generation (length receipts))
-              (equal? (list-ref receipts generation) (hash-ref m 'old-receipt))
-              (if (equal? (hash-ref m 'state) "completed")
-                  (and (< (add1 generation) (length receipts))
-                       (let ([successor (list-ref receipts (add1 generation))])
-                         (and (equal? (hash-ref successor 'attempt-id #f)
-                                      (hash-ref m 'successor-attempt))
-                              (equal? (hash-ref successor 'attempt-fence #f)
-                                      (hash-ref m 'successor-fence))
-                              (equal? (canonical-evidence-digest successor)
-                                      (hash-ref m 'successor-receipt-sha256)))))
-                  (= generation (length history)))))))
-(define (journal-evidence-author-repair j)
-  (define m (and (hash? j) (hash-ref j 'evidence-author-repair #f)))
-  (and m (author-marker-matches-journal? m j) m))
-(define (evidence-author-repair-pending? j)
-  (define m (journal-evidence-author-repair j))
-  (and m
-       (member (hash-ref m 'state) '("pending" "running"))
-       (equal? (hash-ref m 'old-receipt) (hash-ref j 'receipt #f))
-       #t))
+;; Its marker validation (literal-files?, context-receipt?,
+;; valid-author-marker?, author-marker-matches-journal?,
+;; journal-evidence-author-repair, evidence-author-repair-pending?) and the
+;; remote-backing marker below moved verbatim to
+;; supplemental-evidence-publication.rkt (module-size law); the import at the
+;; top keeps the exact historical names and re-provides them.
 
 ;; Write-once verification context. Requires an existing verified journal
 ;; (the context only means something against a recorded receipt); identical
@@ -756,73 +709,176 @@
      (error 'delivery-journal "verification context changed; explicit reconciliation required")]))
 
 ;; ============================================================
-;; Remote-backing marker (v1.00.31 W3, register F5)
-;; ============================================================
-;; The journal's load validation REQUIRES a verified receipt, so an
-;; unpublished branch can never park its state in the journal itself.
-;; The typed remote-pending marker is a SIBLING record: schema-1, exact
-;; campaign/wave identity, the unpushed branch/head and the reason. Its
-;; presence is a typed ladder-entry refusal naming branch and head; it is
-;; cleared automatically the moment the receipt is recorded (or already
-;; durable), so "push, re-verify, deliver" is the only way forward.
+;; BUG-0088 sections 7-8: exact S-authorized supersession.
+;;
+;; The ONLY journal path that installs a supplemental receipt. It runs
+;; inside the shared supplemental authority lock and re-derives every byte
+;; fact from the authenticated journal (the "late cut"): the new generation
+;; is (length receipt-history)+1 exactly when the journal still sits at the
+;; S-pinned predecessor generation — never forced. The old receipt and
+;; publication history are appended/ preserved, the spent evidence-author
+;; marker and all cumulative accounting stay byte-identical, and the stage
+;; resets to context-ready so the ordinary ladder re-runs on the new
+;; receipt. Replaying at the already-superseded identity is an idempotent
+;; no-op; any other stale identity refuses.
+(define supplemental-supersession-allowed-stages
+  '("context-ready" "implementation-review" "implementation-pr" "implementation-ci"))
+(define (supersede-supplemental-receipt! root
+                                         plan
+                                         wave
+                                         new-receipt
+                                         #:expected-old-receipt-sha256 expected-old-sha
+                                         #:expected-generation expected-generation
+                                         #:expected-attempt-id expected-attempt-id
+                                         #:expected-attempt-fence expected-attempt-fence
+                                         #:head-ancestor? head-ancestor?)
+  (unless (valid-delivery-receipt? new-receipt)
+    (error 'delivery-journal "supplemental supersession receipt is invalid"))
+  (validate-receipt-owned-proof! new-receipt root plan wave)
+  (unless (and (hex? expected-old-sha 64)
+               (exact-nonnegative-integer? expected-generation)
+               (text? expected-attempt-id)
+               (exact-nonnegative-integer? expected-attempt-fence)
+               (procedure? head-ancestor?)
+               (procedure-arity-includes? head-ancestor? 2))
+    (error 'delivery-journal "supplemental supersession preconditions are invalid"))
+  (unless (equal? (hash-ref new-receipt 'attempt-id #f) expected-attempt-id)
+    (error 'delivery-journal "supplemental receipt carries a different attempt"))
+  (unless (equal? (hash-ref new-receipt 'attempt-fence #f) expected-attempt-fence)
+    (error 'delivery-journal "supplemental receipt carries a different fence"))
+  (call-with-supplemental-authority-lock
+   (lambda ()
+     (define old (load-delivery-journal root plan wave))
+     (unless old (error 'delivery-journal "supersession requires a durable journal"))
+     (define old-receipt (hash-ref old 'receipt #f))
+     (unless (hash? old-receipt) (error 'delivery-journal "journal carries no receipt"))
+     (define history (hash-ref old 'receipt-history '()))
+     (unless (valid-receipt-history? history)
+       (error 'delivery-journal "existing receipt history is malformed"))
+     (define stage (hash-ref old 'stage #f))
+     (unless (member stage supplemental-supersession-allowed-stages)
+       (error 'delivery-journal (format "stage ~a is terminal for supplemental supersession" stage)))
+     (cond
+       ;; Idempotent replay: the exact receipt is already current.
+       [(and (equal? old-receipt new-receipt)
+             (= (length history) (add1 expected-generation)))
+        old]
+       [else
+        (unless (= (length history) expected-generation)
+          (error 'delivery-journal
+                 (format "supplemental generation advanced: journal ~a, authorized ~a"
+                         (length history)
+                         expected-generation)))
+        (unless (equal? (canonical-evidence-digest old-receipt) expected-old-sha)
+          (error 'delivery-journal "the current receipt is not the S-authorized predecessor"))
+        (define old-branch (hash-ref old-receipt 'branch #f))
+        (unless (and (string? old-branch)
+                     (equal? old-branch (hash-ref new-receipt 'branch #f))
+                     (equal? (hash-ref old-receipt 'origin #f) (hash-ref new-receipt 'origin #f))
+                     (equal? (hash-ref old-receipt 'repo #f) (hash-ref new-receipt 'repo #f)))
+          (error 'delivery-journal "supersession changed the campaign repository/branch identity"))
+        (unless (not (member old-branch '("main" "master")))
+          (error 'delivery-journal "protected branch cannot be superseded"))
+        (define old-head (hash-ref old-receipt 'head #f))
+        (define new-head (hash-ref new-receipt 'head #f))
+        (unless (and (hex? old-head 40) (hex? new-head 40))
+          (error 'delivery-journal "supersession receipt heads are malformed"))
+        (unless (head-ancestor? old-head new-head)
+          (error 'delivery-journal "the certified head is not a descendant of the receipt head"))
+        (save! root
+               plan
+               wave
+               (hash-set* old
+                          'receipt
+                          new-receipt
+                          'receipt-history
+                          (append history (list old-receipt))
+                          'stage
+                          "context-ready"))
+        (load-delivery-journal root plan wave)]))))
 
-(define (remote-pending-path root plan wave)
+;; ============================================================
+;; BUG-0088 section 8: the write-ahead promotion intent. Written ONCE by
+;; the protected owner transition BEFORE the registration capability is
+;; consumed; recovery accepts only the same attested P/operation. The
+;; record cross-checks the CURRENT authenticated journal at load, so a
+;; changed context/generation/receipt voids it (returns #f) instead of
+;; authorizing a stale promotion.
+(define (supplemental-promotion-path root plan wave)
   (unless (and (hex? plan 64) (exact-nonnegative-integer? wave))
     (error 'delivery-journal "invalid campaign/wave identity"))
   (build-path (path->complete-path root)
               ".planning"
               "campaigns"
               plan
-              (format "coordinator-w~a.remote-pending.json" wave)))
-
-(define (load-remote-pending root plan wave)
-  (define path (remote-pending-path root plan wave))
+              (format "coordinator-w~a.supplemental-promotion.json" wave)))
+(define (valid-supplemental-promotion-intent? i plan wave)
+  (and (hash? i)
+       (equal? (hash-ref i 'schema-version #f) 1)
+       (equal? (hash-ref i 'plan-id #f) plan)
+       (equal? (hash-ref i 'wave #f) wave)
+       (exact-nonnegative-integer? (hash-ref i 'generation #f))
+       (hex? (hash-ref i 'receipt-sha256 #f) 64)
+       (hex? (hash-ref i 'context-digest #f) 64)
+       (text? (hash-ref i 'operation-id #f))
+       (hash? (hash-ref i 'promotion #f))
+       (equal? (hash-ref (hash-ref i 'promotion #f) 'kind #f)
+               "supplemental-evidence-promotion/v1")
+       (equal? (hash-ref (hash-ref i 'promotion #f) 'sha256 #f)
+               (canonical-evidence-digest (hash-ref i 'promotion #f)))
+       (exact-nonnegative-integer? (hash-ref i 'at #f))
+       (= (hash-count i) 8)))
+(define (load-supplemental-promotion-intent root plan wave)
+  (define path (supplemental-promotion-path root plan wave))
   (and (file-exists? path)
-       (with-handlers ([exn:fail? (lambda (_) #f)])
-         (define data (call-with-input-file path read-json))
-         (and (hash? data)
-              (equal? (hash-ref data 'schema-version #f) 1)
-              (equal? (hash-ref data 'plan-id #f) plan)
-              (equal? (hash-ref data 'wave #f) wave)
-              (text? (hash-ref data 'branch #f))
-              (hex? (hash-ref data 'head #f) 40)
-              (string? (hash-ref data 'reason #f))
-              data))))
-
-(define (record-remote-pending! root plan wave branch head reason)
-  (unless (and (text? branch) (hex? head 40) (string? reason) (positive? (string-length reason)))
-    (error 'delivery-journal "invalid remote-pending marker"))
-  (define path (remote-pending-path root plan wave))
-  (when (link-exists? path)
-    (error 'delivery-journal "symlinked remote-pending marker refused"))
-  (make-parent-directory* path)
-  (call-with-atomic-output-file path
-                                (lambda (out _)
-                                  (write-json (hasheq 'schema-version
-                                                      1
-                                                      'plan-id
-                                                      plan
-                                                      'wave
-                                                      wave
-                                                      'branch
-                                                      branch
-                                                      'head
-                                                      head
-                                                      'at
-                                                      (current-seconds)
-                                                      'reason
-                                                      reason)
-                                              out)
-                                  (newline out))))
-
-(define (clear-remote-pending! root plan wave)
-  (define path (remote-pending-path root plan wave))
-  (when (file-exists? path)
-    (delete-file path)))
-
-;; The typed ladder-entry gate: (remote-pending-blocker root plan wave)
-;; returns 'branch-not-published exactly when the marker exists, else #f.
-;; Callers that carry the marker hash can name branch and head in the
-;; operator-facing refusal (see delivery-coordinator).
-(define (remote-pending-blocker root plan wave)
-  (and (load-remote-pending root plan wave) 'branch-not-published))
+       (let ([intent
+              (begin
+                (when (link-exists? path)
+                  (error 'delivery-journal "symlinked promotion intent refused"))
+                (with-handlers ([exn:fail? (lambda (_) #f)])
+                  (call-with-input-file path read-json)))])
+         (unless (valid-supplemental-promotion-intent? intent plan wave)
+           (error 'delivery-journal "promotion intent is malformed; refusing"))
+         (define journal (load-delivery-journal root plan wave))
+         (and journal
+              (= (hash-ref intent 'generation)
+                 (length (hash-ref journal 'receipt-history '())))
+              (equal? (hash-ref intent 'receipt-sha256)
+                      (canonical-evidence-digest (hash-ref journal 'receipt)))
+              intent))))
+(define (record-supplemental-promotion-intent! root plan wave intent)
+  (unless (valid-supplemental-promotion-intent? intent plan wave)
+    (error 'delivery-journal "promotion intent is malformed"))
+  (call-with-supplemental-authority-lock
+   (lambda ()
+     (define journal (load-delivery-journal root plan wave))
+     (unless journal (error 'delivery-journal "promotion intent requires a durable journal"))
+     (unless (and (= (hash-ref intent 'generation)
+                     (length (hash-ref journal 'receipt-history '())))
+                  (equal? (hash-ref intent 'receipt-sha256)
+                          (canonical-evidence-digest (hash-ref journal 'receipt))))
+       (error 'delivery-journal "promotion intent does not match the certified journal"))
+     (define path (supplemental-promotion-path root plan wave))
+     (when (link-exists? path)
+       (error 'delivery-journal "symlinked promotion intent refused"))
+     (cond
+       [(file-exists? path)
+        (define prior (call-with-input-file path read-json))
+        (unless (equal? prior intent)
+          (error 'delivery-journal "a different promotion intent is already recorded"))
+        intent]
+       [else
+        (define temp (make-temporary-file ".promotion-~a.tmp" #f (path-only path)))
+        (dynamic-wind
+         void
+         (lambda ()
+           (call-with-output-file temp
+                                  (lambda (out)
+                                    (write-json intent out)
+                                    (newline out))
+                                  #:exists 'truncate)
+           (rename-file-or-directory temp path #t))
+         (lambda ()
+           (when (file-exists? temp)
+             (delete-file temp))))
+        intent]))))

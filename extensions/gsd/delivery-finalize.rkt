@@ -26,6 +26,9 @@
          racket/string
          (only-in "review-checkpoint.rkt" resolve-review-checkpoint! pending-review-rejection-message)
          (only-in "author-checkpoint.rkt" resolve-author-checkpoint! author-repair-pending?)
+         (only-in "supplemental-evidence-controller.rkt"
+                  supplemental-resumable?
+                  supplemental-checkpoint-step!)
          (only-in "delivery-journal.rkt"
                   journal-evidence-author-repair
                   update-delivery-journal!) ; BUG-0084: durable review-infra retry counter
@@ -315,6 +318,21 @@
                       (reverse completed)
                       "delivery provenance changed during finalization")]))
 
+;; BUG-0088 C1: an authenticated active supplemental operation past its launch
+;; boundary resumes HERE, between wave passes, under the held campaign lease —
+;; WITHOUT beginning a new attempt (never re-reserves). One advance per
+;; checkpoint visit; the private CAS journal is the durable progress proof,
+;; so the existing no-spin law stays intact through 'advance only when the
+;; protected operation actually moved.
+(define (supplemental-checkpoint-visit! dir plan-id idx on-cancel on-advance on-blocked)
+  (define record (load-campaign-record dir plan-id))
+  (if (and record (campaign-record-cancellation record))
+      (on-cancel "campaign cancellation requested")
+      (let-values ([(verdict detail) (supplemental-checkpoint-step! dir plan-id idx)])
+        (case verdict
+          [(advance) (on-advance)]
+          [else (on-blocked detail)]))))
+
 ;; Run one delivery-coordinator step and classify it. A typed 'ok re-enters the
 ;; loop ONLY when the durable delivery journal actually moved; a coordinator
 ;; that claims progress without a durable transition is a clean, resumable
@@ -337,99 +355,111 @@
                                     ;; and termination, so #f is a proven dead
                                     ;; session, never an assumption.
                                     #:author-session-live? [author-session-live? (lambda () #t)])
-  (if (and extra (campaign-record-cancellation (load-campaign-record dir plan-id)))
-      (on-cancel message)
-      (let* ([idx (and (campaign-wave? extra) (campaign-wave-index extra))]
-             [before (and idx (delivery-journal-snapshot dir plan-id idx))]
-             [author-replay (and idx (author-repair-pending? dir plan-id idx))]
-             [author-recovery (and author-replay
-                                   (equal? (hash-ref (journal-evidence-author-repair
-                                                      (load-delivery-journal dir plan-id idx))
-                                                     'state
-                                                     #f)
-                                           "running")
-                                   (author-publication-recovery dir plan-id idx))]
-             [replay (pending-review-rejection-message before)]
-             [outcome
-              (cond
-                [(and author-replay (not author-recovery))
-                 (cons 'evidence-author-repair "durable author permission pending")]
-                [author-recovery
-                 ;; Publication-only crash recovery: the confirmed successor
-                 ;; publication and its owned proof replay supersession; no
-                 ;; author phase, reviewer or ladder effect is redispatched.
-                 (with-handlers ([exn:fail? (lambda (e)
-                                              (cons 'evidence-author-repair
-                                                    (format "author publication recovery refused: ~a"
-                                                            (exn-message e))))])
-                   (cons 'ok (hash-ref (author-recovery) 'message)))]
-                [replay (cons 'review-rejected replay)]
-                [else (delivery-coordinator dir plan-id idx)])]
-             ;; BUG-0084: a typed review-infra outcome consumes one unit of
-             ;; the SEPARATE durable relaunch budget before the decision. The
-             ;; counter bump IS a durable journal transition, so advancing on
-             ;; it never violates the no-spin guard; past the limit the
-             ;; honest bounded reason stops the wave instead.
-             [outcome*
-              (if (and idx
-                       (delivery-outcome? outcome)
-                       (eq? (delivery-outcome-kind outcome) 'review-infra))
-                  (let ([count (bump-review-infra-count! dir plan-id idx)]
-                        [limit (current-gsd-review-infra-retry-limit)])
-                    (cond
-                      [(and count (<= count limit))
-                       (cons 'review-infra-retry (delivery-outcome-message outcome))]
-                      [count
-                       (cons 'blocked
-                             (format
-                              "review lane failed ~a times (limit ~a); operator review required: ~a"
-                              count
-                              limit
-                              (delivery-outcome-message outcome)))]
-                      [else outcome]))
-                  outcome)]
-             [after (and idx (delivery-journal-snapshot dir plan-id idx))]
-             [kind (and outcome* (delivery-outcome-kind outcome*))]
-             [decision (coordinator-checkpoint-decision
-                        kind
-                        before
-                        after
-                        (and extra
-                             (campaign-record-cancellation (load-campaign-record dir plan-id))))])
-        (case decision
-          [(cancelled) (on-cancel "campaign cancellation requested")]
-          [(advance)
-           ;; BUG-0084: any genuine advance ends the current review round —
-           ;; its infra budget is refreshed for the next round.
-           (unless (eq? kind 'review-infra-retry)
-             (clear-review-infra-count! dir plan-id idx))
-           (on-advance)]
-          [else
-           (define resolved
-             (cond
-               [(and idx (author-repair-pending? dir plan-id idx))
-                ;; BUG-0086: a dead running author may retain an unchanged
-                ;; snapshot or finish its committed scoped successor through
-                ;; real owned Verify/publication. A refusal is actionable and
-                ;; must NOT be swallowed by the unlaunched-permission resolver.
-                (or
-                 (recover-lost-author-session! dir plan-id idx #:session-live? author-session-live?)
-                 (resolve-author-checkpoint! dir plan-id idx))]
-               [(and (eq? kind 'review-rejected) idx)
-                (resolve-review-checkpoint! dir plan-id idx (delivery-outcome-message outcome*))]
-               [else #f]))
-           (if (eq? resolved #t)
-               (on-advance)
-               (on-blocked
+  (cond
+    [(and (campaign-wave? extra) (supplemental-resumable? dir plan-id (campaign-wave-index extra)))
+     (supplemental-checkpoint-visit! dir
+                                     plan-id
+                                     (campaign-wave-index extra)
+                                     on-cancel
+                                     on-advance
+                                     on-blocked)]
+    [else
+     (if (and extra (campaign-record-cancellation (load-campaign-record dir plan-id)))
+         (on-cancel message)
+         (let* ([idx (and (campaign-wave? extra) (campaign-wave-index extra))]
+                [before (and idx (delivery-journal-snapshot dir plan-id idx))]
+                [author-replay (and idx (author-repair-pending? dir plan-id idx))]
+                [author-recovery (and author-replay
+                                      (equal? (hash-ref (journal-evidence-author-repair
+                                                         (load-delivery-journal dir plan-id idx))
+                                                        'state
+                                                        #f)
+                                              "running")
+                                      (author-publication-recovery dir plan-id idx))]
+                [replay (pending-review-rejection-message before)]
+                [outcome (cond
+                           [(and author-replay (not author-recovery))
+                            (cons 'evidence-author-repair "durable author permission pending")]
+                           [author-recovery
+                            ;; Publication-only crash recovery: the confirmed successor
+                            ;; publication and its owned proof replay supersession; no
+                            ;; author phase, reviewer or ladder effect is redispatched.
+                            (with-handlers ([exn:fail?
+                                             (lambda (e)
+                                               (cons 'evidence-author-repair
+                                                     (format "author publication recovery refused: ~a"
+                                                             (exn-message e))))])
+                              (cons 'ok (hash-ref (author-recovery) 'message)))]
+                           [replay (cons 'review-rejected replay)]
+                           [else (delivery-coordinator dir plan-id idx)])]
+                ;; BUG-0084: a typed review-infra outcome consumes one unit of
+                ;; the SEPARATE durable relaunch budget before the decision. The
+                ;; counter bump IS a durable journal transition, so advancing on
+                ;; it never violates the no-spin guard; past the limit the
+                ;; honest bounded reason stops the wave instead.
+                [outcome*
+                 (if (and idx
+                          (delivery-outcome? outcome)
+                          (eq? (delivery-outcome-kind outcome) 'review-infra))
+                     (let ([count (bump-review-infra-count! dir plan-id idx)]
+                           [limit (current-gsd-review-infra-retry-limit)])
+                       (cond
+                         [(and count (<= count limit))
+                          (cons 'review-infra-retry (delivery-outcome-message outcome))]
+                         [count
+                          (cons
+                           'blocked
+                           (format
+                            "review lane failed ~a times (limit ~a); operator review required: ~a"
+                            count
+                            limit
+                            (delivery-outcome-message outcome)))]
+                         [else outcome]))
+                     outcome)]
+                [after (and idx (delivery-journal-snapshot dir plan-id idx))]
+                [kind (and outcome* (delivery-outcome-kind outcome*))]
+                [decision (coordinator-checkpoint-decision
+                           kind
+                           before
+                           after
+                           (and extra
+                                (campaign-record-cancellation (load-campaign-record dir plan-id))))])
+           (case decision
+             [(cancelled) (on-cancel "campaign cancellation requested")]
+             [(advance)
+              ;; BUG-0084: any genuine advance ends the current review round —
+              ;; its infra budget is refreshed for the next round.
+              (unless (eq? kind 'review-infra-retry)
+                (clear-review-infra-count! dir plan-id idx))
+              (on-advance)]
+             [else
+              (define resolved
                 (cond
-                  [(eq? kind 'delivered)
-                   "terminal stage lacks authenticated readback; no delivery proof advanced"]
-                  [resolved (honest-blocked-reason resolved)]
-                  [(and outcome* (delivery-outcome? outcome*))
-                   (honest-blocked-reason (delivery-outcome-message outcome*))]
-                  [(and before (not after))
-                   "coordinator reported progress without a durable delivery transition"]
-                  [else message])))]))))
+                  [(and idx (author-repair-pending? dir plan-id idx))
+                   ;; BUG-0086: a dead running author may retain an unchanged
+                   ;; snapshot or finish its committed scoped successor through
+                   ;; real owned Verify/publication. A refusal is actionable and
+                   ;; must NOT be swallowed by the unlaunched-permission resolver.
+                   (or (recover-lost-author-session! dir
+                                                     plan-id
+                                                     idx
+                                                     #:session-live? author-session-live?)
+                       (resolve-author-checkpoint! dir plan-id idx))]
+                  [(and (eq? kind 'review-rejected) idx)
+                   (resolve-review-checkpoint! dir plan-id idx (delivery-outcome-message outcome*))]
+                  [else #f]))
+              (if (eq? resolved #t)
+                  (on-advance)
+                  (on-blocked
+                   (cond
+                     [(eq? kind 'delivered)
+                      "terminal stage lacks authenticated readback; no delivery proof advanced"]
+                     [resolved (honest-blocked-reason resolved)]
+                     [(and outcome* (delivery-outcome? outcome*))
+                      (honest-blocked-reason (delivery-outcome-message outcome*))]
+                     [(and before (not after))
+                      "coordinator reported progress without a durable delivery transition"]
+                     [else message])))])))]))
 
 ;; Campaign-facing result wrapper; continuation remains owned by the caller.
 (define (coordinator-checkpoint-result dir

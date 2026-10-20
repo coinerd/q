@@ -112,20 +112,27 @@
       ;; +6 automatic review (dispatch, rejection, checkpoint, usage,
       ;; worktree and the extension-owned runtime session adapter);
       ;; +3 BUG-0042 extractions (owned-lane, wave-scope,
-      ;; evidence-author-journal); +1 BUG-0086 owner session recovery.
+      ;; evidence-author-journal); +1 BUG-0086 owner session recovery;
+      ;; +10 BUG-0088 governed supplemental evidence (effective-verify-binding,
+      ;; supplemental evidence format/authority/journal/proof/publication/
+      ;; promotion/controller/operator and the hardened review-tools registry).
       (check-equal? (length inventory)
-                    87
-                    "85 existing + two separately authorized correction modules"))
+                    97
+                    "85 existing + two correction modules + ten BUG-0088 modules"))
 
     (test-case "evidence recovery classification preserves I/O boundaries"
       (define formats '("evidence-repair-format.rkt"))
       ;; Discovery delegates source reads to runner coverage/the probe reader;
       ;; keep direct source-marker checks separate from delegated effects.
-      (define io-owners '("evidence-probe.rkt" "evidence-readiness.rkt"
-                          "evidence-repair-ledger.rkt" "evidence-runner-coverage.rkt"
-                          "author-scope.rkt" "red-checkpoint.rkt"))
+      (define io-owners
+        '("evidence-probe.rkt" "evidence-readiness.rkt"
+                               "evidence-repair-ledger.rkt"
+                               "evidence-runner-coverage.rkt"
+                               "author-scope.rkt"
+                               "red-checkpoint.rkt"))
       (define discovery (hash-ref inventory-map "evidence-discovery.rkt"))
-      (check-equal? (entry-effects discovery) '(git parameterize path-ops))
+      ;; `dynamic-require` is the rejected-form marker in the helper walk.
+      (check-equal? (entry-effects discovery) '(git parameterize path-ops dynamic-require))
       (for ([dep '("evidence-runner-coverage" "scripts/gsd-evidence-probe-runner")])
         (check-not-false (member dep (entry-deps discovery))))
       (for ([file (in-list formats)])
@@ -134,22 +141,30 @@
         (check-not-false (memq 'fs-read (entry-effects (hash-ref inventory-map file))))))
 
     (test-case "author lifecycle is not classified as pure or a facade"
-      (for ([file '("author-scope.rkt" "author-execution.rkt" "author-checkpoint.rkt"
-                    "evidence-author-repair.rkt" "red-checkpoint.rkt" "author-session-recovery.rkt")])
+      (for ([file '("author-scope.rkt" "author-execution.rkt"
+                                       "author-checkpoint.rkt"
+                                       "evidence-author-repair.rkt"
+                                       "red-checkpoint.rkt"
+                                       "author-session-recovery.rkt")])
         (check-false (and (memq (entry-domain (hash-ref inventory-map file))
-                                '(pure-planning compatibility-facade)) #t)))
+                                '(pure-planning compatibility-facade))
+                          #t)))
       (for ([binding '(("evidence-author-repair.rkt" "author-scope" "delivery-journal")
-                       ("author-execution.rkt" "red-checkpoint" "delivery-journal"
+                       ("author-execution.rkt" "red-checkpoint"
+                                               "delivery-journal"
                                                "../gsd-planning/execution-policy")
                        ("author-checkpoint.rkt" "campaign-repository" "delivery-receipt")
                        ("red-checkpoint.rkt" "verification-job" "author-scope")
-                       ("author-session-recovery.rkt" "delivery-verifier" "review-proof"
-                                                      "verification-job" "system-adapters" "owner-correction")
-                       ("owner-correction.rkt" "generated-readme" "review-proof"
+                       ("author-session-recovery.rkt" "delivery-verifier"
+                                                      "review-proof"
+                                                      "verification-job"
+                                                      "system-adapters"
+                                                      "owner-correction")
+                       ("owner-correction.rkt" "generated-readme"
+                                               "review-proof"
                                                "../gsd-planning/execution-policy"))])
         (for ([dep (in-list (cdr binding))])
-          (check-not-false
-           (member dep (entry-deps (hash-ref inventory-map (car binding))))))))
+          (check-not-false (member dep (entry-deps (hash-ref inventory-map (car binding))))))))
 
     (test-case "domain vocabulary is closed"
       (for ([e (in-list inventory)])
