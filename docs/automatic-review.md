@@ -233,7 +233,11 @@ of the old grant. Provider remains operator-selected, not pinned or guaranteed a
 A private permanent single-child claim precedes the exact pointer CAS; every child
 admission validates that claim and active pointer. Same-child crash replay is supported;
 competing children, drift, rollback, grandchild and ordinary-author fallback are refused.
-Parent records/history/accounting stay unchanged. Authorization launches nothing; `/go`
+A malformed public pointer still retains ownership; if it disappears, a durable private
+claim bound to its exact path preserves a deny-only block. Expiry/revocation never erase
+that ownership, and invalid/inaccessible private roots or ambiguous claims fail closed.
+An absent unused authority store is not provisioned. Neither claim nor file presence
+alone grants child execution. Parent records/history/accounting stay unchanged. Authorization launches nothing; `/go`
 separately uses its normal monotonic owned attempt and all later K/G1/R1/S/P/review gates.
 Historical parent expiry is ignored only for immutable terminal inspection, not execution
 or revocation. A denied, failed or expired child does not restore either permission.

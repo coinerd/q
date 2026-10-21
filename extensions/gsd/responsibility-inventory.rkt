@@ -1005,7 +1005,7 @@
    ;; Protected one-shot operation journal: OS-locked CAS + write-ahead intents.
    (make-entry "supplemental-evidence-journal.rkt"
                'persistence
-               '(fs-write fs-read fs-rename fs-delete mkdir sha256 make-param path-ops)
+               '(fs-write fs-read fs-rename fs-delete mkdir dir-list sha256 make-param path-ops)
                '(current-supplemental-journal-crash-cut)
                '("json" "racket/file"
                         "racket/list"

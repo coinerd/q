@@ -81,7 +81,8 @@
          current-supplemental-journal-crash-cut
          inspect-supplemental-entry-operation
          inspect-supplemental-recovery-parent
-         install-supplemental-recovery-claim!)
+         install-supplemental-recovery-claim!
+         supplemental-recovery-pointer-claimed?)
 
 ;; Fault injection may only interrupt storage, never supply authority or facts.
 (define current-supplemental-journal-crash-cut
@@ -201,7 +202,7 @@
   (check-chain! path)
   (unless (= #o700 (bitwise-and #o7777 (file-or-directory-permissions path 'bits)))
     (refuse "private directory must have mode 0700")))
-(define (root!)
+(define (root! [allow-absent? #f])
   (define raw (current-supplemental-authority-root))
   (unless (and (path-string? raw) (complete-path? raw) (not (member 'up (explode-path raw))))
     (refuse "absolute authority root required; no project context root"))
@@ -214,11 +215,25 @@
     (string->path (if (regexp-match? #px"^/+$" text)
                       "/"
                       (regexp-replace #px"/+$" text ""))))
-  (private-directory! path)
   (define root (simplify-path path #f))
   (when (or (within? root (current-directory)) (within? root source-root))
     (refuse "authority root is inside project/control source"))
-  root)
+  (cond
+    [(and allow-absent? (not (present? path)))
+     ;; Absence is ordinary non-feature use, not permission to create storage.
+     ;; Validate ancestors too: a dangling/symlinked root is not absence.
+     (let absent! ([missing path])
+       (define-values (parent name _dir?) (split-path missing))
+       (cond
+         [(not (present? parent)) (absent! (simplify-path parent #f))]
+         [else
+          (check-chain! parent)
+          ;; Listing distinguishes proven absence from inaccessible/uncertain
+          ;; stat results. Errors propagate; never downgrade them to #f.
+          (when (member name (directory-list parent))
+            (refuse "authority root absence is uncertain"))]))
+     #f]
+    [else (private-directory! path) root]))
 (define (check-file! path)
   (when (link-exists? path)
     (refuse "symlink journal file"))
@@ -326,6 +341,57 @@
      (values proposal task record))))
 (define (claim-path parent)
   (build-path (root!) (string-append "supplemental-recovery-" (hash-ref parent 'sha256) ".json")))
+(define (canonical-pointer-path path)
+  (path->string (simplify-path (path->complete-path path) #f)))
+;; Storage-only validation: deliberately no approval, expiry, revocation,
+;; operation inspection or reconciliation. Ownership can only deny execution.
+(define (read-recovery-claim! path)
+  (define claim (read-sealed path))
+  (define r (hash-ref claim 'lineage #f))
+  (define target (hash-ref claim 'target #f))
+  (define bound (hash-ref claim 'pointer-path #f))
+  (define (ref? value kind)
+    (and (supplemental-reference? value) (equal? (hash-ref value 'kind) kind)))
+  (unless
+      (and (exact-keys? claim '(schema lineage pointer-path target sha256))
+           (equal? (hash-ref claim 'schema) "supplemental-recovery-claim/v1")
+           (exact-keys? r '(parent-proposal parent-approval terminal-sha256 pointer-sha256 allocation))
+           (ref? (hash-ref r 'parent-proposal) "task-proposal")
+           (ref? (hash-ref r 'parent-approval) "task-approval")
+           (for/and ([key '(terminal-sha256 pointer-sha256)])
+             (define digest (hash-ref r key))
+             (and (string? digest) (regexp-match? #px"^[0-9a-f]{64}$" digest)))
+           (let ([a (hash-ref r 'allocation)])
+             (and (exact-keys? a '(attempt-id attempt-fence coordinator-fence))
+                  (string? (hash-ref a 'attempt-id))
+                  (positive? (string-length (hash-ref a 'attempt-id)))
+                  (exact-nonnegative-integer? (hash-ref a 'attempt-fence))
+                  (exact-nonnegative-integer? (hash-ref a 'coordinator-fence))))
+           (string? bound) (complete-path? bound)
+           (equal? bound (canonical-pointer-path bound))
+           (exact-keys? target '(schema task-proposal task-approval))
+           (equal? (hash-ref target 'schema) "supplemental-pointer/v1")
+           (ref? (hash-ref target 'task-proposal) "task-proposal")
+           (ref? (hash-ref target 'task-approval) "task-approval")
+           (equal? (file-name-from-path path)
+                   (string->path
+                    (string-append "supplemental-recovery-"
+                                   (hash-ref (hash-ref r 'parent-approval) 'sha256) ".json"))))
+    (refuse "invalid permanent recovery claim"))
+  claim)
+(define (supplemental-recovery-pointer-claimed? path)
+  ;; Explicit #f is outside the trusted feature embedding: it cannot discover
+  ;; private ownership. Any configured-but-invalid/inaccessible root or claim
+  ;; raises, NEVER becomes #f and ordinary fallback. No files/locks are created.
+  (define root (and (current-supplemental-authority-root) (root! #t)))
+  (define bound (canonical-pointer-path path))
+  (and root
+       (for/fold ([claimed? #f]) ([entry (in-list (directory-list root))]
+                                #:when (regexp-match? #rx"^supplemental-recovery-" (path->string entry)))
+         ;; Validate all candidates even after a match; ambiguity must stop.
+         (define claim (read-recovery-claim! (build-path root entry)))
+         (or (equal? bound (hash-ref claim 'pointer-path)) claimed?))
+       #t))
 (define (read-pointer! path)
   (check-file! path)
   (define bytes (file->bytes path))
@@ -336,7 +402,7 @@
   value)
 (define (validate-recovery-claim! grant proposal task)
   (define r (hash-ref task 'recovery))
-  (define claim (read-sealed (claim-path (hash-ref r 'parent-approval))))
+  (define claim (read-recovery-claim! (claim-path (hash-ref r 'parent-approval))))
   (define target (hash-ref claim 'target))
   (unless (and (equal? (hash-ref claim 'schema) "supplemental-recovery-claim/v1")
                (equal? (hash-ref claim 'lineage) r)
@@ -379,9 +445,9 @@
        (refuse "recovery expected pointer mismatch"))
      (define claim-file (claim-path (hash-ref r 'parent-approval)))
      (define claim (seal (hasheq 'schema "supplemental-recovery-claim/v1" 'lineage r
-                                 'pointer-path (path->string (path->complete-path path)) 'target target)))
+                                 'pointer-path (canonical-pointer-path path) 'target target)))
      (when (present? claim-file)
-       (unless (equal? (read-sealed claim-file) claim)
+       (unless (equal? (read-recovery-claim! claim-file) claim)
          (refuse "parent already permanently claimed by another child or approval")))
      (define current (read-pointer! path))
      (unless (or (equal? current old) (equal? current target))

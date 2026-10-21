@@ -411,10 +411,14 @@
   context)
 
 ;; The supplemental task OWNS the retained receipt checkout while a pointer
-;; exists (any operation state, terminal included): the campaign branch is
-;; delivery/receipt evidence and must never be worktree-cleaned.
+;; exists (even malformed), or its permanent private recovery claim survives:
+;; delivery/receipt evidence must never be worktree-cleaned. This is deny-only;
+;; pending/active routes still require full authentication, never claim alone.
 (define (supplemental-pointer-retained? base plan wave)
-  (and (load-supplemental-pointer base plan wave) #t))
+  (define path (pointer-path base plan wave))
+  (or (link-exists? path)
+      (and (file-or-directory-type path #f) #t)
+      (supplemental-recovery-pointer-claimed? path)))
 (define (supplemental-operation-live? base plan wave)
   (define-values (operation _grant _task _tref) (supplemental-active-operation base plan wave))
   (and operation (not (member (hash-ref operation 'state) '("blocked" "revoked" "completed"))) #t))
