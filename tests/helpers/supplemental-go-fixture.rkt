@@ -15,6 +15,7 @@
          racket/string
          racket/system
          "delivery-fixtures.rkt"
+         "honest-delivery-fixture.rkt"
          "private-fixture-templates.rkt"
          "../../runtime/approval/broker.rkt"
          "../../extensions/gsd/campaign-state.rkt"
@@ -42,7 +43,8 @@
          fixture-approve!
          fixture-run-c1-verifier
          fixture-task-paths
-         fixture-author-commit!)
+         fixture-author-commit!
+         fixture-finalize-predecessor!)
 
 (struct supplemental-fixture
         (root repo
@@ -93,6 +95,26 @@
 (define (fixture-approve! ref)
   (approve-supplemental-proposal! ref (fixture-interactive-grant ref)))
 
+;; Real W0 receipt/handoff reconciliation, not a fabricated predecessor boolean.
+(define (fixture-finalize-predecessor! fx)
+  (define root (supplemental-fixture-root fx))
+  (define plan (supplemental-fixture-plan fx))
+  (define old (load-campaign-record root plan))
+  (define (with-waves waves)
+    (define rec (make-campaign-record plan (campaign-record-manifest old) waves #f
+                                      (campaign-fence-token old) 'test 0 0))
+    (set-campaign-record-plan-snapshot-path! rec (campaign-record-plan-snapshot-path old))
+    (set-campaign-record-plan-snapshot-digest! rec (campaign-record-plan-snapshot-digest old))
+    rec)
+  (define predecessor
+    (with-waves (list (make-campaign-wave 0 "Predecessor" 'awaiting-delivery 1
+                                          (campaign-attempt "predecessor" 7 0)))))
+  (persist-campaign! root predecessor)
+  (finalize-awaiting! root predecessor)
+  (define ready (load-campaign-record root plan))
+  (unless (eq? (campaign-wave-status (car (campaign-record-waves ready))) 'done)
+    (error 'fixture "predecessor did not genuinely finalize"))
+  (persist-campaign! root (with-waves (append (campaign-record-waves ready) (campaign-record-waves old)))))
 (define (fixture-task-paths fx)
   (list (supplemental-fixture-test-path fx) (supplemental-fixture-harness-path fx)))
 

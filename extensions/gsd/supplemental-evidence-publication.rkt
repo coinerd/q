@@ -44,7 +44,7 @@
                   reconcile-supplemental-operation!
                   recovery-pending-state-name
                   transition-supplemental-operation!)
-         (only-in "review-proof.rkt" current-owned-proof-root frozen-verify-binding))
+         (only-in "review-proof.rkt" current-owned-proof-root frozen-verify-binding load-receipt-owned-proof))
 (provide (struct-out supplemental-staged-evidence)
          predict-supplemental-context
          stage-supplemental-evidence!
@@ -235,7 +235,7 @@
 ;; identity. E's canonical digest never depends on R1. Certification must
 ;; preserve r* exactly; E is recomputed from the same inputs at every use and
 ;; refuses to silently drift.
-(define (predict-supplemental-context journal receipt frozen plan wave)
+(define (predict-supplemental-context journal receipt frozen plan wave #:base base)
   (unless (and (hash? journal)
                ((dynamic-journal 'valid-delivery-receipt?) receipt)
                (hash? frozen)
@@ -254,6 +254,11 @@
   (define ref (hash-ref receipt 'owned-proof #f))
   (unless (and (supplemental-owned-proof? ref) (valid-owned-proof-reference? ref))
     (refuse "predicted context requires an authenticated supplemental GREEN reference"))
+  ;; Authenticate G1 directly, without depending on E or R1. Its authority
+  ;; validator supports both the current old receipt and its historical slot.
+  (define manifest (load-receipt-owned-proof receipt base plan wave))
+  (unless manifest
+    (refuse "predicted context requires an authenticated owned manifest"))
   (define context
     (hasheq 'plan-id
             plan
@@ -273,10 +278,7 @@
             ;; The evidence context's repo is the exact execution checkout
             ;; identity (no trailing separator), matching the readiness and
             ;; probe canonicalization of the authenticated execution cwd.
-            (let ([r (hash-ref receipt 'repo)])
-              (if (regexp-match? #px"/+$" r)
-                  (string-append (regexp-replace #px"/+$" r "") (if (equal? (regexp-replace #px"/+$" r "") "/") "/" ""))
-                  r))
+            (path->string (simplify-path (path->complete-path (hash-ref manifest 'execution-cwd))))
             'branch
             (hash-ref receipt 'branch)
             'origin
@@ -438,7 +440,7 @@
        (define journal ((dynamic-journal 'load-delivery-journal) base plan wave))
        (unless journal
          (refuse "missing authenticated journal"))
-       (define context (predict-supplemental-context journal receipt frozen plan wave))
+       (define context (predict-supplemental-context journal receipt frozen plan wave #:base base))
        (unless (and (equal? (hash-ref context 'attempt-id) attempt-id) (equal? (hash-ref context 'attempt-fence) fence))
          (refuse "staged context does not carry the live allocation"))
        (unless (and (equal? (hash-ref task 'baseline-head) (hash-ref task 'baseline-head #f))

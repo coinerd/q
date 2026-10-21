@@ -117,17 +117,17 @@
       ;; supplemental evidence format/authority/journal/proof/publication/
       ;; promotion/controller/operator and the hardened review-tools registry);
       ;; +1 BUG-0088 public promotion audit validator.
-      (check-equal? (length inventory)
-                    98
-                    "85 existing + two correction modules + eleven BUG-0088 modules"))
+      (check-equal?
+       (length inventory)
+       99
+       "85 existing + two correction modules + eleven BUG-0088 modules + explicit recovery owner"))
 
     (test-case "public promotion audit validation preserves pure format dependencies"
       (define audit (hash-ref inventory-map "review-audit-promotion.rkt"))
       (check-equal? (entry-domain audit) 'transition-logic)
       (check-equal? (entry-effects audit) '())
       (check-equal? (entry-params audit) '())
-      (check-equal? (entry-deps audit)
-                    '("supplemental-evidence-format" "evidence-repair-format")))
+      (check-equal? (entry-deps audit) '("supplemental-evidence-format" "evidence-repair-format")))
 
     (test-case "evidence recovery classification preserves I/O boundaries"
       (define formats '("evidence-repair-format.rkt"))

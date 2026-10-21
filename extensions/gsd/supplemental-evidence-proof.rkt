@@ -205,7 +205,11 @@
   (define context (hash-ref task 'context))
   (unless (and (equal? plan (hash-ref context 'plan-id)) (= wave (hash-ref context 'wave)))
     (refuse "task belongs to another campaign/wave"))
-  (define operation (load-supplemental-operation (hash-ref refs 'task-approval)))
+  ;; Proof readback can run under authority (staging/probe admission). Never
+  ;; acquire the operation lock or reconcile WAL here: journal writers take
+  ;; operation -> authority. This pure read authenticates the same snapshot
+  ;; and refuses pending intent; the controller must reconcile it first.
+  (define operation (inspect-supplemental-entry-operation (hash-ref refs 'task-approval)))
   (unless operation
     (refuse "no protected current operation"))
   (define facts (hash-ref operation 'facts))
@@ -273,7 +277,7 @@
         [proposal-key '(task-proposal candidate-proposal)])
     (unless (validate-supplemental-approval (hash-ref refs approval-key) (hash-ref refs proposal-key))
       (refuse "supplemental authority changed during validation")))
-  (unless (and (equal? operation (load-supplemental-operation (hash-ref refs 'task-approval)))
+  (unless (and (equal? operation (inspect-supplemental-entry-operation (hash-ref refs 'task-approval)))
                (< (current-seconds) (hash-ref operation 'deadline-at))
                (equal? current (load-campaign-record base plan)))
     (refuse "supplemental operation/campaign changed during validation"))
@@ -334,8 +338,8 @@
                        (path->string (simplify-path (path->complete-path base)))))
     (refuse "private/public supplemental identity/operation mismatch"))
   (define operation
-    (load-supplemental-operation (hash-ref (hash-ref resolved 'supplemental-contract)
-                                           'task-approval)))
+    (inspect-supplemental-entry-operation (hash-ref (hash-ref resolved 'supplemental-contract)
+                                                  'task-approval)))
   (unless (and (equal? (hash-ref manifest 'command-sha256)
                        (hash-ref (hash-ref (hash-ref operation 'facts) 'verify-job) 'command-sha256))
                (or (equal? (hash-ref operation 'state) "verifying")

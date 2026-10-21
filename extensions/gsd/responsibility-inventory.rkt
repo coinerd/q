@@ -1040,7 +1040,7 @@
    ;; bodies delegate to delivery-publication/authority/journal owners.
    (make-entry "supplemental-evidence-publication.rkt"
                'persistence
-               '(fs-write fs-read fs-rename fs-delete sha256 dynamic-require)
+               '(fs-write fs-read fs-rename fs-delete sha256 dynamic-require path-ops)
                '()
                '("json" "racket/file"
                         "racket/list"
@@ -1119,6 +1119,27 @@
              "author-checkpoint"
              "../gsd-planning/execution-policy"
              "../../util/json/checksum"))
+   ;; Explicit single-child recovery: owner lease, immutable parent inspection,
+   ;; permanent private claim and exact pointer CAS; never a model retry.
+   (make-entry "supplemental-evidence-recovery.rkt"
+               'campaign-state
+               '(git parameterize dynamic-require)
+               '()
+               '("racket/list" "racket/path"
+                               "racket/runtime-path"
+                               "racket/string"
+                               "racket/system"
+                               "campaign-state"
+                               "campaign-repository"
+                               "delivery-journal"
+                               "delivery-receipt"
+                               "review-proof"
+                               "evidence-readiness"
+                               "supplemental-evidence-authority"
+                               "supplemental-evidence-format"
+                               "supplemental-evidence-journal"
+                               "supplemental-evidence-controller"
+                               "../gsd-planning/execution-policy"))
    ;; Trusted-frontend approval requests: broker registration and owner UI
    ;; event emission. No grant is ever created here.
    (make-entry "supplemental-evidence-operator.rkt"
