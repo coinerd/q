@@ -52,7 +52,7 @@
                   current-gsd-delivery-verify-timeout-sec
                   make-branch-delivery-context)
          (only-in "review-proof-format.rkt" apply-verify-jobs)
-         (only-in "review-proof.rkt" frozen-verify-binding)
+         (only-in "review-proof.rkt" frozen-verify-binding load-receipt-owned-proof)
          (only-in "evidence-readiness.rkt" current-evidence-context evidence-readiness)
          (only-in "evidence-probe.rkt" run-staged-supplemental-probe! validate-baseline-probe!)
          (only-in "evidence-repair-format.rkt" canonical-evidence-json canonical-evidence-digest)
@@ -302,11 +302,17 @@
         (define journal (load-delivery-journal base plan wave))
         (define receipt (and journal (hash-ref journal 'receipt #f)))
         (define context (hash-ref task 'context))
+        ;; Reload the digest-addressed owned manifest through the receipt
+        ;; validator: logical repo/branch/origin and frozen proof pins remain
+        ;; strict. Only its authenticated execution-cwd is a physical port.
+        (define manifest (and receipt (load-receipt-owned-proof receipt base plan wave)))
         ;; Pre-supersession admission: the context names the CURRENT receipt.
         (define (admitted-context?)
           (and (= (hash-ref context 'receipt-generation)
                   (length (hash-ref journal 'receipt-history '())))
-               (equal? (hash-ref context 'receipt-sha256) (canonical-evidence-digest receipt))))
+               (equal? (hash-ref context 'receipt-sha256) (canonical-evidence-digest receipt))
+               (equal? (hash-ref context 'green-proof-sha256)
+                       (hash-ref (hash-ref receipt 'owned-proof) 'sha256))))
         ;; After this task's OWN S-authorized supersession, the journal's
         ;; current receipt IS the task's product, so the pre-supersession
         ;; context can never equal it. Accept that superseded identity ONLY
@@ -338,7 +344,8 @@
                      (equal? (hash-ref context 'plan-id) plan)
                      (= (hash-ref context 'wave) wave)
                      (or (admitted-context?) (superseded-context?))
-                     (same-path? (hash-ref context 'repo) (hash-ref receipt 'repo))
+                     manifest
+                     (same-path? (hash-ref context 'repo) (hash-ref manifest 'execution-cwd))
                      (equal? (hash-ref context 'branch) (hash-ref receipt 'branch))
                      (equal? (hash-ref context 'origin) (hash-ref receipt 'origin)))
           (refuse "supplemental task context does not match this campaign's receipt"))
@@ -584,10 +591,11 @@
     ;; response after this commit can never buy another dispatch.
     (unless (guard)
       (refuse "stale campaign authority before supplemental launch"))
-    (step! grant
-           operation*
-           "launched"
-           (hasheq 'dispatch-id (format "supplemental-author-~a" attempt-id)))
+    (define launched
+      (step! grant
+             operation*
+             "launched"
+             (hasheq 'dispatch-id (format "supplemental-author-~a" attempt-id))))
     (unless (guard)
       (refuse "stale campaign authority before model dispatch"))
     (define outcome
@@ -601,7 +609,7 @@
           (with-handlers ([exn:fail? void])
             (transition-supplemental-operation!
              grant
-             (hash-ref operation* 'revision)
+             (hash-ref launched 'revision)
              "launched"
              "blocked"
              (hasheq 'block-reason (trim-message (wave-execution-outcome-message outcome) 200))))

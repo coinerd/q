@@ -120,7 +120,8 @@
                                         #:completed-author? [completed-author? #f]
                                         #:wave-index [wave 1]
                                         #:expires-in-sec [expires-in-sec 3600]
-                                        #:proposal-control-plane-head [proposal-head #f])
+                                        #:proposal-control-plane-head [proposal-head #f]
+                                        #:physical-worktree? [physical-worktree? #f])
   (define root (make-temporary-file "supplemental-go-~a" 'directory))
   (define repo (build-path root "q"))
   (define cwd (path->string repo))
@@ -193,11 +194,19 @@
      (write-wave-doc! root wave "supplemental" '("q/runtime/local.rkt") c0)
      (define plan (campaign-manifest-hash (make-campaign-manifest 1 "fixture" '() '() "constraints")))
      (make-plan-snapshot! root plan (file->string (build-path root ".planning" "PLAN.md")))
+     ;; A real linked checkout preserves the logical repo in receipt identity,
+     ;; while owned capture authenticates the distinct execution directory.
+     (define logical-repo repo)
+     (when physical-worktree?
+       (git-quiet! repo "checkout" "--detach")
+       (define physical (build-path root "wt-campaign"))
+       (git-quiet! repo "worktree" "add" (path->string physical) "campaign/w1")
+       (set! repo physical))
      (parameterize ([current-supplemental-authority-root private]
                     [current-owned-proof-root (build-path root "owned-proofs")]
                     [current-gsd-verification-registry (make-verification-registry)]
                     [current-gsd-delivery-branch-context
-                     (make-branch-delivery-context #:repo-root repo
+                     (make-branch-delivery-context #:repo-root logical-repo
                                                    #:branch "campaign/w1"
                                                    #:base-commit (git-text repo "rev-parse" "HEAD")
                                                    #:worktree-path repo)])
