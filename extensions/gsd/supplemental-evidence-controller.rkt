@@ -74,6 +74,8 @@
          supplemental-pointer-retained?
          write-supplemental-pointer!
          build-supplemental-task-proposal!
+         propose-supplemental-recovery!
+         install-supplemental-recovery!
          supplemental-active-operation
          supplemental-author-pending?
          supplemental-approved-entry-context
@@ -209,6 +211,13 @@
 ;; ----------------------------------------------------------------------
 ;; Task proposal construction from authentic local facts (owner CLI helper)
 ;; ----------------------------------------------------------------------
+(define-runtime-path recovery-module "supplemental-evidence-recovery.rkt")
+(define (propose-supplemental-recovery! base plan wave expected-parent-proposal-sha expires-at)
+  ((dynamic-require recovery-module 'propose-supplemental-recovery!)
+   base plan wave expected-parent-proposal-sha expires-at))
+(define (install-supplemental-recovery! base plan wave new-proposal-ref new-approval-ref)
+  ((dynamic-require recovery-module 'install-supplemental-recovery!)
+   base plan wave new-proposal-ref new-approval-ref))
 (define (hex40? v)
   (and (string? v) (= 40 (string-length v)) (regexp-match? #px"^[0-9a-f]+$" v)))
 ;; Aggregate ceilings are fixed by the approved engineering plan; task bounds
@@ -302,10 +311,22 @@
         (define journal (load-delivery-journal base plan wave))
         (define receipt (and journal (hash-ref journal 'receipt #f)))
         (define context (hash-ref task 'context))
-        ;; Reload the digest-addressed owned manifest through the receipt
-        ;; validator: logical repo/branch/origin and frozen proof pins remain
-        ;; strict. Only its authenticated execution-cwd is a physical port.
-        (define manifest (and receipt (load-receipt-owned-proof receipt base plan wave)))
+        ;; Authenticate the physical port through the exact predecessor
+        ;; receipt pinned by T, not through CURRENT (which may already be
+        ;; this operation's G1 while its private WAL still awaits reconcile).
+        ;; Loading G1 here would circularly require a settled operation just
+        ;; to route that operation to its authenticated reconcile path.
+        (define history (hash-ref journal 'receipt-history '()))
+        (define generation (hash-ref context 'receipt-generation))
+        (define pinned-receipt
+          (and (<= generation (length history))
+               (if (= generation (length history)) receipt (list-ref history generation))))
+        (define manifest
+          (and pinned-receipt
+               (equal? (canonical-evidence-digest pinned-receipt) (hash-ref context 'receipt-sha256))
+               (equal? (hash-ref (hash-ref pinned-receipt 'owned-proof) 'sha256)
+                       (hash-ref context 'green-proof-sha256))
+               (load-receipt-owned-proof pinned-receipt base plan wave)))
         ;; Pre-supersession admission: the context names the CURRENT receipt.
         (define (admitted-context?)
           (and (= (hash-ref context 'receipt-generation)
@@ -359,8 +380,7 @@
        (with-handlers ([exn:fail? (lambda (_) #f)])
          (and (validate-supplemental-approval (hash-ref pointer 'task-approval)
                                               (hash-ref pointer 'task-proposal))
-              (let ([operation (with-handlers ([exn:fail? (lambda (_) #f)])
-                                 (load-supplemental-operation (hash-ref pointer 'task-approval)))])
+              (let ([operation (load-supplemental-operation (hash-ref pointer 'task-approval))])
                 (or (not operation)
                     (member (hash-ref operation 'state) '("proposal-approved" "reserved"))))))
        #t))
@@ -374,7 +394,7 @@
                (validate-supplemental-approval (hash-ref pointer 'task-approval)
                                                (hash-ref pointer 'task-proposal)))
     (refuse "supplemental checkpoint requires the exact live task approval"))
-  (define operation (load-supplemental-operation (hash-ref pointer 'task-approval)))
+  (define operation (inspect-supplemental-entry-operation (hash-ref pointer 'task-approval)))
   (unless (or (not operation) (equal? (hash-ref operation 'state) "proposal-approved"))
     (refuse "supplemental checkpoint cannot reallocate a reserved or spent task"))
   (define proposal (load-supplemental-record (hash-ref pointer 'task-proposal)))
@@ -391,10 +411,14 @@
   context)
 
 ;; The supplemental task OWNS the retained receipt checkout while a pointer
-;; exists (any operation state, terminal included): the campaign branch is
-;; delivery/receipt evidence and must never be worktree-cleaned.
+;; exists (even malformed), or its permanent private recovery claim survives:
+;; delivery/receipt evidence must never be worktree-cleaned. This is deny-only;
+;; pending/active routes still require full authentication, never claim alone.
 (define (supplemental-pointer-retained? base plan wave)
-  (and (load-supplemental-pointer base plan wave) #t))
+  (define path (pointer-path base plan wave))
+  (or (link-exists? path)
+      (and (file-or-directory-type path #f) #t)
+      (supplemental-recovery-pointer-claimed? path)))
 (define (supplemental-operation-live? base plan wave)
   (define-values (operation _grant _task _tref) (supplemental-active-operation base plan wave))
   (and operation (not (member (hash-ref operation 'state) '("blocked" "revoked" "completed"))) #t))
@@ -548,6 +572,13 @@
     (define tref (hash-ref pointer 'task-proposal))
     (define task (hash-ref (hash-ref (load-supplemental-record tref) 'payload) 'task))
     (define context (hash-ref task 'context))
+    ;; The campaign identity guard alone may still name a failed attempt.
+    ;; A terminal journal must also invalidate any retained author callback.
+    (define (author-live?)
+      (and (guard)
+           (let ([op (with-handlers ([exn:fail? (lambda (_) #f)])
+                       (load-supplemental-operation grant))])
+             (and op (member (hash-ref op 'state) '("reserved" "launched")) #t))))
     (unless (same-path? (hash-ref context 'repo) repo)
       (refuse "supplemental task must run in its authenticated retained checkout"))
     (define source (committed-delivery-snapshot repo))
@@ -589,17 +620,17 @@
             operation)))
     ;; Durable launch intent BEFORE the one model dispatch: a crash or lost
     ;; response after this commit can never buy another dispatch.
-    (unless (guard)
+    (unless (author-live?)
       (refuse "stale campaign authority before supplemental launch"))
     (define launched
       (step! grant
              operation*
              "launched"
              (hasheq 'dispatch-id (format "supplemental-author-~a" attempt-id))))
-    (unless (guard)
+    (unless (author-live?)
       (refuse "stale campaign authority before model dispatch"))
     (define outcome
-      (run-supplemental-test-author! repo (task-write-paths task) attempt-id run guard after-phase))
+      (run-supplemental-test-author! repo (task-write-paths task) attempt-id run author-live? after-phase))
     (if (not (eq? (wave-execution-outcome-kind outcome) 'done))
         (begin
           ;; The launch was durably consumed: a phase that ends without an

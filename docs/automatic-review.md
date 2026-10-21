@@ -184,7 +184,7 @@ external sandbox required by its threat model. Modes and hashes alone do not
 prove operator identity.
 
 `scripts/gsd-evidence-replan.rkt` actually parses `--verb` with values
-`propose|authorize|inspect|status|revoke`, not positional subcommands. Authorization
+`propose|propose-recovery|authorize|inspect|status|revoke`, not positional subcommands. Authorization
 uses `--verb authorize --stage task|candidate|supersession`; campaign operations
 also take `--campaign-root`, `--plan` and `--wave`. `propose` additionally requires
 `--repo`, `--test-path`, `--harness-path`, `--owner-paths`, `--baseline-head` and
@@ -196,8 +196,7 @@ A standalone invocation still has no active in-process interactive approval
 channel: `authorize`/`revoke` refuse with exit 2. Stdin, TTY consent, booleans,
 project files and policy/batch auto-approval are not grant paths.
 
-The trusted q TUI now supplies the owner handoff (fixture-tested, not installed
-or live-authorized). Start q in the same campaign-root project directory used by
+The trusted q TUI supplies the owner handoff. Fixture success is not a live authorization. Start q in the same campaign-root project directory used by
 CLI `--verb propose`, with the same trusted-user authority store. In its keyboard
 command input use:
 
@@ -216,6 +215,37 @@ and S approvals through the same digest-correlated reducer and keyboard handler.
 To inspect either record first, deny the prompt, run the displayed `inspect`
 command, then invoke `/go` again. Denial never grants authority. Each prompt
 identifies the stage and full digest; no bounded preview substitutes for inspection.
+A provider switch does not replenish a spent task. The narrowly bounded recovery
+route permits one separately approved child of an original task, never grandchildren:
+
+```text
+racket q/scripts/gsd-evidence-replan.rkt --verb propose-recovery --campaign-root ROOT --plan PLAN --wave N --sha256 PARENT-T --expires-at UNIX-SECONDS
+/evidence-replan inspect task-proposal NEW-T-SHA256
+/evidence-replan authorize-recovery PLAN WAVE NEW-T-SHA256
+```
+
+The parent must be an unrevoked, immutable blocked revision-3 consumed launch without
+pending WAL or captured candidate/proof, owning the exact current failed attempt/fences.
+Source/context/receipt/proof must remain exact and clean, without cancellation/budget pause.
+The child inherits context, scopes, C0/C1, baseline and bounds and explicitly binds parent
+and pointer lineage. The full broker presentation authorizes one NEW dispatch, not reuse
+of the old grant. Provider remains operator-selected, not pinned or guaranteed available.
+A private permanent single-child claim precedes the exact pointer CAS; every child
+admission validates that claim and active pointer. Same-child crash replay is supported;
+competing children, drift, rollback, grandchild and ordinary-author fallback are refused.
+A malformed public pointer still retains ownership; if it disappears, a durable private
+claim bound to its exact path preserves a deny-only block. Expiry/revocation never erase
+that ownership, and invalid/inaccessible private roots or ambiguous claims fail closed.
+An absent unused authority store is not provisioned. Neither claim nor file presence
+alone grants child execution. Parent records/history/accounting stay unchanged. Authorization launches nothing; `/go`
+separately uses its normal monotonic owned attempt and all later K/G1/R1/S/P/review gates.
+Historical parent expiry is ignored only for immutable terminal inspection, not execution
+or revocation. A denied, failed or expired child does not restore either permission.
+
+Predicted E binds the authenticated G1 manifest's physical execution checkout, independently
+of the logical common-repository identity retained in r*. Probe checks keep both identities
+strict and normalize directory separators only; linked worktrees are not substitute repos.
+
 The owner command is intercepted only on the keyboard-user path, not registered
 as a model tool or extension hook. Shared command dispatch reserves its name but
 cannot invoke it. Missing UI bus/channel fails closed.

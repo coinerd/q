@@ -43,6 +43,7 @@
          (submod "../../extensions/gsd/supplemental-evidence-authority.rkt" owner-frontend)
          "../../extensions/gsd/supplemental-evidence-format.rkt"
          "../../extensions/gsd/supplemental-evidence-journal.rkt"
+         "../../extensions/gsd/supplemental-evidence-controller.rkt"
          "../../extensions/gsd/supplemental-evidence-proof.rkt"
          "../../extensions/gsd/supplemental-evidence-publication.rkt"
          "../../extensions/gsd/verification-job.rkt"
@@ -178,7 +179,9 @@
 ;; Drive the whole governed ladder to the certified promotion entry state,
 ;; then hand the immutable facts to proc. Everything is rebuilt per instance
 ;; in a private temp root and deleted on exit (normal or exceptional).
-(define (with-certified-promotion-fixture proc)
+(define (with-certified-promotion-fixture proc #:recovery? [recovery? #f]
+                                          #:physical-worktree? [physical-worktree? #f]
+                                          #:before-stage [before-stage void])
   (define root (make-temporary-file "supplemental-promo-~a" 'directory))
   (define repo (build-path root "q"))
   (define cwd (path->string repo))
@@ -247,12 +250,19 @@
        (write-plan! root 1 "Proof" "proof")
        (write-wave-doc! root 1 "proof" '("q/runtime/local.rkt") c0)
        (make-plan-snapshot! root fixture-plan (file->string (build-path root ".planning" "PLAN.md")))
+       (define logical-repo repo)
+       (when physical-worktree?
+         (git-text cwd "checkout" "--detach")
+         (define physical (build-path root "wt-campaign"))
+         (git-text cwd "worktree" "add" (path->string physical) "campaign/w1")
+         (set! repo physical)
+         (set! cwd (path->string physical)))
        (parameterize ([current-supplemental-authority-root private]
                       [current-owned-proof-root (build-path root "proofs")]
                       [current-gsd-verification-registry (make-verification-registry)]
                       [current-gsd-delivery-verify-timeout-sec 120]
                       [current-gsd-delivery-branch-context
-                       (make-branch-delivery-context #:repo-root repo
+                       (make-branch-delivery-context #:repo-root logical-repo
                                                      #:branch "campaign/w1"
                                                      #:base-commit baseline-head
                                                      #:worktree-path repo)])
@@ -455,7 +465,45 @@
            (propose-retain! "task-proposal"
                             (hasheq 'task task 'expires-at (+ (current-seconds) 2400))))
          (define aref (fixture-approve! tref))
-         (start-supplemental-operation! aref (hasheq 'context context 'coordinator-fence 8))
+         (define parent-snapshot #f)
+         (define parent-marker
+           (hash-ref (load-delivery-journal root fixture-plan 1) 'evidence-author-repair))
+         (when recovery?
+           ;; Consume a real approved parent, without capturing a candidate. The
+           ;; rest of this fixture remains the ordinary genuine publication ladder.
+           (write-supplemental-pointer! root fixture-plan 1 tref aref)
+           (start-supplemental-operation! aref (hasheq 'context context 'coordinator-fence 8))
+           (transition-supplemental-operation! aref 0 "proposal-approved" "reserved"
+                                               (hasheq 'allocation
+                                                       (hasheq 'attempt-id "attempt-3"
+                                                               'attempt-fence 9 'coordinator-fence 9)))
+           (transition-supplemental-operation! aref 1 "reserved" "launched"
+                                               (hasheq 'dispatch-id "fixture-provider-failure"))
+           (transition-supplemental-operation! aref 2 "launched" "blocked"
+                                               (hasheq 'block-reason "provider failed before candidate"))
+           (set-campaign-fence-token! rec 9)
+           (begin-attempt! rec 1 9)
+           (set-campaign-wave-status! (car (campaign-record-waves rec)) 'failed)
+           (persist-campaign! root rec)
+           (define parent-path
+             (build-path private "supplemental-operations" (string-append (hash-ref aref 'sha256) ".json")))
+           (define paths
+             (list parent-path
+                   (build-path private (string-append (hash-ref tref 'sha256) ".json"))
+                   (build-path private (string-append (hash-ref aref 'sha256) ".json"))
+                   (build-path root "proofs" fixture-plan (hash-ref ref1 'path))
+                   (build-path root "proofs" fixture-plan (hash-ref ref2 'path))))
+           (set! parent-snapshot (map (lambda (p) (cons p (file->bytes p))) paths))
+           (define-values (child child-task)
+             (propose-supplemental-recovery! root fixture-plan 1 (hash-ref tref 'sha256) (+ (current-seconds) 2400)))
+           (define child-approval (fixture-approve! child))
+           (install-supplemental-recovery! root fixture-plan 1 child child-approval)
+           (set! tref child)
+           (set! task child-task)
+           (set! aref child-approval))
+         (define author-attempt (if recovery? "attempt-4" "attempt-3"))
+         (define author-fence (if recovery? 10 9))
+         (start-supplemental-operation! aref (hasheq 'context context 'coordinator-fence (sub1 author-fence)))
          (define (step state facts)
            (define operation (load-supplemental-operation aref))
            (transition-supplemental-operation! aref
@@ -465,7 +513,7 @@
                                                facts))
          (step 'reserved
                (hasheq 'allocation
-                       (hasheq 'attempt-id "attempt-3" 'attempt-fence 9 'coordinator-fence 9)))
+                       (hasheq 'attempt-id author-attempt 'attempt-fence author-fence 'coordinator-fence author-fence)))
          (step 'launched (hasheq 'dispatch-id "fixture-supplemental-author-once"))
          ;; Candidate K: the two-file witness commit.
          (put
@@ -484,8 +532,8 @@
                "(module+ test (require rackunit/text-ui) (exit (run-tests evidence-suite)))\n"))
          (git-text cwd "add" fixture-test-path fixture-helper-path)
          (git-text cwd "commit" "-qm" "new supplemental witness")
-         (set-campaign-fence-token! rec 9)
-         (begin-attempt! rec 1 9)
+         (set-campaign-fence-token! rec author-fence)
+         (begin-attempt! rec 1 author-fence)
          (set-campaign-wave-status! (car (campaign-record-waves rec)) 'verifying)
          (persist-campaign! root rec)
          (define source (committed-delivery-snapshot repo))
@@ -513,9 +561,9 @@
                                              'source
                                              source
                                              'attempt-id
-                                             "attempt-3"
+                                             author-attempt
                                              'attempt-fence
-                                             9
+                                             author-fence
                                              'execution-cwd
                                              cwd
                                              'manifest
@@ -550,8 +598,8 @@
                                                        fixture-plan
                                                        1
                                                        repo
-                                                       "attempt-3"
-                                                       9
+                                                       author-attempt
+                                                       author-fence
                                                        contract
                                                        (lambda () (check-command root))))
          (unless (delivery-verification-approved? g1-result)
@@ -559,12 +607,13 @@
          (step 'green-captured (hasheq 'green-proof-ref (hash-ref r2 'owned-proof)))
          ;; Staged wrapper with the exact predicted context E, derived from the
          ;; exact r*/G1 BEFORE the probe.
+         (before-stage (hasheq 'root root 'receipt r2 'contract contract 'task task 'candidate candidate))
          (define staged
            (stage-supplemental-evidence! root
                                          fixture-plan
                                          1
-                                         "attempt-3"
-                                         9
+                                         author-attempt
+                                         author-fence
                                          contract
                                          r2
                                          (hash-ref r2 'owned-proof)
@@ -629,6 +678,12 @@
                   (hash-ref certified-operation 'state)))
          (proc (hasheq 'root
                        root
+                       'parent-marker
+                       parent-marker
+                       'parent-snapshot
+                       parent-snapshot
+                       'task
+                       task
                        'repo
                        repo
                        'cwd

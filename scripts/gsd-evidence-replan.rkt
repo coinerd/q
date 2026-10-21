@@ -19,6 +19,9 @@
 ;;              --baseline-head H --baseline-tree T
 ;;              Build the task proposal from authentic local facts and
 ;;              retain it. Retains only; approves nothing.
+;;   propose-recovery --campaign-root R --plan ID --wave N --sha256 PARENT-T
+;;                    --expires-at UNIX-SECONDS
+;;              Retain one inert recovery child; never move the spent pointer.
 ;;   authorize  --stage task|candidate|supersession (plus the common args)
 ;;              Register the exact pending proposal digest + full immutable
 ;;              presentation on the active interactive channel, await a REAL
@@ -45,6 +48,7 @@
          "../extensions/gsd/supplemental-evidence-operator.rkt"
          (only-in "../extensions/gsd/supplemental-evidence-controller.rkt"
                   build-supplemental-task-proposal!
+                  propose-supplemental-recovery!
                   load-supplemental-pointer
                   supplemental-operation-summary
                   write-supplemental-pointer!))
@@ -80,7 +84,8 @@
 (define args (make-hasheq))
 (command-line
  #:program "gsd-evidence-replan"
- #:once-each [("--verb") v "propose|authorize|inspect|status|revoke" (hash-set! args 'verb v)]
+ #:once-each
+ [("--verb") v "propose|propose-recovery|authorize|inspect|status|revoke" (hash-set! args 'verb v)]
  [("--authority-root")
   p
   "absolute private authority root (mode 0700)"
@@ -98,7 +103,11 @@
  [("--baseline-head") h "pinned baseline head (40-hex)" (hash-set! args 'baseline-head h)]
  [("--baseline-tree") t "pinned baseline tree (40-hex)" (hash-set! args 'baseline-tree t)]
  [("--kind") k "record kind (inspect)" (hash-set! args 'kind k)]
- [("--sha256") s "record digest (inspect/revoke)" (hash-set! args 'sha256 s)]
+ [("--sha256")
+  s
+  "record digest / expected parent task proposal (propose-recovery)"
+  (hash-set! args 'sha256 s)]
+ [("--expires-at") s "fresh recovery expiry (Unix seconds)" (hash-set! args 'expires-at s)]
  [("--stage") s "task|candidate|supersession (authorize)" (hash-set! args 'stage s)])
 
 (define (authority-root!)
@@ -170,6 +179,30 @@
    (write-supplemental-pointer! base plan wave tref)
    (emit (hasheq 'retained "task-proposal" 'sha256 (hash-ref tref 'sha256)))]
 
+  [("propose-recovery")
+   (define-values (base plan wave) (campaign!))
+   (for ([key '(repo test-path harness-path owner-paths baseline-head baseline-tree)])
+     (when (hash-has-key? args key)
+       (refuse! (format "propose-recovery does not accept --~a; scope is inherited from the parent"
+                        key))))
+   (define expected-parent (sha-arg args "sha256"))
+   (define expires-at (string->number (need args 'expires-at)))
+   (unless (and (exact-positive-integer? expires-at) (> expires-at (current-seconds)))
+     (refuse! "--expires-at must be a fresh positive Unix timestamp"))
+   ;; The controller owns the campaign lease and retains only inert bytes.
+   ;; In particular, do NOT point ordinary task authorization at this child.
+   (define-values (tref task)
+     (parameterize ([current-supplemental-authority-root (authority-root!)])
+       (propose-supplemental-recovery! base plan wave expected-parent expires-at)))
+   (emit (hasheq 'retained
+                 "task-proposal"
+                 'sha256
+                 (hash-ref tref 'sha256)
+                 'notice
+                 "One NEW additional dispatch requires exact recovery approval; old task stays spent."
+                 'provider
+                 "Operator-selected; not pinned and not an availability or quota guarantee."))]
+
   [("authorize")
    (define-values (base plan wave) (campaign!))
    (define stage (need args 'stage))
@@ -177,6 +210,13 @@
      (unless (supplemental-operator-channel-available?)
        (refuse! (supplemental-operator-refusal)))
      (define ref (pending-proposal-ref! base plan wave stage))
+     (when (and (equal? stage "task")
+                (equal? (hash-ref
+                         (hash-ref (hash-ref (load-supplemental-record ref) 'payload) 'task (hasheq))
+                         'kind
+                         #f)
+                        "supplemental-evidence-task/v2"))
+       (refuse! "recovery tasks require the keyboard authorize-recovery command"))
      (define grant (request-supplemental-approval! ref))
      (unless grant
        (refuse! "operator denied or the interactive approval was cancelled/timed out"))
@@ -224,4 +264,4 @@
      (define revoked (revoke! revocation grant))
      (emit (hasheq 'revoked (hash-ref revoked 'sha256))))]
 
-  [else (refuse! "--verb must be propose|authorize|inspect|status|revoke")])
+  [else (refuse! "--verb must be propose|propose-recovery|authorize|inspect|status|revoke")])

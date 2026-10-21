@@ -175,7 +175,8 @@
        (define outcome (supplemental-entry-outcome root plan 1))
        (check-not-false outcome "the entry seam must recover the pending cut")
        (check-equal? (campaign-result-status outcome) 'wave-blocked)
-       (check-true (string-contains? (campaign-result-message outcome) "completed"))
+       (check-true (string-contains? (campaign-result-message outcome) "completed")
+                   (campaign-result-message outcome))
 
        ;; The recovered operation is terminal-complete with every captured
        ;; fact preserved and the readiness admitted by the promotion gate.
@@ -287,14 +288,17 @@
        (define certified-journal (load-delivery-journal root plan 1))
        ;; Resume the same confirmed publication through /go entry; cut its
        ;; certification tail next. Neither recovery may repeat the push.
+       (define certification-outcome (box #f))
        (parameterize ([current-gsd-approved-head-publisher
                        (lambda args (error 'fixture "confirmed publication must never push twice"))]
                       [current-supplemental-journal-crash-cut
                        (intent-state-fault intent-path "receipt-certified" certified-fired)])
          (define outcome (supplemental-entry-outcome root plan 1))
+         (set-box! certification-outcome outcome)
          (check-not-false outcome)
          (check-equal? (campaign-result-status outcome) 'wave-blocked))
-       (check-true (unbox certified-fired))
+       (check-true (unbox certified-fired)
+                   (format "certification cut not reached; entry: ~a" (unbox certification-outcome)))
        (check-equal? (hash-ref (load-supplemental-operation aref) 'state) "recover-pending-receipt-certified")
        (check-equal? (unbox pushes) 1)
 

@@ -78,7 +78,11 @@
          load-supplemental-operation
          reconcile-supplemental-operation!
          recovery-pending-state-name
-         current-supplemental-journal-crash-cut)
+         current-supplemental-journal-crash-cut
+         inspect-supplemental-entry-operation
+         inspect-supplemental-recovery-parent
+         install-supplemental-recovery-claim!
+         supplemental-recovery-pointer-claimed?)
 
 ;; Fault injection may only interrupt storage, never supply authority or facts.
 (define current-supplemental-journal-crash-cut
@@ -198,7 +202,7 @@
   (check-chain! path)
   (unless (= #o700 (bitwise-and #o7777 (file-or-directory-permissions path 'bits)))
     (refuse "private directory must have mode 0700")))
-(define (root!)
+(define (root! [allow-absent? #f])
   (define raw (current-supplemental-authority-root))
   (unless (and (path-string? raw) (complete-path? raw) (not (member 'up (explode-path raw))))
     (refuse "absolute authority root required; no project context root"))
@@ -211,11 +215,25 @@
     (string->path (if (regexp-match? #px"^/+$" text)
                       "/"
                       (regexp-replace #px"/+$" text ""))))
-  (private-directory! path)
   (define root (simplify-path path #f))
   (when (or (within? root (current-directory)) (within? root source-root))
     (refuse "authority root is inside project/control source"))
-  root)
+  (cond
+    [(and allow-absent? (not (present? path)))
+     ;; Absence is ordinary non-feature use, not permission to create storage.
+     ;; Validate ancestors too: a dangling/symlinked root is not absence.
+     (let absent! ([missing path])
+       (define-values (parent name _dir?) (split-path missing))
+       (cond
+         [(not (present? parent)) (absent! (simplify-path parent #f))]
+         [else
+          (check-chain! parent)
+          ;; Listing distinguishes proven absence from inaccessible/uncertain
+          ;; stat results. Errors propagate; never downgrade them to #f.
+          (when (member name (directory-list parent))
+            (refuse "authority root absence is uncertain"))]))
+     #f]
+    [else (private-directory! path) root]))
 (define (check-file! path)
   (when (link-exists? path)
     (refuse "symlink journal file"))
@@ -288,7 +306,168 @@
   (check-file! path)
   record)
 
-(define (authenticated-task! grant)
+;; Historical inspection is deliberately PURE: no operation lock and no WAL
+;; reconciliation. The authority lock excludes all possible terminal writers.
+(define (inspect-supplemental-entry-operation grant)
+  (call-with-supplemental-authority-lock
+   (lambda ()
+     (define-values (proposal task expiry) (authenticated-task! grant))
+     (define-values (_dir snapshot intent _lock) (paths (root!) grant))
+     (when (present? intent) (refuse "entry cannot reconcile pending intent"))
+     (and (present? snapshot) (validate-record! (read-sealed snapshot) grant proposal task expiry)))))
+(define (inspect-supplemental-recovery-parent grant)
+  (call-with-supplemental-authority-lock
+   (lambda ()
+     (define-values (proposal task expiry) (authenticated-task! grant #t))
+     (unless (equal? (hash-ref task 'kind) "supplemental-evidence-task/v1")
+       (refuse "recovery requires an original v1 parent; no grandchildren"))
+     (define-values (_dir snapshot intent _lock) (paths (root!) grant #f))
+     (when (present? intent) (refuse "parent has pending write-ahead intent"))
+     (define record (validate-record! (read-sealed snapshot) grant proposal task expiry))
+     (unless (and (equal? (hash-ref record 'state) "blocked")
+                  (= (hash-ref record 'revision) 3)
+                  (hash-ref record 'launch-consumed)
+                  (exact-keys? (hash-ref record 'facts) '(allocation dispatch-id block-reason))
+                  (for/and ([key '(dispatch-id block-reason)])
+                    (define value (hash-ref (hash-ref record 'facts) key))
+                    (and (string? value) (positive? (string-length value))))
+                  (let ([a (hash-ref (hash-ref record 'facts) 'allocation)])
+                    (and (exact-keys? a '(attempt-id attempt-fence coordinator-fence))
+                         (string? (hash-ref a 'attempt-id))
+                         (positive? (string-length (hash-ref a 'attempt-id)))
+                         (exact-nonnegative-integer? (hash-ref a 'attempt-fence))
+                         (exact-nonnegative-integer? (hash-ref a 'coordinator-fence)))))
+       (refuse "parent is not an unambiguous spent blocked revision-3 launch"))
+     (values proposal task record))))
+(define (claim-path parent)
+  (build-path (root!) (string-append "supplemental-recovery-" (hash-ref parent 'sha256) ".json")))
+(define (canonical-pointer-path path)
+  (path->string (simplify-path (path->complete-path path) #f)))
+;; Storage-only validation: deliberately no approval, expiry, revocation,
+;; operation inspection or reconciliation. Ownership can only deny execution.
+(define (read-recovery-claim! path)
+  (define claim (read-sealed path))
+  (define r (hash-ref claim 'lineage #f))
+  (define target (hash-ref claim 'target #f))
+  (define bound (hash-ref claim 'pointer-path #f))
+  (define (ref? value kind)
+    (and (supplemental-reference? value) (equal? (hash-ref value 'kind) kind)))
+  (unless
+      (and (exact-keys? claim '(schema lineage pointer-path target sha256))
+           (equal? (hash-ref claim 'schema) "supplemental-recovery-claim/v1")
+           (exact-keys? r '(parent-proposal parent-approval terminal-sha256 pointer-sha256 allocation))
+           (ref? (hash-ref r 'parent-proposal) "task-proposal")
+           (ref? (hash-ref r 'parent-approval) "task-approval")
+           (for/and ([key '(terminal-sha256 pointer-sha256)])
+             (define digest (hash-ref r key))
+             (and (string? digest) (regexp-match? #px"^[0-9a-f]{64}$" digest)))
+           (let ([a (hash-ref r 'allocation)])
+             (and (exact-keys? a '(attempt-id attempt-fence coordinator-fence))
+                  (string? (hash-ref a 'attempt-id))
+                  (positive? (string-length (hash-ref a 'attempt-id)))
+                  (exact-nonnegative-integer? (hash-ref a 'attempt-fence))
+                  (exact-nonnegative-integer? (hash-ref a 'coordinator-fence))))
+           (string? bound) (complete-path? bound)
+           (equal? bound (canonical-pointer-path bound))
+           (exact-keys? target '(schema task-proposal task-approval))
+           (equal? (hash-ref target 'schema) "supplemental-pointer/v1")
+           (ref? (hash-ref target 'task-proposal) "task-proposal")
+           (ref? (hash-ref target 'task-approval) "task-approval")
+           (equal? (file-name-from-path path)
+                   (string->path
+                    (string-append "supplemental-recovery-"
+                                   (hash-ref (hash-ref r 'parent-approval) 'sha256) ".json"))))
+    (refuse "invalid permanent recovery claim"))
+  claim)
+(define (supplemental-recovery-pointer-claimed? path)
+  ;; Explicit #f is outside the trusted feature embedding: it cannot discover
+  ;; private ownership. Any configured-but-invalid/inaccessible root or claim
+  ;; raises, NEVER becomes #f and ordinary fallback. No files/locks are created.
+  (define root (and (current-supplemental-authority-root) (root! #t)))
+  (define bound (canonical-pointer-path path))
+  (and root
+       (for/fold ([claimed? #f]) ([entry (in-list (directory-list root))]
+                                #:when (regexp-match? #rx"^supplemental-recovery-" (path->string entry)))
+         ;; Validate all candidates even after a match; ambiguity must stop.
+         (define claim (read-recovery-claim! (build-path root entry)))
+         (or (equal? bound (hash-ref claim 'pointer-path)) claimed?))
+       #t))
+(define (read-pointer! path)
+  (check-file! path)
+  (define bytes (file->bytes path))
+  (define in (open-input-bytes bytes))
+  (define value (freeze (read-json in)))
+  (unless (and (eof-object? (peek-byte in)) (bytes=? bytes (bytes-for value)))
+    (refuse "noncanonical recovery pointer"))
+  value)
+(define (validate-recovery-claim! grant proposal task)
+  (define r (hash-ref task 'recovery))
+  (define claim (read-recovery-claim! (claim-path (hash-ref r 'parent-approval))))
+  (define target (hash-ref claim 'target))
+  (unless (and (equal? (hash-ref claim 'schema) "supplemental-recovery-claim/v1")
+               (equal? (hash-ref claim 'lineage) r)
+               (equal? (hash-ref target 'task-proposal) proposal)
+               (equal? (hash-ref target 'task-approval) grant)
+               (equal? target (read-pointer! (hash-ref claim 'pointer-path))))
+    (refuse "recovery child requires its permanent claim and exact active pointer"))
+  ;; Revocation of the parent remains effective, even after migration.
+  (define-values (_p parent terminal)
+    (inspect-supplemental-recovery-parent (hash-ref r 'parent-approval)))
+  (unless (and (equal? (hash-ref terminal 'proposal-ref) (hash-ref r 'parent-proposal))
+               (equal? (hash-ref terminal 'sha256) (hash-ref r 'terminal-sha256))
+               (equal? (hash-ref (hash-ref terminal 'facts) 'allocation) (hash-ref r 'allocation))
+               (for/and ([(key value) (in-hash parent)]
+                         #:unless (memq key '(kind sha256 control-plane-head)))
+                 (equal? value (hash-ref task key #f))))
+    (refuse "recovery lineage or inherited scope mismatch")))
+;; Caller holds campaign lease and has revalidated live context/source. Claim
+;; precedes CAS and is itself the permanent replay intent; never initialize a
+;; child operation here (operation -> authority is the only lock order).
+(define (install-supplemental-recovery-claim! path old target proposal grant)
+  (call-with-supplemental-authority-lock
+   (lambda ()
+     (unless (validate-supplemental-approval grant proposal)
+       (refuse "exact live child approval required"))
+     (define payload (hash-ref (load-supplemental-record proposal) 'payload))
+     (define task (hash-ref payload 'task))
+     (unless (and (exact-keys? payload '(task expires-at)) (valid-supplemental-task? task)
+                  (hash-has-key? task 'recovery)
+                  (< (current-seconds) (hash-ref payload 'expires-at))
+                  (<= (hash-ref payload 'expires-at)
+                      (+ (current-seconds) (hash-ref (hash-ref task 'bounds) 'deadline-sec))))
+       (refuse "invalid or expired recovery child"))
+     (define r (hash-ref task 'recovery))
+     (unless (and (equal? (hash-ref old 'task-proposal) (hash-ref r 'parent-proposal))
+                  (equal? (hash-ref old 'task-approval) (hash-ref r 'parent-approval))
+                  (equal? (supplemental-record-digest old) (hash-ref r 'pointer-sha256))
+                  (equal? target (hasheq 'schema "supplemental-pointer/v1"
+                                        'task-proposal proposal 'task-approval grant)))
+       (refuse "recovery expected pointer mismatch"))
+     (define claim-file (claim-path (hash-ref r 'parent-approval)))
+     (define claim (seal (hasheq 'schema "supplemental-recovery-claim/v1" 'lineage r
+                                 'pointer-path (canonical-pointer-path path) 'target target)))
+     (when (present? claim-file)
+       (unless (equal? (read-recovery-claim! claim-file) claim)
+         (refuse "parent already permanently claimed by another child or approval")))
+     (define current (read-pointer! path))
+     (unless (or (equal? current old) (equal? current target))
+       (refuse "active pointer CAS mismatch"))
+     ;; Validate all inherited scope and terminal bindings before persisting.
+     (define-values (p parent terminal) (inspect-supplemental-recovery-parent (hash-ref r 'parent-approval)))
+     (unless (and (equal? p (hash-ref r 'parent-proposal))
+                  (equal? (hash-ref terminal 'sha256) (hash-ref r 'terminal-sha256))
+                  (equal? (hash-ref (hash-ref terminal 'facts) 'allocation) (hash-ref r 'allocation))
+                  (for/and ([(key value) (in-hash parent)]
+                            #:unless (memq key '(kind sha256 control-plane-head)))
+                    (equal? value (hash-ref task key #f))))
+       (refuse "child changed parent lineage or scope"))
+     (unless (present? claim-file) (atomic-write! claim-file claim))
+     (cut! 'recovery-claim-written)
+     (unless (equal? current target) (atomic-write! path target))
+     (cut! 'recovery-pointer-written)
+     (validate-recovery-claim! grant proposal task)
+     target)))
+(define (authenticated-task! grant [historical? #f])
   (when (current-gsd-author-phase)
     (refuse "author phase cannot operate supplemental journal"))
   (unless (supplemental-reference? grant)
@@ -309,9 +488,12 @@
                (exact-keys? payload '(task expires-at))
                (valid-supplemental-task? task)
                (exact-positive-integer? expiry)
-               (< (current-seconds) expiry)
-               (<= expiry (+ (current-seconds) (hash-ref (hash-ref task 'bounds) 'deadline-sec))))
+               (or historical?
+                   (and (< (current-seconds) expiry)
+                        (<= expiry (+ (current-seconds) (hash-ref (hash-ref task 'bounds) 'deadline-sec))))))
     (refuse "approval requires a valid bounded task and unexpired operator expiry"))
+  (when (and (not historical?) (hash-has-key? task 'recovery))
+    (validate-recovery-claim! grant proposal-ref task))
   (values proposal-ref task expiry))
 (define (validate-linked-approvals! facts)
   (for ([keys '((candidate-approval-ref candidate-ref "candidate-approval" "candidate-proposal")
@@ -376,9 +558,9 @@
                  (or (not key) (hash-has-key? (hash-ref record 'facts) key))))
     (refuse "invalid operation/base/grant binding"))
   record)
-(define (paths root grant)
+(define (paths root grant [create? #t])
   (define dir (build-path root "supplemental-operations"))
-  (unless (present? dir)
+  (when (and create? (not (present? dir)))
     (with-handlers ([exn:fail:filesystem:exists? void])
       (make-directory dir #o700))
     (sync-directory! root))

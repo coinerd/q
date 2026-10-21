@@ -973,9 +973,47 @@
      "line": 210,
      "reason": "BUG-0088 keyboard revocation integration: after the actual approve key, poll durable approval validity at most 200 times with 0.01s waits; success requires durable revocation and subsequent admission/recovery refusal, not elapsed time. The frontend worker exposes no completion event to this test; logical clock advancement cannot schedule its durable write.",
      "text": "(sleep 0.01)"
+    },
+    {
+     "class": "C",
+     "disposition": "retained-canary",
+     "line": 156,
+     "reason": "Recovery keyboard denial canary: after the actual deny key, allow a bounded 0.05s window for the asynchronous worker to act incorrectly, then require unchanged old pointer and no pending decision. This negative window is not worker-completion proof; fake time cannot schedule the real broker worker.",
+     "text": "(sleep 0.05)"
+    },
+    {
+     "class": "C",
+     "disposition": "retained-canary",
+     "line": 171,
+     "reason": "Recovery keyboard integration: after a real exact grant, poll at most 200 times at 0.01s for the worker's actual refusal transcript because this structural fixture has no authentic eligible parent/claim. Assertions require that refusal and unchanged pointer, not elapsed time; the owner worker exposes no completion event and logical time cannot schedule it.",
+     "text": "(sleep 0.01)"
     }
    ],
    "suite": "fast"
+  },
+  "tests/test-gsd-supplemental-recovery-frontend.rkt": {
+   "occurrences": [
+    {
+     "class": "C",
+     "disposition": "retained-canary",
+     "line": 160,
+     "reason": "Genuine keyboard recovery integration polls at most 300 times at 0.01s for the exact private claim and active pointer installed by the asynchronously consumed broker grant. Assertions require validated migration and immutable parent bytes, never elapsed time; the frontend exposes no completion event and fake time cannot schedule its worker.",
+     "text": "(sleep 0.01)"
+    }
+   ],
+   "suite": "other"
+  },
+  "tests/test-gsd-supplemental-recovery-store.rkt": {
+   "occurrences": [
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 203,
+     "reason": "Historical-parent expiry boundary: wait 4s past the real current-seconds based 3s parent approval expiry, require ordinary journal execution inspection to refuse while pure immutable blocked-snapshot inspection still succeeds, then require revocation to refuse even historical inspection. Production wall-clock expiry has no injectable seam; this bounded real-time canary is not model retry permission.",
+     "text": "(sleep 4)"
+    }
+   ],
+   "suite": "unit-fast"
   },
   "tests/test-gsd-supplemental-evidence-journal.rkt": {
    "occurrences": [
@@ -2258,9 +2296,9 @@
  },
  "summary": {
   "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll)",
-  "total-occurrences": 248,
-  "unit-fast-files": 3,
-  "unit-fast-occurrences": 3,
+  "total-occurrences": 252,
+  "unit-fast-files": 4,
+  "unit-fast-occurrences": 4,
   "unjustified-unit-fast-sleeps": 0
  },
  "target-families": [

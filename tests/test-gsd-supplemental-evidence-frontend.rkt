@@ -6,8 +6,12 @@
 ;; @timeout 120
 (require rackunit
          racket/file
+         racket/port
+         racket/runtime-path
+         racket/system
          (prefix-in journal: "test-gsd-supplemental-evidence-journal.rkt")
          "../extensions/gsd/supplemental-evidence-journal.rkt"
+         "../extensions/gsd/supplemental-evidence-format.rkt"
          "../extensions/gsd/supplemental-evidence-authority.rkt"
          "../extensions/gsd/supplemental-evidence-operator.rkt"
          "../runtime/approval/broker.rkt"
@@ -42,7 +46,136 @@
                   (clear-approval-channel!)
                   (delete-directory/files home))))
 
+(define-runtime-path replan-cli "../scripts/gsd-evidence-replan.rkt")
+
 (module+ test
+  (test-case "recovery CLI recognizes exact-parent and expiry flags before requiring campaign"
+    (with-fixture (lambda ()
+                    (define-values (process stdout stdin stderr)
+                      (subprocess #f
+                                  #f
+                                  #f
+                                  (find-executable-path "racket")
+                                  replan-cli
+                                  "--authority-root"
+                                  (current-supplemental-authority-root)
+                                  "--verb"
+                                  "propose-recovery"
+                                  "--sha256"
+                                  (make-string 64 #\a)
+                                  "--expires-at"
+                                  (number->string (+ (current-seconds) 600))))
+                    (close-output-port stdin)
+                    (define output (port->string stdout))
+                    (define errors (port->string stderr))
+                    (subprocess-wait process)
+                    (check-equal? (subprocess-status process) 2 errors)
+                    (check-equal? output "")
+                    (check-regexp-match #rx"missing required --campaign-root" errors))))
+  (test-case "recovery uses retained new digest, exact broker presentation and denial never migrates"
+    (with-fixture
+     (lambda ()
+       ;; Structural frontend fixture only. No terminal parent or private claim is
+       ;; invented: even a genuine approval below must fail backend installation.
+       (define project (build-path (current-supplemental-authority-root) 'up "recovery-project"))
+       (make-directory project)
+       (parameterize ([current-directory project])
+         (define plan (hash-ref (hash-ref journal:task 'context) 'plan-id))
+         (define parent (propose-retain! "task-proposal" (hasheq 'task journal:task)))
+         (define old-pointer (write-supplemental-pointer! project plan 1 parent))
+         (define child
+           (seal-supplemental-record
+            (hash-set (hash-set journal:task 'kind "supplemental-evidence-task/v2")
+                      'recovery
+                      (hasheq 'parent-proposal
+                              parent
+                              'parent-approval
+                              (hasheq 'kind "task-approval" 'sha256 (make-string 64 #\b))
+                              'terminal-sha256
+                              (make-string 64 #\c)
+                              'pointer-sha256
+                              (make-string 64 #\d)
+                              'allocation
+                              (hasheq 'attempt-id "new" 'attempt-fence 4 'coordinator-fence 8)))))
+         (check-true (valid-supplemental-task? child))
+         (define ref
+           (propose-retain! "task-proposal"
+                            (hasheq 'task child 'expires-at (+ (current-seconds) 600))))
+         (define bus (make-event-bus))
+         (define ctx (make-tui-ctx #:session-runner void #:event-bus bus #:session-queue #f))
+         (define shown (make-semaphore 0))
+         (define requests 0)
+         (subscribe! bus
+                     (lambda (evt)
+                       (define sb (tui-ctx-ui-state-box ctx))
+                       (set-box! sb (apply-event-to-state (unbox sb) evt))
+                       (when (equal? (event-ev evt) "supplemental-evidence.approval-requested")
+                         (set! requests (add1 requests))
+                         (semaphore-post shown))))
+         (define raw
+           (format "/evidence-replan authorize-recovery ~a 1 ~a" plan (hash-ref ref 'sha256)))
+         (define (keyboard! text)
+           (define ib (tui-ctx-input-state-box ctx))
+           (set-box! ib (input-insert-string (unbox ib) text))
+           (process-tui-message! ctx '(key enter)))
+         (shared:process-slash-command ctx 'unknown raw)
+         (check-equal? requests 0 "model/shared commands must not reach owner approval")
+         (define sb (tui-ctx-ui-state-box ctx))
+         (set-box! sb (set-busy (unbox sb) #t))
+         (handle-owner-evidence-command! ctx raw)
+         (set-box! sb (set-busy (unbox sb) #f))
+         (handle-owner-evidence-command! (make-tui-ctx #:session-runner void #:session-queue #f) raw)
+         (for ([text
+                (in-list
+                 (list
+                  (format "/evidence-replan authorize-recovery ~a 1 ~a" plan (make-string 64 #\0))
+                  (format "/evidence-replan authorize-recovery ~a 1 ~a"
+                          plan
+                          (hash-ref parent 'sha256))
+                  (format "/evidence-replan authorize-recovery ~a 2 ~a" plan (hash-ref ref 'sha256))
+                  (format "/evidence-replan authorize-recovery ~a 1 ~a"
+                          (make-string 64 #\f)
+                          (hash-ref ref 'sha256))))])
+           (handle-owner-evidence-command! ctx text))
+         (check-equal? requests
+                       0
+                       "invalid kind, digest, campaign, wave, busy or channel must fail preflight")
+         (keyboard! raw)
+         (check-not-false (sync/timeout 2 shown)
+                          "new retained digest is not the still-active parent pointer")
+         (define overlay (ui-state-active-overlay (unbox sb)))
+         (check-not-false overlay)
+         (when overlay
+           (define extra (overlay-state-extra overlay))
+           (check-equal? (hash-ref extra 'commitment-digest) (hash-ref ref 'sha256))
+           (check-equal? (hash-ref (hash-ref extra 'approval-view) 'record-canonical-json)
+                         (hash-ref (supplemental-approval-presentation ref) 'record-canonical-json))
+           (check-false (approval-decide! (hash-ref extra 'request-id) (hash-ref parent 'sha256) #t))
+           (check-equal? (load-supplemental-pointer project plan 1) old-pointer)
+           (process-tui-message! ctx '(key #\n))
+           (sleep 0.05)
+           (check-equal? (load-supplemental-pointer project plan 1) old-pointer)
+           (check-equal? (pending-approval-count) 0)
+           ;; A genuine grant creates approval, not permission to bypass the
+           ;; installer's terminal-parent/claim checks or automatically launch.
+           (keyboard! raw)
+           (check-not-false (sync/timeout 2 shown))
+           (process-tui-message! ctx '(key #\y))
+           (let wait ([tries 200])
+             (define refused?
+               (for/or ([entry (in-list (ui-state-transcript (unbox sb)))])
+                 (regexp-match? #rx"Owner authorization refused:" (transcript-entry-text entry))))
+             (cond
+               [refused? (void)]
+               [(positive? tries)
+                (sleep 0.01)
+                (wait (sub1 tries))]
+               [else (fail "unclaimed recovery must refuse installation after broker approval")]))
+           (check-equal? (load-supplemental-pointer project plan 1) old-pointer)
+           (check-false (ui-state-busy? (unbox sb)))
+           (clear-approval-channel!)
+           (handle-owner-evidence-command! ctx raw)
+           (check-equal? requests 2))))))
   (test-case "retained T/K/S reaches real UI selection and returns only exact opaque broker grant"
     (with-fixture
      (lambda ()

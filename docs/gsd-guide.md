@@ -204,6 +204,18 @@ without redispatch. Fixture coverage is not installation or live authorization;
 remaining engineering acceptance gates still apply. See the
 [governance contract and frontend limits](automatic-review.md#governed-supplemental-evidence-replan-bug-0088).
 
+Changing models does not revive a spent supplemental launch. An eligible original task
+blocked at revision 3 may have one separately broker-approved recovery child, with identical
+scope/context/baseline/C0/C1/bounds and explicit parent/pointer lineage. No grandchildren,
+allowance reset, old approval reuse, or ordinary-author fallback is permitted. Retain it with
+`--verb propose-recovery --campaign-root ROOT --plan PLAN --wave N --sha256 PARENT-T --expires-at UNIX-SECONDS`,
+inspect NEW-T, then use `/evidence-replan authorize-recovery PLAN WAVE NEW-T-SHA256` in the owner TUI.
+This grants one NEW bounded invocation and installs a permanent claimed pointer migration;
+it launches nothing. Invoke `/go` separately after the genuine decision. Provider choice
+remains operator-selected, not a quota guarantee. Exact clean source, unrevoked terminal
+parent, current failed allocation/fences and no cancellation/budget pause are required;
+K, full C1/G1, real R1, S, P/readiness and fresh independent review still follow normally.
+
 ## State Machine
 
 ```
