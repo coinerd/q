@@ -20,7 +20,10 @@
 ;;   extensions/context.rkt → make-extension-ctx (extension registration)
 ;; ───────────────────────────────────────────────────────────────
 
-(require (only-in racket/dict in-dict)
+(require "../util/worker-tool-policy.rkt"
+         (only-in "../util/capability.rkt" canonical-capabilities-snapshot capability-authorized?)
+         (only-in "tool-coordinator.rkt" capabilities-for-tool-execution)
+         (only-in racket/dict in-dict)
          (only-in racket/list filter-map)
          racket/contract
          (only-in "../util/loop-result.rkt" loop-result? loop-result-messages)
@@ -48,7 +51,10 @@
                   extension-registry?
                   dispatch-hooks
                   list-tools-jsexpr
-                  merge-tool-lists)
+                  merge-tool-lists
+                  ;; Registry metadata, never provider schemas, is capability authority.
+                  lookup-tool
+                  tool-required-capability)
          "../agent/loop.rkt"
          (only-in "../agent/loop-fsm.rkt" current-turn-fsm-state turn-state-blocked)
          (only-in "../runtime/settings.rkt" setting-ref setting-ref*)
@@ -280,6 +286,22 @@
 ;; Provider turn
 ;; ============================================================
 
+;; Apply only at the worker boundary, after all schema assembly. A custom or
+;; extension schema must resolve to an installed tool; malformed projections and
+;; registry lookup failures are hidden rather than treated as unprivileged tools.
+(define (filter-worker-capabilities schemas reg capabilities)
+  (for/list ([schema (in-list (or schemas '()))]
+             #:when
+             (with-handlers ([(lambda (_) #t) (lambda (_) #f)])
+               (define name
+                 (hash-ref (if (equal? (hash-ref schema 'type #f) "function")
+                               (hash-ref schema 'function)
+                               schema)
+                           'name))
+               (define tool (and (string? name) reg (lookup-tool reg name)))
+               (and tool (capability-authorized? (tool-required-capability tool) capabilities))))
+    schema))
+
 ;; Run the provider turn: dispatch before-provider-request hook, then run agent turn.
 ;; Returns the loop-result from run-agent-turn.
 (define (run-provider-turn ctx-final
@@ -292,7 +314,12 @@
                            token
                            config-raw
                            #:tool-list-proc [tool-list-proc #f])
+  (define policy (current-worker-tool-policy))
   (define config config-raw)
+  ;; Match execution's config-over-inherited-parameter precedence and snapshot
+  ;; before hooks or custom assembly callbacks can change ambient authority.
+  (define worker-capabilities
+    (and policy (canonical-capabilities-snapshot (capabilities-for-tool-execution config))))
   ;; v0.28.20 T7: Emit system.warning if mock provider is being used
   (when (provider-is-mock? prov)
     (emit-session-event! bus
@@ -316,11 +343,17 @@
   ;; v0.20.5 W3: Uses shared register-session-extensions! function.
   ;; Idempotent — extensions track their own state.
   (define ext-tools (and ext-reg (register-session-extensions! reg ext-reg bus session-id)))
+  (define projected-tools
+    (filter-worker-tools
+     (cond
+       [tool-list-proc (tool-list-proc base-tools ext-tools)]
+       [(and base-tools (pair? ext-tools)) (merge-tool-lists base-tools ext-tools)]
+       [else base-tools])
+     policy))
   (define tools
-    (cond
-      [tool-list-proc (tool-list-proc base-tools ext-tools)]
-      [(and base-tools (pair? ext-tools)) (merge-tool-lists base-tools ext-tools)]
-      [else base-tools]))
+    (if policy
+        (filter-worker-capabilities projected-tools reg worker-capabilities)
+        projected-tools))
 
   ;; v0.14.4 Wave 2 FIX: Extract ONLY provider-specific settings from config.
   ;; The full config is a mutable hash with event-bus, extension-registry, etc.

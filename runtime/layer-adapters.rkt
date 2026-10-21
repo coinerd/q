@@ -28,6 +28,8 @@
          (only-in "../tools/tool.rkt"
                   list-tools-jsexpr
                   merge-tool-lists
+                  lookup-tool
+                  tool-required-capability
                   tool-result?
                   tool-registry?
                   make-exec-context
@@ -55,6 +57,9 @@
 ;; Tool schema assembly
 (provide list-tools-jsexpr
          merge-tool-lists
+         ;; Trusted registry metadata for capability admission.
+         lookup-tool
+         tool-required-capability
          ;; Tool execution
          run-tool-batch
          scheduler-result

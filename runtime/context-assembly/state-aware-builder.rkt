@@ -15,6 +15,7 @@
 (require racket/list
          racket/runtime-path
          racket/string
+         (only-in "../../util/worker-tool-policy.rkt" current-worker-tool-policy)
          (only-in "../../util/content/content-parts.rkt" make-text-part)
          (only-in "../../util/message/message.rkt"
                   message
@@ -421,6 +422,10 @@
          [(verification) "VERIFICATION"]
          [(debugging) "DEBUGGING"]
          [else "UNKNOWN"]))
+     ;; A scoped worker's owner task contract, not the ordinary task FSM,
+     ;; determines its role and available actions. Keep checkpoint observations
+     ;; and existing memory, but omit optional general workflow automation.
+     (define worker? (and (current-worker-tool-policy) #t))
      (define guidance (hash-ref state-guidance-table state-name "Focus on the current task."))
      ;; v0.95.18 F9: Filter bare [Auto] conclusions before count/render
      (define visible-conclusions
@@ -439,26 +444,34 @@
                      conclusion-count
                      (length top)
                      (string-join texts "\n")))
-           "\n\nNo conclusions in memory yet. Use record_conclusion to save findings."))
+           (if worker?
+               "\n\nNo conclusions in memory yet."
+               "\n\nNo conclusions in memory yet. Use record_conclusion to save findings.")))
      (define reflection-reminder
-       (if reflection-event
+       (if (and reflection-event (not worker?))
            "\n\nReminder: You recently received large tool results. Use record_conclusion to save key findings before taking more actions."
            ""))
      (define preamble-text
-       (format (string-append "You are currently in the ~a phase.~a~a~a~a\n\n"
-                              "Workflow: Use record_conclusion to persist findings. "
-                              "Use set_task_state to transition: "
-                              "exploration→planning→implementation→verification→debugging.")
-               label
-               guidance
-               conclusion-section
-               reflection-reminder
-               (if (current-blackboard-injection-enabled)
-                   (let ([snippet (build-blackboard-context-snippet)])
-                     (if snippet
-                         (string-append "\n\n" snippet)
-                         ""))
-                   "")))
+       (format
+        (if worker?
+            (string-append "Task checkpoint (runtime state: ~a; observation only)."
+                           "~a~a~a~a\n\n"
+                           "Follow the owner-provided task contract, including its role, paths, "
+                           "and tool limits. This checkpoint does not change that contract.")
+            (string-append "You are currently in the ~a phase.~a~a~a~a\n\n"
+                           "Workflow: Use record_conclusion to persist findings. "
+                           "Use set_task_state to transition: "
+                           "exploration→planning→implementation→verification→debugging."))
+        label
+        (if worker? "" guidance)
+        conclusion-section
+        reflection-reminder
+        (if (current-blackboard-injection-enabled)
+            (let ([snippet (build-blackboard-context-snippet)])
+              (if snippet
+                  (string-append "\n\n" snippet)
+                  ""))
+            "")))
      ;; v0.99.89: Reflection event consumed by caller, not here.
      (make-message "state-awareness-preamble"
                    #f

@@ -13,7 +13,9 @@
 ;;;   2. Batch execution (serial or parallel with bounded thread pool)
 ;;;   3. IPC response translation for worker-based execution
 
-(require racket/match
+(require "scheduler-denial.rkt"
+         "../util/worker-tool-policy.rkt"
+         racket/match
          racket/contract
          (only-in "tool.rkt"
                   tool-call?
@@ -55,7 +57,11 @@
                   tool-approval-commitment-digest)
          (only-in "tool-classification.rkt" tool-name-tool-owned-approval?)
          (only-in "../runtime/approval/broker.rkt" approval-grant? call-with-approval-grant)
-         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload hook-block)
+         (only-in "../util/hook-types.rkt"
+                  hook-result?
+                  hook-result-action
+                  hook-result-payload
+                  hook-block)
          (only-in "../util/cancellation.rkt" cancellation-token-cancelled?)
          (only-in "../util/capability.rkt" capability-authorized?)
          (only-in "scheduler-preflight.rkt"
@@ -179,6 +185,7 @@
 
 (define (execute-single tc t exec-ctx hook-dispatcher)
   ;; Dispatch 'tool-call-pre hook
+  (define policy (current-worker-tool-policy))
   (define tc-id (tool-call-id tc))
   (define tc-name (tool-call-name tc))
   (define tc-args (tool-call-arguments tc))
@@ -202,11 +209,12 @@
   ;; Check if tool-call-pre hook blocks or amends
   (define pre-hook-result
     (if hook-dispatcher
-        (with-handlers ([exn:fail? (lambda (e)
-                                     (log-warning "tool-call-pre hook threw: ~a" (exn-message e))
-                                     ;; A failed authorization dispatch is not
-                                     ;; equivalent to having no dispatcher.
-                                     (hook-block "tool-call-pre authorization dispatch failed"))])
+        (with-handlers ([(lambda (_) #t)
+                         (lambda (_)
+                           (log-warning "tool-call-pre authorization dispatch failed")
+                           ;; A failed authorization dispatch is not
+                           ;; equivalent to having no dispatcher.
+                           (hook-block "tool-call-pre authorization dispatch failed"))])
           (hook-dispatcher 'tool-call-pre pre-payload))
         #f))
 
@@ -217,9 +225,16 @@
      (make-error-result (format "tool '~a' blocked — required capability '~a' is not authorized"
                                 tc-name
                                 (tool-required-capability t)))]
+    [(and pre-hook-result
+          (or (not (hook-result? pre-hook-result))
+              (not (memq (hook-result-action pre-hook-result) '(pass amend block)))))
+     (make-error-result (format "tool '~a' blocked — malformed tool-call-pre authorization result"
+                                tc-name))]
     [(and (hook-result? pre-hook-result) (eq? (hook-result-action pre-hook-result) 'block))
      ;; Return early with blocked result
-     (make-error-result (format "tool '~a' blocked by tool-call-pre hook" tc-name))]
+     (make-error-result (format "tool '~a' blocked by tool-call-pre hook: ~a"
+                                tc-name
+                                (safe-denial-reason (hook-result-payload pre-hook-result))))]
     [else
      ;; A declared amendment must contain hash arguments. Malformed amendments
      ;; fail closed rather than silently executing the original invocation.
@@ -268,6 +283,11 @@
             #f))
         (cond
           [validation-error (make-error-result (exn-message validation-error))]
+          [(worker-tool-denial tc-name final-args policy)
+           =>
+           (lambda (reason)
+             (make-error-result
+              (format "tool '~a' blocked by worker policy: ~a" tc-name (safe-denial-reason reason))))]
           [else
            ;; G3.4: Permission gate — check if tool needs approval.
            ;; v0.99.66 (W1, finding #1 CRITICAL): fail-closed. If perm-cfg
@@ -371,6 +391,10 @@
   ;; For 'blocked and 'error entries, produces error results directly.
   ;; For 'ready entries, executes the tool.
 
+  (define policy (current-worker-tool-policy))
+  (define (execute tc t)
+    (parameterize ([current-worker-tool-policy policy])
+      (guard-execute tc t exec-ctx hook-dispatcher)))
   (define cancellation-token (and exec-ctx (exec-context-cancellation-token exec-ctx)))
   (define (cancelled?)
     (and cancellation-token (cancellation-token-cancelled? cancellation-token)))
@@ -389,23 +413,22 @@
     (if parallel?
         ;; Parallel execution using threads with bounded pool (F6)
         (let* ([sem (make-semaphore (max-parallel-tools))]
-               [channels
-                (for/list ([ie (in-list indexed-ready)])
-                  (define ch (make-channel))
-                  (define idx (car ie))
-                  (define entry (cdr ie))
-                  (define tc (preflight-entry-tool-call entry))
-                  (define t (preflight-entry-tool entry))
-                  (thread (lambda ()
-                            (define result
-                              (dynamic-wind (lambda () (semaphore-wait sem))
-                                            (lambda ()
-                                              (if (cancelled?)
-                                                  (cancelled-result)
-                                                  (guard-execute tc t exec-ctx hook-dispatcher)))
-                                            (lambda () (semaphore-post sem))))
-                            (channel-put ch (cons idx result))))
-                  ch)])
+               [channels (for/list ([ie (in-list indexed-ready)])
+                           (define ch (make-channel))
+                           (define idx (car ie))
+                           (define entry (cdr ie))
+                           (define tc (preflight-entry-tool-call entry))
+                           (define t (preflight-entry-tool entry))
+                           (thread (lambda ()
+                                     (define result
+                                       (dynamic-wind (lambda () (semaphore-wait sem))
+                                                     (lambda ()
+                                                       (if (cancelled?)
+                                                           (cancelled-result)
+                                                           (execute tc t)))
+                                                     (lambda () (semaphore-post sem))))
+                                     (channel-put ch (cons idx result))))
+                           ch)])
           (for/list ([ch (in-list channels)])
             (channel-get ch)))
         ;; Serial execution
@@ -417,7 +440,7 @@
           (cons idx
                 (if (cancelled?)
                     (cancelled-result)
-                    (guard-execute tc t exec-ctx hook-dispatcher))))))
+                    (execute tc t))))))
 
   ;; Build a map from index -> result
   (define results-by-idx

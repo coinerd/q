@@ -24,7 +24,8 @@
 ;;   dispatch-iteration      — model-select hook + iteration loop dispatch
 ;;   run-prompt-internal     — internal prompt execution (after input hook)
 
-(require racket/contract
+(require "../../util/worker-tool-policy.rkt"
+         racket/contract
          (only-in "session-config.rkt"
                   config-working-set
                   config-token-budget-threshold
@@ -202,13 +203,16 @@
 
 ;; ── dispatch-iteration ──
 
-;; dispatch-iteration — model-select hook + iteration loop dispatch.
-;;   Runs the core agent loop with error handling. Returns a loop-result.
-;;   v0.32.0: Starts trace logger for session diagnostics.
+;; dispatch-iteration — model-select + core loop, with error handling and tracing.
+;; Returns a loop-result; the trusted session policy covers all worker callbacks.
 (define (dispatch-iteration sess
                             context-with-system
                             max-iterations
                             #:prompt-turn-id [prompt-turn-id #f])
+  (parameterize ([current-worker-tool-policy (config-worker-tool-policy (agent-session-config sess))])
+    (dispatch-iteration/policy sess context-with-system max-iterations prompt-turn-id)))
+
+(define (dispatch-iteration/policy sess context-with-system max-iterations prompt-turn-id)
   (define bus (session-tool-facet-event-bus (session->tool-facet sess)))
   (define prov (session-provider-facet-provider (session->provider-facet sess)))
   (define reg (session-tool-facet-tool-registry (session->tool-facet sess)))
@@ -259,8 +263,7 @@
     (define override-model (hash-ref (hook-result-payload model-hook-res) 'model))
     (guarded-set-model-name! sess override-model))
 
-  ;; Run the core agent loop with tool-call iteration
-  ;; v0.32.0: Start trace logger for diagnostics
+  ;; Run the tool-call iteration loop with session diagnostics.
   (define session-dir (agent-session-session-dir sess))
   (define tracer (make-trace-logger bus session-dir #:enabled? #t))
   (start-trace-logger! tracer)
@@ -335,8 +338,7 @@
         #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
         #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess))
         #:session sess
-        ;; Injected runtime operations — closures capture cfg
-        ;; so Agent iteration never imports session-config.
+        ;; Closures capture cfg so Agent iteration never imports session-config.
         #:build-context-fn
         (lambda (ctx-to-use ws-arg ext-reg-arg bus-arg sid-arg iter #:session sess-arg)
           (build-assembled-context ctx-to-use
@@ -366,8 +368,7 @@
         #:ensure-working-set-fn
         (lambda (ws-arg)
           (or ws-arg (make-working-set #:max-tokens (compute-working-set-budget ctx-budget)))))))
-    ;; v0.32.0: Stop trace logger on normal completion
-    (stop-trace-logger! tracer)
+    (stop-trace-logger! tracer) ; Flush session diagnostics on normal completion.
     result))
 
 ;; ── run-prompt-internal ──

@@ -110,8 +110,8 @@
       (define results (scheduler-result-results result))
       (check-equal? (length results) 1)
       (check-true (tool-result-is-error? (car results)) "blocked pre hook produces error result")
-      (check-not-false (regexp-match? #rx"blocked" (error-text (car results)))
-                       "error message mentions blocking"))
+      (check-not-false (regexp-match? #rx"blocked by policy" (error-text (car results)))
+                       "error message preserves policy reason"))
 
     ;; ============================================================
     ;; TS2: tool-call-pre hook amends arguments

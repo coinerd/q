@@ -1088,7 +1088,7 @@
     'destination-gate
     "fast"
     'members
-    '("tests/test-gsd-delivery-verifier.rkt")
+    '("tests/test-gsd-delivery-verifier-git-contract.rkt")
     'owner
     "test-design"
     'status

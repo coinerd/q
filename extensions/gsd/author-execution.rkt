@@ -6,6 +6,9 @@
          racket/port
          racket/string
          racket/system
+         (only-in "../../util/worker-tool-policy.rkt" current-worker-tool-policy)
+         "supplemental-author-contract.rkt"
+         (only-in "../../agent/state.rkt" current-empty-response-nudge)
          "red-checkpoint.rkt"
          "delivery-receipt.rkt"
          "delivery-journal.rkt"
@@ -188,29 +191,33 @@
               'done
               "Evidence author returned without edits; implementation retained; fresh review is next"))
            implemented)])))
-(define supplemental-test-author-instructions
-  (string-append
-   "\nGOVERNED SUPPLEMENTAL EVIDENCE TASK (operator-authorized, one-shot; NOT a review rejection).\n"
-   "Write the new regression witness in the TWO approved FILES only; do not implement any fix and do not\n"
-   "touch any other path. Use an exported literal RackUnit evidence-suite whose module+ test runs that same\n"
-   "suite. The witness must fail behaviorally on the pinned baseline and pass on the current candidate via\n"
-   "the approved helper. No fabricated output, exits, skipped checks or weakened expectations.\n"
-   "Bash and custom mutation tools are unavailable. The owner commits and runs the approved C1 Verify.\n"
-   "There is NO implementation phase for this task. Return when the two files are authored.\n"))
-
-;; Supplemental evidence task: exactly ONE test-author dispatch, restricted to
-;; the two approved write paths under the ordinary hook guard. No implementation
-;; phase exists; the owner commits through the ordinary scoped commit path.
-(define (run-supplemental-test-author! repo files attempt run guard after-phase)
-  (dispatch-phase! repo
-                   files
-                   files
+;; The descriptor is already authenticated by the owned controller. Keep all
+;; projections dynamically bound until the owned runner returns, including
+;; same-invocation continuations. The runtime captures this generic policy.
+(define (run-supplemental-test-author! repo contract attempt run guard after-phase)
+  (define scope (supplemental-author-contract-scope contract))
+  (need (equal? (path->directory-path (simplify-path (path->complete-path repo) #f))
+                (path->directory-path (hash-ref scope 'repo)))
+        "supplemental contract checkout mismatch")
+  (define before (git repo "rev-parse" "HEAD"))
+  (need (guard) "stale authority before model dispatch")
+  (define result
+    (parameterize ([current-supplemental-author-contract contract]
+                   [current-gsd-author-phase scope]
+                   [current-worker-tool-policy (make-supplemental-worker-tool-policy contract)]
+                   [current-gsd-wave-failure-context #f]
+                   [current-empty-response-nudge (render-supplemental-author-prompt contract)])
+      (coerce-run-result (run))))
+  (after-phase)
+  (when (eq? (wave-execution-outcome-kind result) 'done)
+    (commit-phase! repo
+                   before
+                   (hash-ref scope 'files)
+                   (hash-ref scope 'tests)
                    'test-author
                    attempt
-                   run
-                   guard
-                   after-phase
-                   #:instructions supplemental-test-author-instructions))
+                   guard))
+  result)
 
 (define (run-proactive-author-phases! base
                                       plan

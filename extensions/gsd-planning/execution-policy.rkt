@@ -13,7 +13,9 @@
          (only-in "../gsd/session-state.rkt" current-gsd-ctx))
 
 (provide gsd-tool-guard
-         current-gsd-author-phase)
+         current-gsd-author-phase
+         author-scope-denial
+         author-scope-tool-names)
 
 ;; Trusted caller supplies an immutable snapshot. Validate at admission rather
 ;; than raising in a parameter guard: malformed scopes must deny even reads.
@@ -58,25 +60,68 @@
        (let-values ([(base name dir?) (split-path p)])
          (or (not (path? base)) (equal? base p) (safe-directory-chain? base)))))
 
-(define (author-phase-allows? scope payload)
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (and (valid-author-scope? scope)
-         (let ([tool (hash-ref payload 'tool-name #f)])
-           (or (member tool '("read" "grep" "find" "ls" "glob"))
-               (and (member tool '("write" "edit"))
-                    (let* ([args (hash-ref payload 'tool-arguments #f)]
-                           [raw (and (hash? args) (hash-ref args 'path #f))]
-                           [repo (simplify-path (hash-ref scope 'repo) #f)]
-                           [allowed (if (eq? (hash-ref scope 'phase) 'test-author)
-                                        (hash-ref scope 'tests)
-                                        (remove* (hash-ref scope 'tests) (hash-ref scope 'files)))])
-                      (and (path-string? raw)
-                           ;; Reject traversal even if simplification would land inside.
-                           (not (member 'up (explode-path raw)))
-                           (let ([target (simplify-path (path->complete-path raw repo) #f)])
-                             (and (for/or ([p (in-list allowed)])
-                                    (equal? target (simplify-path (build-path repo p) #f)))
-                                  (safe-regular-or-new? target)))))))))))
+;; One decision shared by the hook and final effective-invocation policy.
+;; Diagnostics expose only owner scope, never arbitrary arguments or outside paths.
+(define author-tool-names '("read" "grep" "find" "ls" "glob" "write" "edit"))
+(define (author-scope-tool-names scope)
+  (if (valid-author-scope? scope)
+      author-tool-names
+      '()))
+(define (public-text value)
+  (define text
+    (if (path? value)
+        (path->string value)
+        value))
+  (if (and (string? text)
+           (<= (string-length text) 512)
+           (regexp-match? #px"^[A-Za-z0-9_./ :,-]+$" text))
+      text
+      "[non-public target]"))
+(define (author-scope-denial scope tool args)
+  (define invalid
+    "AUTHOR_SCOPE_INVALID: stop and report an owner configuration problem; do not broaden scope.")
+  (with-handlers ([exn:fail? (lambda (_) invalid)])
+    (cond
+      [(not (valid-author-scope? scope)) invalid]
+      [(not (member tool author-tool-names))
+       (format
+        "AUTHOR_TOOL_NOT_ALLOWED: ~a denied in phase ~a; permitted tools: ~a. Owner-only tools stay unavailable."
+        (public-text tool)
+        (hash-ref scope 'phase)
+        (string-join author-tool-names ", "))]
+      [(member tool '("read" "grep" "find" "ls" "glob")) #f]
+      [else
+       (define raw (and (hash? args) (hash-ref args 'path #f)))
+       (define repo (simplify-path (hash-ref scope 'repo) #f))
+       (define allowed
+         (if (eq? (hash-ref scope 'phase) 'test-author)
+             (hash-ref scope 'tests)
+             (remove* (hash-ref scope 'tests) (hash-ref scope 'files))))
+       (cond
+         [(or (not (path-string? raw))
+              (member 'up (explode-path raw))
+              (regexp-match? #px"\\\\"
+                             (if (path? raw)
+                                 (path->string raw)
+                                 raw)))
+          "AUTHOR_PATH_UNSAFE: unsafe target or traversal refused; use an exact authorized path without traversal."]
+         [else
+          (define target (simplify-path (path->complete-path raw repo) #f))
+          (cond
+            [(not (for/or ([p (in-list allowed)])
+                    (equal? target (simplify-path (build-path repo p) #f))))
+             (define relative (find-relative-path repo target))
+             (format (string-append
+                      "AUTHOR_PATH_OUT_OF_SCOPE: ~a denied. Allowed paths: ~a. Physical cwd: ~a. "
+                      "Author those files; do not switch phase.")
+                     (if (literal-repo-path? (path->string relative))
+                         (public-text relative)
+                         "outside-checkout target")
+                     (string-join (map public-text allowed) ", ")
+                     (public-text repo))]
+            [(not (safe-regular-or-new? target))
+             "AUTHOR_PATH_UNSAFE: symlink or unsafe target refused; stop and report to the owner."]
+            [else #f])])])))
 
 (define protected-planning-path-rx
   #px"(?:^|/)\\.planning/(?:PLAN|STATE|VALIDATION)(?:-[^/]*)?\\.md$|(?:^|/)\\.planning/HANDOFF\\.json$")
@@ -96,13 +141,13 @@
   (define mode (gsm-ctx-current (current-gsd-ctx)))
   (define tool-name (hash-ref payload 'tool-name #f))
   (define phase-denied?
-    (and (current-gsd-author-phase) (not (author-phase-allows? (current-gsd-author-phase) payload))))
+    (and (current-gsd-author-phase)
+         (author-scope-denial (current-gsd-author-phase)
+                              tool-name
+                              (hash-ref payload 'tool-arguments #f))))
   (define allowed (and (not phase-denied?) (gsm-tool-allowed? tool-name)))
   (cond
-    [phase-denied?
-     (hook-block (string-append
-                  "Author phase tool denied. Only scoped write/edit and read-only tools are allowed; "
-                  "the owner runs declared tests and performs commits outside the phase."))]
+    [phase-denied? (hook-block phase-denied?)]
     [(and (eq? mode 'executing) (equal? tool-name "planning-write"))
      (hook-block "Cannot update plan during /go. Focus on executing the existing plan.")]
     [(and (eq? mode 'executing) (generic-mutation-targets-planning-artifact? tool-name payload))

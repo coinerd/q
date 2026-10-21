@@ -162,6 +162,33 @@ it never permits ordinary-author fallback or duplicate dispatch. Direct
 full-entry fixtures invoke `run-campaign!` without an advance override and stop
 at the next genuine approval boundary, not at live delivery acceptance.
 
+#### Supplemental worker execution contract
+
+Before dispatch, the owner derives one immutable task descriptor from authenticated T:
+public task identity, test-author phase, retained physical working directory, source and
+baseline identities, and exactly two approved repo-relative paths with absolute targets.
+The replacement prompt names both paths even when the files do not exist and retains
+only the frozen wave's behavioral Goal/Goals, Done/Done Criteria and Acceptance sections as intent.
+The frozen wave's original Files, implementation, Git, shell Verify and scratch-write instructions
+are not current worker authority. Re-anchors and same-invocation continuations retain
+that contract. The worker authors the literal evidence suite and approved helper, then
+returns normally; the owner owns commits, canonical metadata, C1 Verify, baseline probes,
+approval transitions and publication.
+
+A trusted generic runtime policy projects the final assembled provider tool schemas
+session-locally: only installed permitted read tools plus scoped write/edit are advertised.
+Other sessions and the shared registry are unchanged. Hiding tools grants no authority:
+normal scheduler/capability/hook checks still reject forged calls, and the same pure
+scope policy checks final effective arguments after hook amendment and schema validation.
+Denials retain a bounded, credential-redacted, control-character-safe reason identifying
+disallowed tools, out-of-scope paths, unsafe paths or invalid owner scope; infrastructure
+failures remain fail-closed infrastructure errors, not claims that all writes are blocked.
+No tool or prompt permits implementation escalation or owner-only operations.
+
+The descriptor is data, not a grant. Broker/journal/fence, expiry, cancellation and all
+T/K/S/C1/G1/R1/P boundaries remain authoritative. This repair does not revive the already
+spent recovery child, authorize retry, reset accounting or permit a grandchild.
+
 Shared owner locking, revision/CAS and write-ahead intents serialize
 admission, revocation and recovery. Revalidate exact source/clean checkout,
 ancestry, receipt/generation, approvals/revocation, deadlines, cancellation and

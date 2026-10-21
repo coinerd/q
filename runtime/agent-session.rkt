@@ -24,7 +24,8 @@
 ;;   close-session!         — close/deactivate a session
 ;;   agent-session?         — predicate
 
-(require racket/contract
+(require "../util/worker-tool-policy.rkt"
+         racket/contract
          racket/string
          racket/file
          racket/list
@@ -284,7 +285,8 @@
 
   ;; M4 W0: Rollout gate — deterministically assign task-state-aware? based on session-id hash
   (define task-state-aware? (session-rollout-enabled? sid))
-  (define cfg-with-rollout (dict-set cfg 'task-state-aware? task-state-aware?))
+  (define cfg-with-rollout
+    (capture-worker-tool-policy (dict-set cfg 'task-state-aware? task-state-aware?)))
 
   (define session-created-at (now-seconds))
 

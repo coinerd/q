@@ -315,7 +315,9 @@
                      "2026-06-07T12:00:00Z"
                      "2026-06-07T12:00:00Z"))
       ((memory-backend-store! backend) test-item)
-      (define msgs (make-test-msgs 5))
+      ;; State-aware retrieval uses recent text as a lexical query. Keep the
+      ;; fixture relevant so this tests config wiring, not unrelated filtering.
+      (define msgs (list (make-test-msg 'user "Check session config wiring")))
       ;; BUG PROOF: without #:session-config, injection is skipped
       ;; This is the exact gap in turn-orchestrator.rkt assemble-context/pure
       (define tc-no-config

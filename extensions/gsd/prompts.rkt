@@ -5,7 +5,8 @@
 ;; Wave 3a of v0.21.0: Prompt templates that guide the LLM through
 ;; the GSD workflow phases.
 
-(require racket/format
+(require "supplemental-author-contract.rkt"
+         racket/format
          racket/string
          "plan-types.rkt"
          "wave-executor.rkt")
@@ -70,6 +71,10 @@
 ;; → prompt that restates the executor role verbatim and ORDERS continuation
 ;; of implementation. No I/O.
 (define (executor-reanchor-prompt wave-id campaign-id task-line last-tool-result-excerpt)
+  (if (current-supplemental-author-contract)
+      (render-supplemental-author-prompt)
+      (ordinary-executor-reanchor-prompt wave-id campaign-id task-line last-tool-result-excerpt)))
+(define (ordinary-executor-reanchor-prompt wave-id campaign-id task-line last-tool-result-excerpt)
   (string-append "[SYSTEM — EXECUTOR RE-ANCHOR — NOT A USER MESSAGE]\n\n"
                  (format "Campaign: ~a\n" campaign-id)
                  (format "Wave: ~a\n" wave-id)

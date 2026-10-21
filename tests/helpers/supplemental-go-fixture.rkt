@@ -101,20 +101,31 @@
   (define plan (supplemental-fixture-plan fx))
   (define old (load-campaign-record root plan))
   (define (with-waves waves)
-    (define rec (make-campaign-record plan (campaign-record-manifest old) waves #f
-                                      (campaign-fence-token old) 'test 0 0))
+    (define rec
+      (make-campaign-record plan
+                            (campaign-record-manifest old)
+                            waves
+                            #f
+                            (campaign-fence-token old)
+                            'test
+                            0
+                            0))
     (set-campaign-record-plan-snapshot-path! rec (campaign-record-plan-snapshot-path old))
     (set-campaign-record-plan-snapshot-digest! rec (campaign-record-plan-snapshot-digest old))
     rec)
   (define predecessor
-    (with-waves (list (make-campaign-wave 0 "Predecessor" 'awaiting-delivery 1
+    (with-waves (list (make-campaign-wave 0
+                                          "Predecessor"
+                                          'awaiting-delivery
+                                          1
                                           (campaign-attempt "predecessor" 7 0)))))
   (persist-campaign! root predecessor)
   (finalize-awaiting! root predecessor)
   (define ready (load-campaign-record root plan))
   (unless (eq? (campaign-wave-status (car (campaign-record-waves ready))) 'done)
     (error 'fixture "predecessor did not genuinely finalize"))
-  (persist-campaign! root (with-waves (append (campaign-record-waves ready) (campaign-record-waves old)))))
+  (persist-campaign! root
+                     (with-waves (append (campaign-record-waves ready) (campaign-record-waves old)))))
 (define (fixture-task-paths fx)
   (list (supplemental-fixture-test-path fx) (supplemental-fixture-harness-path fx)))
 
@@ -138,12 +149,16 @@
         "(define evidence-suite (test-suite \"witness\" (test-case \"new regression\" "
         "(check-true (witness)))))\n"
         "(module+ test (require rackunit/text-ui) (exit (run-tests evidence-suite)))\n")))
-(define (call-with-supplemental-fixture proc
-                                        #:completed-author? [completed-author? #f]
-                                        #:wave-index [wave 1]
-                                        #:expires-in-sec [expires-in-sec 3600]
-                                        #:proposal-control-plane-head [proposal-head #f]
-                                        #:physical-worktree? [physical-worktree? #f])
+(define (call-with-supplemental-fixture
+         proc
+         #:completed-author? [completed-author? #f]
+         #:wave-index [wave 1]
+         #:expires-in-sec [expires-in-sec 3600]
+         #:proposal-control-plane-head [proposal-head #f]
+         #:physical-worktree? [physical-worktree? #f]
+         #:frozen-goal
+         [frozen-goal
+          "The exported answer from runtime/local.rkt is 42 on candidate; the pinned baseline answer is 7."])
   (define root (make-temporary-file "supplemental-go-~a" 'directory))
   (define repo (build-path root "q"))
   (define cwd (path->string repo))
@@ -170,7 +185,7 @@
      ;; same closure repeatedly. compiled/ is ignored; source pins are unchanged.
      (managed-compile-zo (build-path repo "scripts" "run-tests.rkt"))
      ;; Pre-fix baseline production fact, then the fix + existing witness.
-     (put repo "runtime/local.rkt" "#lang racket/base\n(provide answer)\n(define answer 41)\n")
+     (put repo "runtime/local.rkt" "#lang racket/base\n(provide answer)\n(define answer 7)\n")
      (git-quiet! repo "add" "-A")
      (git-quiet! repo "commit" "-qm" "pre-fix baseline")
      (define baseline-head (git-text repo "rev-parse" "HEAD"))
@@ -214,6 +229,16 @@
      (git-quiet! repo "commit" "-qm" "lint helper")
      (write-plan! root wave "Supplemental" "supplemental")
      (write-wave-doc! root wave "supplemental" '("q/runtime/local.rkt") c0)
+     ;; Behavioral intent is authored BEFORE freezing/approval, never patched
+     ;; into an already approved snapshot.
+     (display-to-file
+      (string-append
+       "\n## Goal\n"
+       frozen-goal
+       "\n\n## Acceptance Criteria\n- The helper reads the exported production answer.\n"
+       "- The witness expects answer 42, not baseline 7.\n")
+      (build-path root ".planning" "waves" (format "W~a-supplemental.md" wave))
+      #:exists 'append)
      (define plan (campaign-manifest-hash (make-campaign-manifest 1 "fixture" '() '() "constraints")))
      (make-plan-snapshot! root plan (file->string (build-path root ".planning" "PLAN.md")))
      ;; A real linked checkout preserves the logical repo in receipt identity,

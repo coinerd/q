@@ -19,6 +19,11 @@
 (require rackunit
          racket/file
          racket/string
+         racket/runtime-path
+         "helpers/supplemental-go-fixture.rkt"
+         (only-in "../extensions/gsd/supplemental-evidence-controller.rkt" load-supplemental-pointer)
+         "../extensions/gsd/plan-snapshot.rkt"
+         (only-in "../extensions/gsd/prompts.rkt" executor-reanchor-prompt)
          "../extensions/gsd/command-handlers.rkt"
          (only-in "../extensions/gsd/prompts.rkt" planning-implement-prompt)
          (only-in "../extensions/gsd/plan-context-builder.rkt" find-git-root-dir)
@@ -27,6 +32,139 @@
 ;; ============================================================
 ;; Fixtures
 ;; ============================================================
+
+(define-runtime-path author-contract-path "../extensions/gsd/supplemental-author-contract.rkt")
+(module+ test
+  (test-case "supplemental replacement uses authenticated physical scope, including on re-anchor"
+    (define make-contract
+      (dynamic-require `(submod ,author-contract-path owner) 'make-supplemental-author-contract))
+    (define contract-param
+      (dynamic-require author-contract-path 'current-supplemental-author-contract))
+    (define scope-of (dynamic-require author-contract-path 'supplemental-author-contract-scope))
+    (define filter-tools (dynamic-require author-contract-path 'supplemental-author-tool-filter))
+    (define admit (dynamic-require author-contract-path 'supplemental-author-tool-admit))
+    (check-exn exn:fail? (lambda () (contract-param (hasheq 'files '("arbitrary.rkt")))))
+    (call-with-supplemental-fixture
+     (lambda (fx)
+       (define repo (supplemental-fixture-repo fx))
+       (define pointer
+         (load-supplemental-pointer (supplemental-fixture-root fx) (supplemental-fixture-plan fx) 1))
+       (define (construct [physical repo] [wave 1])
+         (make-contract (hash-ref pointer 'task-proposal)
+                        (hash-ref pointer 'task-approval)
+                        physical
+                        "attempt"
+                        (supplemental-fixture-root fx)
+                        (supplemental-fixture-plan fx)
+                        wave))
+       (define contract (construct))
+       (define render (dynamic-require author-contract-path 'render-supplemental-author-prompt))
+       (define frozen-prompt (render contract))
+       (check-true
+        (string-contains?
+         frozen-prompt
+         "The exported answer from runtime/local.rkt is 42 on candidate; the pinned baseline answer is 7."))
+       (check-true (string-contains? frozen-prompt "The witness expects answer 42, not baseline 7."))
+       (check-true (string-contains? frozen-prompt "READ-ONLY"))
+       (check-true
+        (string-contains?
+         frozen-prompt
+         (format
+          "~s"
+          (string-append
+           "## Goal\nThe exported answer from runtime/local.rkt is 42 on candidate; the pinned baseline answer is 7.\n\n"
+           "## Acceptance Criteria\n- The helper reads the exported production answer.\n"
+           "- The witness expects answer 42, not baseline 7.\n"))))
+       (check-false (string-contains? frozen-prompt (supplemental-fixture-c0 fx)))
+       (check-false (string-contains? frozen-prompt "## Files"))
+       (check-exn exn:fail? (lambda () (construct repo 2)))
+       ;; Current planning text is not authority for T's behavioral assignment.
+       (display-to-file
+        "## Goal\nMUTABLE REPLACEMENT\n"
+        (build-path (supplemental-fixture-root fx) ".planning" "waves" "W1-supplemental.md")
+        #:exists 'truncate)
+       (check-equal? (render (construct)) frozen-prompt)
+       (define scope (scope-of contract))
+       (check-true (immutable? scope))
+       (check-equal? (hash-count scope) 4)
+       (check-equal? (hash-ref scope 'tests) (fixture-task-paths fx))
+       (check-true (andmap immutable? (hash-ref scope 'tests)))
+       (define installed
+         (list (hasheq 'name "read")
+               (hasheq 'name "edit")
+               (hasheq 'name "write")
+               (hasheq 'name "bash")
+               (hasheq 'name "set-task-state")
+               (hasheq 'name "custom-mutation")))
+       (check-equal? (filter-tools contract installed) (take installed 3))
+       (check-equal? (filter-tools contract (list (hasheq 'name "read")))
+                     (list (hasheq 'name "read")))
+       (check-false (admit contract "write" (hasheq 'path (car (fixture-task-paths fx)))))
+       (check-regexp-match #rx"AUTHOR_TOOL_NOT_ALLOWED" (admit contract "bash" (hasheq)))
+       (check-regexp-match #rx"AUTHOR_PATH_OUT_OF_SCOPE"
+                           (admit contract "edit" (hasheq 'path "runtime/local.rkt")))
+       (check-exn exn:fail? (lambda () (construct (supplemental-fixture-root fx))))
+       (parameterize ([contract-param contract])
+         ;; No logical PLAN or target existence lookup is needed in this lane.
+         (define prompt (build-single-wave-prompt "/nonexistent/control" (make-test-plan) 0))
+         (define anchor (executor-reanchor-prompt "old-wave" "old-plan" "obsolete goals" ""))
+         (for ([text (list prompt anchor)])
+           (check-true (string-contains? text (path->string repo)))
+           (for ([path (fixture-task-paths fx)])
+             (check-true (string-contains? text path))
+             (check-false (file-exists? (build-path repo path))))
+           (for ([stale '("IMPLEMENT NOW" "q/tui/"
+                                          "obsolete goals"
+                                          "scratch"
+                                          "git commit"
+                                          "read-only bash")])
+             (check-false (string-contains? text stale)))
+           (check-true (string-contains? text "evidence-suite"))
+           (check-true (string-contains? text "owner"))))
+       (define frozen-body
+         (build-path (snapshot-dir (supplemental-fixture-root fx) (supplemental-fixture-plan fx))
+                     "waves"
+                     "W1-supplemental.md"))
+       (define saved (file->string frozen-body))
+       (display-to-file (string-replace saved "answer" "tamper") frozen-body #:exists 'truncate)
+       (check-exn exn:fail? construct)
+       ;; Already constructed immutable intent never consults mutable disk again.
+       (check-equal? (render contract) frozen-prompt)
+       (delete-file frozen-body)
+       (check-exn exn:fail? construct)))))
+
+(module+ test
+  (test-case "another frozen wave gets distinct authenticated behavioral intent"
+    (define make-contract
+      (dynamic-require `(submod ,author-contract-path owner) 'make-supplemental-author-contract))
+    (define render (dynamic-require author-contract-path 'render-supplemental-author-prompt))
+    (call-with-supplemental-fixture
+     (lambda (fx)
+       (define pointer
+         (load-supplemental-pointer (supplemental-fixture-root fx) (supplemental-fixture-plan fx) 3))
+       (define prompt
+         (render (make-contract (hash-ref pointer 'task-proposal)
+                                (hash-ref pointer 'task-approval)
+                                (supplemental-fixture-repo fx)
+                                "attempt"
+                                (supplemental-fixture-root fx)
+                                (supplemental-fixture-plan fx)
+                                3)))
+       (check-true
+        (string-contains? prompt "Distinct frozen behavior: preserve ordered tracker convergence."))
+       (check-regexp-match
+        #rx"Canary acceptance order.*Authenticated receipt.*Tracker convergence.*No implementation rerun"
+        prompt)
+       (check-false (string-contains? prompt "FORBIDDEN IMPLEMENTATION COMMAND"))
+       (check-false
+        (string-contains? prompt "The exported answer from runtime/local.rkt is 42 on candidate")))
+     #:wave-index 3
+     #:frozen-goal
+     (string-append
+      "Distinct frozen behavior: preserve ordered tracker convergence.\n\n"
+      "## Canary acceptance order\n1. Authenticated receipt.\n2. Tracker convergence.\n\n"
+      "## Done\nNo implementation rerun.\n\n"
+      "## Implementation\nFORBIDDEN IMPLEMENTATION COMMAND"))))
 
 (define scratch-guidance-line
   "8. Scratch files (BUG-0026): for throwaway experiments use the edit tool to create files under `tmp/`, run them, then delete them.\n")

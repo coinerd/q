@@ -180,6 +180,23 @@ promotion **P** then links the certified successor receipt to its one-use eviden
 registration; only authenticated readiness `ready` admits fresh review. None of
 these steps grants merge authorization or delivery.
 
+The scoped worker receives an owner-authenticated task descriptor and replacement prompt
+naming exactly its two approved new test/helper paths (relative and absolute), retained
+physical working directory, test-author phase and baseline/current source identities.
+It authors those files and returns normally. Commits, canonical generation, C1 Verify,
+baseline probes, approvals and publication belong to the owner, not the worker. Historical
+wave Files and ordinary implementation/Git/shell/scratch instructions confer no authority.
+The same contract remains in re-anchors and continuations.
+
+Tool schemas are projected session-locally through a trusted generic runtime policy:
+installed permitted read tools plus scoped write/edit, without changing other sessions'
+registry. Forged calls still face normal capability/hook admission; final effective
+arguments after hook mutation are checked by the same scope policy. Bounded, redacted,
+control-character-safe denials distinguish forbidden tools/paths, unsafe paths, invalid
+scope and infrastructure failures. They do not unlock owner tools or implementation.
+The descriptor grants no launch: existing authority, fences, expiry and cancellation
+remain unchanged. This repair cannot retry the spent recovery child or create a grandchild.
+
 The owner CLI is `scripts/gsd-evidence-replan.rkt` with `--verb`
 `propose|authorize|inspect|status|revoke`; authorization selects
 `--stage task|candidate|supersession`. Proposals and inspection are not grants.

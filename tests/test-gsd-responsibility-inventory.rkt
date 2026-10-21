@@ -116,11 +116,20 @@
       ;; +10 BUG-0088 governed supplemental evidence (effective-verify-binding,
       ;; supplemental evidence format/authority/journal/proof/publication/
       ;; promotion/controller/operator and the hardened review-tools registry);
-      ;; +1 BUG-0088 public promotion audit validator.
-      (check-equal?
-       (length inventory)
-       99
-       "85 existing + two correction modules + eleven BUG-0088 modules + explicit recovery owner"))
+      ;; +1 BUG-0088 public promotion audit validator;
+      ;; +1 BUG-0088 supplemental worker descriptor/projections.
+      (check-equal? (length inventory) 100 "99 existing modules + supplemental worker contract"))
+
+    (test-case "supplemental worker descriptor projects policy without dispatch authority"
+      (define descriptor (hash-ref inventory-map "supplemental-author-contract.rkt"))
+      (check-equal? (entry-domain descriptor) 'transition-logic)
+      (check-equal? (entry-effects descriptor) '(fs-read make-param))
+      (check-equal? (entry-params descriptor) '(current-supplemental-author-contract))
+      (for ([dep '("supplemental-evidence-authority" "supplemental-evidence-format"
+                                                     "util/worker-tool-policy"
+                                                     "../gsd-planning/execution-policy")])
+        (check-not-false (member dep (entry-deps descriptor))))
+      (check-false (member "wave-runner-port" (entry-deps descriptor))))
 
     (test-case "public promotion audit validation preserves pure format dependencies"
       (define audit (hash-ref inventory-map "review-audit-promotion.rkt"))
