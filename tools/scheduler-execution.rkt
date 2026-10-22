@@ -225,7 +225,10 @@
      (make-error-result (format "tool '~a' blocked — required capability '~a' is not authorized"
                                 tc-name
                                 (tool-required-capability t)))]
+    ;; Legacy dispatchers echo unknown hook payloads unchanged. Only that
+    ;; exact object is a no-op; copied or altered hashes still fail closed.
     [(and pre-hook-result
+          (not (eq? pre-hook-result pre-payload))
           (or (not (hook-result? pre-hook-result))
               (not (memq (hook-result-action pre-hook-result) '(pass amend block)))))
      (make-error-result (format "tool '~a' blocked — malformed tool-call-pre authorization result"

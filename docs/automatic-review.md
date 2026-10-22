@@ -177,6 +177,9 @@ approval transitions and publication.
 
 A trusted generic runtime policy projects the final assembled provider tool schemas
 session-locally: only installed permitted read tools plus scoped write/edit are advertised.
+`runtime/worker-tool-advertisement.rkt` captures the worker capability snapshot before
+assembly callbacks and filters the completed built-in/extension/custom merge against
+registered tool metadata; provider schemas are not capability authority.
 Other sessions and the shared registry are unchanged. Hiding tools grants no authority:
 normal scheduler/capability/hook checks still reject forged calls, and the same pure
 scope policy checks final effective arguments after hook amendment and schema validation.

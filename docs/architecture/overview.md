@@ -60,6 +60,7 @@ inline comment that defines their role:
 | `agent/iteration/main-loop.rkt` | Agent | "Main iteration loop orchestrator." |
 | `runtime/context/context-assembly.rkt` | Runtime | "Unified context assembly pipeline - thin facade re-exporting from budgeting, selection, serialization." |
 | `runtime/context-assembly/turn-context.rkt` | Runtime | "Turn-level context assembly helpers - extracted from turn-orchestrator.rkt." |
+| `runtime/worker-tool-advertisement.rkt` | Runtime | "Provider-facing worker schemas: capture authority before callbacks, then project the completed schema list without changing the shared registry." |
 | `agent/loop.rkt` | Agent | "COMPOSITION ROOT - effectful agent turn orchestrator. Should not be imported by other production modules." |
 | `agent/loop-messages.rkt` | Agent | "Message helpers (build-raw-messages, emit! etc.)" |
 | `agent/loop-stream.rkt` | Agent | "Streaming, cancellation, result building." |

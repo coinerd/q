@@ -16,6 +16,7 @@
          rackunit/text-ui
          "../util/message/protocol-types.rkt"
          "../util/hook-types.rkt"
+         "../util/worker-tool-policy.rkt"
          "../util/event/event-bus.rkt"
          (only-in "../tools/tool.rkt"
                   make-tool
@@ -92,6 +93,98 @@
 
 (define scheduler-hook-tests
   (test-suite "Scheduler Hook Protocol Tests"
+
+    (test-case "legacy identity echo is a no-op in serial and parallel execution"
+      (for ([parallel? '(#f #t)])
+        (define exec-log (box '()))
+        (define reg (make-tool-registry))
+        (register-tool! reg
+                        (make-recording-tool exec-log
+                                             #:schema (hasheq 'type "object" 'properties (hasheq))))
+        (define result
+          (run-tool-batch (list (make-tool-call "echo-input" "rec" (hasheq 'original #t)))
+                          reg
+                          #:parallel? parallel?
+                          #:hook-dispatcher (lambda (_point payload) payload)
+                          #:exec-context (make-test-exec-context)))
+        (check-false (tool-result-is-error? (car (scheduler-result-results result))))
+        (check-equal? (length (unbox exec-log)) 1)
+        (check-true (hash-ref (car (unbox exec-log)) 'original))))
+
+    (test-case "legacy echo cannot bypass final worker name or amended scope policy"
+      (for ([parallel? '(#f #t)])
+        (define exec-log (box '()))
+        (define reg (make-tool-registry))
+        (for ([name '("rec" "hidden")])
+          (register-tool! reg
+                          (make-recording-tool exec-log
+                                               #:name name
+                                               #:schema
+                                               (hasheq 'type "object" 'properties (hasheq)))))
+        (define policy
+          (worker-tool-policy
+           values
+           (lambda (name args)
+             (cond
+               [(not (equal? name "rec")) "TOOL_NOT_ALLOWED"]
+               [(not (equal? (hash-ref args 'path #f) "allowed")) "PATH_OUT_OF_SCOPE"]
+               [else #f]))))
+        (define (run name [amend-point #f])
+          (parameterize ([current-worker-tool-policy policy])
+            (car (scheduler-result-results
+                  (run-tool-batch (list (make-tool-call "policy-echo" name (hasheq 'path "allowed")))
+                                  reg
+                                  #:parallel? parallel?
+                                  #:hook-dispatcher
+                                  (lambda (point payload)
+                                    (check-eq? (current-worker-tool-policy)
+                                               policy
+                                               "worker policy remains scoped through scheduler hooks")
+                                    (cond
+                                      [(and (eq? point 'tool-call) (eq? amend-point 'tool-call))
+                                       (make-tool-call "policy-echo" name (hasheq 'path "forbidden"))]
+                                      [(and (eq? point 'tool-call-pre)
+                                            (eq? amend-point 'tool-call-pre))
+                                       (hook-amend (hasheq 'args (hasheq 'path "forbidden")))]
+                                      [else payload]))
+                                  #:exec-context (make-test-exec-context))))))
+        (check-false (tool-result-is-error? (run "rec")))
+        (define hidden (run "hidden"))
+        (check-true (tool-result-is-error? hidden))
+        (check-regexp-match #rx"TOOL_NOT_ALLOWED" (error-text hidden))
+        (for ([point '(tool-call tool-call-pre)])
+          (define amended (run "rec" point))
+          (check-true (tool-result-is-error? amended))
+          (check-regexp-match #rx"PATH_OUT_OF_SCOPE" (error-text amended)))
+        (check-equal? (length (unbox exec-log)) 1)
+        (check-equal? (hash-ref (car (unbox exec-log)) 'path) "allowed")))
+
+    (test-case "nonidentity hashes and malformed pre-hook results fail closed"
+      (for* ([parallel? '(#f #t)]
+             [produce (in-list (list hash-copy
+                                     (lambda (payload)
+                                       (hash-set payload 'tool-arguments (hasheq 'changed #t)))
+                                     (lambda (_) (hasheq))
+                                     (lambda (_) "not a hook result")
+                                     (lambda (_) 42)
+                                     (lambda (_) (hook-result 'unknown #f))
+                                     (lambda (_) (hook-amend (hasheq 'args 42)))))])
+        (define exec-log (box '()))
+        (define reg (make-tool-registry))
+        (register-tool! reg
+                        (make-recording-tool exec-log
+                                             #:schema (hasheq 'type "object" 'properties (hasheq))))
+        (define result
+          (run-tool-batch (list (make-tool-call "malformed" "rec" (hasheq)))
+                          reg
+                          #:parallel? parallel?
+                          #:hook-dispatcher (make-hook-dispatcher 'tool-call-pre produce)
+                          #:exec-context (make-test-exec-context)))
+        (define tr (car (scheduler-result-results result)))
+        (check-true (tool-result-is-error? tr))
+        (check-regexp-match #rx"malformed tool-call-pre|invalid tool-call-pre amendment"
+                            (error-text tr))
+        (check-equal? (unbox exec-log) '())))
 
     ;; ============================================================
     ;; TS1: tool-call-pre hook blocks execution
