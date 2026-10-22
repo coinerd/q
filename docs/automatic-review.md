@@ -214,7 +214,7 @@ external sandbox required by its threat model. Modes and hashes alone do not
 prove operator identity.
 
 `scripts/gsd-evidence-replan.rkt` actually parses `--verb` with values
-`propose|propose-recovery|authorize|inspect|status|revoke`, not positional subcommands. Authorization
+`propose|propose-recovery|propose-disposition|authorize|inspect|status|revoke`, not positional subcommands. Authorization
 uses `--verb authorize --stage task|candidate|supersession`; campaign operations
 also take `--campaign-root`, `--plan` and `--wave`. `propose` additionally requires
 `--repo`, `--test-path`, `--harness-path`, `--owner-paths`, `--baseline-head` and
@@ -246,7 +246,7 @@ To inspect either record first, deny the prompt, run the displayed `inspect`
 command, then invoke `/go` again. Denial never grants authority. Each prompt
 identifies the stage and full digest; no bounded preview substitutes for inspection.
 A provider switch does not replenish a spent task. The narrowly bounded recovery
-route permits one separately approved child of an original task, never grandchildren:
+route permits one separately approved child of an original task, never grandchildren outside the fixed amendment below:
 
 ```text
 racket q/scripts/gsd-evidence-replan.rkt --verb propose-recovery --campaign-root ROOT --plan PLAN --wave N --sha256 PARENT-T --expires-at UNIX-SECONDS
@@ -262,10 +262,49 @@ and pointer lineage. The full broker presentation authorizes one NEW dispatch, n
 of the old grant. Provider remains operator-selected, not pinned or guaranteed available.
 A private permanent single-child claim precedes the exact pointer CAS; every child
 admission validates that claim and active pointer. Same-child crash replay is supported;
-competing children, drift, rollback, grandchild and ordinary-author fallback are refused.
+competing children, drift, rollback, unamended grandchildren and ordinary-author fallback are refused.
 A malformed public pointer still retains ownership; if it disappears, a durable private
 claim bound to its exact path preserves a deny-only block. Expiry/revocation never erase
 that ownership, and invalid/inaccessible private roots or ambiguous claims fail closed.
+
+The sole explicit disposition amendment permits one v2→v3 task for full campaign
+`79a69b427b40fb6c6b68b4fd1484a74551db182afa9b96f065353324af16b19e`, wave 1,
+root `30be1b8ecd87ee21246d19473a338a571f3e0ef13dea7fe214824163280ae31c`,
+spent parent `77538def70739c9260a0920705a7174baf2f326dbbffb1e560d4b57c2fccc629`.
+Its terminal BODY digest
+`209accd0ca0f80a7f6d3fc562baeedafcb96396d98019a1ae861f160dfa5ca17`
+is distinct from its COMPLETE-record digest
+`7412b190a534cd291eb676a10bcbee75196f3f5fd3b42f2c04d5924cec94ae40`.
+The fixed amendment binds both, the exact approvals, snapshot and failed allocation;
+no settings, model input or owner command may replace those bindings.
+
+```text
+racket q/scripts/gsd-evidence-replan.rkt --verb propose-disposition --campaign-root ROOT --plan PLAN --wave 1 --sha256 PARENT-T --expires-at UNIX-SECONDS
+/evidence-replan inspect task-proposal NEW-T-SHA256
+/evidence-replan authorize-disposition PLAN 1 NEW-T-SHA256
+```
+
+Proposal retention is inert. Only a fresh exact keyboard-origin interactive broker T
+approval can install it; false/denied grants, chat and descriptors confer no authority.
+Installation never launches an author; do not automate `/go` or authorize on the human's
+behalf. Candidate K and supersession S remain separate later genuine broker decisions.
+A distinct permanent amendment claim precedes pointer CAS and survives expiry/revocation;
+only identical-target crash replay is allowed, never another winner after failure.
+Both claim namespaces preserve deny-only ownership even when discovery is missing/malformed.
+No old approval reuse, retry, fallback, allowance reset or additional exception exists.
+Ordinary v1→v2 policy is unchanged; the fixed v3 task has no successor.
+
+Disposition regression deadlines are explicit per-file engineering bounds, not live
+approval lifetimes or permission to increase existing limits. The BUG88 disposition
+plan owner owns these gates: store (13 cases, fast, 120s), frontend (4 cases, slow/L4,
+1200s), eligibility (1 case, slow/L4, 7200s), campaign (4 cases, slow/L4, 14400s).
+The campaign deadline covers real cross-process claim replay and the complete fresh-worker
+write/edit/commit/K/G1/R1/S/P/readiness chain; it is not a default fast-suite allowance.
+The store retains one 3s real historical-expiry canary; frontend polls observable handler
+completion and exact pointer installation every 10ms, each bounded to 15s. These waits
+are named in the canonical wait audit. The plan's `validation/disposition/test-deadline-audit.json`
+binds actual test bytes, metadata, case counts and deadline justifications; a timeout is
+not GREEN. No existing global deadline, lifecycle budget or authorization limit changes.
 An absent unused authority store is not provisioned. Neither claim nor file presence
 alone grants child execution. Parent records/history/accounting stay unchanged. Authorization launches nothing; `/go`
 separately uses its normal monotonic owned attempt and all later K/G1/R1/S/P/review gates.

@@ -88,10 +88,12 @@
 ;; exact references against the permanent private claim and active pointer.
 (define (valid-recovery? r)
   (and (exact-keys? r '(parent-proposal parent-approval terminal-sha256 pointer-sha256 allocation))
-       (for/and ([key '(parent-proposal parent-approval)] [kind '("task-proposal" "task-approval")])
+       (for/and ([key '(parent-proposal parent-approval)]
+                 [kind '("task-proposal" "task-approval")])
          (define ref (hash-ref r key))
          (and (exact-keys? ref '(kind sha256))
-              (equal? (hash-ref ref 'kind) kind) (hex? (hash-ref ref 'sha256) 64)))
+              (equal? (hash-ref ref 'kind) kind)
+              (hex? (hash-ref ref 'sha256) 64)))
        (hex? (hash-ref r 'terminal-sha256) 64)
        (hex? (hash-ref r 'pointer-sha256) 64)
        (let ([a (hash-ref r 'allocation)])
@@ -100,13 +102,41 @@
               (positive? (string-length (hash-ref a 'attempt-id)))
               (exact-nonnegative-integer? (hash-ref a 'attempt-fence))
               (exact-nonnegative-integer? (hash-ref a 'coordinator-fence))))))
+(define (valid-disposition? d)
+  (and (exact-keys? d
+                    '(amendment-id root-proposal
+                                   root-approval
+                                   parent-proposal
+                                   parent-approval
+                                   terminal-body-sha256
+                                   terminal-record-sha256
+                                   pointer-sha256
+                                   allocation))
+       (for/and ([key '(amendment-id terminal-body-sha256 terminal-record-sha256 pointer-sha256)])
+         (hex? (hash-ref d key) 64))
+       (for/and ([key '(root-proposal root-approval parent-proposal parent-approval)]
+                 [kind '("task-proposal" "task-approval" "task-proposal" "task-approval")])
+         (define r (hash-ref d key))
+         (and (exact-keys? r '(kind sha256))
+              (equal? (hash-ref r 'kind) kind)
+              (hex? (hash-ref r 'sha256) 64)))
+       (let ([a (hash-ref d 'allocation)])
+         (and (exact-keys? a '(attempt-id attempt-fence coordinator-fence))
+              (string? (hash-ref a 'attempt-id))
+              (positive? (string-length (hash-ref a 'attempt-id)))
+              (exact-positive-integer? (hash-ref a 'attempt-fence))
+              (exact-positive-integer? (hash-ref a 'coordinator-fence))))))
 (define (valid-supplemental-task? task)
   (with-handlers ([exn:fail? (lambda (_) #f)])
-    (and (if (equal? (hash-ref task 'kind #f) "supplemental-evidence-task/v2")
-             (and (exact-keys? task (cons 'recovery task-fields))
-                  (valid-recovery? (hash-ref task 'recovery)))
-             (and (exact-keys? task task-fields)
-                  (equal? (hash-ref task 'kind) "supplemental-evidence-task/v1")))
+    (and (if (equal? (hash-ref task 'kind #f) "supplemental-evidence-task/v3")
+             (and (exact-keys? task (append '(recovery disposition) task-fields))
+                  (valid-recovery? (hash-ref task 'recovery))
+                  (valid-disposition? (hash-ref task 'disposition)))
+             (if (equal? (hash-ref task 'kind #f) "supplemental-evidence-task/v2")
+                 (and (exact-keys? task (cons 'recovery task-fields))
+                      (valid-recovery? (hash-ref task 'recovery)))
+                 (and (exact-keys? task task-fields)
+                      (equal? (hash-ref task 'kind) "supplemental-evidence-task/v1"))))
          (sealed? task)
          (valid-evidence-context? (hash-ref task 'context))
          (for/and ([key '(baseline-head baseline-tree control-plane-head)])
@@ -133,7 +163,8 @@
   (with-handlers ([exn:fail? (lambda (_) #f)])
     (and (sealed? record)
          (if (member (hash-ref record 'kind #f)
-                     '("supplemental-evidence-task/v1" "supplemental-evidence-task/v2"))
+                     '("supplemental-evidence-task/v1" "supplemental-evidence-task/v2"
+                                                       "supplemental-evidence-task/v3"))
              (valid-supplemental-task? record)
              (and (if (member (hash-ref record 'kind #f) descriptor-kinds) #t #f)
                   (valid-evidence-context? (hash-ref record 'context #f))

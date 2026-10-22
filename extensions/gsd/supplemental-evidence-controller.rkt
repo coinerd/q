@@ -77,6 +77,8 @@
          build-supplemental-task-proposal!
          propose-supplemental-recovery!
          install-supplemental-recovery!
+         propose-supplemental-disposition!
+         install-supplemental-disposition!
          supplemental-active-operation
          supplemental-author-pending?
          supplemental-approved-entry-context
@@ -212,6 +214,19 @@
 ;; ----------------------------------------------------------------------
 ;; Task proposal construction from authentic local facts (owner CLI helper)
 ;; ----------------------------------------------------------------------
+(define-runtime-path disposition-module "supplemental-evidence-disposition.rkt")
+(define (propose-supplemental-disposition! base plan wave parent-sha expires-at)
+  ((dynamic-require disposition-module 'propose-supplemental-disposition!) base
+                                                                           plan
+                                                                           wave
+                                                                           parent-sha
+                                                                           expires-at))
+(define (install-supplemental-disposition! base plan wave proposal approval)
+  ((dynamic-require disposition-module 'install-supplemental-disposition!) base
+                                                                           plan
+                                                                           wave
+                                                                           proposal
+                                                                           approval))
 (define-runtime-path recovery-module "supplemental-evidence-recovery.rkt")
 (define (propose-supplemental-recovery! base plan wave expected-parent-proposal-sha expires-at)
   ((dynamic-require recovery-module 'propose-supplemental-recovery!) base

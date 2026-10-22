@@ -118,7 +118,8 @@
       ;; promotion/controller/operator and the hardened review-tools registry);
       ;; +1 BUG-0088 public promotion audit validator;
       ;; +1 BUG-0088 supplemental worker descriptor/projections.
-      (check-equal? (length inventory) 100 "99 existing modules + supplemental worker contract"))
+      ;; +4 fixed disposition policy/claim/store/backend owners.
+      (check-equal? (length inventory) 104 "100 existing modules + four disposition owners"))
 
     (test-case "supplemental worker descriptor projects policy without dispatch authority"
       (define descriptor (hash-ref inventory-map "supplemental-author-contract.rkt"))

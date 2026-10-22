@@ -198,7 +198,7 @@ The descriptor grants no launch: existing authority, fences, expiry and cancella
 remain unchanged. This repair cannot retry the spent recovery child or create a grandchild.
 
 The owner CLI is `scripts/gsd-evidence-replan.rkt` with `--verb`
-`propose|authorize|inspect|status|revoke`; authorization selects
+`propose|propose-recovery|propose-disposition|authorize|inspect|status|revoke`; authorization selects
 `--stage task|candidate|supersession`. Proposals and inspection are not grants.
 Authority uses the trusted `~/.q/agent/supplemental-evidence` store shared with
 `/go`, never project configuration. `/go` does not provision it. The operator
@@ -223,7 +223,7 @@ remaining engineering acceptance gates still apply. See the
 
 Changing models does not revive a spent supplemental launch. An eligible original task
 blocked at revision 3 may have one separately broker-approved recovery child, with identical
-scope/context/baseline/C0/C1/bounds and explicit parent/pointer lineage. No grandchildren,
+scope/context/baseline/C0/C1/bounds and explicit parent/pointer lineage. Outside the fixed exception below, no grandchildren,
 allowance reset, old approval reuse, or ordinary-author fallback is permitted. Retain it with
 `--verb propose-recovery --campaign-root ROOT --plan PLAN --wave N --sha256 PARENT-T --expires-at UNIX-SECONDS`,
 inspect NEW-T, then use `/evidence-replan authorize-recovery PLAN WAVE NEW-T-SHA256` in the owner TUI.
@@ -232,6 +232,28 @@ it launches nothing. Invoke `/go` separately after the genuine decision. Provide
 remains operator-selected, not a quota guarantee. Exact clean source, unrevoked terminal
 parent, current failed allocation/fences and no cancellation/budget pause are required;
 K, full C1/G1, real R1, S, P/readiness and fresh independent review still follow normally.
+
+### Sole fixed disposition exception
+
+The immutable amendment permits exactly one additional v2→v3 task for campaign
+`79a69b427b40fb6c6b68b4fd1484a74551db182afa9b96f065353324af16b19e`, wave 1,
+with spent parent `77538def70739c9260a0920705a7174baf2f326dbbffb1e560d4b57c2fccc629`
+and original root `30be1b8ecd87ee21246d19473a338a571f3e0ef13dea7fe214824163280ae31c`.
+The parent terminal BODY digest is
+`209accd0ca0f80a7f6d3fc562baeedafcb96396d98019a1ae861f160dfa5ca17`;
+the COMPLETE-record digest is
+`7412b190a534cd291eb676a10bcbee75196f3f5fd3b42f2c04d5924cec94ae40`.
+These are distinct namespaces, not interchangeable evidence or authority.
+
+Use `--verb propose-disposition --campaign-root ROOT --plan PLAN --wave 1 --sha256 PARENT-T --expires-at UNIX-SECONDS`
+to retain an inert proposal, inspect its full digest, then use the keyboard-only
+`/evidence-replan authorize-disposition PLAN 1 NEW-T-SHA256`.
+A fresh genuine broker T decision is mandatory; chat, amendment identity, proposal
+retention and false/denied grants authorize nothing. Installation launches no author.
+Do not submit `/go` automatically. K and S require separate later broker decisions;
+no old grant reuse, auto-authorization, retry, budget reset or ordinary fallback exists.
+One permanent claim admits only one winner, including after expiry, revocation or failure.
+The ordinary v1→v2 rules are unchanged; v3 has no successor or further exception.
 
 ## State Machine
 

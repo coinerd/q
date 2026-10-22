@@ -5,18 +5,18 @@ W0 retains every candidate behavior in its source tier (retained-in-place).
 
 ## Selected-path digest (union of all gates)
 
-`54cb87a4bd6e5ac1a3779c48bd39cd332c4f56a3b66da808915b97484ecb9b0f`
+`1e0b9188768e53d7a2a8311e97e25d2d1fd113d4d8be65f4daafaab9da71ce5c`
 
 ## Gate membership (deterministic repository walk)
 
 | Gate | Selected files | Selected-path digest |
 |---|---|---|
-| fast | 1266 | ec058c90e1443e182686a9a5e13abdd9bb158193e107e1560ca6afd03d456df2 |
+| fast | 1267 | 605207f1d170da83ed723304c7c32b37a8dc5adb8bb9c8e729c9fa6d64313a3f |
 | platform | 38 | 2c82c1959a5a3073b4a8c96e236a5d7f8e46a297c91ca2582ce2ceda009af4a5 |
 | security | 64 | 22c0b9d2d154356a7aa4b3b39592157a9b90ebd2dc86b31363cb1a4aedcbe289 |
 | workflows | 33 | cdcc2f1bde27340fa8e458fbc41ee5f2b17e59b1edeb4091853b36df3c236ac7 |
-| unit-fast | 970 | d7d8bdda8bc3994aa487120edd84825f949088db4cf11a5a1bedeaccc2adc3a7 |
-| slow/L4 | 138 | c8694bd7401041a727b9df02f9306e81695a8a2d58fc292c980af55e1c974d76 |
+| unit-fast | 971 | ebd7aca2280e0aeac705f4eef4c7063fe306f1827398481032ee84c600dbd8d7 |
+| slow/L4 | 141 | 958f02b6f1fcbbad3c83043aca19c3351bc3576c8ca8879956c9273bff2ca33f |
 
 ## Behavior ownership (frozen v1.00.24 W0 candidate rows)
 

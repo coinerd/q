@@ -16,6 +16,7 @@
          (only-in "../../extensions/gsd/supplemental-evidence-controller.rkt"
                   load-supplemental-pointer
                   install-supplemental-recovery!
+                  install-supplemental-disposition!
                   write-supplemental-pointer!))
 (provide handle-owner-evidence-command!
          call-with-owner-approval-publisher)
@@ -43,6 +44,7 @@
    "/evidence-replan inspect KIND SHA256\n"
    "/evidence-replan authorize-task PLAN WAVE TASK-SHA256\n"
    "/evidence-replan authorize-recovery PLAN WAVE NEW-T-SHA256\n"
+   "/evidence-replan authorize-disposition PLAN WAVE NEW-T-SHA256\n"
    "/evidence-replan revoke KIND APPROVAL-SHA256\n"
    "Propose using the installed CLI first. Inspect exact retained bytes; authorization does not run /go.\n"
    "After task approval use /go; the governed controller requests exact candidate and supersession approval in this UI."))
@@ -114,10 +116,11 @@
                        (hash-ref target 'sha256)
                        (hash-ref revoked 'sha256)))]))))))]
          [(and (= (length args) 4)
-               (member (car args) '("authorize-task" "authorize-recovery"))
+               (member (car args) '("authorize-task" "authorize-recovery" "authorize-disposition"))
                (digest? (cadr args))
                (digest? (cadddr args)))
           (define recovery? (equal? (car args) "authorize-recovery"))
+          (define disposition? (equal? (car args) "authorize-disposition"))
           (define plan (cadr args))
           (define wave (string->number (caddr args)))
           (define expected (cadddr args))
@@ -131,7 +134,7 @@
           ;; A retained recovery child is deliberately NOT the active pointer yet.
           ;; Load its exact new digest, never substitute the spent parent's pointer.
           (define ref
-            (if recovery?
+            (if (or recovery? disposition?)
                 (hasheq 'kind "task-proposal" 'sha256 (string->immutable-string expected))
                 (let ([pointer (load-supplemental-pointer base plan wave)])
                   (unless (and pointer
@@ -142,22 +145,29 @@
           (define proposal (load-supplemental-record ref))
           (define task (hash-ref (hash-ref proposal 'payload) 'task (hasheq)))
           (cond
-            [recovery?
-             (unless (and (equal? (hash-ref task 'kind #f) "supplemental-evidence-task/v2")
+            [(or recovery? disposition?)
+             (unless (and (equal? (hash-ref task 'kind #f)
+                                  (if disposition?
+                                      "supplemental-evidence-task/v3"
+                                      "supplemental-evidence-task/v2"))
                           (valid-supplemental-task? task)
                           (equal? (hash-ref (hash-ref task 'context) 'plan-id) plan)
                           (equal? (hash-ref (hash-ref task 'context) 'wave) wave))
-               (error 'owner-evidence
-                      "recovery requires a genuine task/v2 for this exact campaign and wave"))
+               (error
+                'owner-evidence
+                "owner route requires the matching task generation for this exact campaign and wave"))
              (report!
               ctx
               (string-append
-               "Recovery requests one NEW additional dispatch; the old task stays spent. "
+               (if disposition?
+                   "Disposition task/v3 requests the sole fixed amendment dispatch; root and parent remain spent. "
+                   "Recovery requests one NEW additional dispatch; the old task stays spent. ")
                "Provider is operator-selected, not pinned and not an availability or quota guarantee."))]
-            [(equal? (hash-ref task 'kind #f) "supplemental-evidence-task/v2")
+            [(member (hash-ref task 'kind #f)
+                     '("supplemental-evidence-task/v2" "supplemental-evidence-task/v3"))
              (error
               'owner-evidence
-              "use authorize-recovery for a recovery task; ordinary task installation refuses it")])
+              "use the matching authorize-recovery or authorize-disposition route; ordinary task installation refuses it")])
           ;; Never block the keyboard loop while waiting for its human decision.
           (call-with-owner-approval-publisher
            ctx
@@ -179,15 +189,20 @@
                        (error 'owner-evidence "exact broker grant consumption refused"))
                      ;; Both installation APIs revalidate authority. Recovery owns its
                      ;; lease and admission lock; never hold either across a broker wait.
-                     (if recovery?
-                         (install-supplemental-recovery! base plan wave ref approval)
-                         (write-supplemental-pointer! base plan wave ref approval))
+                     (cond
+                       [disposition? (install-supplemental-disposition! base plan wave ref approval)]
+                       [recovery? (install-supplemental-recovery! base plan wave ref approval)]
+                       [else (write-supplemental-pointer! base plan wave ref approval)])
                      (report!
                       ctx
-                      (if recovery?
-                          (string-append
-                           "Exact recovery task approved and installed for one NEW additional dispatch; old task stays spent. "
-                           "No work launched. Use /go only when ready.")
-                          "Exact task approved. Use /go to resume the governed controller; no work launched by this command."))]))))))]
+                      (cond
+                        [disposition?
+                         "Exact disposition task/v3 approved and installed. No work launched; K and S require separate decisions."]
+                        [recovery?
+                         (string-append
+                          "Exact recovery task approved and installed for one NEW additional dispatch; old task stays spent. "
+                          "No work launched. Use /go only when ready.")]
+                        [else
+                         "Exact task approved. Use /go to resume the governed controller; no work launched by this command."]))]))))))]
          [else (report! ctx usage)]))
      #t]))
