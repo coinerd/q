@@ -4,12 +4,14 @@
          racket/path
          "supplemental-evidence-format.rkt"
          "supplemental-evidence-authority.rkt")
-(provide disposition-amendment)
+(provide disposition-amendment
+         disposition-amendment-1
+         disposition-amendment-2)
 (define production-home (simplify-path (find-system-path 'home-dir) #f))
 (define production-root (build-path production-home ".q" "agent" "supplemental-evidence"))
 (define (ref kind digest)
   (hasheq 'kind kind 'sha256 digest))
-(define default-amendment
+(define disposition-amendment-1
   (seal-supplemental-record
    (hasheq 'kind
            "supplemental-disposition-amendment/v1"
@@ -37,7 +39,32 @@
            1
            'successor-permitted
            #f)))
+(define disposition-amendment-2
+  (seal-supplemental-record
+   (hash-set* disposition-amendment-1
+              'v2-proposal
+              (hash-ref disposition-amendment-1 'parent-proposal)
+              'v2-approval
+              (hash-ref disposition-amendment-1 'parent-approval)
+              'parent-proposal
+              (ref "task-proposal" "f4238535e291e23062926f698c922da75fd3caadcd2de160e8b3ca68b33ba764")
+              'parent-approval
+              (ref "task-approval" "f8ea96b875e8b05fc2f5800674270c6dddf93b4e256fa6b8fc1ed650fcd5b816")
+              'terminal-body-sha256
+              "b60c5f76528c76ff66ce98943633c93fed570e80b60a99192150d178c86d8259"
+              'terminal-record-sha256
+              "0c9e45d27cfb3934c29dc9bdc44686b62a6011ddf21c08d8c507beaf88e6e5c0"
+              'allocation
+              (hasheq 'attempt-id "attempt-5" 'attempt-fence 8 'coordinator-fence 8))))
+(define default-amendment disposition-amendment-2)
 (define fixture-amendment (make-parameter #f))
+(define fixture-predecessor (make-parameter #f))
+(module+ ancestry-support
+  (provide disposition-predecessor)
+  (define (disposition-predecessor)
+    (if (fixture-amendment)
+        (fixture-predecessor)
+        disposition-amendment-1)))
 (define (disposition-amendment)
   (define fixture (fixture-amendment))
   (cond
@@ -48,7 +75,7 @@
     [else default-amendment]))
 (module+ test-support
   (provide call-with-test-disposition-amendment)
-  (define (call-with-test-disposition-amendment amendment thunk)
+  (define (call-with-test-disposition-amendment amendment thunk #:predecessor [predecessor #f])
     (define raw (current-supplemental-authority-root))
     (unless (and (path-string? raw) (complete-path? raw))
       (error 'call-with-test-disposition-amendment "isolated temporary authority root required"))
@@ -78,8 +105,10 @@
     (unless (and
              (hash? amendment)
              (immutable? amendment)
-             (equal? (sort (hash-keys amendment) symbol<?)
-                     (sort (hash-keys default-amendment) symbol<?))
+             (equal?
+              (sort (hash-keys amendment) symbol<?)
+              (sort (hash-keys (if predecessor disposition-amendment-2 disposition-amendment-1))
+                    symbol<?))
              (equal? amendment (seal-supplemental-record amendment))
              (equal? (hash-ref amendment 'kind) "supplemental-disposition-amendment/v1")
              (for/and ([key '(plan-id terminal-body-sha256 terminal-record-sha256 snapshot-sha256)])
@@ -100,5 +129,11 @@
              (equal? (hash-ref amendment 'model-dispatches) 1)
              (eq? (hash-ref amendment 'successor-permitted) #f))
       (error 'call-with-test-disposition-amendment "invalid immutable fixture amendment"))
-    (parameterize ([fixture-amendment (cons root (seal-supplemental-record amendment))])
+    (when predecessor
+      (call-with-test-disposition-amendment predecessor void)
+      (unless (and (equal? (hash-ref amendment 'v2-proposal) (hash-ref predecessor 'parent-proposal))
+                   (equal? (hash-ref amendment 'v2-approval) (hash-ref predecessor 'parent-approval)))
+        (error 'call-with-test-disposition-amendment "fixture predecessor mismatch")))
+    (parameterize ([fixture-amendment (cons root (seal-supplemental-record amendment))]
+                   [fixture-predecessor predecessor])
       (thunk))))

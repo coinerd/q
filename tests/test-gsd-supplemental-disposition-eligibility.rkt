@@ -11,6 +11,7 @@
 ;; timeout 7200 racket tests/test-gsd-supplemental-disposition-eligibility.rkt
 ;; Redirect stdout/stderr to /tmp/bug88-disposition-eligibility-green.log.
 (require json
+         racket/runtime-path
          rackunit
          rackunit/text-ui
          racket/system
@@ -22,7 +23,13 @@
          "../extensions/gsd/review-proof.rkt"
          "../extensions/gsd/supplemental-evidence-controller.rkt"
          "../extensions/gsd/supplemental-evidence-journal.rkt"
+         "../extensions/gsd/supplemental-evidence-authority.rkt"
          (only-in "../extensions/gsd/review-proof-format.rkt" valid-owned-proof-manifest?))
+
+;; Source-anchored CLI path: the dispatcher lives at the repository root,
+;; never under tests/. A plain relative string would resolve against this
+;; file's directory and break the real subprocess-free CLI exercise.
+(define-runtime-path cli-dispatcher "../scripts/gsd-evidence-replan.rkt")
 
 (define (files root)
   (for/hash ([p (in-list (find-files file-exists? root))])
@@ -71,6 +78,37 @@
          ;; Fail closed here if the real fixture is not eligible. Do not weaken
          ;; production policy or substitute literal attempt/fence allocations.
          (define-values (ref task) (propose))
+         ;; Exercise the actual CLI dispatcher with the same isolated authority
+         ;; binding. It must retain amendment-2, never select amendment-1.
+         (define cli-output (open-output-string))
+         (parameterize ([current-command-line-arguments (vector "--verb"
+                                                                "propose-disposition"
+                                                                "--authority-root"
+                                                                (path->string private)
+                                                                "--campaign-root"
+                                                                (path->string base)
+                                                                "--plan"
+                                                                plan
+                                                                "--wave"
+                                                                "1"
+                                                                "--sha256"
+                                                                parent-sha
+                                                                "--expires-at"
+                                                                (number->string (+ (current-seconds)
+                                                                                   14400)))]
+                        [current-output-port cli-output])
+           (dynamic-require cli-dispatcher #f))
+         (define cli-result (read-json (open-input-string (get-output-string cli-output))))
+         (define cli-proposal
+           (load-supplemental-record (hasheq 'kind
+                                             "task-proposal"
+                                             'sha256
+                                             (string->immutable-string (hash-ref cli-result
+                                                                                 'sha256)))))
+         (check-equal? (hash-ref (hash-ref (hash-ref (hash-ref cli-proposal 'payload) 'task)
+                                           'disposition)
+                                 'amendment-id)
+                       (hash-ref (disposition-fixture-amendment df) 'sha256))
          (define approval (fixture-approve! ref))
          (define initial-private (files private))
          (define initial-pointer (file->bytes pointer))
@@ -125,6 +163,13 @@
                             ;; The persisted bytes include current allocation, attempt count,
                             ;; cancellation, budget pause and all usage accounting fields.
                             (check-equal? (file->bytes campaign-path) accounting-before)))
+         (refused! "old amendment-1 proposal install (production f4238535 analogue)"
+                   (lambda ()
+                     (install-supplemental-disposition! base
+                                                        plan
+                                                        1
+                                                        (hash-ref parent 'task-proposal)
+                                                        (hash-ref parent 'task-approval))))
          (define (both! label [target base])
            (refused! (string-append label "/proposal") (lambda () (propose target)))
            (refused! (string-append label "/install")
@@ -211,6 +256,17 @@
              (car (find-files (lambda (p) (and (file-exists? p) (regexp-match? #rx"[.]md$" p)))
                               frozen))
              (lambda (p) (display-to-file "\nnegative snapshot tamper\n" p #:exists 'append)))
+            (file-case "spent v2 pointer cannot select amendment-1"
+                       pointer
+                       (lambda (p)
+                         (define a (disposition-fixture-amendment df))
+                         (put-json! p
+                                    (hasheq 'schema
+                                            "supplemental-pointer/v1"
+                                            'task-proposal
+                                            (hash-ref a 'v2-proposal)
+                                            'task-approval
+                                            (hash-ref a 'v2-approval)))))
             (file-case "alternate pointer contents"
                        pointer
                        (lambda (p) (put-json! p (disposition-fixture-root-pointer df))))))
@@ -279,7 +335,8 @@
          (check-equal? (file->bytes campaign-path) initial-campaign)
          (check-no-operation!)
          (check-equal? (campaign-usage-summary (load-campaign-record base plan))
-                       (campaign-usage-summary initial-rec)))))))
+                       (campaign-usage-summary initial-rec)))
+       #:second? #t))))
 (module+ main
   (exit (run-tests eligibility-suite)))
 (module+ test

@@ -134,9 +134,11 @@
   (current-supplemental-authority-root . CONFIGURATION))
  ;; Private test-support DATA, not a callback/grant or core lifecycle state.
  ;; Bound only under a validated isolated temporary private authority root;
- ;; unreachable from settings, task JSON, CLI and owner UI.
+ ;; unreachable from settings, task JSON, CLI and owner UI. fixture-predecessor
+ ;; likewise: immutable fixture ancestry DATA for the two-link spent history,
+ ;; same restricted seam and never production authority.
  ("extensions/gsd/supplemental-disposition-policy.rkt"
-  (fixture-amendment . OTHER_REVIEWED))
+  (fixture-amendment . OTHER_REVIEWED) (fixture-predecessor . OTHER_REVIEWED))
  ("extensions/gsd/supplemental-evidence-journal.rkt"
   (current-supplemental-journal-crash-cut . SERVICE_HANDLE))
  ("extensions/gsd/supplemental-evidence-operator.rkt"
