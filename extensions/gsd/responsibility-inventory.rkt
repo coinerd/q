@@ -1019,18 +1019,73 @@
                         "../../util/json/checksum"
                         "evidence-repair-format"
                         "../gsd-planning/execution-policy"))
+   ;; Fixed amendment identity. The private fixture parameter carries trusted
+   ;; test data only, under an isolated private authority root, never a grant.
+   (make-entry
+    "supplemental-disposition-policy.rkt"
+    'transition-logic
+    '(make-param parameterize)
+    '(fixture-amendment)
+    '("racket/file" "racket/path" "supplemental-evidence-format" "supplemental-evidence-authority"))
+   ;; Canonical private filesystem primitives and fsync FFI extracted from journal.
+   (make-entry "supplemental-evidence-store.rkt"
+               'persistence
+               '(fs-write fs-read fs-rename fs-delete dir-list sha256 path-ops)
+               '()
+               '("json" "racket/file"
+                        "racket/list"
+                        "racket/path"
+                        "racket/runtime-path"
+                        "ffi/unsafe"
+                        "ffi/unsafe/port"
+                        "../../util/json/checksum"
+                        "evidence-repair-format"
+                        "supplemental-evidence-authority"))
+   ;; Known-path journal helper; the submodule exposes immutable inspection and
+   ;; storage support, not public caller-selected authorization callbacks.
+   (make-entry "supplemental-disposition-claim.rkt"
+               'persistence
+               '(sha256 path-ops)
+               '()
+               '("racket/file" "racket/path"
+                               "supplemental-evidence-store"
+                               "supplemental-evidence-format"
+                               "supplemental-evidence-authority"
+                               "supplemental-disposition-policy"
+                               "../../util/json/checksum"
+                               "evidence-repair-format"
+                               "supplemental-evidence-journal"))
+   (make-entry "supplemental-evidence-disposition.rkt"
+               'campaign-state
+               '(git parameterize dynamic-require sha256)
+               '()
+               '("racket/list" "racket/runtime-path"
+                               "racket/string"
+                               "racket/system"
+                               "campaign-state"
+                               "campaign-repository"
+                               "delivery-journal"
+                               "evidence-repair-format"
+                               "../../util/json/checksum"
+                               "delivery-receipt"
+                               "review-proof"
+                               "evidence-readiness"
+                               "supplemental-evidence-authority"
+                               "supplemental-evidence-format"
+                               "supplemental-evidence-journal"
+                               "supplemental-disposition-policy"
+                               "supplemental-evidence-controller"
+                               "../gsd-planning/execution-policy"))
    ;; Protected one-shot operation journal: OS-locked CAS + write-ahead intents.
    (make-entry "supplemental-evidence-journal.rkt"
                'persistence
-               '(fs-write fs-read fs-rename fs-delete mkdir dir-list sha256 make-param path-ops)
+               '(fs-write fs-read fs-delete mkdir dir-list make-param path-ops dynamic-require)
                '(current-supplemental-journal-crash-cut)
                '("json" "racket/file"
                         "racket/list"
                         "racket/path"
-                        "racket/port"
                         "racket/runtime-path"
-                        "../../util/json/checksum"
-                        "evidence-repair-format"
+                        "supplemental-evidence-store"
                         "supplemental-evidence-format"
                         "supplemental-evidence-authority"
                         "../gsd-planning/execution-policy"))

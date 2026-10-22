@@ -3,6 +3,37 @@
  "dispositions": "remediated (changed in W1) | retained-canary (real-clock wait kept with a named behavioral reason) | not-a-test-sleep (text match is fixture source or comment) | verified-clean (no matches at all)",
  "kind": "wait-audit",
  "raw-sleep-files": {
+  "tests/test-gsd-supplemental-disposition-frontend.rkt": {
+   "occurrences": [
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 123,
+     "reason": "BUG88 genuine asynchronous owner-handler completion: poll the observable installed-report count every 10ms, at most 1500 iterations (15s); no completion event is exposed by the UI transcript.",
+     "text": "(sleep 0.01)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 182,
+     "reason": "BUG88 genuine asynchronous T approval installation: poll the authenticated target pointer every 10ms, at most 1500 iterations (15s), exiting immediately on the exact new proposal; broker decision alone does not signal durable installation.",
+     "text": "(sleep 0.01)"
+    }
+   ],
+   "suite": "slow/L4"
+  },
+  "tests/test-gsd-supplemental-disposition-store.rkt": {
+   "occurrences": [
+    {
+     "class": "A",
+     "disposition": "retained-canary",
+     "line": 472,
+     "reason": "BUG88 historical-expiry canary: wait 3s beyond the real broker-backed short parent approval expiry, then prove live admission refuses while passive authenticated ancestry inspection succeeds; production current-seconds authentication has no fixture clock override. Not a process-settle delay or retry permission.",
+     "text": "(sleep 3)"
+    }
+   ],
+   "suite": "unit-fast"
+  },
   "tests/fixtures/grouped-mode/f09-timeout.rkt": {
    "occurrences": [
     {
@@ -2296,9 +2327,9 @@
  },
  "summary": {
   "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll)",
-  "total-occurrences": 252,
-  "unit-fast-files": 4,
-  "unit-fast-occurrences": 4,
+  "total-occurrences": 255,
+  "unit-fast-files": 5,
+  "unit-fast-occurrences": 5,
   "unjustified-unit-fast-sleeps": 0
  },
  "target-families": [

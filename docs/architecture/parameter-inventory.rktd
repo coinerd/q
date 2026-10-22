@@ -132,6 +132,11 @@
  ;; bytes.
  ("extensions/gsd/supplemental-evidence-authority.rkt"
   (current-supplemental-authority-root . CONFIGURATION))
+ ;; Private test-support DATA, not a callback/grant or core lifecycle state.
+ ;; Bound only under a validated isolated temporary private authority root;
+ ;; unreachable from settings, task JSON, CLI and owner UI.
+ ("extensions/gsd/supplemental-disposition-policy.rkt"
+  (fixture-amendment . OTHER_REVIEWED))
  ("extensions/gsd/supplemental-evidence-journal.rkt"
   (current-supplemental-journal-crash-cut . SERVICE_HANDLE))
  ("extensions/gsd/supplemental-evidence-operator.rkt"
