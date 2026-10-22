@@ -314,7 +314,10 @@
                      (tool-required-capability t)
                      #:coordinator-wd
                      (let ([cwd (and exec-ctx (exec-context-working-directory exec-ctx))])
-                       (and cwd (path->string cwd)))))
+                       (and cwd
+                            (if (path? cwd)
+                                (path->string cwd)
+                                cwd)))))
                   (ipc-response->tool-result resp)]
                  [else
                   ;; Existing in-process execution (unchanged)

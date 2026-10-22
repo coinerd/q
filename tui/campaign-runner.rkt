@@ -40,7 +40,11 @@
       [else #f]))
   (define exec-config
     (if owned-cwd
-        (dict-set inherited-config 'project-dir (path->string owned-cwd))
+        (dict-set inherited-config
+                  'project-dir
+                  (if (path? owned-cwd)
+                      (path->string owned-cwd)
+                      owned-cwd))
         inherited-config))
   (define campaign-sess (make-agent-session exec-config))
   (define campaign-sid (session-id campaign-sess))
