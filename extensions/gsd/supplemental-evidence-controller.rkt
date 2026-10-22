@@ -63,6 +63,7 @@
          "supplemental-evidence-journal.rkt"
          "supplemental-evidence-operator.rkt"
          (only-in "author-execution.rkt" run-supplemental-test-author!)
+         (submod "supplemental-author-contract.rkt" owner)
          (only-in "../gsd-planning/execution-policy.rkt" current-gsd-author-phase)
          (only-in "composition-root.rkt" current-gsd-verification-registry)
          (only-in "verification-job.rkt" make-verification-registry verification-close-registry!)
@@ -213,11 +214,17 @@
 ;; ----------------------------------------------------------------------
 (define-runtime-path recovery-module "supplemental-evidence-recovery.rkt")
 (define (propose-supplemental-recovery! base plan wave expected-parent-proposal-sha expires-at)
-  ((dynamic-require recovery-module 'propose-supplemental-recovery!)
-   base plan wave expected-parent-proposal-sha expires-at))
+  ((dynamic-require recovery-module 'propose-supplemental-recovery!) base
+                                                                     plan
+                                                                     wave
+                                                                     expected-parent-proposal-sha
+                                                                     expires-at))
 (define (install-supplemental-recovery! base plan wave new-proposal-ref new-approval-ref)
-  ((dynamic-require recovery-module 'install-supplemental-recovery!)
-   base plan wave new-proposal-ref new-approval-ref))
+  ((dynamic-require recovery-module 'install-supplemental-recovery!) base
+                                                                     plan
+                                                                     wave
+                                                                     new-proposal-ref
+                                                                     new-approval-ref))
 (define (hex40? v)
   (and (string? v) (= 40 (string-length v)) (regexp-match? #px"^[0-9a-f]+$" v)))
 ;; Aggregate ceilings are fixed by the approved engineering plan; task bounds
@@ -320,7 +327,9 @@
         (define generation (hash-ref context 'receipt-generation))
         (define pinned-receipt
           (and (<= generation (length history))
-               (if (= generation (length history)) receipt (list-ref history generation))))
+               (if (= generation (length history))
+                   receipt
+                   (list-ref history generation))))
         (define manifest
           (and pinned-receipt
                (equal? (canonical-evidence-digest pinned-receipt) (hash-ref context 'receipt-sha256))
@@ -622,6 +631,7 @@
     ;; response after this commit can never buy another dispatch.
     (unless (author-live?)
       (refuse "stale campaign authority before supplemental launch"))
+    (define contract (make-supplemental-author-contract tref grant repo attempt-id base plan wave))
     (define launched
       (step! grant
              operation*
@@ -630,7 +640,7 @@
     (unless (author-live?)
       (refuse "stale campaign authority before model dispatch"))
     (define outcome
-      (run-supplemental-test-author! repo (task-write-paths task) attempt-id run author-live? after-phase))
+      (run-supplemental-test-author! repo contract attempt-id run author-live? after-phase))
     (if (not (eq? (wave-execution-outcome-kind outcome) 'done))
         (begin
           ;; The launch was durably consumed: a phase that ends without an

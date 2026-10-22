@@ -29,6 +29,7 @@
          racket/match
          racket/class
          racket/list
+         (only-in "../../util/worker-tool-policy.rkt" current-worker-tool-policy)
          (only-in "../../agent/iteration/loop-state.rkt"
                   loop-infra
                   loop-infra?
@@ -249,7 +250,8 @@
                                          'tokens
                                          (ws-entry-token-estimate entry)))))
   ;; v0.96.13 W3: Post-tool reflection — emit event if large results detected
-  (when (current-reflection-prompt-enabled)
+  ;; Scoped workers retain observations without optional tool/workflow nudges.
+  (when (and (current-reflection-prompt-enabled) (not (current-worker-tool-policy)))
     (define large-results
       (for/list ([m (in-list tool-result-msgs)]
                  #:when (let ([content-str (format "~a" (message-content m))])
@@ -504,6 +506,11 @@
         ;; sessions keep the generic nudge (parameter defaults to #f).
         (define nudge-text
           (or (current-empty-response-nudge)
+              (and (current-worker-tool-policy)
+                   (string-append
+                    "Your previous response produced no output. Continue only within "
+                    "the owner-provided task contract and its role, paths, and tool limits; "
+                    "provide the task result or explain a blocker."))
               (string-append "Your previous response contained extensive reasoning "
                              "but produced no output. Please provide a direct response "
                              "or tool call.")))
@@ -626,21 +633,29 @@
           updated-ctx
           (append
            updated-ctx
-           (list (make-message
-                  (format "exploration-corrective-~a" (loop-counters-iteration counters))
-                  #f
-                  'user
-                  'message
-                  (list (make-text-part
-                         (format (string-append
-                                  "STEERING: You have called the same tools repeatedly (~a) without "
-                                  "producing text or progress. Stop exploring and re-reading files. "
-                                  "Produce a concrete implementation step now (an edit, a test run, "
-                                  "a file write, or a clear statement of the blocker), or the loop "
-                                  "will be terminated.")
-                                 loop-warning)))
-                  (current-seconds)
-                  (hasheq 'source 'steering)))))))
+           (list
+            (make-message
+             (format "exploration-corrective-~a" (loop-counters-iteration counters))
+             #f
+             'user
+             'message
+             (list
+              (make-text-part
+               (format
+                (if (current-worker-tool-policy)
+                    (string-append
+                     "STEERING: Repeated tool calls (~a) have not made progress. "
+                     "Recheck the owner-provided task contract and its role, paths, and tool limits. "
+                     "Take a different permitted task action or report the blocker; "
+                     "do not broaden scope or change roles.")
+                    (string-append "STEERING: You have called the same tools repeatedly (~a) without "
+                                   "producing text or progress. Stop exploring and re-reading files. "
+                                   "Produce a concrete implementation step now (an edit, a test run, "
+                                   "a file write, or a clear statement of the blocker), or the loop "
+                                   "will be terminated."))
+                loop-warning)))
+             (current-seconds)
+             (hasheq 'source 'steering)))))))
      ;; Reuse make-next-counters for consistent counter increment
      (directive-recurse updated-ctx
                         (struct-copy loop-counters

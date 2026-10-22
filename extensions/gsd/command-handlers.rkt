@@ -5,7 +5,8 @@
 ;;
 ;; Extracted from extensions/gsd-planning.rkt (v0.34.6 W0b -- A-02 decomposition).
 
-(require racket/contract
+(require "supplemental-author-contract.rkt"
+         racket/contract
          racket/match
          racket/string
          racket/format
@@ -486,6 +487,19 @@
                                   wave-idx
                                   #:scratch-token [scratch-token #f]
                                   #:scratch-root-abs [scratch-root-abs #f])
+  (if (current-supplemental-author-contract)
+      (render-supplemental-author-prompt)
+      (build-ordinary-single-wave-prompt base-dir
+                                         plan
+                                         wave-idx
+                                         #:scratch-token scratch-token
+                                         #:scratch-root-abs scratch-root-abs)))
+
+(define (build-ordinary-single-wave-prompt base-dir
+                                           plan
+                                           wave-idx
+                                           #:scratch-token [scratch-token #f]
+                                           #:scratch-root-abs [scratch-root-abs #f])
   (define wave (plan-wave-ref plan wave-idx))
   (unless wave
     (error 'build-single-wave-prompt "wave ~a is not present in the validated plan" wave-idx))

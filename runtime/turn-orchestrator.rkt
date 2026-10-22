@@ -20,7 +20,8 @@
 ;;   extensions/context.rkt → make-extension-ctx (extension registration)
 ;; ───────────────────────────────────────────────────────────────
 
-(require (only-in racket/dict in-dict)
+(require (only-in "worker-tool-advertisement.rkt" make-provider-tool-projector)
+         (only-in racket/dict in-dict)
          (only-in racket/list filter-map)
          racket/contract
          (only-in "../util/loop-result.rkt" loop-result? loop-result-messages)
@@ -47,8 +48,7 @@
                   tool-registry?
                   extension-registry?
                   dispatch-hooks
-                  list-tools-jsexpr
-                  merge-tool-lists)
+                  list-tools-jsexpr)
          "../agent/loop.rkt"
          (only-in "../agent/loop-fsm.rkt" current-turn-fsm-state turn-state-blocked)
          (only-in "../runtime/settings.rkt" setting-ref setting-ref*)
@@ -303,6 +303,9 @@
                                  'provider
                                  "mock")))
 
+  ;; Match execution's config-over-inherited-parameter precedence and snapshot
+  ;; before hooks or custom assembly callbacks can change ambient authority.
+  (define project-tools (make-provider-tool-projector reg config-raw tool-list-proc))
   ;; Dispatch 'before-provider-request hook (informational)
   (define-values (_bpr-payload _bpr-res)
     (maybe-dispatch-hooks ext-reg
@@ -316,11 +319,7 @@
   ;; v0.20.5 W3: Uses shared register-session-extensions! function.
   ;; Idempotent — extensions track their own state.
   (define ext-tools (and ext-reg (register-session-extensions! reg ext-reg bus session-id)))
-  (define tools
-    (cond
-      [tool-list-proc (tool-list-proc base-tools ext-tools)]
-      [(and base-tools (pair? ext-tools)) (merge-tool-lists base-tools ext-tools)]
-      [else base-tools]))
+  (define tools (project-tools base-tools ext-tools))
 
   ;; v0.14.4 Wave 2 FIX: Extract ONLY provider-specific settings from config.
   ;; The full config is a mutable hash with event-bus, extension-registry, etc.

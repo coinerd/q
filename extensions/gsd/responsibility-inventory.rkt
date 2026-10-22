@@ -146,6 +146,22 @@
     '(fs-read)
     '()
     '("racket/file" "racket/list" "racket/string" "plan-snapshot" "plan-types" "wave-docs"))
+   ;; Authenticated task data and prompt/tool projections; construction reads
+   ;; authority through its owner and reads frozen snapshot intent. No dispatch,
+   ;; budget or approval authority.
+   (make-entry "supplemental-author-contract.rkt"
+               'transition-logic
+               '(fs-read make-param)
+               '(current-supplemental-author-contract)
+               '("racket/file" "racket/list"
+                               "racket/path"
+                               "racket/string"
+                               "plan-snapshot"
+                               "wave-docs"
+                               "supplemental-evidence-authority"
+                               "supplemental-evidence-format"
+                               "util/worker-tool-policy"
+                               "../gsd-planning/execution-policy"))
    ;; Owner-controlled phase dispatch and Git commits. Snapshot/journal reads,
    ;; durable launch intent and registered checks delegate to their owners.
    ;; Path normalization uses path->complete-path/simplify-path, outside the
@@ -163,6 +179,7 @@
                                "delivery-journal"
                                "wave-runner-port"
                                "policy"
+                               "supplemental-author-contract"
                                "../gsd-planning/execution-policy"))
    ;; Resume policy mutates campaign state and delegates persistence to the
    ;; repository. Approved parked-entry admission serializes with revocation

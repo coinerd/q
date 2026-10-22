@@ -40,6 +40,13 @@
  ;; here: a phase dispatch may span turns, so TURN_LOCAL would be misleading.
  ;; Its immutable tool-admission scope is neither configuration nor a service.
  ("extensions/gsd-planning/execution-policy.rkt" (current-gsd-author-phase . OTHER_REVIEWED))
+ ;; Immutable descriptor bound only for one owned author dispatch, unwound on
+ ;; return/failure; not durable authority or cross-invocation session state.
+ ("extensions/gsd/supplemental-author-contract.rkt"
+  (current-supplemental-author-contract . OTHER_REVIEWED))
+ ;; Trusted callable projection/admission handle captured in session-owned
+ ;; in-memory config, rebound for each turn and scheduler worker. Never JSON.
+ ("util/worker-tool-policy.rkt" (current-worker-tool-policy . SERVICE_HANDLE))
  ("extensions/gsd/author-session-recovery.rkt" (current-gsd-author-recovery-timeout-sec . CONFIGURATION))
  ("agent/blackboard.rkt" (current-blackboard . SERVICE_HANDLE))
  ("agent/iteration/main-loop.rkt" (current-iteration-fsm-state . ITERATION_LOCAL))
