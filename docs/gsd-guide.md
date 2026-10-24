@@ -253,7 +253,31 @@ retention and false/denied grants authorize nothing. Installation launches no au
 Do not submit `/go` automatically. K and S require separate later broker decisions;
 no old grant reuse, auto-authorization, retry, budget reset or ordinary fallback exists.
 One permanent claim admits only one winner, including after expiry, revocation or failure.
-The ordinary v1→v2 rules are unchanged; v3 has no successor or further exception.
+The ordinary v1→v2 rules are unchanged; no generic v3 successor is permitted.
+
+#### Amendment-2 (active fixed disposition)
+
+Amendment-1 above is exhausted and retained only for provenance; its permanent claim
+is never rewritten. The sole active amendment-2 ID is
+`645a6a88de529fa239edbda468b8c12e64df1c0c1fbff859db4a9f284e242505`.
+It binds spent v3 proposal
+`f4238535e291e23062926f698c922da75fd3caadcd2de160e8b3ca68b33ba764` / approval
+`f8ea96b875e8b05fc2f5800674270c6dddf93b4e256fa6b8fc1ed650fcd5b816`, blocked/rev3,
+launch consumed, allocation attempt-5 / attempt-fence-8 / coordinator-fence-8.
+The terminal BODY digest is
+`b60c5f76528c76ff66ce98943633c93fed570e80b60a99192150d178c86d8259`; COMPLETE digest is
+`0c9e45d27cfb3934c29dc9bdc44686b62a6011ddf21c08d8c507beaf88e6e5c0`.
+Root/v2 ancestry, snapshot, receipt, clean source and owned proof port remain unchanged.
+
+`propose-disposition` now targets only this v3 parent; the keyboard authorization
+route is unchanged and still requires fresh genuine exact-T consent before a separate
+`/go`. The task remains kind/v3 with unchanged recovery ancestry and bounds
+1/14400/600/86400; only the disposition binding and engine provenance change.
+A separate amendment-keyed permanent claim permits one winner and one dispatch,
+not a retry, generic chain, fourth-generation schema or third amendment.
+Old amendment proposals refuse; K and S remain separate decisions, with full
+C1/G1, baseline RED/candidate GREEN R1 and P/registration/readiness mandatory.
+BUG-0089 must be merged and installed before any live author attempt.
 
 ## State Machine
 

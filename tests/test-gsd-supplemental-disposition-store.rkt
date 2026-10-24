@@ -21,6 +21,7 @@
          "../extensions/gsd/supplemental-evidence-authority.rkt"
          "../extensions/gsd/supplemental-disposition-policy.rkt"
          (submod "../extensions/gsd/supplemental-disposition-policy.rkt" test-support)
+         (submod "../extensions/gsd/supplemental-disposition-policy.rkt" ancestry-support)
          "../extensions/gsd/evidence-repair-format.rkt"
          "../util/json/checksum.rkt")
 (define (ref kind digit)
@@ -69,13 +70,13 @@
 (define (put path value)
   (display-to-file (canonical-evidence-json value) path #:exists 'truncate)
   (file-or-directory-permissions path #o600))
-(define (spend! grant)
+(define (spend! grant [owned allocation])
   (start-supplemental-operation! grant base-binding)
   (transition-supplemental-operation! grant
                                       0
                                       "proposal-approved"
                                       "reserved"
-                                      (hasheq 'allocation allocation))
+                                      (hasheq 'allocation owned))
   (transition-supplemental-operation! grant
                                       1
                                       "reserved"
@@ -113,7 +114,7 @@
      (install-supplemental-recovery-claim! path old parent-pointer pp pg)
      (define po (spend! pg))
      (define a
-       (seal-supplemental-record (hash-set* (disposition-amendment)
+       (seal-supplemental-record (hash-set* disposition-amendment-1
                                             'plan-id
                                             (hash-ref (hash-ref rt 'context) 'plan-id)
                                             'wave
@@ -134,7 +135,50 @@
                                             (hash-ref (hash-ref rt 'context) 'snapshot-sha256)
                                             'allocation
                                             allocation)))
-     (call-with-test-disposition-amendment a (lambda () (proc f path parent-pointer parent po a))))))
+     (call-with-test-disposition-amendment
+      a
+      (lambda ()
+        (define-values (p g t target) (child! parent parent-pointer a (if short? 2 1700)))
+        (install-supplemental-disposition-claim! path parent-pointer target p g)
+        (define owned (hasheq 'attempt-id "attempt-5" 'attempt-fence 8 'coordinator-fence 8))
+        (define terminal (spend! g owned))
+        (define second
+          (seal-supplemental-record (hash-set* a
+                                               'v2-proposal
+                                               pp
+                                               'v2-approval
+                                               pg
+                                               'parent-proposal
+                                               p
+                                               'parent-approval
+                                               g
+                                               'terminal-body-sha256
+                                               (hash-ref terminal 'sha256)
+                                               'terminal-record-sha256
+                                               (sha256-string (canonical-evidence-json terminal))
+                                               'allocation
+                                               owned)))
+        (call-with-test-disposition-amendment
+         second
+         (lambda ()
+           ;; The old amendment-1 proposal (production f4238535) cannot
+           ;; install through amendment-2. Use its genuinely approved fixture
+           ;; analogue, not fabricated production records or live authority.
+           ;; Both active-policy mismatch and the predecessor's permanent claim
+           ;; independently refuse the old amendment proposal.
+           (check-exn exn:fail?
+                      (lambda ()
+                        (install-supplemental-disposition-claim! path parent-pointer target p g)))
+           (call-with-test-disposition-amendment
+            a
+            (lambda ()
+              (define-values (cp cg ct competitor) (child! parent parent-pointer a 1690))
+              (check-exn
+               #rx"already permanently claimed"
+               (lambda ()
+                 (install-supplemental-disposition-claim! path parent-pointer competitor cp cg)))))
+           (proc f path target t terminal second))
+         #:predecessor a))))))
 (define (child! parent old a [offset 1600])
   (define d
     (hash-set* disposition
@@ -153,7 +197,9 @@
                'terminal-record-sha256
                (hash-ref a 'terminal-record-sha256)
                'pointer-sha256
-               (supplemental-record-digest old)))
+               (supplemental-record-digest old)
+               'allocation
+               (hash-ref a 'allocation)))
   (define t
     (seal-supplemental-record
      (hash-set* parent 'kind "supplemental-evidence-task/v3" 'disposition d)))
@@ -165,7 +211,7 @@
 (define (worker root a path old target p g)
   (define-values (process out in err)
     (subprocess #f #f #f (find-executable-path "racket") self "--claim" (path->string root)))
-  (write (list a (path->string path) old target p g) in)
+  (write (list a (disposition-predecessor) (path->string path) old target p g) in)
   (newline in)
   (flush-output in)
   (unless (equal? (read-line out) "ready")
@@ -193,7 +239,8 @@
       (parameterize ([current-supplemental-authority-root (string->path (vector-ref args 1))])
         (call-with-test-disposition-amendment
          (car request)
-         (lambda () (apply install-supplemental-disposition-claim! (cdr request)))))
+         (lambda () (apply install-supplemental-disposition-claim! (cddr request)))
+         #:predecessor (cadr request)))
       (exit 0))))
 (module+ test
   (test-case "explicit v3 wire descriptor is structurally supported (identity only)"
@@ -207,15 +254,25 @@
     (check-false (valid-supplemental-task?
                   (seal-supplemental-record
                    (hash-set v3 'disposition (hash-set disposition 'extra #t))))))
+  (test-case "active production amendment-2 ID is derived from its public binding fields"
+    (check-equal? (hash-ref (disposition-amendment) 'sha256)
+                  "645a6a88de529fa239edbda468b8c12e64df1c0c1fbff859db4a9f284e242505")
+    ;; Drop the published ID and use the policy's own canonical sealing path.
+    (define derived (seal-supplemental-record (hash-remove (disposition-amendment) 'sha256)))
+    (check-equal? (hash-ref derived 'sha256)
+                  "645a6a88de529fa239edbda468b8c12e64df1c0c1fbff859db4a9f284e242505")
+    (check-not-equal? (hash-ref disposition-amendment-1 'sha256)
+                      "645a6a88de529fa239edbda468b8c12e64df1c0c1fbff859db4a9f284e242505")
+    (check-equal? (disposition-predecessor) disposition-amendment-1))
   (test-case "production policy is frozen; real/default root cannot use fixture seam"
     (define a (disposition-amendment))
     (check-equal? (hash-ref a 'plan-id)
                   "79a69b427b40fb6c6b68b4fd1484a74551db182afa9b96f065353324af16b19e")
     (check-equal? (hash-ref a 'wave) 1)
     (check-equal? (hash-ref a 'terminal-body-sha256)
-                  "209accd0ca0f80a7f6d3fc562baeedafcb96396d98019a1ae861f160dfa5ca17")
+                  "b60c5f76528c76ff66ce98943633c93fed570e80b60a99192150d178c86d8259")
     (check-equal? (hash-ref a 'terminal-record-sha256)
-                  "7412b190a534cd291eb676a10bcbee75196f3f5fd3b42f2c04d5924cec94ae40")
+                  "0c9e45d27cfb3934c29dc9bdc44686b62a6011ddf21c08d8c507beaf88e6e5c0")
     (check-equal? (hash-ref a 'snapshot-sha256)
                   "5d10ae297263d52f60e2305365b299f6060c232c9459168fc8b1fdba32071077")
     (check-equal? (hash-ref a 'root-proposal)
@@ -232,13 +289,21 @@
                   (hasheq 'kind
                           "task-proposal"
                           'sha256
-                          "77538def70739c9260a0920705a7174baf2f326dbbffb1e560d4b57c2fccc629"))
+                          "f4238535e291e23062926f698c922da75fd3caadcd2de160e8b3ca68b33ba764"))
     (check-equal? (hash-ref a 'parent-approval)
                   (hasheq 'kind
                           "task-approval"
                           'sha256
-                          "8b34d850c38078e0263946da930b84c76fd3b8d829428d20b37f4c00c09afd27"))
-    (check-equal? (hash-ref a 'allocation) allocation)
+                          "f8ea96b875e8b05fc2f5800674270c6dddf93b4e256fa6b8fc1ed650fcd5b816"))
+    (check-equal? a disposition-amendment-2)
+    (check-equal? (hash-ref disposition-amendment-1 'sha256)
+                  "e608629026bfd787c7c34a7dc163ebdc15f8c7ba82fff46277ba428037f82313")
+    (check-equal? (hash-ref disposition-amendment-1 'parent-proposal) (hash-ref a 'v2-proposal))
+    (check-equal? (hash-ref disposition-amendment-1 'parent-approval) (hash-ref a 'v2-approval))
+    (check-not-equal? (hash-ref disposition-amendment-1 'parent-proposal)
+                      (hash-ref a 'parent-proposal))
+    (check-equal? (hash-ref a 'allocation)
+                  (hasheq 'attempt-id "attempt-5" 'attempt-fence 8 'coordinator-fence 8))
     (check-equal? (hash-ref a 'model-dispatches) 1)
     (check-false (hash-ref a 'successor-permitted))
     (check-true (immutable? a))
@@ -283,7 +348,7 @@
   (test-case "fixture getter rejects a changed root and restores its original binding"
     (with-fixture
      (lambda (f)
-       (define a (disposition-amendment))
+       (define a disposition-amendment-1)
        (define other (build-path (fixture-workspace f) "other-private"))
        (make-directory other #o700)
        (call-with-test-disposition-amendment
@@ -330,7 +395,7 @@
          (check-equal? terminal po)
          (check-equal? (hash-ref (start-supplemental-operation! g base-binding) 'revision) 0)
          ;; Ongoing admission follows the NEW owned allocation, not immutable parent4/7.
-         (define fresh (hasheq 'attempt-id "attempt-5" 'attempt-fence 8 'coordinator-fence 8))
+         (define fresh (hasheq 'attempt-id "attempt-6" 'attempt-fence 9 'coordinator-fence 9))
          (transition-supplemental-operation! g
                                              0
                                              "proposal-approved"
@@ -384,8 +449,8 @@
        (check-exn exn:fail? (lambda () (install-supplemental-disposition-claim! path old target p g)))
        (delete-file path)
        (check-true (supplemental-recovery-pointer-claimed? path)))))
-  (test-case "root and parent revocation always deny passive ancestry and child admission"
-    (for ([key '(root-approval parent-approval)])
+  (test-case "root, v2 and v3 parent revocation always deny passive ancestry and child admission"
+    (for ([key '(root-approval v2-approval parent-approval)])
       (with-spent
        (lambda (f path old parent po a)
          (define-values (p g t target) (child! parent old a))
@@ -407,7 +472,7 @@
            (cond
              [(memq key '(root-proposal parent-proposal)) (ref "task-proposal" #\f)]
              [(memq key '(root-approval parent-approval)) (ref "task-approval" #\f)]
-             [(eq? key 'allocation) (hash-set allocation 'attempt-fence 8)]
+             [(eq? key 'allocation) (hash-set (hash-ref a 'allocation) 'attempt-fence 99)]
              [else (make-string 64 #\f)]))
          (define changed
            (seal-supplemental-record (hash-set t 'disposition (hash-set d key replacement))))
@@ -465,6 +530,44 @@
        (check-exn exn:fail?
                   (lambda ()
                     (supplemental-recovery-pointer-claimed? "/tmp/unused-disposition-pointer"))))))
+  (test-case "expired new approval cannot claim amendment-2; both permanent claims deny discovery independently"
+    (with-spent
+     (lambda (f path old parent po a)
+       (define-values (ep eg et expired) (child! parent old a 1))
+       (sleep 2)
+       (check-exn exn:fail?
+                  (lambda () (install-supplemental-disposition-claim! path old expired ep eg)))
+       (define-values (p g t target) (child! parent old a))
+       (install-supplemental-disposition-claim! path old target p g)
+       (define claims
+         (find-files (lambda (p)
+                       (regexp-match? #rx"/supplemental-disposition-.*[.]json$" (path->string p)))
+                     (fixture-root f)))
+       (check-equal? (length claims) 2)
+       (delete-file path)
+       ;; Leave each disposition as the SOLE denial, hiding the recovery
+       ;; claim too. Discovery must not open or repair the absent pointer.
+       (define all-claims
+         (find-files (lambda (p)
+                       (regexp-match? #rx"/supplemental-(recovery|disposition)-.*[.]json$"
+                                      (path->string p)))
+                     (fixture-root f)))
+       (for ([claim claims])
+         (define bytes (file->bytes claim))
+         (define hidden
+           (for/list ([other all-claims]
+                      #:unless (equal? other claim))
+             (cons other (build-path (fixture-workspace f) (file-name-from-path other)))))
+         (dynamic-wind (lambda ()
+                         (for ([entry hidden])
+                           (rename-file-or-directory (car entry) (cdr entry))))
+                       (lambda ()
+                         (check-true (supplemental-recovery-pointer-claimed? path))
+                         (check-false (file-exists? path)))
+                       (lambda ()
+                         (for ([entry hidden])
+                           (rename-file-or-directory (cdr entry) (car entry)))))
+         (check-equal? (file->bytes claim) bytes)))))
   (test-case "historical expiry is ignored only by passive inspection"
     (with-spent
      (lambda (f path old parent po a)

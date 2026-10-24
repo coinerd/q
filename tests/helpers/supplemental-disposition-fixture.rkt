@@ -11,6 +11,7 @@
          "../../extensions/gsd/supplemental-evidence-controller.rkt"
          "../../extensions/gsd/supplemental-evidence-format.rkt"
          "../../extensions/gsd/supplemental-evidence-journal.rkt"
+         "../../extensions/gsd/supplemental-disposition-policy.rkt"
          (only-in "../../extensions/gsd/evidence-repair-format.rkt" canonical-evidence-json)
          (only-in "../../util/json/checksum.rkt" sha256-string))
 (provide (struct-out disposition-fixture)
@@ -38,7 +39,7 @@
                (hash-ref op 'launch-consumed))
     (error 'disposition-fixture "real no-edit launch did not produce blocked revision 3"))
   op)
-(define (call-with-disposition-fixture proc)
+(define (call-with-disposition-fixture proc #:second? [second? #f])
   (call-with-supplemental-fixture
    (lambda (fx)
      (define base (supplemental-fixture-root fx))
@@ -81,7 +82,7 @@
      (define parent-op (terminal! (hash-ref parent 'task-approval)))
      (define campaign (load-campaign-record base plan))
      (define amendment
-       (seal-supplemental-record (hash-set* ((dynamic-require policy 'disposition-amendment))
+       (seal-supplemental-record (hash-set* disposition-amendment-1
                                             'plan-id
                                             plan
                                             'wave
@@ -104,7 +105,40 @@
                                             (campaign-record-plan-snapshot-digest campaign))))
      ((dynamic-require `(submod ,policy test-support) 'call-with-test-disposition-amendment)
       amendment
-      (lambda () (proc (disposition-fixture fx root parent root-op parent-op amendment)))))
+      (lambda ()
+        (cond
+          [second?
+           (define-values (p t)
+             (propose-supplemental-disposition! base
+                                                plan
+                                                1
+                                                (hash-ref (hash-ref parent 'task-proposal) 'sha256)
+                                                (+ (current-seconds) 14400)))
+           (install-supplemental-disposition! base plan 1 p (fixture-approve! p))
+           (define v3 (load-supplemental-pointer base plan 1))
+           (consume! fx)
+           (define v3-op (terminal! (hash-ref v3 'task-approval)))
+           (define second
+             (seal-supplemental-record (hash-set* amendment
+                                                  'v2-proposal
+                                                  (hash-ref parent 'task-proposal)
+                                                  'v2-approval
+                                                  (hash-ref parent 'task-approval)
+                                                  'parent-proposal
+                                                  (hash-ref v3 'task-proposal)
+                                                  'parent-approval
+                                                  (hash-ref v3 'task-approval)
+                                                  'terminal-body-sha256
+                                                  (hash-ref v3-op 'sha256)
+                                                  'terminal-record-sha256
+                                                  (sha256-string (canonical-evidence-json v3-op))
+                                                  'allocation
+                                                  (hash-ref (hash-ref v3-op 'facts) 'allocation))))
+           ((dynamic-require `(submod ,policy test-support) 'call-with-test-disposition-amendment)
+            second
+            (lambda () (proc (disposition-fixture fx root v3 root-op v3-op second)))
+            #:predecessor amendment)]
+          [else (proc (disposition-fixture fx root parent root-op parent-op amendment))]))))
    #:completed-author? #t
    #:physical-worktree? #t
    #:wave-index 1

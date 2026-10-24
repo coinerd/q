@@ -30,6 +30,13 @@
      "line": 472,
      "reason": "BUG88 historical-expiry canary: wait 3s beyond the real broker-backed short parent approval expiry, then prove live admission refuses while passive authenticated ancestry inspection succeeds; production current-seconds authentication has no fixture clock override. Not a process-settle delay or retry permission.",
      "text": "(sleep 3)"
+    },
+    {
+     "class": "A",
+     "disposition": "retained-canary",
+     "line": 574,
+     "text": "(sleep 3)",
+     "reason": "BUG88 amendment-2 historical-expiry canary: wait 3s beyond the real broker-backed short v3 parent approval expiry, then prove amendment-2 live admission refuses while passive authenticated v3 ancestry inspection succeeds; production current-seconds authentication has no fixture clock override. Not a process-settle delay or retry permission."
     }
    ],
    "suite": "unit-fast"
@@ -2326,10 +2333,10 @@
   "sha256-at-w0": "6fbd4343b95217f847fd6a05d946d064f1ef98d3110266451cc651ab8d549166"
  },
  "summary": {
-  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll)",
-  "total-occurrences": 255,
+  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll); BUG-0088 amendment-2 registers the store historical-expiry canary (bounded 3s expiry crossing for the two-link v1-v2-v3 spent history)",
+  "total-occurrences": 256,
   "unit-fast-files": 5,
-  "unit-fast-occurrences": 5,
+  "unit-fast-occurrences": 6,
   "unjustified-unit-fast-sleeps": 0
  },
  "target-families": [

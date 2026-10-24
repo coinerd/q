@@ -6,6 +6,7 @@
          "supplemental-evidence-format.rkt"
          "supplemental-evidence-authority.rkt"
          "supplemental-disposition-policy.rkt"
+         (submod "supplemental-disposition-policy.rkt" ancestry-support)
          "../../util/json/checksum.rkt"
          (only-in "evidence-repair-format.rkt" canonical-evidence-json)
          (submod "supplemental-evidence-journal.rkt" disposition-store-support))
@@ -21,7 +22,7 @@
   (hasheq 'schema "supplemental-pointer/v1" 'task-proposal p 'task-approval g))
 (define (inherited? parent task)
   (for/and ([(key value) (in-hash parent)]
-            #:unless (memq key '(kind sha256 control-plane-head)))
+            #:unless (memq key '(kind sha256 control-plane-head disposition)))
     (equal? value (hash-ref task key #f))))
 (define (spent? r)
   (define facts (hash-ref r 'facts))
@@ -33,21 +34,46 @@
          (define v (hash-ref facts key))
          (and (string? v) (positive? (string-length v))))))
 (define (inspect-supplemental-disposition-parent grant)
+  (inspect-parent grant (disposition-amendment) (disposition-predecessor)))
+(define (inspect-parent grant a predecessor)
   (call-with-supplemental-authority-lock
    (lambda ()
-     (define a (disposition-amendment))
      (define-values (proposal task expiry) (authenticated-task! grant #t))
      (unless (and (equal? grant (hash-ref a 'parent-approval))
                   (equal? proposal (hash-ref a 'parent-proposal))
-                  (equal? (hash-ref task 'kind) "supplemental-evidence-task/v2"))
-       (refuse "amendment requires its exact v2 parent"))
+                  (equal?
+                   (hash-ref task 'kind)
+                   (if predecessor "supplemental-evidence-task/v3" "supplemental-evidence-task/v2")))
+       (refuse "amendment requires its exact parent generation"))
+     (when predecessor
+       (define-values (pp pt po)
+         (inspect-parent (hash-ref predecessor 'parent-approval) predecessor #f))
+       (define previous (read-disposition-claim! (claim-path (hash-ref predecessor 'sha256))))
+       (unless (and (equal? (hash-ref a 'v2-proposal) pp)
+                    (equal? (hash-ref a 'v2-approval) (hash-ref predecessor 'parent-approval))
+                    (equal? (hash-ref previous 'amendment) predecessor)
+                    (equal? (hash-ref previous 'target) (pointer proposal grant))
+                    (equal? (hash-ref previous 'lineage) (hash-ref task 'disposition))
+                    (equal? (hash-ref task 'disposition)
+                            (descriptor predecessor
+                                        (pointer pp (hash-ref predecessor 'parent-approval))))
+                    (inherited? pt task))
+         (refuse "historical disposition claim or scope mismatch")))
      (define r (hash-ref task 'recovery))
      (unless (and (equal? (hash-ref r 'parent-proposal) (hash-ref a 'root-proposal))
                   (equal? (hash-ref r 'parent-approval) (hash-ref a 'root-approval)))
        (refuse "amendment root mismatch"))
      (define old-claim (read-recovery-claim! (recovery-claim-path (hash-ref a 'root-approval))))
      (unless (and (equal? (hash-ref old-claim 'lineage) r)
-                  (equal? (hash-ref old-claim 'target) (pointer proposal grant)))
+                  (equal? (hash-ref old-claim 'target)
+                          (if predecessor
+                              (pointer (hash-ref a 'v2-proposal) (hash-ref a 'v2-approval))
+                              (pointer proposal grant)))
+                  (or (not predecessor)
+                      (equal? (hash-ref old-claim 'pointer-path)
+                              (hash-ref (read-disposition-claim! (claim-path (hash-ref predecessor
+                                                                                       'sha256)))
+                                        'pointer-path))))
        (refuse "historical private recovery claim mismatch"))
      ;; This v1 inspector authenticates revocation, but ignores historical expiry.
      (define-values (rp root rt) (inspect-supplemental-recovery-parent (hash-ref a 'root-approval)))
@@ -111,7 +137,7 @@
   (define bound (hash-ref c 'pointer-path #f))
   (unless (and (exact-keys? c '(schema amendment lineage pointer-path target sha256))
                (equal? (hash-ref c 'schema) "supplemental-disposition-claim/v1")
-               (exact-keys? a
+               (exact-keys? (hash-remove (hash-remove a 'v2-proposal) 'v2-approval)
                             '(kind plan-id
                                    wave
                                    root-proposal
@@ -125,6 +151,9 @@
                                    model-dispatches
                                    successor-permitted
                                    sha256))
+               (or (and (not (hash-has-key? a 'v2-proposal)) (not (hash-has-key? a 'v2-approval)))
+                   (and (ref? (hash-ref a 'v2-proposal #f) "task-proposal")
+                        (ref? (hash-ref a 'v2-approval #f) "task-approval")))
                (equal? a (seal-supplemental-record a))
                (equal? (hash-ref a 'kind) "supplemental-disposition-amendment/v1")
                (digest? (hash-ref a 'plan-id))
