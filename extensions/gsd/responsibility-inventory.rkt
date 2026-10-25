@@ -327,6 +327,19 @@
                '()
                '()
                '("racket/format" "racket/string" "plan-types" "wave-executor"))
+   ;; R76 (BUG-0076): shared leaf delivery-root resolver — the root/layout
+   ;; decision logic sits below every call site (plan-context-builder,
+   ;; wave-executor, delivery-verifier, ... all import it). Like its caller
+   ;; plan-context-builder it probes Git's own answers, so the same effect
+   ;; family applies; the run-git seam parameter is the only state.
+   (make-entry "git-root-layout.rkt"
+               'pure-planning
+               '(git make-param path-ops parameterize)
+               '(current-git-root-layout-run-git)
+               '("racket/file" "racket/path"
+                                "racket/port"
+                                "racket/string"
+                                "racket/system"))
    (make-entry "plan-context-builder.rkt"
                'pure-planning
                '(git make-param path-ops fs-read parameterize)

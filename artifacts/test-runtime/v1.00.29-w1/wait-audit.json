@@ -3,6 +3,39 @@
  "dispositions": "remediated (changed in W1) | retained-canary (real-clock wait kept with a named behavioral reason) | not-a-test-sleep (text match is fixture source or comment) | verified-clean (no matches at all)",
  "kind": "wait-audit",
  "raw-sleep-files": {
+  "tests/test-gsd-supplemental-advance-failure.rkt": {
+   "occurrences": [
+    {
+     "class": "A",
+     "disposition": "not-a-test-sleep",
+     "line": 117,
+     "reason": "R101 text match is generated fixture source: the sleep is a line inside the string template of a witness-author test written to a temporary authority root and executed as a separate process; no sleep runs in this file's process at this line.",
+     "text": "(sleep 1)"
+    },
+    {
+     "class": "A",
+     "disposition": "retained-canary",
+     "line": 238,
+     "reason": "R101 expiry-boundary re-observation canary: bounded two-iteration 1s wait past the retained task's real operator-approved expires-at, then prove live admission refuses with typed cause expired (now == expires-at is already expired); production current-seconds authentication exposes no fixture clock override. Not a process-settle delay.",
+     "text": "(sleep 1)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 619,
+     "reason": "R101 lock-exclusion fixture: the holder thread that owns the operation file lock waits on the test's release semaphore through call-with-file-lock/timeout's bounded 50ms retry interval; the release is posted by the test only after the blocked-transition assertions, and no lock-free completion event exists.",
+     "text": "(sleep 0.05)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 623,
+     "reason": "R101 lock-exclusion fixture: bounded 50ms poll of the durable operation record until the committed verifying transition is observed, so the exclusive lock is taken only after the phase commits; exits as soon as the state file shows verifying.",
+     "text": "(sleep 0.05)"
+    }
+   ],
+   "suite": "slow/L4"
+  },
   "tests/test-gsd-supplemental-disposition-frontend.rkt": {
    "occurrences": [
     {
@@ -2064,6 +2097,39 @@
    ],
    "suite": "other"
   },
+  "tests/test-tui-diagnostic-surface.rkt": {
+   "occurrences": [
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 52,
+     "reason": "R98 bounded 20ms poll (5s ceiling) until the real installed stderr-guard route delivers the status through its asynchronous receiver thread; the route exposes no completion event.",
+     "text": "(sleep 0.02)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 64,
+     "reason": "R98 bounded 20ms poll (5s ceiling) until the status surface CHANGES from the previous record, so the second record is never observed racily through the asynchronous route; no per-record completion event exists.",
+     "text": "(sleep 0.02)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 74,
+     "reason": "R98 bounded 20ms poll (5s ceiling) until the asynchronously written spill file contains the expected record; file delivery through the guard route exposes no completion event.",
+     "text": "(sleep 0.02)"
+    },
+    {
+     "class": "C",
+     "disposition": "retained-canary",
+     "line": 332,
+     "reason": "R98 negative-observation window: after restore-stderr-guard! the test waits a bounded 150ms and asserts the spill file is unchanged, proving post-restore records are dropped; absence cannot be proven synchronously without guard-internal hooks.",
+     "text": "(sleep 0.15)"
+    }
+   ],
+   "suite": "unit-fast"
+  },
   "tests/test-tui-event-channel.rkt": {
    "occurrences": [
     {
@@ -2137,16 +2203,37 @@
     {
      "class": "C",
      "disposition": "retained-canary",
-     "line": 47,
+     "line": 53,
      "reason": "bounded settle wait letting the guard's receiver thread drain one log record before asserting; BUG-0072 stderr-guard test, fixed bound, no completion event exposed yet",
      "text": "(sleep 0.15) ; let the guard thread drain"
     },
     {
      "class": "C",
      "disposition": "retained-canary",
-     "line": 71,
-     "reason": "bounded settle wait letting the guard's receiver thread drain one log record before asserting; BUG-0072 stderr-guard test, fixed bound, no completion event exposed yet",
+     "line": 82,
+     "reason": "bounded settle wait letting the restored original logger's receiver thread observe the post-restore record before asserting; BUG-0072 stderr-guard test, fixed bound, no completion event exposed yet",
      "text": "(sleep 0.15)"
+    },
+    {
+     "class": "C",
+     "disposition": "retained-canary",
+     "line": 96,
+     "reason": "R98 bounded settle wait letting the guard's asynchronous drain invoke the on-error-record callback after the injected spill-write failure; the callback route exposes no completion event.",
+     "text": "(sleep 0.15)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 113,
+     "reason": "R98 bounded 20ms poll (at most 100 iterations, 2s) until the injected callback failure's diagnostic-surface disclosure appears in the spill file; file delivery through the guard route exposes no completion event.",
+     "text": "(sleep 0.02)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 119,
+     "reason": "R98 bounded 20ms poll (at most 100 iterations, 2s) until the after-failure record appears in the spill, proving the guard thread keeps draining after a callback failure; no completion event is exposed.",
+     "text": "(sleep 0.02)"
     }
    ],
    "suite": "other"
@@ -2169,6 +2256,32 @@
     }
    ],
    "suite": "other"
+  },
+  "tests/test-gsd-verification-terminal-events.rkt": {
+   "occurrences": [
+    {
+     "class": "C",
+     "disposition": "retained-canary",
+     "line": 117,
+     "reason": "R102 bounded 50ms log-drain settle before killing the logger pump thread in call-with-captured-warnings; log-receiver delivery is asynchronous and has no synchronous flush.",
+     "text": "(sleep 0.05)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 297,
+     "reason": "R102 attach-path determinism: bounded 20ms poll (at most 500 iterations, 10s) until caller 1's started event is observed before caller 2 runs, so the second call exercises the attach-to-running-job path instead of racing a second launch; no started-observation callback is exposed to the test.",
+     "text": "(sleep 0.02)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 383,
+     "reason": "R102 orphan-reconcile determinism: bounded 10ms poll (at most 500 iterations, 5s) until the lost process's job facts surface as running before reconcile, so the orphan-recovery replacement path is exercised against the observed state; no synchronous state-flip hook is exposed to the test.",
+     "text": "(sleep 0.01)"
+    }
+   ],
+   "suite": "slow/L4"
   },
   "tests/test-verification-job-lifecycle.rkt": {
    "occurrences": [
@@ -2333,8 +2446,8 @@
   "sha256-at-w0": "6fbd4343b95217f847fd6a05d946d064f1ef98d3110266451cc651ab8d549166"
  },
  "summary": {
-  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll); BUG-0088 amendment-2 registers the store historical-expiry canary (bounded 3s expiry crossing for the two-link v1-v2-v3 spent history)",
-  "total-occurrences": 256,
+  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll); BUG-0088 amendment-2 registers the store historical-expiry canary (bounded 3s expiry crossing for the two-link v1-v2-v3 spent history); R101 (BUG-0101) registers tests/test-gsd-supplemental-advance-failure.rkt (one generated-fixture source literal, not-a-test-sleep; one bounded expiry-boundary re-observation canary, class A retained with reason; two bounded 50ms lock-exclusion fixture polls, class B retained with reason); R102 (BUG-0102) registers tests/test-gsd-verification-terminal-events.rkt (one bounded log-drain settle before pump teardown, class C retained with reason; two bounded async-determinism polls for the attach and orphan-reconcile paths, class B retained with reason); R98 (BUG-0098) registers tests/test-tui-diagnostic-surface.rkt (three bounded async-delivery polls through the real installed stderr-guard route, class B retained with reason; one bounded negative-observation window after guard restore, class C retained with reason); R98 audit refresh: tests/test-tui-stderr-guard.rkt re-measured after the R98 additions (two carried-forward drain settles at their new lines plus one new drain settle and two bounded spill-disclosure polls, all retained with reasons)",
+  "total-occurrences": 270,
   "unit-fast-files": 5,
   "unit-fast-occurrences": 6,
   "unjustified-unit-fast-sleeps": 0

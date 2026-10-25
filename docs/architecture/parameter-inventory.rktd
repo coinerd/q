@@ -105,7 +105,28 @@
                                           ;; exactly one verification attempt (alongside
                                           ;; current-owned-verify-observer), unwound after; never
                                           ;; a command override.
-                                          (current-owned-supplemental-verification . ITERATION_LOCAL))
+                                          (current-owned-supplemental-verification . ITERATION_LOCAL)
+                                          ;; R102 identity contract: authenticated attempt/fence
+                                          ;; facts bound at bridge entry — once per verifier
+                                          ;; invocation, before the job exists, never at
+                                          ;; event-arrival time and never from model text. Like
+                                          ;; the owned-proof seams above it is rebound for
+                                          ;; exactly one verification attempt and unwound
+                                          ;; after, so ITERATION_LOCAL; #f carries only
+                                          ;; registry-trusted identity.
+                                          (current-gsd-verification-attempt-context . ITERATION_LOCAL)
+                                          ;; R102: monotone session-attachment generation bound by
+                                          ;; the owning TUI lifecycle when the event source
+                                          ;; attaches to a session (attach/switch/restore) and
+                                          ;; read during that attachment's events. An attachment
+                                          ;; spans many turns and iterations, so none of the four
+                                          ;; clean lifetimes fits; reviewed here (OTHER_REVIEWED):
+                                          ;; the value is an opaque monotone stale-event token —
+                                          ;; never authority, never model-supplied, and the owning
+                                          ;; counter lives in TUI session state
+                                          ;; (tui/state-types.rkt), not in this parameter. #f when
+                                          ;; unattached; consumers treat #f as generation-0.
+                                          (current-gsd-verification-attachment-generation . OTHER_REVIEWED))
  ("extensions/gsd/go-orchestrator.rkt" (current-gsd-wave-cancel! . SERVICE_HANDLE))
  ;; v1.00.33 recovery continuation: origin-policy DI seam for the recovery
  ;; candidate resolver's independent-clone production check (tests relax
@@ -139,8 +160,20 @@
  ;; same restricted seam and never production authority.
  ("extensions/gsd/supplemental-disposition-policy.rkt"
   (fixture-amendment . OTHER_REVIEWED) (fixture-predecessor . OTHER_REVIEWED))
- ("extensions/gsd/supplemental-evidence-journal.rkt"
+ ;; BUG-0090 extraction: the crash-cut fault hook (and its invariant — it may
+ ;; only interrupt storage, never supply authority or facts) moved verbatim
+ ;; from supplemental-evidence-journal.rkt into this storage-only core; the
+ ;; journal now requires it from here. Still SERVICE_HANDLE: injected
+ ;; procedure seam, default void in production.
+ ("extensions/gsd/supplemental-evidence-store-core.rkt"
   (current-supplemental-journal-crash-cut . SERVICE_HANDLE))
+ ;; R76 (BUG-0076): injectable Git-invocation seam for the shared delivery-root
+ ;; resolver — a (dir args) -> (list exit-code stdout stderr) procedure; the
+ ;; default shells REAL git. Tests pin the boundary without a filesystem;
+ ;; production callers leave it untouched because resolution authenticity
+ ;; requires the real git answers. Same shape as current-gsd-git-runner.
+ ("extensions/gsd/git-root-layout.rkt"
+  (current-git-root-layout-run-git . SERVICE_HANDLE))
  ("extensions/gsd/supplemental-evidence-operator.rkt"
   (current-supplemental-operator-publisher . SERVICE_HANDLE))
  ("extensions/gsd/stall-policy.rkt" (current-gsd-stall-steerer . SERVICE_HANDLE))
