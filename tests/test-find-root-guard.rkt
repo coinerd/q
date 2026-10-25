@@ -202,8 +202,12 @@
                        (define r (tool-find (hasheq 'path (path->string dir))))
                        (check-false (result-is-error? r))
                        (define c (result-strings r))
-                       ;; nothing from INSIDE the cycle is emitted
-                       (check-false (findf (lambda (s) (string-contains? s "/loop/")) c)
+                       ;; nothing from INSIDE the cycle is emitted (the
+                       ;; marker is the real fixture's cycle directory,
+                       ;; built from path pieces — no hardcoded prefix)
+                       (define cycle-marker
+                         (path->string (path->directory-path (build-path dir "d1" "loop"))))
+                       (check-false (findf (lambda (s) (string-contains? s cycle-marker)) c)
                                     "cycle directory must not be traversed")
                        ;; real subtree still found
                        (check-not-false (member (path->string (build-path dir "d1/inner.txt")) c))

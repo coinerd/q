@@ -35,7 +35,9 @@
          racket/system
          rackunit
          rackunit/text-ui
-         (only-in "helpers/private-fixture-templates.rkt" git-quiet!)
+         (only-in "helpers/private-fixture-templates.rkt"
+                  git-quiet!
+                  hermetic-identity!)
          (only-in "../extensions/gsd/git-root-layout.rkt"
                   exn:fail:git-root?
                   exn:fail:git-root-root
@@ -83,17 +85,28 @@
 ;; Real-git fixtures (hermetic, temp-rooted, self-cleaning)
 ;; ============================================================
 
+;; macOS keeps /tmp as a symlink to /private/tmp, so git's own answers
+;; (rev-parse toplevel, realpath identity) live in the RESOLVED path space
+;; while a raw make-temporary-file result stays lexical (/tmp/...). Every
+;; fixture ROOT is normalized ONCE through normalize-path so all expected
+;; paths share git's resolved identity on every platform.
+(define (make-fixture-dir! name)
+  (normalize-path (make-temporary-file (format "~a-~~a" name) 'directory)))
+
 ;; The canonical two-tier workspace: outer planning dir WITHOUT any git
 ;; repository + a genuine nested q/ repository carrying the committed target
 ;; change. Returns (values outer q).
 (define (make-two-tier! #:outer-repo? [outer-repo? #f]
                         #:dir-name [dir-name "ws"]
                         #:ignore-q? [ignore-q? #f])
-  (define outer (make-temporary-file (format "~a-~~a" dir-name) 'directory))
+  (define outer (make-fixture-dir! dir-name))
   (define q (build-path outer "q"))
   (make-directory* q)
   (when outer-repo?
     (git-quiet! outer "init" "--quiet")
+    ;; hermetic commit identity: never depend on the caller's global gitconfig
+    ;; (CI-like envs pin GIT_CONFIG_GLOBAL=/dev/null)
+    (hermetic-identity! outer)
     (when ignore-q?
       (display-to-file "q/\n" (build-path outer ".gitignore") #:exists 'truncate)))
   ;; genuine nested product repository with a committed docs target
@@ -331,7 +344,7 @@
       ;; ----------------------------------------------------------
       (test-case "broken nested .git marker refuses; broken root marker refuses"
         (let ()
-          (define outer (make-temporary-file "broken-~a" 'directory))
+          (define outer (make-fixture-dir! "broken"))
           (dynamic-wind
            void
            (lambda ()
@@ -377,13 +390,14 @@
         (if (not GIT)
             (log-warning "r76: git unavailable; skipping spaces case")
             (let ()
-              (define outer (make-temporary-file "my r76 ws-~a" 'directory))
+              (define outer (make-fixture-dir! "my r76 ws"))
               (dynamic-wind
                void
                (lambda ()
                  (define q (build-path outer "q"))
                  (make-directory* (build-path q "docs"))
                  (git-quiet! q "init" "--quiet")
+                 (hermetic-identity! q)
                  (display-to-file "body\n" (build-path q "docs" "with space.md"))
                  (git-quiet! q "add" "-A")
                  (git-quiet! q "commit" "-qm" "baseline")
@@ -401,7 +415,7 @@
       ;; ----------------------------------------------------------
       (test-case "no repository: all resolvers answer #f without raising"
         (let ()
-          (define plain (make-temporary-file "plain-~a" 'directory))
+          (define plain (make-fixture-dir! "plain"))
           (dynamic-wind
            void
            (lambda ()
@@ -433,8 +447,8 @@
         (if (not GIT)
             (log-warning "r76: git unavailable; skipping explicit-context case")
             (let ()
-              (define outer-a (make-temporary-file "ctx-a-~a" 'directory))
-              (define outer-b (make-temporary-file "ctx-b-~a" 'directory))
+              (define outer-a (make-fixture-dir! "ctx-a"))
+              (define outer-b (make-fixture-dir! "ctx-b"))
               (dynamic-wind
                void
                (lambda ()
@@ -525,11 +539,12 @@
         (if (not GIT)
             (log-warning "r76: git unavailable; skipping plain-q case")
             (let ()
-              (define repo (make-temporary-file "monorepo-~a" 'directory))
+              (define repo (make-fixture-dir! "monorepo"))
               (dynamic-wind
                void
                (lambda ()
                  (git-quiet! repo "init" "--quiet")
+                 (hermetic-identity! repo)
                  (make-directory* (build-path repo "q" "src"))
                  (display-to-file "x" (build-path repo "q" "src" "m.rkt"))
                  (git-quiet! repo "add" "-A")
@@ -547,7 +562,7 @@
         (if (not GIT)
             (log-warning "r76: git unavailable; skipping publication selector case")
             (let ()
-              (define outer (make-temporary-file "pub-~a" 'directory))
+              (define outer (make-fixture-dir! "pub"))
               (dynamic-wind
                void
                (lambda ()

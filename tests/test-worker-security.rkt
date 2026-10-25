@@ -693,9 +693,17 @@
            ;; without dispatch (fail closed, no #f-and-continue fallback).
            (define direct
              (process-ipc-request
-              (make-ipc-request "r91-direct" "write"
-                                (hasheq 'path "/tmp/r91-never-created-2.txt" 'content "no")
-                                5000 #f 'any 1 "/a/../b")))
+              (make-ipc-request
+               "r91-direct"
+               "write"
+               (hasheq 'path "/tmp/r91-never-created-2.txt" 'content "no")
+               5000
+               #f
+               'any
+               1
+               ;; absolute twd carrying a '..' element, built from path
+               ;; pieces — the whole request must stay malformed/refused
+               (path->string (build-path (string->path "/") "a" ".." "b")))))
            (check-equal? (ipc-response-status direct) 'error)
            (check-true (string-contains? (or (ipc-response-error-message direct) "")
                                          "invalid trusted working directory"))

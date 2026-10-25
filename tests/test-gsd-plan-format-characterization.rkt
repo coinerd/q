@@ -202,7 +202,7 @@ Do the thing.
                       (check-false (load-plan-from-index tmp)))
                     (lambda () (rm-tmp-planning tmp))))
 
-    (test-case "existing declared arrow target loads as-is; no W<idx>-<slug> synthesis demanded (BUG-0082/R82 declared-identity supersedes the BUG-0023 W2 characterization)"
+    (test-case "existing declared arrow target loads as-is; no W<idx>-<slug> synthesis demanded (R82 declared identity supersedes BUG-0023 W2 pin)"
       (define plan-text "# Plan: Odd Name
 
 ## Waves

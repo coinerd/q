@@ -382,7 +382,7 @@
                                        (define r2
                                          (tool-find
                                           (hasheq 'path
-                                                  (string-append (path->string dir) "/s/.."))))
+                                                  (path->string (build-path dir "s" "..")))))
                                        (check-false (result-is-error? r2))
                                        (check-absolute-results! r2)
                                        (check-equal? (sort (result-content r1) string<?)

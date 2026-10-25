@@ -298,7 +298,7 @@ in-process modes. The contract (BUG-0092, R92):
    call lives in the `test` submodule. A file whose entry point is
    `module+ main` with no `test` submodule executes ZERO tests under
    `raco test` and still exits 0 (a vacuous green; named explicitly in the
-   v1.00.31-w7 release-preflight evidence), so a bare `raco test` pass
+   frozen wait-audit release-preflight evidence), so a bare `raco test` pass
    proves nothing for such files.
 2. **`module+ main` defers, never re-runs.** A direct `racket file.rkt`
    run reaches the SAME `test` submodule through `main`:
