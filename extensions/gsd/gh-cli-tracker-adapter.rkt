@@ -46,11 +46,15 @@
 ;; selected option. The same read also returns the bound field's option
 ;; list, so a stale or mistyped single-select option id can be refused
 ;; before any mutation. `gh` credentials stay in its own credential store.
+;; BUG-0074 (R74-LIVE): the fourth segment previously ended with six closing
+;; braces, leaving final brace depth 1 — GitHub rejected every execution with
+;; "Expected NAME ... at [1, 264]" and the adapter could never complete a live
+;; reconciliation. The seventh brace closes the top-level query selection set.
 (define item-query
   (string-append "query($id:ID!){node(id:$id){... on ProjectV2Item{"
                  "id project{id} content{... on Issue{number repository{nameWithOwner}}}"
                  " fieldValueByName(name:\"Status\"){... on ProjectV2ItemFieldSingleSelectValue{"
-                 "optionId field{... on ProjectV2SingleSelectField{id options{id}}}}}}}"))
+                 "optionId field{... on ProjectV2SingleSelectField{id options{id}}}}}}}}"))
 (define (nested-ref h keys)
   (for/fold ([value h]) ([key (in-list keys)])
     (and (hash? value) (hash-ref value key #f))))

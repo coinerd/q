@@ -22,10 +22,10 @@
                   task-conclusion-relevance-tags
                   task-conclusion-dependencies
                   ;; R99a: shared frozen recognizer re-exported for consumers of
-                  ;; this module. The deterministic fallback below is UNCHANGED
-                  ;; (R99b writer activation is HELD — output stays byte-identical).
-                  legacy-deterministic-fallback?)
-         racket/string)
+                  ;; this module. R99b (owner-authorized): the deterministic
+                  ;; fallback now emits INTERNAL 'provenance records; the frozen
+                  ;; recognizer keeps classifying only old-signature records.
+                  legacy-deterministic-fallback?))
 
 ;; ── Uncovered Entry Detection ──
 
@@ -43,19 +43,28 @@
 ;; ── Deterministic Fallback ──
 
 ;; Generate a deterministic fallback conclusion for an uncovered entry.
-;; v0.79.2 GAP-3: Accept optional content summary for richer fallback text.
-;; v0.95.18 F9: Blank/whitespace content treated as absent — use provenance fallback.
+;; v0.79.2 GAP-3: Accepted an optional content summary for richer fallback text.
+;; v0.95.18 F9: Blank/whitespace content treated as absent.
+;; R99b (BUG-0099, owner-authorized writer activation): the fallback is an
+;; INTERNAL 'provenance record — an honest provenance marker, never a
+;; fact-labeled raw excerpt. The text is a fixed sentence naming only the
+;; origin message id. content-summary is KEPT IN THE ARITY for call-site
+;; compatibility but is deliberately unused: no source excerpt, no summary
+;; and no "previously read file" claim may leak into the record. Records stay
+;; discoverable via the 'auto-distilled tag and the stable auto-<origin> id,
+;; and carry the explicit 'deterministic-fallback tag. They are provenance
+;; kind by CATEGORY (the frozen legacy recognizer keeps classifying only
+;; old-signature [Auto] records stored before this change).
 (define (make-deterministic-fallback msg-id current-state [content-summary #f])
-  (define trimmed (and content-summary (string-trim content-summary)))
+  ;; R99b: intentionally unused for the text (arity compatibility only).
+  (void content-summary)
   (task-conclusion (format "auto-~a" msg-id)
-                   (if (and trimmed (non-empty-string? trimmed))
-                       (format "[Auto] ~a" (substring trimmed 0 (min (string-length trimmed) 200)))
-                       (format "[Auto] Previously read file (origin: ~a)" msg-id))
-                   'fact
+                   (format "Source message ~a retained as provenance; no distilled insight available." msg-id)
+                   'provenance
                    (or current-state 'idle)
                    (list msg-id)
                    (current-seconds)
-                   '(auto-distilled)
+                   '(auto-distilled deterministic-fallback)
                    '()))
 
 ;; Generate fallback conclusions for all uncovered entries.

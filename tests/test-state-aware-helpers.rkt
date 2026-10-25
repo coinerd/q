@@ -22,7 +22,10 @@
                   task-conclusion
                   task-conclusion?
                   task-conclusion-text
-                  task-conclusion-origin-message-ids)
+                  task-conclusion-origin-message-ids
+                  provenance-kind?)
+         (only-in "../runtime/context-assembly/auto-distillation.rkt"
+                  generate-fallback-conclusions)
          (only-in "../util/fsm/fsm.rkt" fsm-state fsm-state?)
          "../runtime/context-assembly/state-aware-helpers.rkt")
 
@@ -308,6 +311,23 @@
                      (check-true (string-contains? (message-text r1) "[Conclusion replaces context] Curated insight"))
                      (check-false (string-contains? (message-text r1) "provenance"))
                      (check-true (string-contains? (message-text r2) "[Conclusion replaces context] Curated insight")))
+                   (test-case "R99b: activated writer's record replaces WS entry labeled provenance with the honest text"
+                     (define ws-msg (make-text-message 'assistant "long original file content"))
+                     (define record
+                       (car (generate-fallback-conclusions
+                             (list (message-id ws-msg)) 'implementation)))
+                     (check-true (provenance-kind? record))
+                     (check-false (string-contains? (task-conclusion-text record) "long original file content"))
+                     (define result (ws-entry->conclusion-or-self ws-msg (list record)))
+                     (define text (message-text result))
+                     (check-true (string-contains? text "[Source provenance replaces context]"))
+                     (check-true (string-contains? text "(unverified)"))
+                     (check-true (string-contains?
+                                  text
+                                  (format "Source message ~a retained as provenance; no distilled insight available."
+                                          (message-id ws-msg))))
+                     (check-false (string-contains? text "[Conclusion replaces context]"))
+                     (check-false (string-contains? text "long original file content")))
                    (test-case "R99a: insight replacement text unchanged (existing behavior)"
                      (define ws-msg (make-text-message 'assistant "long original file content"))
                      (define insight

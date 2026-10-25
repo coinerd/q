@@ -166,3 +166,72 @@
   (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
   (check-exn exn:fail? (lambda () ((github-adapter-set-board-field! adapter) board-params)))
   (check-equal? (length calls) 1))
+
+;; ── BUG-0074 regression (R74-LIVE) ─────────────────────────────────────────
+;; The live pass proved GitHub rejects the adapter's identity pre-read with
+;; "Expected NAME ... at [1, 264]": the appended item-query text had final
+;; brace depth 1 (one closing brace missing). Fake runners never parse the
+;; query, so the defect never surfaced at fixture level. This fixture asserts
+;; the EXACT query text the adapter sends: (a) it parses as a syntactically
+;; valid GraphQL document (tiny dependency-free structural sanity parser),
+;; and (b) it contains every identity field the readback verification checks.
+
+;; Dependency-free GraphQL sanity parse for the adapter's fixed-shape query:
+;; braces/parens/brackets balanced outside string literals, depth never
+;; negative, zero depth at end, and no empty selection/argument group.
+;; (Not a full GraphQL grammar — a structural gate sized to this document.)
+(define (graphql-sane? q)
+  (define (scan i in-string? depth paren bracket)
+    (cond
+      [(>= i (string-length q))
+       (and (not in-string?) (zero? depth) (zero? paren) (zero? bracket))]
+      [else
+       (define c (string-ref q i))
+       (cond
+         [(char=? c #\") (scan (add1 i) (not in-string?) depth paren bracket)]
+         [in-string? (scan (add1 i) in-string? depth paren bracket)]
+         [(char=? c #\{) (scan (add1 i) in-string? (add1 depth) paren bracket)]
+         [(char=? c #\}) (scan (add1 i) in-string? (sub1 depth) paren bracket)]
+         [(char=? c #\() (scan (add1 i) in-string? depth (add1 paren) bracket)]
+         [(char=? c #\)) (scan (add1 i) in-string? depth (sub1 paren) bracket)]
+         [(char=? c #\[) (scan (add1 i) in-string? depth paren (add1 bracket))]
+         [(char=? c #\]) (scan (add1 i) in-string? depth paren (sub1 bracket))]
+         [else (scan (add1 i) in-string? depth paren bracket)])]))
+  (and (string? q)
+       (not (string-contains? q "{}"))
+       (not (string-contains? q "()"))
+       (scan 0 #f 0 0 0)))
+
+(test-case "BUG-0074: the identity pre-read query is valid GraphQL and binds every verified identity field"
+  (define calls '())
+  (define (runner args)
+    (set! calls (append calls (list args)))
+    (cond
+      [(equal? (take args 2) '("api" "graphql"))
+       (values 0 (item-proof 9763 (if (= (length calls) 1) "inbox" "done123")) "")]
+      [else (values 0 "{\"id\":\"PVTI_item\"}" "")]))
+  (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
+  ((github-adapter-set-board-field! adapter) board-params)
+  (define graphql-call (findf (lambda (args) (equal? (take args 2) '("api" "graphql"))) calls))
+  (check-true (and graphql-call #t) "identity pre-read must run before any mutation")
+  (define query-arg (list-ref graphql-call 3))
+  (check-true (string-prefix? query-arg "query=") "query is passed via -f query=<text>")
+  (define query (substring query-arg (string-length "query=")))
+  ;; (a) The document must parse (GitHub rejected the malformed text).
+  (check-true (graphql-sane? query)
+              "query must be a balanced GraphQL document (BUG-0074: missing closing brace)")
+  ;; (b) Identity fields the readback verification depends on: item id,
+  ;; project id, issue number, repository nameWithOwner, the bound Status
+  ;; field, its option id and the option list for the membership pre-check.
+  (for ([needle
+         (in-list '("query($id:ID!){"
+                    "node(id:$id){"
+                    "... on ProjectV2Item{"
+                    "project{id}"
+                    "content{... on Issue{number repository{nameWithOwner}}}"
+                    "fieldValueByName(name:\"Status\"){"
+                    "... on ProjectV2ItemFieldSingleSelectValue{"
+                    "optionId"
+                    "field{... on ProjectV2SingleSelectField{id options{id}}}"))])
+    (check-true (string-contains? query needle)
+                (format "query must contain identity field ~s" needle))))

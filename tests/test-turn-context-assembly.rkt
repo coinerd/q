@@ -135,9 +135,11 @@
               "hash->session-config with empty hash should produce valid config"))
 
 ;; ---------------------------------------------------------------------------
-;; R99a (BUG-0099): the turn-context auto-distill augmentation path keeps the
-;; deterministic writer HELD — persisted fallbacks are recognized by the frozen
-;; recognizer and byte-identical to the pre-R99a writer output.
+;; R99b (BUG-0099, owner-authorized): the turn-context auto-distill
+;; augmentation path persists the ACTIVATED writer's honest internal
+;; 'provenance records (category-based provenance; the R99a HOLD byte pins
+;; were intentionally replaced). Old-signature records stay recognized via
+;; the frozen legacy recognizer.
 ;; ---------------------------------------------------------------------------
 
 (require (only-in "../runtime/context-assembly/turn-context.rkt"
@@ -163,6 +165,7 @@
                   task-conclusion-relevance-tags
                   task-conclusion-timestamp
                   legacy-deterministic-fallback?
+                  provenance-kind?
                   conclusion->hash)
          (only-in "../runtime/session/session-store-goal-task.rkt"
                   conclusion-hash->json-safe)
@@ -174,7 +177,7 @@
 (define (r99a-turn-msg id text)
   (make-message id #f 'user 'text (list (make-text-part text)) (current-seconds) (hasheq)))
 
-(test-case "R99a: prepare-turn-context-state fallbacks are recognized + byte-identical (writer HELD)"
+(test-case "R99b: prepare-turn-context-state persists the writer's honest provenance records (pinned)"
   (define ws (make-working-set))
   (working-set-add! ws "/tmp/r99a-file-a.rkt" "m1" 10)
   (define cfg (hash->session-config (hasheq 'working-set ws)))
@@ -190,17 +193,25 @@
               (agent-session-task-conclusions sess)))
     (check-equal? (length new-concs) 1)
     (define c (car new-concs))
-    ;; recognized legacy deterministic fallback
-    (check-true (legacy-deterministic-fallback? c))
-    ;; byte-identity pins: every field matches the frozen writer shape
+    ;; R99b: provenance by CATEGORY; the frozen legacy recognizer does not
+    ;; match the new (excerpt-free) text shape.
+    (check-true (provenance-kind? c))
+    (check-false (legacy-deterministic-fallback? c))
+    ;; field pins: every field matches the activated writer shape; the source
+    ;; message text ("parser code content") must NOT appear.
     (check-equal? (task-conclusion-id c) "auto-m1")
-    (check-equal? (task-conclusion-text c) "[Auto] parser code content")
-    (check-equal? (task-conclusion-category c) 'fact)
+    (check-equal? (task-conclusion-text c)
+                  "Source message m1 retained as provenance; no distilled insight available.")
+    (check-false (string-contains? (task-conclusion-text c) "parser code content"))
+    (check-equal? (task-conclusion-category c) 'provenance)
     (check-equal? (task-conclusion-origin-message-ids c) '("m1"))
-    (check-equal? (task-conclusion-relevance-tags c) '(auto-distilled))
-    ;; serialized store bytes identical to the pre-R99a writer (timestamp pinned)
+    (check-equal? (task-conclusion-relevance-tags c) '(auto-distilled deterministic-fallback))
+    ;; serialized store bytes pinned to the activated writer (timestamp pinned)
     (define pinned-record
-      (task-conclusion "auto-m1" "[Auto] parser code content" 'fact 'idle '("m1") 0 '(auto-distilled) '()))
+      (task-conclusion "auto-m1"
+                       "Source message m1 retained as provenance; no distilled insight available."
+                       'provenance 'idle '("m1") 0
+                       '(auto-distilled deterministic-fallback) '()))
     (define pinned (jsexpr->string (conclusion-hash->json-safe (conclusion->hash pinned-record))))
     (define actual (jsexpr->string
                     (conclusion-hash->json-safe

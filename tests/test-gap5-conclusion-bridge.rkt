@@ -49,7 +49,9 @@
          (only-in "../runtime/context-assembly/task-conclusion.rkt"
                   task-conclusion
                   legacy-deterministic-fallback?
-                  provenance-kind?))
+                  provenance-kind?)
+         (only-in "../runtime/context-assembly/auto-distillation.rkt"
+                  generate-fallback-conclusions))
 
 (define (r99a-fallback-conclusion id origin-id)
   (task-conclusion (format "auto-~a" origin-id)
@@ -117,3 +119,34 @@
     (check-equal? (length (memory-hash-backend-items backend)) 1)))
 
 (run-tests r99a-bridge-no-promotion-tests)
+
+;; ---------------------------------------------------------------------------
+;; R99b (BUG-0099): the ACTIVATED writer's provenance records are excluded
+;; from high-value semantic export (no promotion), without suppressing
+;; genuine insights in a mixed batch.
+;; ---------------------------------------------------------------------------
+(define-test-suite r99b-bridge-writer-record-tests
+  (test-case "R99b: writer-produced provenance record is NOT promoted to memory"
+    (define record
+      (car (generate-fallback-conclusions (list "ws-9") 'implementation)))
+    (check-true (provenance-kind? record))
+    (define backend (make-memory-hash-backend))
+    (parameterize ([current-conclusion-to-memory-bridge-enabled #t])
+      (persist-high-value-conclusions! (list record) #:backend backend #:session-id "s"))
+    (check-equal? (length (memory-hash-backend-items backend)) 0))
+
+  (test-case "R99b: mixed batch — writer record excluded, genuine decision exported"
+    (define record
+      (car (generate-fallback-conclusions (list "ws-10") 'implementation)))
+    (define backend (make-memory-hash-backend))
+    (parameterize ([current-conclusion-to-memory-bridge-enabled #t])
+      (persist-high-value-conclusions!
+       (list record
+             (task-conclusion "c-dec2" "Real decision from LLM" 'decision 'planning '() (current-seconds) '() '()))
+       #:backend backend
+       #:session-id "s"))
+    (define items (memory-hash-backend-items backend))
+    (check-equal? (length items) 1)
+    (check-equal? (memory-item-content (car items)) "Real decision from LLM")))
+
+(run-tests r99b-bridge-writer-record-tests)

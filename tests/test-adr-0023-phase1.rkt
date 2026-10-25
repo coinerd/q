@@ -68,8 +68,11 @@
         ;; Should fall back to deterministic fallback
         (check-true (and (list? results) (= (length results) 1))
                     "Should produce fallback conclusions when LLM returns invalid result")
-        (check-true (string-contains? (task-conclusion-text (car results)) "[Auto]")
-                    "Fallback conclusions should have [Auto] prefix")))
+        ;; R99b: the deterministic fallback is an honest internal provenance
+        ;; record — no [Auto] excerpt text.
+        (check-equal? (task-conclusion-text (car results))
+                      "Source message msg-1 retained as provenance; no distilled insight available."
+                      "Fallback must be the honest provenance record")))
 
     (test-case "GAP-1: auto-distill falls back when LLM fn throws"
       (define mock-distill-error
@@ -78,8 +81,8 @@
                      [current-llm-distill-fn mock-distill-error])
         (define results (auto-distill '("msg-1") '() 'exploration))
         (check-true (and (list? results) (= (length results) 1)) "Should fall back on LLM error")
-        (check-true (string-contains? (task-conclusion-text (car results)) "[Auto]")
-                    "Fallback should be deterministic")))))
+        (check-equal? (task-conclusion-category (car results)) 'provenance
+                      "Fallback should be the deterministic provenance record")))))
 
 ;; ═══════════════════════════════════════════════════════════════
 ;; GAP-3: Tool result content passed to auto-extraction
