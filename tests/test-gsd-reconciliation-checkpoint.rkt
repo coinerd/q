@@ -18,8 +18,10 @@
 
 (require rackunit
          rackunit/text-ui
+         json
          racket/file
          racket/list
+         racket/logging
          (only-in "helpers/honest-delivery-fixture.rkt" test-delivered-reader)
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
@@ -30,7 +32,9 @@
          "../extensions/gsd/delivery-handoff.rkt"
          "../extensions/gsd/effect-ports.rkt"
          "../extensions/gsd/delivery-finalize.rkt"
+         "../extensions/gsd/gh-cli-tracker-adapter.rkt"
          "../extensions/gsd/reconciliation-checkpoint.rkt"
+         "../extensions/gsd/tracker-production-wiring.rkt"
          "../extensions/gsd/tracker-reconciliation.rkt")
 
 ;; ── Fixtures ──────────────────────────────────────────────────
@@ -457,4 +461,212 @@
   ;; The done branch returns whatever on-delivered returned (the orchestrator
   ;; passes its loop thunk), so the durable wave status is the real assertion.
   (check-true (void? result))
+  (delete-directory/files dir #:must-exist? #f))
+
+;; ── R74 production composition ─────────────────────────────────────────────
+;; The reconciler handed to run-delivery-finalization below is the SHIPPED
+;; production resolver: the real settings opt-in read from .q/config.json,
+;; the real identity binding, the real adapter construction and a real LIVE
+;; github port. Only the `gh` subprocess (the runner) and the authenticated
+;; controller readback are faked — no real GitHub is reachable.
+
+(define (write-tracker-opt-in! dir plan-id)
+  (make-directory* (build-path dir ".q"))
+  (call-with-output-file
+   (build-path dir ".q" "config.json")
+   (lambda (out)
+     (write-json
+      (hasheq 'gsd
+              (hasheq 'tracker
+                      (hasheq 'live
+                              #t
+                              'plan-id
+                              plan-id
+                              'wave
+                              0
+                              'repository
+                              "owner/repo"
+                              'issue-number
+                              74
+                              'board-field
+                              "Status"
+                              'board-value
+                              "Done"
+                              'project-item-id
+                              "PVTI_item"
+                              'project-id
+                              "PVT_project"
+                              'field-id
+                              "PVTSSF_status"
+                              'option-id
+                              "done123")))
+      out)
+     (newline out))
+   #:exists 'replace))
+
+(define (item-readback-json option-id)
+  (format
+   (string-append
+    "{\"data\":{\"node\":{\"id\":\"PVTI_item\","
+    "\"project\":{\"id\":\"PVT_project\"},"
+    "\"content\":{\"number\":74,\"repository\":{\"nameWithOwner\":\"owner/repo\"}},"
+    "\"fieldValueByName\":{\"field\":{\"id\":\"PVTSSF_status\","
+    "\"options\":[{\"id\":\"inbox\"},{\"id\":\"inprogress\"},{\"id\":\"done123\"}]},"
+    "\"optionId\":\"~a\"}}}}}")
+   option-id))
+
+;; Records every gh argv in `log`. The identity pre-read attests the item in
+;; the bound project/repo/issue with Status=Inbox; after the board mutation
+;; the post-read attests Status=Done. #:close-state simulates an issue whose
+;; close does or does not take effect upstream.
+(define (make-composition-runner log #:close-state [close-state "closed"])
+  (lambda (argv)
+    (set-box! log (append (unbox log) (list argv)))
+    (cond
+      [(equal? (take argv 2) '("api" "graphql"))
+       (values 0 (item-readback-json (if (= (length (unbox log)) 1) "inbox" "done123")) "")]
+      [(equal? (take argv 2) '("project" "item-edit"))
+       (values 0 "{\"id\":\"PVTI_item\"}" "")]
+      [else
+       (values 0 (format "{\"number\":74,\"state\":\"~a\"}" close-state) "")])))
+
+(define (composition-reconciler dir plan-id log #:close-state [close-state "closed"])
+  (resolve-live-tracker-reconciler
+   dir
+   plan-id
+   0
+   #:adapter-maker
+   (lambda (#:live? live? #:repository repository)
+     (check-equal? live? #t "the production adapter requires explicit live authority")
+     (check-equal? repository "owner/repo")
+     (make-gh-cli-tracker-adapter #:live? live?
+                                  #:repository repository
+                                  #:runner (make-composition-runner log #:close-state close-state)))))
+
+(test-case "production composition: finalization after durable DONE drives the real reconciler to gh with exact identity"
+  (define-values (dir pid merge-sha rec) (make-parked-wave-with-proof))
+  (write-tracker-opt-in! dir pid)
+  (define gh-log (box '()))
+  (define on-delivered (box #f))
+  (run-delivery-finalization
+   dir
+   pid
+   rec
+   0
+   merge-sha
+   '()
+   #:on-delivered (lambda () (set-box! on-delivered #t))
+   #:tracker-reconciler (composition-reconciler dir pid gh-log)
+   #:delivery-reader (delivered-proof-for pid merge-sha))
+  (check-true (unbox on-delivered) "a reconciled pass still runs the post-DONE bookkeeping")
+  (check-equal? (campaign-wave-status (car (campaign-record-waves (load-campaign-record dir pid))))
+                'done)
+  ;; Exact command list: the authenticated identity pre-read, the board
+  ;; mutation bound to the exact opaque IDs, the verified post-read, then the
+  ;; issue close against the bound repository and issue. Nothing else runs,
+  ;; and the reconciled outcome itself proves the port was live (a dry-run
+  ;; port would have been refused before any read).
+  (define argvs (unbox gh-log))
+  (check-equal? (map (lambda (argv) (take argv 2)) argvs)
+                (list '("api" "graphql")
+                      '("project" "item-edit")
+                      '("api" "graphql")
+                      '("api" "repos/owner/repo/issues/74")))
+  (check-equal? (list-ref (list-ref argvs 0) 5) "id=PVTI_item")
+  (check-equal? (drop (list-ref argvs 1) 2)
+                (list "--id"
+                      "PVTI_item"
+                      "--project-id"
+                      "PVT_project"
+                      "--field-id"
+                      "PVTSSF_status"
+                      "--single-select-option-id"
+                      "done123"
+                      "--format"
+                      "json"))
+  (check-equal? (list-ref (list-ref argvs 3) 5) "state=closed")
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "a tracker refusal in the composed pass is visible and non-fatal to the established DONE"
+  (define-values (dir pid merge-sha rec) (make-parked-wave-with-proof))
+  (write-tracker-opt-in! dir pid)
+  (define gh-log (box '()))
+  (define on-delivered (box #f))
+  (define warnings (box '()))
+  (with-intercepted-logging
+   (lambda (entry) (set-box! warnings (cons (vector-ref entry 1) (unbox warnings))))
+   (lambda ()
+     (run-delivery-finalization
+      dir
+      pid
+      rec
+      0
+      merge-sha
+      '()
+      #:on-delivered (lambda () (set-box! on-delivered #t))
+      #:tracker-reconciler (composition-reconciler dir pid gh-log #:close-state "open")
+      #:delivery-reader (delivered-proof-for pid merge-sha)))
+   'warning)
+  ;; The board mutation succeeded and was verified, but the close's response
+  ;; did not attest state=closed: exactly the four commands of the composed
+  ;; pass ran, and the pass is refused as a whole (its board action stays
+  ;; visible in the checkpoint result the finalization logs).
+  (check-equal? (map (lambda (argv) (take argv 2)) (unbox gh-log))
+                (list '("api" "graphql")
+                      '("project" "item-edit")
+                      '("api" "graphql")
+                      '("api" "repos/owner/repo/issues/74")))
+  (check-true (unbox on-delivered) "the refusal must not abort the post-DONE bookkeeping")
+  (check-equal? (campaign-wave-status (car (campaign-record-waves (load-campaign-record dir pid))))
+                'done
+                "a tracker refusal can never move the delivered wave off done")
+  (check-true
+   (and
+    (findf
+     (lambda (msg)
+       (and (string? msg)
+            (regexp-match? #rx"tracker reconciliation blocked for plan" msg)
+            (regexp-match? #rx"wave 0" msg)
+            (regexp-match? #rx"wave remains delivered" msg)))
+     (unbox warnings))
+    #t)
+   "the refusal is visible to the operator")
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "absent opt-in: finalization reconciles nothing, consults no readback, and still completes DONE"
+  (define-values (dir pid merge-sha rec) (make-parked-wave-with-proof))
+  ;; No .q/config.json tracker binding exists in this campaign directory, so
+  ;; the production fallback resolver resolves to #f.
+  (define on-delivered (box #f))
+  (define reader-consulted (box 0))
+  (define warnings (box '()))
+  (with-intercepted-logging
+   (lambda (entry) (set-box! warnings (cons (vector-ref entry 1) (unbox warnings))))
+   (lambda ()
+     (run-delivery-finalization
+      dir
+      pid
+      rec
+      0
+      merge-sha
+      '()
+      #:on-delivered (lambda () (set-box! on-delivered #t))
+      #:delivery-reader
+      (lambda (_base _plan _wave)
+        (set-box! reader-consulted (add1 (unbox reader-consulted)))
+        (error 'test "no live tracker is configured"))))
+   'warning)
+  (check-true (unbox on-delivered) "completion is reachable with reconciliation simply unconfigured")
+  (check-equal? (unbox reader-consulted)
+                0
+                "no reconciler is configured, so no authenticated readback is consulted")
+  (check-equal? (campaign-wave-status (car (campaign-record-waves (load-campaign-record dir pid))))
+                'done)
+  (check-true
+   (and
+    (findf
+     (lambda (msg) (and (string? msg) (regexp-match? #rx"tracker reconciliation not-configured" msg)))
+     (unbox warnings))
+    #t)
+   "the unconfigured pass is visible to the operator")
   (delete-directory/files dir #:must-exist? #f))

@@ -27,6 +27,7 @@
                   make-error-result
                   tool-result?
                   tool-result-content
+                  tool-result-details
                   tool-result-is-error?
                   tool-call?
                   tool-call-name
@@ -36,7 +37,13 @@
          (only-in "../tools/permission-gate.rkt"
                   make-default-permission-config
                   make-permissive-permission-config)
-         "../tools/scheduler.rkt")
+         "../tools/scheduler.rkt"
+         ;; R94 (BUG-0094): real save-conclusion tool through hook admission
+         (only-in "../tools/registry-table.rkt" register-tools-from-specs!)
+         (only-in "../tools/registry-table/skill-tools.rkt" skill-tool-specs)
+         (only-in "../runtime/context-assembly/task-conclusion.rkt"
+                  task-conclusion-category
+                  task-conclusion-relevance-tags))
 
 ;; ============================================================
 ;; Helpers
@@ -86,6 +93,29 @@
 ;; require a permissive permission config to run without approval.
 (define (make-test-exec-context)
   (make-exec-context #:permission-config (make-permissive-permission-config)))
+
+;; R94 (BUG-0094): registry holding only the real save-conclusion tool.
+(define (make-save-conclusion-reg)
+  (define reg (make-tool-registry))
+  (register-tools-from-specs! reg skill-tool-specs #:only '("save-conclusion"))
+  reg)
+
+;; R94: exec-context that captures scheduler/tool events in a box.
+(define (make-event-capturing-ctx events)
+  (make-exec-context
+   #:permission-config (make-permissive-permission-config)
+   #:event-publisher
+   (lambda (event-type payload)
+     (set-box! events (cons (cons event-type payload) (unbox events))))))
+
+(define (deprecated-events events)
+  (filter (lambda (e) (equal? (car e) "tool.deprecated")) events))
+
+;; R94: error results carry an EMPTY details hash, so "no stored conclusion"
+;; means the '_conclusion key is absent — not that details is #f.
+(define (stored-conclusion result)
+  (define d (tool-result-details result))
+  (and (hash? d) (hash-ref d '_conclusion #f)))
 
 ;; ============================================================
 ;; Tests
@@ -458,6 +488,83 @@
       (check-equal? (unbox max-concurrent)
                     1
                     "file mutation queue prevents concurrent writes to same file"))
+
+    ;; ============================================================
+    ;; R94 (BUG-0094): save-conclusion JSON wire types through hook
+    ;; final admission. Amendments committed by tool-call-pre are
+    ;; revalidated post-hook; normalization happens only inside the
+    ;; handler, so blocked admissions leave no _conclusion and no
+    ;; deprecation event.
+    ;; ============================================================
+
+    (test-case "R94: pre-hook amendment to valid JSON string args executes and normalizes"
+      (define reg (make-save-conclusion-reg))
+      (define events (box '()))
+      (define result
+        (car (scheduler-result-results
+              (run-tool-batch
+               (list (make-tool-call "r94-ok" "save-conclusion" (hasheq 'content "original")))
+               reg
+               #:hook-dispatcher
+               (make-hook-dispatcher
+                'tool-call-pre
+                (lambda (_payload)
+                  (hook-amend
+                   (hasheq 'args
+                           (hasheq 'content "hooked"
+                                   'category "decision"
+                                   'tags (list "r94" "hook"))))))
+               #:exec-context (make-event-capturing-ctx events)))))
+      (check-false (tool-result-is-error? result)
+                   (format "amended JSON strings should succeed: ~a" (error-text result)))
+      (define details (tool-result-details result))
+      (check-not-false (and details (hash-ref details '_conclusion #f)))
+      (check-eq? (task-conclusion-category (hash-ref details '_conclusion)) 'decision)
+      (check-equal?
+       (task-conclusion-relevance-tags (hash-ref details '_conclusion))
+       '(r94 hook))
+      (check-equal? (length (deprecated-events (unbox events))) 1))
+
+    (test-case "R94: hook amendment with invalid category type blocked at final revalidation"
+      (define reg (make-save-conclusion-reg))
+      (define events (box '()))
+      (define result
+        (car (scheduler-result-results
+              (run-tool-batch
+               (list (make-tool-call "r94-bad" "save-conclusion" (hasheq 'content "x")))
+               reg
+               #:hook-dispatcher
+               (make-hook-dispatcher
+                'tool-call-pre
+                (lambda (_payload)
+                  (hook-amend (hasheq 'args (hasheq 'content "x" 'category 42)))))
+               #:exec-context (make-event-capturing-ctx events)))))
+      (check-true (tool-result-is-error? result) "number category must not execute")
+      (check-regexp-match #rx"validate-tool-args" (error-text result))
+      (check-false (stored-conclusion result) "no _conclusion detail after blocked admission")
+      (check-equal? (deprecated-events (unbox events)) '() "no deprecation event"))
+
+    (test-case "R94: hook amendment with invalid tag elements handler-rejected, no effect"
+      (define reg (make-save-conclusion-reg))
+      (define events (box '()))
+      (define result
+        (car (scheduler-result-results
+              (run-tool-batch
+               (list (make-tool-call "r94-tags" "save-conclusion" (hasheq 'content "x")))
+               reg
+               #:hook-dispatcher
+               (make-hook-dispatcher
+                'tool-call-pre
+                (lambda (_payload)
+                  (hook-amend
+                   (hasheq 'args (hasheq 'content "x" 'tags (list "ok" 42))))))
+               #:exec-context (make-event-capturing-ctx events)))))
+      (check-true (tool-result-is-error? result) "malformed tag element must not execute")
+      ;; passes the array-typed wire schema, so rejection is handler-structured
+      (check-false (regexp-match? #rx"validate-tool-args" (error-text result)))
+      (check-regexp-match #rx"tags" (error-text result))
+      (check-false (stored-conclusion result) "no _conclusion detail on rejection")
+      (check-equal? (deprecated-events (unbox events)) '() "no deprecation event"))
 
     ;; ============================================================
     ;; TS8: Preflight hook throws exception

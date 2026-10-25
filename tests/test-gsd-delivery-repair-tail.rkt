@@ -717,12 +717,17 @@
       ;; IS the git root), but wave docs were authored for the outer <base>/q
       ;; layout ("q/extensions/..."). The mapping must strip the layout
       ;; prefix — otherwise no target can ever match git's unprefixed names.
+      ;; R76 (BUG-0076): the branch context's repo-root is authenticated by
+      ;; REAL git (rev-parse toplevel/realpath) before any evidence gate runs,
+      ;; so the fixture root must be an actual git repository; the diff reads
+      ;; stay on the injected runner below.
       (define root (make-temporary-file "wt-layout-~a" 'directory))
       (dynamic-wind
        void
        (lambda ()
          (make-directory* (build-path root "extensions" "gsd"))
          (display-to-file "x" (build-path root "extensions" "gsd" "adapter.rkt") #:exists 'truncate)
+         (git-quiet! root "init" "--quiet")
          (define plan-struct (load-plan** root '("q/extensions/gsd/adapter.rkt") "exit 0"))
          (define fake-sha (make-string 40 #\1))
          (parameterize ([current-gsd-git-runner (lambda (_root args)

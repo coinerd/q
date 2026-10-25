@@ -28,6 +28,7 @@
                   reconcile-repair-tail-receipt!
                   update-delivery-journal!)
          "../extensions/gsd/delivery-coordinator.rkt"
+         (only-in "../extensions/gsd/git-root-layout.rkt" exn:fail:git-root?)
          (only-in (file "../util/version.rkt") q-version))
 ;; Red-first (repo convention): the v1.00.33 W0 generation-aware binding
 ;; helpers are required dynamically until the coordinator module provides
@@ -1210,11 +1211,17 @@
                              ;; No .git marker in base-dir: legacy child q/ root.
                              (check-equal? (artifact-root-selector dir plan 0 #:run-git no-git)
                                            (build-path dir "q"))
-                             ;; A Git marker means enumeration failure must never fall back.
+                             ;; R76 (BUG-0076): a git marker whose repository is
+                             ;; unusable now REFUSES with the typed diagnostic
+                             ;; (still fail-closed: the artifact-provenance gate
+                             ;; maps the refusal to a blocked stop), so
+                             ;; enumeration can never inspect a corrupt checkout.
                              (make-directory (build-path dir "q"))
                              (display-to-file "gitdir: missing" (build-path dir "q" ".git"))
-                             (check-false (artifact-root-selector dir plan 0 #:run-git no-git))
+                             (check-exn exn:fail:git-root?
+                                        (lambda () (artifact-root-selector dir plan 0 #:run-git no-git)))
                              (delete-file (build-path dir "q" ".git"))
                              (make-directory (build-path dir ".git"))
-                             (check-false (artifact-root-selector dir plan 0 #:run-git no-git))))))
+                             (check-exn exn:fail:git-root?
+                                        (lambda () (artifact-root-selector dir plan 0 #:run-git no-git)))))))
    (lambda () (delete-directory/files fixture-root #:must-exist? #f))))

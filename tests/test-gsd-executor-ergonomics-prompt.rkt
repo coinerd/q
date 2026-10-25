@@ -21,6 +21,7 @@
          racket/string
          racket/runtime-path
          "helpers/supplemental-go-fixture.rkt"
+         (only-in "helpers/private-fixture-templates.rkt" git-quiet!)
          (only-in "../extensions/gsd/supplemental-evidence-controller.rkt" load-supplemental-pointer)
          "../extensions/gsd/plan-snapshot.rkt"
          (only-in "../extensions/gsd/prompts.rkt" executor-reanchor-prompt)
@@ -181,10 +182,14 @@
   (make-directory* (build-path dir "q" "tui" "keybindings"))
   (call-with-output-file (build-path dir "q" "tui" "keybindings" "key-dispatch.rkt")
                          (lambda (out) (display ";; key-dispatch\n" out)))
+  ;; R76 (BUG-0076): the prompt's git-root contract lines resolve through the
+  ;; layout-aware helper, which authenticates REAL work trees — a bare .git
+  ;; marker is no longer a root. The fixtures therefore git-init the layout
+  ;; they simulate (base checkout, or nested q/ two-tier workspace).
   (when git-at-base?
-    (make-directory* (build-path dir ".git")))
+    (git-quiet! dir "init" "--quiet"))
   (when git-at-q?
-    (make-directory* (build-path dir "q" ".git")))
+    (git-quiet! (build-path dir "q") "init" "--quiet"))
   (call-with-output-file
    (build-path dir ".planning" "PLAN.md")
    (lambda (out)

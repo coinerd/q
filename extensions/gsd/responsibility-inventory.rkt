@@ -1041,8 +1041,23 @@
                         "../../util/json/checksum"
                         "evidence-repair-format"
                         "supplemental-evidence-authority"))
-   ;; Known-path journal helper; the submodule exposes immutable inspection and
-   ;; storage support, not public caller-selected authorization callbacks.
+   ;; BUG-0090: storage/validation core moved verbatim from the journal so the
+   ;; module graph stays journal -> claim -> core, a static acyclic DAG with no
+   ;; lazy first-use dynamic-require. Refusals keep the journal's source symbol
+   ;; (like supplemental-evidence-store.rkt); the crash-cut parameter moved here.
+   (make-entry "supplemental-evidence-store-core.rkt"
+               'persistence
+               '(fs-read mkdir make-param path-ops)
+               '(current-supplemental-journal-crash-cut)
+               '("json" "racket/file"
+                        "racket/list"
+                        "racket/path"
+                        "supplemental-evidence-store"
+                        "supplemental-evidence-format"
+                        "supplemental-evidence-authority"
+                        "../gsd-planning/execution-policy"))
+   ;; Known-path journal helper; requires the shared store core instead of the
+   ;; journal back-edge, and re-provides its immutable inspection surface.
    (make-entry "supplemental-disposition-claim.rkt"
                'persistence
                '(sha256 path-ops)
@@ -1054,7 +1069,7 @@
                                "supplemental-disposition-policy"
                                "../../util/json/checksum"
                                "evidence-repair-format"
-                               "supplemental-evidence-journal"))
+                               "supplemental-evidence-store-core"))
    (make-entry "supplemental-evidence-disposition.rkt"
                'campaign-state
                '(git parameterize dynamic-require sha256)
@@ -1077,18 +1092,20 @@
                                "supplemental-evidence-controller"
                                "../gsd-planning/execution-policy"))
    ;; Protected one-shot operation journal: OS-locked CAS + write-ahead intents.
+   ;; BUG-0090: storage/validation effects (fs-read/mkdir/make-param) and the
+   ;; crash-cut parameter moved to supplemental-evidence-store-core; the lazy
+   ;; dynamic-require seam is gone (static journal -> claim -> core requires).
    (make-entry "supplemental-evidence-journal.rkt"
                'persistence
-               '(fs-write fs-read fs-delete mkdir dir-list make-param path-ops dynamic-require)
-               '(current-supplemental-journal-crash-cut)
-               '("json" "racket/file"
-                        "racket/list"
-                        "racket/path"
-                        "racket/runtime-path"
-                        "supplemental-evidence-store"
-                        "supplemental-evidence-format"
-                        "supplemental-evidence-authority"
-                        "../gsd-planning/execution-policy"))
+               '(fs-write fs-delete dir-list path-ops)
+               '()
+               '("racket/file"
+                 "racket/path"
+                 "supplemental-evidence-store"
+                 "supplemental-evidence-store-core"
+                 "supplemental-disposition-claim"
+                 "supplemental-evidence-format"
+                 "supplemental-evidence-authority"))
    ;; Effective C1 owned-Verify capture and private authority reload. Git,
    ;; verification capture and proof retention delegate to their owners.
    (make-entry "supplemental-evidence-proof.rkt"

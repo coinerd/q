@@ -18,6 +18,8 @@
          racket/file
          racket/format
          racket/list
+         racket/path
+         racket/runtime-path
          racket/string
          json
          (only-in "../util/version.rkt" q-version)
@@ -96,11 +98,11 @@
                  "no unjustified real sleeps may be recorded anywhere, least of all unit-fast")
    (define raw-files (hash-ref audit 'raw-sleep-files))
    (define sleep-files
-     (for/list ([f (in-list (walk-rkt-files "tests"))]
+     (for/list ([f (in-list (walk-rkt-files TESTS-DIR))]
                 #:when (positive? (count-raw-sleeps f)))
        f))
    (for ([f (in-list sleep-files)])
-     (define key (path->string f))
+     (define key f)
      (define row (hash-ref raw-files (string->symbol key) #f))
      (check-true (hash? row) (format "wait-audit: missing row for ~a" key))
      (when (hash? row)
@@ -138,25 +140,42 @@
  (test-case "wait-audit lint: remediated families have benchmark manifests"
    (define audit (call-with-input-file WAIT-AUDIT-PATH read-json))
    (for ([rf (in-list (hash-ref audit 'remediated-families))])
-     (check-true (file-exists? (hash-ref rf 'benchmark))
+     (check-true (file-exists? (build-path q-root (hash-ref rf 'benchmark)))
                  (format "missing benchmark manifest for ~a" (hash-ref rf 'file))))))
 
 ;; ============================================================
 ;; Lint support
 ;; ============================================================
 
+;; BUG-0092 (R92): every filesystem/audit path is anchored to THIS source
+;; file via define-runtime-path, never to the process CWD. raco test binds
+;; CWD to the test file's directory, the grouped in-process runner does the
+;; same (in-process-cwd), and a direct `racket` run inherits the caller's
+;; CWD — the anchored paths below give all three modes identical meaning.
+;; The audit itself stays frozen: this suite reads it, never regenerates or
+;; suppresses it.
+(define-runtime-path q-root-rel "..")
+(define q-root (simple-form-path q-root-rel))
+(define-runtime-path this-test-file "test-deterministic-clock.rkt")
+
 ;; The wait audit is a FROZEN v1.00.29-campaign artifact (that campaign's W1
 ;; produced it). Its path was derived from q-version, which only held while the
-;; canonical version was 1.00.29. Pinned literally, reason recorded; the recorded
-;; `wave` field below is asserted against the same frozen value.
-(define WAIT-AUDIT-PATH "artifacts/test-runtime/v1.00.29-w1/wait-audit.json")
+;; canonical version was 1.00.29. Pinned literally (anchored to the repo root),
+;; reason recorded; the recorded `wave` field below is asserted against the
+;; same frozen value.
+(define WAIT-AUDIT-PATH
+  (build-path q-root "artifacts" "test-runtime" "v1.00.29-w1" "wait-audit.json"))
+(define TESTS-DIR (build-path q-root "tests"))
 (define raw-sleep-rx #px"\\(sleep\\s")
 (define allowed-dispositions '("remediated" "retained-canary" "not-a-test-sleep" "verified-clean"))
 
+;; Walks the anchored tests tree and returns q-root-relative strings, so the
+;; row keys stay byte-identical with the frozen audit's repo-relative keys in
+;; every execution mode (raco/direct/grouped).
 (define (walk-rkt-files dir)
   (append (for/list ([p (in-list (directory-list dir #:build? #t))]
                      #:when (and (file-exists? p) (regexp-match? #rx"[.]rkt$" p)))
-            p)
+            (path->string (find-relative-path q-root p)))
           (for/fold ([acc '()])
                     ([p (in-list (directory-list dir #:build? #t))]
                      #:when (and (directory-exists? p)
@@ -164,11 +183,30 @@
                                               '("compiled" ".git" "node_modules")))))
             (append acc (walk-rkt-files p)))))
 
+;; f is a repo-relative string (from walk-rkt-files or a frozen audit row);
+;; resolve it against the anchored repo root, not the process CWD.
 (define (count-raw-sleeps f)
   (call-with-input-file
-   f
+   (build-path q-root f)
    (lambda (in) (for/sum ([line (in-lines in)]) (length (regexp-match* raw-sleep-rx line))))))
 
+;; ============================================================
+;; Standalone execution (BUG-0092)
+;; ============================================================
+;;
+;; Exactly ONE suite invocation lives in the `test` submodule. `raco test`
+;; runs it directly; a direct `racket` run defers to the same submodule via
+;; `main`, so the suite is never executed twice. On failures the submodule
+;; RAISES (it never merely returns the integer, never exits): the raise
+;; makes a direct racket execution exit nonzero, while the grouped
+;; in-process host records the failure per file and survives.
+(module+ test
+  (define failure-count (run-tests deterministic-clock-suite))
+  (unless (zero? failure-count)
+    (error 'test-deterministic-clock "~a test failure(s)" failure-count)))
+
 (module+ main
-  (define failures (run-tests deterministic-clock-suite))
-  (exit (if (zero? failures) 0 1)))
+  ;; Anchored self path + resolved `(test)` submodule path: CWD-independent
+  ;; under `raco test`, direct `racket`, and grouped in-process execution.
+  (dynamic-require (make-resolved-module-path (cons (simple-form-path this-test-file) '(test)))
+                   #f))

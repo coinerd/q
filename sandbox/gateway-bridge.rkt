@@ -267,7 +267,18 @@
       (if wd
           (hash-remove args 'working-directory)
           args))
-    (define effective-wd (or coordinator-wd (and (string? wd) wd)))
+    ;; R91/BUG-0091 (frozen contract §2.2.4): the trusted producer normalizes
+    ;; path objects to JSON strings before serialization; JSON cannot encode
+    ;; path objects. The trusted channel carries ONLY the coordinator-supplied
+    ;; value — never a model/hook-supplied argument.
+    (define trusted-wd
+      (and coordinator-wd
+           (if (path? coordinator-wd) (path->string coordinator-wd) coordinator-wd)))
+    ;; Effective-cwd precedence (§2.2.3): the wire working-dir field is the
+    ;; coordinator twd when present, else the string-tolerated model
+    ;; `working-directory` (BUG-0089). Only trusted-wd ever reaches the twd
+    ;; field, so only it can extend worker roots.
+    (define effective-wd (or trusted-wd (and (string? wd) wd)))
     (define req
       (make-ipc-request req-id
                         tool-name
@@ -276,7 +287,7 @@
                         effective-wd
                         required-capability
                         IPC-SCHEMA-VERSION
-                        coordinator-wd))
+                        trusted-wd))
     (define gw (ensure-worker!))
     (send-request! gw req timeout-ms)))
 
@@ -374,4 +385,4 @@
           [ensure-worker! (-> gateway-worker?)]
           [execute-via-worker (-> any/c hash?)]
           [execute-tool-via-worker
-           (->* (string? hash? symbol?) (#:coordinator-wd (or/c string? #f)) ipc-response?)]))
+           (->* (string? hash? symbol?) (#:coordinator-wd (or/c path-string? #f)) ipc-response?)]))

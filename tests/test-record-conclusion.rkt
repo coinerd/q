@@ -112,6 +112,29 @@
       (define tags (hash-ref (cdr ev) 'tags #f))
       (check-equal? tags '(a b)))
 
+    ;; ============================================================
+    ;; R94 (BUG-0094) compat: save-conclusion JSON-type normalization is
+    ;; scoped to the save-conclusion handler boundary. record_conclusion
+    ;; production logic is untouched; lock in its existing acceptance of
+    ;; string categories (JSON wire) and symbol categories/tags (internal).
+    ;; ============================================================
+
+    (test-case "R94 compat: record_conclusion preserves internal symbol categories"
+      (define-values (result events)
+        (call-tool-with-ctx record_conclusion (hasheq 'text "compat" 'category 'decision)))
+      (check-false (tool-result-is-error? result))
+      (define ev (assoc "tool.record_conclusion.completed" events))
+      (check-not-false ev)
+      (check-equal? (hash-ref (cdr ev) 'category #f) 'decision))
+
+    (test-case "R94 compat: record_conclusion normalizes string tags and preserves symbol tags"
+      (define-values (result events)
+        (call-tool-with-ctx record_conclusion (hasheq 'text "compat" 'tags '("wire" internal))))
+      (check-false (tool-result-is-error? result))
+      (define ev (assoc "tool.record_conclusion.completed" events))
+      (check-not-false ev)
+      (check-equal? (hash-ref (cdr ev) 'tags #f) '(wire internal)))
+
     ;; ── Session event handler integration ──
 
     (test-case "session handler persists conclusion from event"
@@ -177,3 +200,33 @@
       (check-equal? (task-conclusion-origin-message-ids c) '("msg-42")))))
 
 (run-tests suite)
+
+;; ---------------------------------------------------------------------------
+;; R99a (BUG-0099): public/internal category split — provenance is NOT
+;; writable through the public record surface (five categories only).
+;; ---------------------------------------------------------------------------
+
+(define r99a-record-suite
+  (test-suite "R99a record-conclusion public category split"
+
+    (test-case "R99a: record_conclusion rejects category provenance (string)"
+      (define result (call-tool record_conclusion (hasheq 'text "x" 'category "provenance")))
+      (check-true (tool-result-is-error? result)))
+
+    (test-case "R99a: record_conclusion rejects category 'provenance (symbol)"
+      (define result (call-tool record_conclusion (hasheq 'text "x" 'category 'provenance)))
+      (check-true (tool-result-is-error? result))
+      (check-true (regexp-match? #rx"Invalid category" (format "~a" (tool-result-content result)))))
+
+    (test-case "R99a: record_conclusion still accepts the five public categories"
+      (for ([cat (in-list '(fact decision pattern error-cause test-result))])
+        (define result (call-tool record_conclusion (hasheq 'text "x" 'category cat)))
+        (check-false (tool-result-is-error? result) (format "~a should be accepted" cat))))
+
+    (test-case "R99a: no record_conclusion.completed event for provenance category"
+      (define-values (result events)
+        (call-tool-with-ctx record_conclusion (hasheq 'text "x" 'category "provenance")))
+      (check-true (tool-result-is-error? result))
+      (check-equal? events '()))))
+
+(run-tests r99a-record-suite)

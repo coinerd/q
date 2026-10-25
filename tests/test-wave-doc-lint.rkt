@@ -156,6 +156,46 @@
                       (check-equal? (test-doc-lint dir) '()))
                     (lambda () (cleanup! dir))))
 
+    (test-case "R75: lint stays silent on grammar-preserved Verify sections"
+      ;; The lint's 'verify claim is ONLY "section exists and is non-empty".
+      ;; BUG-0075 declaration grammar (prose-before-bullets, unclosed fences,
+      ;; non-shell fences) is owned by the delivery verifier's named
+      ;; refusals — the advisory lint must neither double-report nor
+      ;; false-positive on sections the verifier will handle.
+      (define (lint-verify-section body)
+        (define dir
+          (make-planning-with-doc
+           (lambda ()
+             (displayln "# Wave 0")
+             (displayln "Status: Inbox")
+             (newline)
+             (displayln "## Files")
+             (displayln "- File: q/src/a.rkt")
+             (newline)
+             (displayln "## Verify")
+             (displayln body)
+             (newline)
+             (displayln "## Done")
+             (displayln "- delivered"))))
+        (dynamic-wind
+         void
+         (lambda ()
+           (map wave-doc-violation-section
+                (lint-wave-doc (read-wave-doc dir 0 "no-sections"))))
+         (lambda () (cleanup! dir))))
+      (check-equal?
+       (lint-verify-section
+        (string-append "The gates below must all pass.\n"
+                       "- `racket tests/a.rkt` green"))
+       '()
+       "prose-before-bullets Verify sections are lint-clean")
+      (check-equal? (lint-verify-section "```sh\nracket tests/a.rkt\n")
+                    '()
+                    "unclosed fences are the verifier's refusal, not a lint violation")
+      (check-equal? (lint-verify-section "```json\n{}\n```")
+                    '()
+                    "non-shell fences are the verifier's refusal, not a lint violation"))
+
     (test-case "one named warning per doc at /go entry; warnings never block"
       (define dir (make-temp-planning))
       (dynamic-wind

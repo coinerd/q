@@ -323,6 +323,31 @@
                   (format "fallback must be separately described: ~a" verify-detail))
       (check-true (string-contains? verify-detail "raco make")
                   "the derived gate command is visible in the evidence")
+      (cleanup-tmp base))
+
+    (test-case "R75: malformed/unclosed fence refuses WITHOUT the compile-gate fallback"
+      ;; The Racket target changed, so a derived compile gate IS derivable —
+      ;; a malformed declaration must still refuse loudly instead of being
+      ;; silently replaced by the fallback.
+      (define base (make-tmp-git-repo))
+      (make-git-branch! base "feature/issue-42-wave")
+      (make-git-file-change! base)
+      (write-plan! base 0 "Wave Zero" "zero")
+      (write-wave-doc! base
+                       0
+                       "zero"
+                       '("q/ui-core/preferences.rkt")
+                       "```sh\ntest -f q/ui-core/preferences.rkt\n")
+      (write-state! base 0 "42")
+      (define plan (load-plan** base '("q/ui-core/preferences.rkt")))
+      (define result
+        (parameterize ([current-gsd-verification-registry (make-verification-registry)])
+          (run-delivery-verification base plan 0)))
+      (check-false (delivery-verification-approved? result))
+      (define message (delivery-verification-message result))
+      (check-true (string-contains? message "unclosed") (format "message: ~a" message))
+      (check-false (string-contains? message "compile-gate")
+                   (format "malformed fence must not reach the fallback: ~a" message))
       (cleanup-tmp base))))
 
 (module+ main

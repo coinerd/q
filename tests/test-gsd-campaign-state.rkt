@@ -243,6 +243,36 @@
       (check-equal? (campaign-wave-descriptor-doc-path w0) "waves/W0-own-zero.md")
       (delete-directory/files dir))
 
+    (test-case "BUG-0082: campaign identity hashes the DECLARED file — the stale twin never feeds it"
+      ;; Same declared-mapping shape as BUG-0081, plus a stale synthesized
+      ;; twin (waves/W2-carrier-wave.md) whose bytes differ from the carrier.
+      ;; Rewriting the DECLARED carrier re-identifies the plan; rewriting the
+      ;; stale twin (or the nonexistent synthesized name) does not.
+      (define dir (make-temporary-file "campaign-0082-~a" 'directory))
+      (make-directory (build-path dir ".planning"))
+      (make-directory (build-path dir ".planning" "waves"))
+      (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                             (lambda (out)
+                               (display "# Plan: Carrier\n\n## Waves\n" out)
+                               (display "- [Inbox] W2: Carrier wave → waves/W0-carrier.md\n" out))
+                             #:exists 'truncate)
+      (define (put! rel text)
+        (call-with-output-file (build-path dir ".planning" rel)
+                               (lambda (out) (display text out))
+                               #:exists 'truncate))
+      (put! "waves/W0-carrier.md" "# Wave 0\nStatus: Inbox\n\nBody carrier v1.\n")
+      (put! "waves/W2-carrier-wave.md" "# Wave 2\nStatus: Inbox\n\nSTALE twin bytes.\n")
+      (define id-before (campaign-plan-id (migrate-campaign! dir)))
+      ;; stale twin bytes never feed identity
+      (put! "waves/W2-carrier-wave.md" "# Wave 2\nStatus: Inbox\n\nSTALE twin bytes v2.\n")
+      (check-equal? (campaign-plan-id (migrate-campaign! dir)) id-before "stale twin is not identity")
+      ;; the declared carrier's bytes ARE identity
+      (put! "waves/W0-carrier.md" "# Wave 0\nStatus: Inbox\n\nBody carrier v2.\n")
+      (check-not-equal? (campaign-plan-id (migrate-campaign! dir))
+                        id-before
+                        "declared carrier bytes re-identify the plan")
+      (delete-directory/files dir))
+
     (test-case "global constraints hash participates in identity"
       (define m1
         (make-campaign-manifest 1

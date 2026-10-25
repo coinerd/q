@@ -33,16 +33,22 @@
 ;;   - Recency: max 20 points, based on age in seconds
 ;;   - Tag overlap: +5 per matching tag
 ;;   - Has dependencies: +3 (indicates curated conclusion)
+;; R99a: provenance-kind entries (recognized legacy deterministic fallbacks and
+;; future internal 'provenance records) always score 0 — they receive no
+;; state/recency/tag/dependency boosts and rank below every insight. Ties are
+;; broken deterministically in rank-and-budget (insight before provenance).
 (define (score-conclusion c current-state active-tags [now (current-seconds)])
-  (define state-score
-    (if (and current-state (eq? (task-conclusion-fsm-state-origin c) current-state)) 50 0))
-  (define cat-score (category-score c))
-  (define age (- now (task-conclusion-timestamp c)))
-  (define recency-score (max 0 (- 20 (quotient age 300)))) ; decay over 5min intervals
-  (define c-tags (task-conclusion-relevance-tags c))
-  (define tag-score (* 5 (for/sum ([t (in-list c-tags)]) (if (member t active-tags) 1 0))))
-  (define dep-score (if (pair? (task-conclusion-dependencies c)) 3 0))
-  (+ state-score cat-score recency-score tag-score dep-score))
+  (if (provenance-kind? c)
+      0
+      (let* ([state-score
+              (if (and current-state (eq? (task-conclusion-fsm-state-origin c) current-state)) 50 0)]
+             [cat-score (category-score c)]
+             [age (- now (task-conclusion-timestamp c))]
+             [recency-score (max 0 (- 20 (quotient age 300)))] ; decay over 5min intervals
+             [c-tags (task-conclusion-relevance-tags c)]
+             [tag-score (* 5 (for/sum ([t (in-list c-tags)]) (if (member t active-tags) 1 0)))]
+             [dep-score (if (pair? (task-conclusion-dependencies c)) 3 0)])
+        (+ state-score cat-score recency-score tag-score dep-score))))
 
 ;; ── Ranking ──
 
@@ -57,18 +63,32 @@
                          [token-estimate
                           (lambda (c) (* 4 (+ 10 (string-length (task-conclusion-text c)))))])
   (define now (current-seconds))
+  ;; R99a: decorate with input index for a total deterministic order:
+  ;; score desc → insight before provenance → original input order.
   (define scored
-    (for/list ([c (in-list conclusions)])
-      (cons c (score-conclusion c current-state active-tags now))))
-  ;; Sort by score descending
-  (define sorted (sort scored > #:key cdr))
+    (for/list ([c (in-list conclusions)]
+               [i (in-naturals)])
+      (cons i (cons c (score-conclusion c current-state active-tags now)))))
+  (define sorted
+    (sort scored
+          (lambda (a b)
+            (define sa (cddr a))
+            (define sb (cddr b))
+            (cond
+              [(> sa sb) #t]
+              [(< sa sb) #f]
+              ;; tie: insights (provenance-kind? = #f) first
+              [(not (provenance-kind? (cadr a))) (provenance-kind? (cadr b))]
+              [(not (provenance-kind? (cadr b))) #f]
+              ;; full tie: stable input order
+              [else (< (car a) (car b))]))))
   ;; Greedy fill within budget
   (define-values (selected _tokens)
     (for/fold ([acc '()]
                [used 0])
               ([sc (in-list sorted)]
                #:break (> used max-tokens))
-      (define c (car sc))
+      (define c (cadr sc))
       (define cost (token-estimate c))
       (if (<= (+ used cost) max-tokens)
           (values (cons c acc) (+ used cost))

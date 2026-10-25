@@ -45,6 +45,7 @@
                   load-plan*
                   load-plan**
                   cleanup-tmp)
+         (only-in "../extensions/gsd/plan-types.rkt" gsd-plan make-gsd-wave)
          (only-in "../extensions/gsd/delivery-verifier.rkt"
                   run-delivery-verification
                   delivery-verification?
@@ -54,7 +55,8 @@
                   current-gsd-delivery-verify-command
                   current-gsd-delivery-verify-timeout-sec
                   current-gsd-git-runner
-                  normalize-declared-verify)
+                  normalize-declared-verify
+                  verify-declaration-extraction)
          (only-in "../extensions/gsd/events.rkt"
                   make-event-collector
                   set-gsd-event-bus!
@@ -175,6 +177,27 @@
                       " && racket scripts/metrics.rkt --lint")))
     (test-case "BUG-0070: prose-only bullets do not become shell"
       (check-equal? (normalize-declared-verify "- unknown stays `unknown`.") ""))
+
+    ;; R75 (BUG-0075): the parser now preserves section newlines, so a
+    ;; prose-first bullet section reaches the normalizer DECORATED and only
+    ;; its authored spans normalize — the historical "; " join hid every
+    ;; bullet anchor after the first line and passed the whole section to
+    ;; /bin/sh verbatim.
+    (test-case "R75: prose-before-bullets extracts spans instead of becoming shell"
+      (check-equal?
+       (normalize-declared-verify (string-append "The gates below must all pass before delivery.\n"
+                                                 "- `racket tests/test-shell-risk.rkt` green.\n"
+                                                 "- `metrics.rkt --lint` green."))
+       "racket tests/test-shell-risk.rkt && racket scripts/metrics.rkt --lint"))
+    (test-case "R75: unsupported command-shaped spans fail visibly among valid ones"
+      (define declaration "- `racket a.rkt` green\n- `grep -L forbidden q/report.txt` clean\n")
+      (check-equal? (normalize-declared-verify declaration) "")
+      (check-equal? (hash-ref (car (hash-ref (verify-declaration-extraction declaration) 'rejections))
+                              'reason)
+                    'grep-exit-semantics))
+    (test-case "R75: test and POSIX bracket spans are executable vocabulary"
+      (check-equal? (normalize-declared-verify "- `test -f a.rkt`\n- `[ -f b.rkt ]` exists")
+                    "test -f a.rkt && [ -f b.rkt ]"))
 
     (test-case "default delivery verify deadline is 14400s (bounded, multi-hour)"
       ;; Declared gates legitimately run for hours; the default deadline must
@@ -370,6 +393,81 @@
                    "branch check must fail on main against the expected issue branch")
       (check-true (string-contains? (cddr branch-entry) "expected=feature/issue-7-wave")
                   "expected branch resolves through the declared carrier path")
+      (cleanup-tmp base))
+
+    (test-case "BUG-0082: stale-collision — the declared carrier's Verify drives the gate"
+      ;; A stale synthesized twin (waves/W2-canary.md) with a WEAK verify
+      ;; exists next to the declared carrier. The verifier reparse must
+      ;; execute the carrier's marker, never the twin's — and must approve
+      ;; on the carrier's passing gate.
+      (define base (make-synthetic-repo))
+      (call-with-output-file
+       (build-path base ".planning" "PLAN.md")
+       (lambda (out)
+         (display (string-append "# Plan\n\n"
+                                 "- [Inbox] W0: carrier → waves/W0-carrier-seven.md\n"
+                                 "- [Inbox] W2: Canary → waves/W0-carrier-seven.md\n")
+                  out))
+       #:exists 'truncate)
+      (write-wave-doc! base
+                       0
+                       "carrier-seven"
+                       '("q/ui-core/preferences.rkt")
+                       "printf 'strong-carrier-decision-4a9\\n'")
+      (write-wave-doc! base 2 "canary" '("q/stale-only.rkt") "printf 'weak-stale-decision-6b0\\n'")
+      (define plan
+        (gsd-plan (list (make-gsd-wave 2
+                                       "Canary"
+                                       ""
+                                       (list "q/ui-core/preferences.rkt")
+                                       '()
+                                       "fallback"
+                                       (list "done")))
+                  ""
+                  '()
+                  '()))
+      (define result
+        (parameterize ([current-gsd-git-runner (fake-git-facts)]
+                       [current-gsd-verification-registry (make-verification-registry)])
+          (run-delivery-verification base plan 2)))
+      (check-true (delivery-verification-approved? result) (delivery-verification-message result))
+      (define verify-entry (assoc "verify" (delivery-verification-evidence result)))
+      (check-true (string-contains? (cddr verify-entry) "strong-carrier-decision-4a9"))
+      (check-false (string-contains? (cddr verify-entry) "weak-stale-decision-6b0"))
+      (cleanup-tmp base))
+
+    (test-case "BUG-0082: missing declared doc refuses by name, never the plan fallback"
+      ;; The index row declares a carrier that is missing; a stale synthesized
+      ;; twin exists AND the hand-built plan struct carries a nonempty verify
+      ;; fallback. The verify check must refuse naming the exact declared path
+      ;; and must never execute the twin or the fallback.
+      (define base (make-synthetic-repo))
+      (call-with-output-file
+       (build-path base ".planning" "PLAN.md")
+       (lambda (out) (display "# Plan\n\n- [Inbox] W2: Canary → waves/W0-carrier-seven.md\n" out))
+       #:exists 'truncate)
+      (write-wave-doc! base 2 "canary" '("q/stale-only.rkt") "printf 'weak-stale-decision-6b0\\n'")
+      (define plan
+        (gsd-plan (list (make-gsd-wave 2
+                                       "Canary"
+                                       ""
+                                       (list "q/ui-core/preferences.rkt")
+                                       '()
+                                       "printf 'decision-fallback-1e8\\n'"
+                                       (list "done")))
+                  ""
+                  '()
+                  '()))
+      (define result
+        (parameterize ([current-gsd-git-runner (fake-git-facts)]
+                       [current-gsd-verification-registry (make-verification-registry)])
+          (run-delivery-verification base plan 2)))
+      (check-false (delivery-verification-approved? result))
+      (check-true (string-contains? (delivery-verification-message result)
+                                    ".planning/waves/W0-carrier-seven.md"))
+      (check-false (string-contains? (delivery-verification-message result)
+                                     "weak-stale-decision-6b0"))
+      (check-false (string-contains? (delivery-verification-message result) "decision-fallback-1e8"))
       (cleanup-tmp base))
 
     (test-case "approves git-root-relative wave files (no q/ prefix)"

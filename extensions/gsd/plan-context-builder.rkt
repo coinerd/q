@@ -20,7 +20,8 @@
          racket/system
          "plan-types.rkt"
          "effect-ports.rkt"
-         "composition-root.rkt")
+         "composition-root.rkt"
+         "git-root-layout.rkt")
 
 (provide build-enriched-plan-ctx
          infer-capabilities-from-files
@@ -37,62 +38,29 @@
 ;; Git Root Resolution (moved before parameter for forward reference)
 ;; ============================================================
 
+;; R76 (BUG-0076): canonical resolution delegates to the shared layout-aware
+;; helper (git-root-layout.rkt) — Git's own rev-parse answers, never marker
+;; sniffing. Supported layouts: a direct repository (start inside one), and
+;; the nested-q two-tier workspace ONLY when start/q is a real nested
+;; repository rooted exactly at start/q. A decoy outer repository alongside
+;; an independent nested q refuses (ambiguous identity); a .git marker with
+;; a broken/unusable repository refuses; no repository at all still yields
+;; #f (unchanged no-repo contract). Refusals raise exn:fail:git-root with
+;; root+reason diagnostics; callers that must tolerate them catch the typed
+;; error and fail closed.
 (define (find-git-root-dir start-dir)
-  (define start-path
-    (path->complete-path (if (path? start-dir)
-                             start-dir
-                             (string->path start-dir))))
-  (define (has-git? dir)
-    (define git-marker (build-path dir ".git"))
-    (or (directory-exists? git-marker) (file-exists? git-marker)))
-  (define q-sub (build-path start-path "q"))
-  (cond
-    [(has-git? start-path) start-path]
-    [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
-    [else
-     (let loop ([dir start-path])
-       (cond
-         [(has-git? dir) dir]
-         [else
-          (define-values (parent _sub _dir?) (split-path dir))
-          (if (and parent (path? parent) (not (equal? parent dir)))
-              (loop parent)
-              #f)]))]))
+  (delivery-root-or-raise start-dir))
 
-;; ============================================================
-;; Git Root Resolution (F-7) — moved here from go-orchestrator (B2b)
-;; Uses `current-git-root` parameter defined below for the last-resort
-;; fallback. Canonical home: plan-context-builder owns git-root resolution.
-;; ============================================================
-
+;; F-7 variant: identical resolution, with the process-level
+;; current-git-root parameter as the last-resort explicit fallback (an
+;; operator-configured override; marker-checked as before). Refusals still
+;; raise — the fallback exists only for the no-repository case.
 (define (find-git-root start-dir)
-  (define start-path
-    (path->complete-path (if (path? start-dir)
-                             start-dir
-                             (string->path start-dir))))
-  (define (has-git? dir)
-    (define git-marker (build-path dir ".git"))
-    (or (directory-exists? git-marker) (file-exists? git-marker)))
-  (define q-sub (build-path start-path "q"))
-  (cond
-    [(has-git? start-path) start-path]
-    [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
-    [else
-     (define walked (find-git-root-walking-up start-path has-git?))
-     (if walked
-         walked
-         (let ([param-root (current-git-root)])
-           (if (and param-root (has-git? param-root)) param-root #f)))]))
-
-(define (find-git-root-walking-up start-path has-git?)
-  (let loop ([dir start-path])
-    (cond
-      [(has-git? dir) dir]
-      [else
-       (define-values (parent _sub _dir?) (split-path dir))
-       (if (and parent (path? parent) (not (equal? parent dir)))
-           (loop parent)
-           #f)])))
+  (define walked (find-git-root-dir start-dir))
+  (if walked
+      walked
+      (let ([param-root (current-git-root)])
+        (if (and param-root (git-root-marker? param-root)) param-root #f))))
 
 (define (git-available? base-dir)
   (define git (find-executable-path "git"))
@@ -118,8 +86,10 @@
 ;; Defaults to (find-git-root-dir (current-directory)).
 ;; Callers can parameterize this for testing or to override resolution.
 (define current-git-root
-  (make-parameter (find-git-root-dir (current-directory))
-                  (lambda (val)
+  (make-parameter
+   (with-handlers ([exn:fail? (lambda (_) #f)])
+     (find-git-root-dir (current-directory)))
+   (lambda (val)
                     (cond
                       [(path? val) val]
                       [(string? val) (string->path val)]
@@ -187,16 +157,35 @@
 ;; resolution also delegates to the port's find-root so system-adapters is
 ;; the single production implementation (find-git-root-dir stays as the
 ;; exported compatibility/test API).
+;; current-git-root parameter remains the public override seam. Root
+;; resolution also delegates to the port's find-root so system-adapters is
+;; the single production implementation (find-git-root-dir stays as the
+;; exported compatibility/test API).
+;; R76 (BUG-0076): resolution goes through the shared layout-aware helper
+;; (the port's find-root remains the last fallback for injected ports), and
+;; every declared target must resolve INSIDE the selected delivery root
+;; before any git invocation. An outside or escaping target raises the
+;; typed git-root refusal naming the root — the refusal deliberately is NOT
+;; swallowed into an empty excerpt, so a target that would silently read
+;; another root fails loudly instead. Pure path validation happens BEFORE
+;; the guarded git call.
 ;; Returns a string (possibly empty when no changes or no git).
 (define (get-diff-excerpt base-dir files)
   (if (or (null? files) (not base-dir))
       ""
-      (with-handlers ([exn:fail? (lambda (_) "")])
+      (let ()
         (define git-port (gsd-effect-ports-git (current-gsd-effect-ports)))
-        (define git-root (or (current-git-root) ((gsd-git-port-find-root git-port) base-dir)))
+        (define git-root
+          (or (current-git-root)
+              (delivery-root-or-raise base-dir)
+              ((gsd-git-port-find-root git-port) base-dir)))
         (cond
           [(not git-root) ""]
-          [else ((gsd-git-port-head-summary git-port) git-root files)]))))
+          [else
+           (for ([f (in-list files)])
+             (require-delivery-target-in-root! git-root f #:base base-dir #:what "wave diff target"))
+           (with-handlers ([exn:fail? (lambda (_) "")])
+             ((gsd-git-port-head-summary git-port) git-root files))]))))
 
 ;; Attempt to read test summary from session artifacts.
 ;; v0.99.24 W1: Checks for cached test results file. Returns a descriptive

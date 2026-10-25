@@ -119,7 +119,12 @@
       ;; +1 BUG-0088 public promotion audit validator;
       ;; +1 BUG-0088 supplemental worker descriptor/projections.
       ;; +4 fixed disposition policy/claim/store/backend owners.
-      (check-equal? (length inventory) 104 "100 existing modules + four disposition owners"))
+      ;; +1 BUG-0090 storage/validation core extracted from the journal
+      ;; (supplemental-evidence-store-core).
+      (check-equal?
+       (length inventory)
+       105
+       "100 existing modules + four disposition owners + BUG-0090 journal store core"))
 
     (test-case "supplemental worker descriptor projects policy without dispatch authority"
       (define descriptor (hash-ref inventory-map "supplemental-author-contract.rkt"))

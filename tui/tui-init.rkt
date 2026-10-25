@@ -20,6 +20,7 @@
 (require racket/async-channel
          "../tui/terminal.rkt"
          (only-in "../tui/stderr-guard.rkt" install-stderr-guard! restore-stderr-guard!)
+         (only-in "../tui/diagnostic-surface.rkt" diagnostic-status-line)
          "../tui/state.rkt"
          "../tui/scrollback.rkt"
          "../tui/render.rkt"
@@ -78,7 +79,10 @@
                        ;; terminal-bridge + tui-ctx (both opaque)
                        [run-tui-loop (-> any/c any/c any)]
                        ;; Testable approval-channel lifecycle extent used by both entry points.
-                       [call-with-tui-approval-channel (-> (-> any/c) any/c)]))
+                       [call-with-tui-approval-channel (-> (-> any/c) any/c)]
+                       ;; BUG-0098/R98: the installed stderr-guard callback factory
+                       ;; (tui-ctx opaque; callback = message x capture-status -> any).
+                       [make-stderr-status-callback (-> any/c (-> any/c (or/c #f path-string?) any))]))
 
 ;; ============================================================
 ;; PIPE-01 (v0.98.13): Bridge event struct → hash for action handler.
@@ -177,9 +181,15 @@
      (unbox agent-session-box)
      #:on-created (lambda (campaign-sess)
                     (set-box! (tui-ctx-agent-session-box ctx) campaign-sess)
+                    ;; R102: the fresh campaign session attaches with a NEW
+                    ;; monotone attachment generation, so queued events from
+                    ;; any earlier session can neither set nor clear this
+                    ;; foreground's verification state.
                     (set-box! (tui-ctx-ui-state-box ctx)
                               (initial-ui-state #:session-id (session-id campaign-sess)
-                                                #:model-name (dict-ref rt-config 'model-name #f)))
+                                                #:model-name (dict-ref rt-config 'model-name #f)
+                                                #:attachment-generation
+                                                (next-attachment-generation!)))
                     (set-box! (tui-ctx-needs-redraw-box ctx) #t))
      #:before-run (lambda (prompt)
                     ;; The box is shared with cmd-ctx: /retry can find the last wave
@@ -308,6 +318,21 @@
 ;; Phase 3: Install UI callbacks + subscribe events (W-19)
 ;; ============================================================
 
+;; BUG-0072/R98: the installed stderr-guard status callback for ctx.
+;; Guard contract (BUG-0098): (callback message captured-spill-path) where
+;; captured-spill-path is the guard's real spill path when THIS record was
+;; captured to the private spill file, or #f when the spill write failed.
+;; The status text itself (sanitization, grapheme/cell-safe 160-char preview,
+;; truncation marker + real spill pointer, capture-failure disclosure) lives
+;; in tui/diagnostic-surface.rkt. Bounded: sets one status string; never
+;; stores a copy of the record.
+(define (make-stderr-status-callback ctx)
+  (lambda (msg captured-spill-path)
+    (define b (tui-ctx-ui-state-box ctx))
+    (set-box! b
+              (set-status-message (unbox b)
+                                  (diagnostic-status-line msg captured-spill-path)))))
+
 (define (init-tui-terminal ctx)
   ;; Install UI callbacks and subscribe to runtime events.
   (install-ui-callbacks!
@@ -339,14 +364,7 @@
                                (log-q-tui-init-warning
                                 "stderr guard install failed (frame corruption risk): ~a"
                                 (exn-message e)))])
-    (install-stderr-guard!
-     #:on-error-record
-     (lambda (msg)
-       (define b (tui-ctx-ui-state-box ctx))
-       (set-box! b
-                 (set-status-message (unbox b)
-                                     (format "error: ~a"
-                                             (substring msg 0 (min (string-length msg) 160))))))))
+    (install-stderr-guard! #:on-error-record (make-stderr-status-callback ctx)))
   (tui-ctx-init-terminal! ctx))
 
 ;; ============================================================

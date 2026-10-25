@@ -21,6 +21,7 @@
          (only-in racket/string string-contains? string-suffix? string-trim)
          "../sandbox/ipc-protocol.rkt"
          "../sandbox/worker-tools.rkt"
+         (only-in "../sandbox/worker-dispatch.rkt" process-ipc-request)
          "../sandbox/worker-main.rkt"
          (only-in "../tools/builtins/bash-safety.rkt" sanctioned-scratch-root)
          "../util/config-paths.rkt")
@@ -60,6 +61,25 @@
                         "any"
                         'schema-version
                         IPC-SCHEMA-VERSION)))
+
+;; R91/BUG-0091: same wire shape with the coordinator trust channel.
+(define (make-trusted-request-json req-id tool args #:wd [wd #f] #:twd [twd #f])
+  (define base
+    (hash 'request-id
+          req-id
+          'tool-name
+          tool
+          'arguments
+          args
+          'timeout-ms
+          5000
+          'working-dir
+          wd
+          'capability
+          "any"
+          'schema-version
+          IPC-SCHEMA-VERSION))
+  (jsexpr->string (if twd (hash-set base 'trusted-working-dir twd) base)))
 
 (define (parse-response resp)
   (ipc-response-status resp))
@@ -525,7 +545,373 @@
                 (map path->string (directory-list backup-dir))))
       (check-true (> (length backups) 0) "delete-lines should create a backup")
       (check-equal? (file->string (build-path backup-dir (car (sort backups string>?))))
-                    "line1\nline2\nline3"))))
+                    "line1\nline2\nline3"))
+
+    ;; ── R91/BUG-0091: trusted working directory adversarial matrix ──
+    ;; Fixture: spawn root A, coordinator-owned sibling B, an outside victim
+    ;; file whose bytes must survive every refusal. All cases run through the
+    ;; real request line (decoder → dispatch) or the real request struct.
+    (test-case "R91: trusted-only request extends roots without chdir"
+      (define base (make-temporary-file "r91-sec-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define spawn-a (build-path base "a"))
+         (define owned-b (build-path base "b"))
+         (make-directory* spawn-a)
+         (make-directory* owned-b)
+         (parameterize ([current-allowed-roots (list spawn-a)])
+           (define cwd-before (current-directory))
+           ;; twd present, wd absent: roots extend, cwd does NOT move.
+           (define resp
+             (process-request-line
+              (make-trusted-request-json
+               "r91-only"
+               "write"
+               (hash 'path (path->string (build-path owned-b "f.txt")) 'content "trusted-only")
+               #:twd (path->string owned-b))))
+           (check-equal? (ipc-response-status resp) 'ok (ipc-response-error-message resp))
+           (check-equal? (file->string (build-path owned-b "f.txt")) "trusted-only")
+           (check-equal? (current-directory) cwd-before "trust is never a chdir channel")
+           ;; The extension is request-scoped: outside the request the roots
+           ;; are unchanged and a follow-up request without twd is refused.
+           (check-equal? (current-allowed-roots) (list spawn-a))
+           (define follow-up
+             (process-request-line
+              (make-trusted-request-json
+               "r91-only-2"
+               "write"
+               (hash 'path (path->string (build-path owned-b "g.txt")) 'content "no"))))
+           (check-equal? (ipc-response-status follow-up) 'error)
+           (check-false (file-exists? (build-path owned-b "g.txt")))))
+       (lambda () (delete-directory/files base #:must-exist? #f))))
+
+    (test-case "R91: model working-dir alone never becomes trust"
+      (define base (make-temporary-file "r91-sec-model-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define spawn-a (build-path base "a"))
+         (define owned-b (build-path base "b"))
+         (make-directory* spawn-a)
+         (make-directory* owned-b)
+         (parameterize ([current-allowed-roots (list spawn-a)]
+                        [current-directory spawn-a])
+           ;; The model-supplied cwd is honored as plain cwd (bash feature)…
+           (define pwd-resp
+             (process-request-line
+              (make-trusted-request-json
+               "r91-model-pwd"
+               "bash"
+               (hash 'command "pwd")
+               #:wd (path->string owned-b))))
+           (check-equal? (ipc-response-status pwd-resp) 'ok)
+           (check-equal?
+            (string-trim (format "~a" (ipc-response-content pwd-resp)))
+            (path->string owned-b))
+           ;; …but it must not extend roots: writes into B are refused.
+           (define write-resp
+             (process-request-line
+              (make-trusted-request-json
+               "r91-model-write"
+               "write"
+               (hash 'path (path->string (build-path owned-b "x.txt")) 'content "no"))))
+           (check-equal? (ipc-response-status write-resp) 'error)
+           (check-true (string-contains? (or (ipc-response-error-message write-resp) "")
+                                         "not allowed"))
+           (check-false (file-exists? (build-path owned-b "x.txt")))
+           ;; Missing-trust owned request: the owned directory B as wd without
+           ;; coordinator trust denies the write (never gains roots by omission).
+           (check-equal? (ipc-response-status write-resp) 'error)))
+       (lambda () (delete-directory/files base #:must-exist? #f))))
+
+    (test-case "R91: coordinator B + model cwd C cannot extend to C"
+      (define base (make-temporary-file "r91-sec-mix-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define spawn-a (build-path base "a"))
+         (define owned-b (build-path base "b"))
+         (define model-c (build-path base "c"))
+         (make-directory* spawn-a)
+         (make-directory* owned-b)
+         (make-directory* model-c)
+         (parameterize ([current-allowed-roots (list spawn-a)])
+           (define req-args (hash 'path (path->string (build-path model-c "x.txt")) 'content "no"))
+           (define resp
+             (process-request-line
+              (make-trusted-request-json "r91-mix" "write" req-args
+                                         #:wd (path->string model-c)
+                                         #:twd (path->string owned-b))))
+           ;; The worker chdirs to model C (plain cwd semantics) but the only
+           ;; extended root is coordinator B — C stays refused.
+           (check-equal? (ipc-response-status resp) 'error)
+           (check-false (file-exists? (build-path model-c "x.txt")))
+           ;; Coordinator B remains writable under the same request shape.
+           (define ok-resp
+             (process-request-line
+              (make-trusted-request-json "r91-mix-ok" "write"
+                                         (hash 'path
+                                               (path->string (build-path owned-b "y.txt"))
+                                               'content
+                                               "yes")
+                                         #:wd (path->string model-c)
+                                         #:twd (path->string owned-b))))
+           (check-equal? (ipc-response-status ok-resp) 'ok (ipc-response-error-message ok-resp))
+           (check-equal? (file->string (build-path owned-b "y.txt")) "yes")
+           ;; And the model cwd never gained anything after the requests.
+           (check-equal? (current-allowed-roots) (list spawn-a))))
+       (lambda () (delete-directory/files base #:must-exist? #f))))
+
+    (test-case "R91: invalid trust values fail closed as malformed requests"
+      (define base (make-temporary-file "r91-sec-invalid-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define spawn-a (build-path base "a"))
+         (make-directory* spawn-a)
+         (parameterize ([current-allowed-roots (list spawn-a)])
+           (define (denied? twd target)
+             (define resp
+               (process-request-line
+                (make-trusted-request-json
+                 "r91-invalid"
+                 "write"
+                 (hash 'path target 'content "no")
+                 #:twd twd)))
+             (and (equal? (ipc-response-status resp) 'error)
+                  (string-contains? (or (ipc-response-error-message resp) "")
+                                    "malformed request")))
+           ;; Traversal, relative, non-string, NUL: the WHOLE request is
+           ;; malformed and no tool runs (no target is ever created).
+           (for ([twd (list "/tmp/../etc" "relative/path" 7
+                            (string-append "/tmp/n" (string #\null) "x"))])
+             (check-true (denied? twd "/tmp/r91-never-created.txt")
+                         (format "invalid trust ~s must refuse the request" twd)))
+           (check-false (file-exists? "/tmp/r91-never-created.txt"))
+           ;; Direct struct construction bypassing the decoder also refuses
+           ;; without dispatch (fail closed, no #f-and-continue fallback).
+           (define direct
+             (process-ipc-request
+              (make-ipc-request "r91-direct" "write"
+                                (hasheq 'path "/tmp/r91-never-created-2.txt" 'content "no")
+                                5000 #f 'any 1 "/a/../b")))
+           (check-equal? (ipc-response-status direct) 'error)
+           (check-true (string-contains? (or (ipc-response-error-message direct) "")
+                                         "invalid trusted working directory"))
+           (check-false (file-exists? "/tmp/r91-never-created-2.txt"))))
+       (lambda () (delete-directory/files base #:must-exist? #f))))
+
+    (test-case "R91: symlink-spelled trust is refused by the decoder"
+      (define base (make-temporary-file "r91-sec-link-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define spawn-a (build-path base "a"))
+         (make-directory* spawn-a)
+         (make-file-or-directory-link (string->path "/etc") (build-path base "evil-link"))
+         (make-file-or-directory-link (string->path "/nonexistent-r91")
+                                      (build-path base "broken-link"))
+         (parameterize ([current-allowed-roots (list spawn-a)])
+           (for ([twd (list (path->string (build-path base "evil-link"))
+                            (path->string (build-path base "evil-link" "sub"))
+                            (path->string (build-path base "broken-link")))])
+             (define resp
+               (process-request-line
+                (make-trusted-request-json
+                 "r91-link"
+                 "write"
+                 (hash 'path "/tmp/r91-link-never.txt" 'content "no")
+                 #:twd twd)))
+             (check-equal? (ipc-response-status resp) 'error)
+             (check-true (string-contains? (or (ipc-response-error-message resp) "")
+                                           "malformed request")
+                         (format "symlink-spelled trust ~a must be malformed" twd)))
+           (check-false (file-exists? "/tmp/r91-link-never.txt"))))
+       (lambda () (delete-directory/files base #:must-exist? #f))))
+
+    (test-case "R91: sibling-prefix and absolute cross-root refusals preserve outside bytes"
+      (define base (make-temporary-file "r91-sec-cross-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define spawn-a (build-path base "a"))
+         (define owned-b (build-path base "b"))
+         (define victim (build-path base "victim.txt"))
+         (make-directory* spawn-a)
+         (make-directory* owned-b)
+         (call-with-output-file victim #:exists 'truncate (lambda (p) (display "OUTSIDE-BYTES" p)))
+         (parameterize ([current-allowed-roots (list spawn-a)])
+           ;; Sibling-prefix guard: twd=B must never authorize B-escape.
+           (define sibling-prefix
+             (process-request-line
+              (make-trusted-request-json
+               "r91-sib"
+               "write"
+               (hash 'path (path->string (build-path base "b-escape" "x.txt")) 'content "no")
+               #:twd (path->string owned-b))))
+           (check-equal? (ipc-response-status sibling-prefix) 'error)
+           (check-false (directory-exists? (build-path base "b-escape")))
+           ;; Absolute cross-root write refused; outside bytes preserved.
+           (define cross-write
+             (process-request-line
+              (make-trusted-request-json
+               "r91-cross-w"
+               "write"
+               (hash 'path (path->string victim) 'content "OVERWRITTEN")
+               #:twd (path->string owned-b))))
+           (check-equal? (ipc-response-status cross-write) 'error)
+           (check-equal? (file->string victim) "OUTSIDE-BYTES")
+           ;; Absolute cross-root edit refused; outside bytes preserved.
+           (define cross-edit
+             (process-request-line
+              (make-trusted-request-json
+               "r91-cross-e"
+               "edit"
+               (hash 'path (path->string victim) 'old-text "OUTSIDE" 'new-text "HACKED")
+               #:twd (path->string owned-b))))
+           (check-equal? (ipc-response-status cross-edit) 'error)
+           (check-equal? (file->string victim) "OUTSIDE-BYTES")
+           ;; In-root write still works under the same trust (positive control).
+           (define in-root
+             (process-request-line
+              (make-trusted-request-json
+               "r91-in"
+               "write"
+               (hash 'path (path->string (build-path owned-b "ok.txt")) 'content "fine")
+               #:twd (path->string owned-b))))
+           (check-equal? (ipc-response-status in-root) 'ok)
+           (check-equal? (file->string victim) "OUTSIDE-BYTES")))
+       (lambda () (delete-directory/files base #:must-exist? #f))))
+
+    (test-case "R91: model/hook trusted-working-dir argument injection never becomes trust"
+      (define base (make-temporary-file "r91-sec-inject-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define spawn-a (build-path base "a"))
+         (define owned-b (build-path base "b"))
+         (make-directory* spawn-a)
+         (make-directory* owned-b)
+         (parameterize ([current-allowed-roots (list spawn-a)])
+           ;; The model plants a trust-looking TOOL ARGUMENT plus its own cwd.
+           ;; Neither is the wire trust field, so roots never extend.
+           (define resp
+             (process-request-line
+              (make-trusted-request-json
+               "r91-inject"
+               "write"
+               (hash 'path
+                     (path->string (build-path owned-b "injected.txt"))
+                     'content
+                     "no"
+                     'trusted-working-dir
+                     (path->string owned-b)
+                     'working-directory
+                     (path->string owned-b)))))
+           (check-equal? (ipc-response-status resp) 'error)
+           (check-true (string-contains? (or (ipc-response-error-message resp) "")
+                                         "not allowed"))
+           (check-false (file-exists? (build-path owned-b "injected.txt")))
+           (check-equal? (current-allowed-roots) (list spawn-a))))
+       (lambda () (delete-directory/files base #:must-exist? #f))))
+
+    (test-case "R91: legacy non-owned requests keep spawn roots and never gain roots by omission"
+      (define base (make-temporary-file "r91-sec-legacy-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define spawn-a (build-path base "a"))
+         (define owned-b (build-path base "b"))
+         (make-directory* spawn-a)
+         (make-directory* owned-b)
+         (parameterize ([current-allowed-roots (list spawn-a)]
+                        [current-directory spawn-a])
+           ;; wd inside the spawn root, no trust field: unchanged legacy path.
+           (define legacy
+             (process-request-line
+              (make-trusted-request-json
+               "r91-legacy"
+               "write"
+               (hash 'path "legacy.txt" 'content "legacy ok"))))
+           (check-equal? (ipc-response-status legacy) 'ok (ipc-response-error-message legacy))
+           (check-equal? (file->string (build-path spawn-a "legacy.txt")) "legacy ok")
+           ;; The same legacy shape cannot write into B (no roots by omission).
+           (define refused
+             (process-request-line
+              (make-trusted-request-json
+               "r91-legacy-b"
+               "write"
+               (hash 'path (path->string (build-path owned-b "no.txt")) 'content "no"))))
+           (check-equal? (ipc-response-status refused) 'error)
+           (check-false (file-exists? (build-path owned-b "no.txt")))))
+       (lambda () (delete-directory/files base #:must-exist? #f))))
+
+    (test-case "R91: request-scoped roots restored after crash and after escaped exception"
+      (define base (make-temporary-file "r91-sec-exc-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define spawn-a (build-path base "a"))
+         (define owned-b (build-path base "b"))
+         (make-directory* spawn-a)
+         (make-directory* owned-b)
+         (define edit-target (build-path spawn-a "edit-me.txt"))
+         (call-with-output-file edit-target #:exists 'truncate (lambda (p) (display "alpha" p)))
+         (parameterize ([current-allowed-roots (list spawn-a)])
+           ;; A crash INSIDE the extended scope (hook raises exn:fail, converted
+           ;; by the tool boundary) must still restore the captured roots.
+           (parameterize ([current-worker-edit-before-write-hook
+                           (lambda (path new-content)
+                             (error "r91 simulated tool crash"))])
+             (define crashed
+               (process-request-line
+                (make-trusted-request-json
+                 "r91-crash"
+                 "edit"
+                 (hash 'path
+                       (path->string edit-target)
+                       'old-text
+                       "alpha"
+                       'new-text
+                       "beta")
+                 #:twd (path->string owned-b))))
+             (check-equal? (ipc-response-status crashed) 'error)
+             (check-true (string-contains? (or (ipc-response-error-message crashed) "")
+                                           "crashed"))
+             (check-equal? (current-allowed-roots) (list spawn-a)))
+           ;; An exception that ESCAPES the dispatch (non-exn raise) must also
+           ;; restore the roots during unwinding.
+           (parameterize ([current-worker-edit-before-write-hook
+                           (lambda (path new-content) (raise 'r91-escape))])
+             (define escaped 'no-raise)
+             (with-handlers ([(lambda (e) (eq? e 'r91-escape))
+                              (lambda (e) (set! escaped 'escaped))])
+               (process-request-line
+                (make-trusted-request-json
+                 "r91-escape"
+                 "edit"
+                 (hash 'path
+                       (path->string edit-target)
+                       'old-text
+                       "alpha"
+                       'new-text
+                       "gamma")
+                 #:twd (path->string owned-b))))
+             (check-equal? escaped 'escaped "non-exn exception must propagate")
+             (check-equal? (current-allowed-roots) (list spawn-a)))
+           ;; And a follow-up request without trust cannot reach B.
+           (define follow-up
+             (process-request-line
+              (make-trusted-request-json
+               "r91-after-exc"
+               "write"
+               (hash 'path (path->string (build-path owned-b "after.txt")) 'content "no"))))
+           (check-equal? (ipc-response-status follow-up) 'error)
+           (check-false (file-exists? (build-path owned-b "after.txt")))
+           ;; The edit target kept its original bytes (no partial write).
+           (check-equal? (file->string edit-target) "alpha")))
+       (lambda () (delete-directory/files base #:must-exist? #f))))))
 
 ;; ── Run ─────────────────────────────────────────────────────────
 

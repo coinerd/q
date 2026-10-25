@@ -314,3 +314,128 @@
       (check-exn exn:fail? (lambda () (guarded-set-recent-tool-calls! sess '(read 42)))))))
 
 (run-tests mutation-suite)
+
+;; ---------------------------------------------------------------------------
+;; R99a (BUG-0099): stored acceptance of internal 'provenance + roundtrip
+;; through memory hash and session store (active + archived), search/recall
+;; keeps provenance identifiable without dropping it.
+;; ---------------------------------------------------------------------------
+
+(require racket/file
+         json
+         (only-in "../runtime/session/session-store.rkt"
+                  append-conclusion!
+                  append-archive-marker!
+                  load-conclusions
+                  load-conclusions-archived))
+
+(define (r99a-provenance-record [id "p1"])
+  (task-conclusion id
+                   "[Auto] provenance-category record"
+                   'provenance
+                   'exploration
+                   '("m-orig-1")
+                   1000
+                   '(auto-distilled)
+                   '()))
+
+(define r99a-suite
+  (test-suite "R99a stored-acceptance + roundtrip"
+
+    (test-case "R99a: stored predicate accepts 'provenance; public predicate does not"
+      (check-true (stored-task-conclusion-category? 'provenance))
+      (check-false (task-conclusion-category? 'provenance))
+      (check-false (stored-task-conclusion-category? 'mystery))
+      (check-false (task-conclusion-category? 'mystery)))
+
+    (test-case "R99a: memory-hash roundtrip of a provenance-category record"
+      (define c (r99a-provenance-record))
+      (define h (conclusion->hash c))
+      (check-equal? (hash-ref h 'category) 'provenance)
+      (define c2 (hash->conclusion h))
+      (check-true (task-conclusion? c2))
+      (check-equal? (task-conclusion-category c2) 'provenance)
+      (check-equal? (task-conclusion-text c2) "[Auto] provenance-category record")
+      (check-equal? (task-conclusion-origin-message-ids c2) '("m-orig-1")))
+
+    (test-case "R99a: hash->conclusion still rejects truly unknown categories"
+      (check-exn exn:fail?
+                 (lambda ()
+                   (hash->conclusion (hasheq 'id "x" 'text "t" 'category 'mystery
+                                             'fsm-state-origin 'idle)))))
+
+    (test-case "R99a: task-memory->hash / hash->task-memory roundtrip keeps provenance"
+      (define mem
+        (add-conclusion (add-conclusion (make-task-memory)
+                                        (task-conclusion "c1" "insight" 'fact 'idle '("m1") 1 '() '()))
+                        (r99a-provenance-record "p1")))
+      (define restored (hash->task-memory (task-memory->hash mem)))
+      (check-equal? (length (task-memory-conclusions restored)) 2)
+      (check-true (for/or ([c (in-list (task-memory-conclusions restored))])
+                    (and (eq? (task-conclusion-category c) 'provenance)
+                         (provenance-kind? c)))))
+
+    (test-case "R99a: search/recall finds provenance by tag and state without dropping it"
+      (define mem
+        (add-conclusion (add-conclusion (make-task-memory)
+                                        (task-conclusion "c1" "insight" 'decision 'planning '("m2") 1 '(arch) '()))
+                        (r99a-provenance-record "p1")))
+      ;; tag search (recall by origin tag)
+      (define by-tag (conclusions-with-tags mem '(auto-distilled)))
+      (check-equal? (map task-conclusion-id by-tag) '("p1"))
+      ;; state search
+      (define by-state (conclusions-for-states mem '(exploration)))
+      (check-equal? (map task-conclusion-id by-state) '("p1"))
+      ;; identified as provenance, not silently reclassified as insight
+      (check-true (provenance-kind? (car by-tag)))
+      (check-true (legacy-deterministic-fallback? (r99a-provenance-record "auto-m-orig-1"))
+                  "recognized fallback shape is identifiable via the frozen recognizer"))
+
+    (test-case "R99a: session store ACTIVE path roundtrips old five-category records unchanged"
+      (define log-path (make-temporary-file "r99a-store-~a.log"))
+      (append-conclusion! log-path (task-conclusion "c1" "old fact" 'fact 'exploration '("m1") 1000 '() '()))
+      (append-conclusion! log-path (task-conclusion "c2" "old decision" 'decision 'planning '("m2") 2000 '(t) '()))
+      (define loaded (load-conclusions log-path))
+      (check-equal? (map task-conclusion-id loaded) '("c1" "c2"))
+      (check-equal? (map task-conclusion-category loaded) '(fact decision))
+      (delete-file log-path))
+
+    (test-case "R99a: session store ACTIVE path roundtrips NEW provenance records"
+      (define log-path (make-temporary-file "r99a-store-~a.log"))
+      (append-conclusion! log-path (r99a-provenance-record "p1"))
+      (append-conclusion! log-path (task-conclusion "c1" "mixed in" 'fact 'idle '("m9") 1000 '() '()))
+      (define loaded (load-conclusions log-path))
+      (check-equal? (map task-conclusion-id loaded) '("p1" "c1"))
+      (define prov (car loaded))
+      (check-equal? (task-conclusion-category prov) 'provenance)
+      (check-true (stored-task-conclusion-category? (task-conclusion-category prov)))
+      (delete-file log-path))
+
+    (test-case "R99a: session store ARCHIVED path roundtrips provenance records"
+      (define log-path (make-temporary-file "r99a-arch-~a.log"))
+      (append-archive-marker! log-path (r99a-provenance-record "p1"))
+      (append-conclusion! log-path (task-conclusion "c1" "active insight" 'fact 'idle '("m1") 1000 '() '()))
+      (append-archive-marker! log-path (r99a-provenance-record "p2"))
+      ;; archived loader includes both task-conclusion and task-conclusion-archived entries
+      (define archived (load-conclusions-archived log-path))
+      (check-equal? (map task-conclusion-id archived) '("p1" "c1" "p2"))
+      (check-true (for/and ([c (in-list archived)])
+                    (if (equal? (task-conclusion-id c) "c1")
+                        (eq? (task-conclusion-category c) 'fact)
+                        (eq? (task-conclusion-category c) 'provenance))))
+      (check-true (provenance-kind? (last archived)))
+      ;; active loader skips archived markers
+      (define active (load-conclusions log-path))
+      (check-equal? (map task-conclusion-id active) '("c1"))
+      (delete-file log-path))
+
+    (test-case "R99a: OLD-READER behavior preserved for truly unknown categories (active path)"
+      ;; Characterization: unknown categories are NOT silently accepted — the
+      ;; entry degrades to #f (documented rollback hazard for old readers).
+      (define log-path (make-temporary-file "r99a-unknown-~a.log"))
+      (append-conclusion! log-path (task-conclusion "bad" "unknown category" 'mystery 'idle '("m1") 1000 '() '()))
+      (define loaded (load-conclusions log-path))
+      (check-equal? loaded '(#f))
+      (delete-file log-path))))
+
+(run-tests r99a-suite)

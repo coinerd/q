@@ -151,3 +151,57 @@
               (text-part-text (car (message-content m))))))
   (check-false (ormap (λ (t) (string-contains? t (make-string 500 #\y))) all-texts)
                "unmatched WS entry should be dropped entirely in excluded state"))
+
+;; ── R99a (BUG-0099): fallback provenance replaces WS entries with an
+;; UNVERIFIED provenance label; a genuine insight sharing the origin wins. ──
+
+(define (make-fallback-conclusion msg-id text)
+  (task-conclusion (format "auto-~a" msg-id)
+                   text
+                   'fact
+                   'implementation
+                   (list msg-id)
+                   (current-seconds)
+                   '(auto-distilled)
+                   '()))
+
+(test-case "R99a: excluded WS — fallback replacement labeled [Source provenance]"
+  (define ws-1 (make-test-msg "ws-1" (make-string 500 #\x)))
+  (define fallback (make-fallback-conclusion "ws-1" "[Auto] Previously read file (origin: ws-1)"))
+  (define tc
+    (build-tiered-context/state-aware (list (make-test-msg "m1" "hello"))
+                                      #:tier-b-count 5
+                                      #:tier-c-count 2
+                                      #:working-set-messages (list ws-1)
+                                      #:task-state 'implementation
+                                      #:conclusions (list fallback)))
+  (define tier-a-texts
+    (for/list ([m (tiered-context-tier-a tc)])
+      (text-part-text (car (message-content m)))))
+  (check-true (ormap (λ (t) (string-contains? t "[Source provenance replaces context] (unverified) [Auto] Previously read file (origin: ws-1)"))
+                     tier-a-texts)
+              "fallback replacement must be labeled provenance")
+  (check-false (ormap (λ (t) (string-contains? t "[Conclusion replaces context] [Auto]"))
+                      tier-a-texts)
+               "fallback must not render as [Conclusion]"))
+
+(test-case "R99a: genuine insight sharing the origin wins in excluded WS path"
+  (define ws-1 (make-test-msg "ws-1" (make-string 500 #\x)))
+  (define fallback (make-fallback-conclusion "ws-1" "[Auto] Previously read file (origin: ws-1)"))
+  (define insight (make-conclusion "Curated summary of ws-1" #:origin-ids '("ws-1")))
+  (define tc
+    (build-tiered-context/state-aware (list (make-test-msg "m1" "hello"))
+                                      #:tier-b-count 5
+                                      #:tier-c-count 2
+                                      #:working-set-messages (list ws-1)
+                                      #:task-state 'implementation
+                                      #:conclusions (list fallback insight)))
+  (define tier-a-texts
+    (for/list ([m (tiered-context-tier-a tc)])
+      (text-part-text (car (message-content m)))))
+  (check-true (ormap (λ (t) (string-contains? t "[Conclusion replaces context] Curated summary of ws-1"))
+                     tier-a-texts)
+              "genuine insight wins the replacement")
+  (check-false (ormap (λ (t) (string-contains? t "[Source provenance replaces context]"))
+                      tier-a-texts)
+               "no provenance replacement when a genuine insight covers the origin"))

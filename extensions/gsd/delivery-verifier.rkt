@@ -50,6 +50,8 @@
          "wave-docs.rkt"
          (only-in "review-proof-format.rkt" apply-verify-jobs)
          (only-in "plan-context-builder.rkt" find-git-root-dir)
+         ;; R76 (BUG-0076): shared layout-aware root resolution + validation.
+         (only-in "git-root-layout.rkt" resolve-explicit-delivery-root!)
          (only-in "../../sandbox/subprocess.rkt"
                   run-subprocess
                   subprocess-result-exit-code
@@ -76,13 +78,23 @@
          branch-delivery-context?
          branch-delivery-context-ref
          committed-branch-changed-files
+         ;; R76 (BUG-0076): additive export so the root-identity contract
+         ;; tests can assert every resolver call site selects the SAME
+         ;; authenticated repository (evidence root under the active branch
+         ;; context, git-root-for otherwise).
+         evidence-git-root
          check-git-available
          check-branch-matches
          check-wave-files-changed
          check-verify-command
-         ;; BUG-0068 secondary 2: pure criteria-decoration normalizer,
+         ;; BUG-0075 secondary 2: pure criteria-decoration normalizer,
          ;; provided for the TDD suite (see tests/test-gsd-delivery-verifier.rkt)
          normalize-declared-verify
+         ;; BUG-0075 (R75): complete declaration extraction + the normalizer
+         ;; contract version (frozen-binding drift refusal), re-exported from
+         ;; the pure shared module so every consumer sees ONE vocabulary.
+         verify-declaration-extraction
+         verify-normalizer-version
          ;; D2/D3 (§17.3): exported additively for the receipt wrapper's
          ;; expected-branch resolution check — same verified git path and
          ;; injectable current-gsd-git-runner as the isolated gate.
@@ -105,7 +117,14 @@
          ;; Owned behavioral RED capture (same trusted registry/snapshot
          ;; authority; additive exports for review-proof.rkt).
          execution-snapshot
-         checkout-key)
+         checkout-key
+         ;; R102 identity contract: the owned-singleton identity constructor
+         ;; and the trusted identity-context parameters, exported for the
+         ;; lifecycle owners that bind them (tests; R93/R98 consumers).
+         delivery-verify-identity
+         delivery-verify-suite
+         current-gsd-verification-attempt-context
+         current-gsd-verification-attachment-generation)
 
 ;; ============================================================
 ;; Structured verification result
@@ -219,9 +238,17 @@
 
 ;; Effective git root for git evidence: under an active branch context the
 ;; campaign branch's repo; otherwise the base-dir checkout.
+;; R76 (BUG-0076): the explicit branch-delivery context WINS — but only after
+;; real git proves it is a usable work tree whose toplevel realpath-equals
+;; the authenticated root. An unverifiable context root refuses (typed
+;; exn:fail:git-root, root+reason); it never falls through silently to
+;; layout sniffing, and a broken context never yields a bogus evidence root.
 (define (evidence-git-root base-dir)
   (define ctx (current-gsd-delivery-branch-context))
-  (or (and ctx (branch-delivery-context-ref ctx 'repo-root)) (git-root-for base-dir)))
+  (define ctx-root (and ctx (branch-delivery-context-ref ctx 'repo-root)))
+  (if ctx-root
+      (resolve-explicit-delivery-root! ctx-root)
+      (git-root-for base-dir)))
 
 ;; Effective cwd for the verify command: under an active branch context the
 ;; wave worktree (the delivered tree as committed); otherwise the git root.
@@ -316,8 +343,13 @@
       (cadr result)
       ""))
 
+;; R76 (BUG-0076): a broken/ambiguous layout raises the typed git-root
+;; refusal out of git-root-for; availability is a yes/no predicate, so any
+;; resolution failure — absent or refused — answers #f (fail closed).
 (define (git-available? base-dir)
-  (define root (git-root-for base-dir))
+  (define root
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (git-root-for base-dir)))
   (and root
        (directory-exists? root)
        (git-exit-ok? (run-git root (list "rev-parse" "--is-inside-work-tree")))))
@@ -338,19 +370,23 @@
   ;; this index: stale rows left by a previous campaign (whose wave docs were
   ;; replaced) must not be misread as issue mappings. When the campaign has no
   ;; issues at all, the branch check degrades to "no expected branch" (pass).
-  ;; BUG-0081: the expected doc is the plan index's DECLARED arrow path when
-  ;; the row carries one (a plan may route a wave through another campaign's
-  ;; W-numbered carrier doc); the W<idx>-<slug>.md synthesis is only the
-  ;; fallback.
+  ;; BUG-0081/BUG-0082: the expected doc is the plan index's DECLARED arrow
+  ;; path when the row carries one (a plan may route a wave through another
+  ;; campaign's W-numbered carrier doc); the W<idx>-<slug>.md synthesis is
+  ;; only the arrowless fallback. An UNSAFE declared arrow yields no issue
+  ;; mapping here — the verify check independently refuses the unresolvable
+  ;; declared document by name, so delivery still fails loudly.
   (define state-path (build-path base-dir ".planning" "STATE.md"))
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
-  (define declared-doc
-    (and (file-exists? plan-path)
-         (wave-entry-doc-path (parse-plan-index (call-with-input-file plan-path port->string))
-                              wave-idx)))
-  (define current-slug (wave-slug base-dir wave-idx))
   (define expected-doc
-    (or declared-doc (and current-slug (format "waves/W~a-~a.md" wave-idx current-slug))))
+    (and (file-exists? plan-path)
+         (let ([entry (for/first ([e (in-list (parse-plan-index (call-with-input-file plan-path
+                                                                                      port->string)))]
+                                  #:when (= (wave-index-entry-idx e) wave-idx))
+                        e)])
+           (and entry
+                (let-values ([(rel refusal) (wave-entry-effective-doc-rel-path entry)])
+                  (and (not refusal) rel))))))
   (cond
     [(or (not (file-exists? state-path)) (not expected-doc)) #f]
     [else
@@ -725,6 +761,35 @@
 
 (define delivery-verify-suite "delivery-verify")
 
+;; ============================================================
+;; R102 identity contract: trusted identity context parameters
+;; ============================================================
+
+;; Authenticated attempt/fence facts (attempt-id, attempt-fence,
+;; coordinator-fence) bound by the campaign lifecycle BEFORE the job exists —
+;; at bridge entry, never at event-arrival time, never from model text. #f
+;; when the caller has no authenticated attempt context: emitted events then
+;; carry only registry-trusted identity (incarnation, job-id, identity key).
+(define current-gsd-verification-attempt-context
+  (make-parameter
+   #f
+   (lambda (v)
+     (if (or (not v) (hash? v))
+         v
+         (raise-argument-error 'current-gsd-verification-attempt-context "(or/c #f hash?)" v)))))
+
+;; Monotone session-attachment generation bound by the owning TUI lifecycle
+;; when the event source attaches to a session (attach/switch/restore). #f
+;; when the source is unattached; consumers treat #f as generation-0 legacy.
+(define current-gsd-verification-attachment-generation
+  (make-parameter #f
+                  (lambda (v)
+                    (if (or (not v) (and (exact-nonnegative-integer? v)))
+                        v
+                        (raise-argument-error 'current-gsd-verification-attachment-generation
+                                              "(or/c #f exact-nonnegative-integer?)"
+                                              v)))))
+
 ;; Runtime capability: no exported constructor. The observer runs before the
 ;; registry slot can be reused, with the closed/reaped terminal record.
 (struct owned-verify-observation (job command cwd before after base wave fresh? declared? active))
@@ -797,41 +862,150 @@
   (parameterize ([current-directory run-cwd])
     (verification-start! reg identity "/bin/sh" (list "-c" command) #:timeout-ms timeout-ms)))
 
+;; R102: uniform terminal-fact accessors over the two registry record shapes
+;; (the live verification-job and the captured tombstone of a replaced job),
+;; so a late terminal publication attributes the actual observed record.
+(define (terminal-facts-state rec)
+  (if (verification-job? rec)
+      (verification-job-state rec)
+      (verification-terminal-tombstone-state rec)))
+
+(define (terminal-facts-exit-code rec)
+  (if (verification-job? rec)
+      (verification-job-exit-code rec)
+      (verification-terminal-tombstone-exit-code rec)))
+
+(define (terminal-facts-reaped? rec)
+  (if (verification-job? rec)
+      (verification-job-reaped? rec)
+      (verification-terminal-tombstone-reaped? rec)))
+
+(define (terminal-facts-log-path rec)
+  (if (verification-job? rec)
+      (verification-job-log-path rec)
+      (verification-terminal-tombstone-log-path rec)))
+
 (define (registry-run-verify command run-cwd timeout-sec base-dir wave-idx declared?)
   (define before (and (not (eq? (current-owned-verify-observer) void)) (execution-snapshot run-cwd)))
   (define reg (current-gsd-verification-registry))
   (define timeout-ms (* 1.0 timeout-sec 1000.0))
   (define identity (delivery-verify-identity base-dir wave-idx run-cwd command))
+  ;; R102: identity facts are bound at bridge ENTRY — before the job exists
+  ;; and once per verifier invocation. The started event, the terminal
+  ;; publication and every attached caller carry THEIR OWN entry binding,
+  ;; never a value read at arrival time and never model text.
+  (define attempt-ctx (current-gsd-verification-attempt-context))
+  (define attachment-generation (current-gsd-verification-attachment-generation))
   (define started (start-or-attach! reg identity run-cwd command timeout-ms))
   (define job-id (start-result-job-id started))
   (define start-job (verification-status reg job-id))
+  ;; R102 identity fields: registry incarnation + registry job-id + verify
+  ;; identity key + the bound attempt/fence triple + attachment generation.
+  (define identity-fields
+    (hasheq 'job-id
+            job-id
+            'registry-incarnation
+            (verification-registry-incarnation reg)
+            'verify-identity-key
+            (verification-job-identity-key start-job)
+            'attempt-id
+            (and attempt-ctx (hash-ref attempt-ctx 'attempt-id #f))
+            'attempt-fence
+            (and attempt-ctx (hash-ref attempt-ctx 'attempt-fence #f))
+            'coordinator-fence
+            (and attempt-ctx (hash-ref attempt-ctx 'coordinator-fence #f))
+            'session-attachment-generation
+            attachment-generation))
   ;; BUG-0058: the started event carries the durable log path so the TUI can
   ;; show a truthful multi-minute gate instead of a frozen executor summary.
   (emit-verification-progress! 'gsd.verification.started
-                               (hasheq 'wave
-                                       wave-idx
-                                       'command
-                                       command
-                                       'timeout-sec
-                                       timeout-sec
-                                       'log-path
-                                       (verification-job-log-path start-job)
-                                       'attached?
-                                       (start-result-existing-job? started)
-                                       'start-ms
-                                       (verification-job-start-ms start-job)))
+                               (hash-merge-fields (hasheq 'wave
+                                                          wave-idx
+                                                          'command
+                                                          command
+                                                          'timeout-sec
+                                                          timeout-sec
+                                                          'log-path
+                                                          (verification-job-log-path start-job)
+                                                          'attached?
+                                                          (start-result-existing-job? started)
+                                                          'start-ms
+                                                          (verification-job-start-ms start-job))
+                                                  identity-fields))
+  ;; ------------------------------------------------------------------
+  ;; R102: ONE terminal finalization path. It publishes the terminal facts
+  ;; EXACTLY ONCE with the actual registry record (state/exit/log identity —
+  ;; live record or replacement tombstone), on the normal path AND on the
+  ;; wait-exception path (after cancel/reap). A record still 'running (its
+  ;; cancel failed) publishes NOTHING terminal: a cancelled/reaped
+  ;; attribution is only ever an observed registry fact, never a guess, and
+  ;; the job stays attributable as detached-running. Secondary cancel/emit
+  ;; failures are logged distinctly and never replace the primary exception.
+  ;; ------------------------------------------------------------------
+  (define terminal-published? (box #f))
+  (define (publish-terminal! observed)
+    (unless (unbox terminal-published?)
+      (set-box! terminal-published? #t)
+      (define rec (or observed (verification-job-facts reg job-id)))
+      (when (and rec (not (eq? (terminal-facts-state rec) 'running)))
+        (define state (terminal-facts-state rec))
+        (define exit-code (terminal-facts-exit-code rec))
+        (define approved?
+          (and (eq? state 'completed) (equal? exit-code 0) (terminal-facts-reaped? rec)))
+        (emit-verification-progress!
+         'gsd.verification.completed
+         (hash-merge-fields
+          (hasheq 'wave
+                  wave-idx
+                  'command
+                  command
+                  'state
+                  state
+                  'exit-code
+                  exit-code
+                  'approved?
+                  approved?
+                  ;; Reducer-compatible verdict/reason (legacy payload contract).
+                  'verdict
+                  (if approved? "approve" "reject")
+                  'reason
+                  (and (not approved?) (format "verify state=~a exit=~a" state exit-code))
+                  'elapsed-sec
+                  (and (verification-job? rec)
+                       (verification-job-start-ms rec)
+                       (verification-job-end-ms rec)
+                       (/ (- (verification-job-end-ms rec) (verification-job-start-ms rec)) 1000.0))
+                  'log-path
+                  (terminal-facts-log-path rec))
+          identity-fields)))))
   ;; A break/exception while the coordinator is waiting must not detach the
   ;; owned gate. Cancel+reap before propagating the escape; terminal jobs are
-  ;; immutable, so this is safe if completion won the race.
+  ;; immutable, so this is safe if completion won the race. The cancel is
+  ;; BEST-EFFORT: its own failure is a SECONDARY failure — logged, never
+  ;; allowed to replace the primary exception, which is re-raised verbatim.
   (define waited
-    (with-handlers ([exn? (lambda (e)
-                            (verification-cancel! reg job-id)
-                            (raise e))])
+    (with-handlers
+        ([exn? (lambda (primary)
+                 (with-handlers
+                     ([exn? (lambda (secondary)
+                              (log-warning
+                               "gsd: verification cancel after wait failure failed (secondary): ~a"
+                               (if (exn? secondary)
+                                   (exn-message secondary)
+                                   (format "~a" secondary))))])
+                   (verification-cancel! reg job-id))
+                 (publish-terminal! #f)
+                 (raise primary))])
       (verification-wait reg job-id timeout-ms)))
+  (publish-terminal! waited)
   (define state (verification-job-state waited))
   (define exit-code (verification-job-exit-code waited))
   (define approved?
     (and (eq? state 'completed) (equal? exit-code 0) (verification-job-reaped? waited)))
+  ;; R102: the terminal publication already happened above (exactly once);
+  ;; a raising observer below can no longer suppress it. A successful exit
+  ;; plus a rejected (raising) observer is NOT workflow approval: the
+  ;; exception escapes and no delivery-verification value crosses at all.
   (unless (eq? (current-owned-verify-observer) void)
     (define active (box 'available))
     (define o
@@ -848,31 +1022,13 @@
     (dynamic-wind void
                   (lambda () ((current-owned-verify-observer) o))
                   (lambda () (set-box! active 'expired))))
-  (emit-verification-progress!
-   'gsd.verification.completed
-   (hasheq 'wave
-           wave-idx
-           'command
-           command
-           'state
-           state
-           'exit-code
-           exit-code
-           'approved?
-           approved?
-           ;; Reducer-compatible verdict/reason (legacy payload contract).
-           'verdict
-           (if approved? "approve" "reject")
-           'reason
-           (and (not approved?) (format "verify state=~a exit=~a" state exit-code))
-           'elapsed-sec
-           (and (verification-job-start-ms waited)
-                (verification-job-end-ms waited)
-                (real? (verification-job-end-ms waited))
-                (/ (- (verification-job-end-ms waited) (verification-job-start-ms waited)) 1000.0))
-           'log-path
-           (verification-job-log-path waited)))
   waited)
+
+;; Merge additive identity fields over a base event payload without mutating
+;; the legacy contract (R102: additive only).
+(define (hash-merge-fields base additive)
+  (for/fold ([h base]) ([(k v) (in-hash additive)])
+    (hash-set h k v)))
 
 ;; cwd for a DECLARED verify command: the wave worktree under branch
 ;; isolation (the delivered tree as committed); otherwise the base-dir
@@ -917,18 +1073,12 @@
 ;; load-plan-from-index builds gsd-wave-verify from — so the doc is read
 ;; directly; the plan struct's gsd-wave-verify is honored only when the doc
 ;; cannot be read (hand-built plans). Fail closed to #f (empty declaration)
-;; on any read/parse failure.
+;; on any read/parse failure. See declared-verify-declaration for the
+;; structural-verdict form used by the execution plane.
 (define (declared-wave-verify base-dir wave-idx plan)
-  (define (non-empty s)
-    (and (string? s) (let ([v (string-trim s)]) (and (non-empty-string? v) v))))
-  (define doc
-    (let ([slug (wave-slug base-dir wave-idx)])
-      (and slug
-           (with-handlers ([exn:fail? (lambda (_) #f)])
-             (read-wave-doc base-dir wave-idx slug)))))
-  (or (and doc (non-empty (hash-ref (parse-wave-content (hash-ref doc 'content "")) 'verify #f)))
-      (let ([wave (and plan (plan-wave-ref plan wave-idx))])
-        (and wave (non-empty (gsd-wave-verify wave))))))
+  (let-values ([(declaration _refusal _doc-path)
+                (declared-verify-declaration base-dir wave-idx plan)])
+    declaration))
 
 ;; BUG-0068 secondary finding 2 (live: W0 14:26, W1 21:17/23:59 — every
 ;; verification of a v1.00.29 wave died with `/bin/sh: 0: Illegal option -`):
@@ -939,52 +1089,46 @@
 ;;  - single-line declarations without Markdown bullets retain their legacy
 ;;    shell contract; unambiguous multiline stages canonicalize to fail-fast
 ;;    && before execution and frozen command binding (never snapshot edits);
-;;  - otherwise only command-shaped inline-code spans are executable. Prose
-;;    identifiers (`unknown`, `distinct_*`, filenames, examples) are ignored;
-;;  - executable spans retain document order and join with &&. If none exist,
-;;    verification fails closed instead of launching prose through /bin/sh.
+;;  - otherwise only command-shaped inline-code spans are executable. Every
+;;    authored span becomes an executed marker or a NAMED rejection carrying
+;;    the original span (R75); unsupported command-shaped spans among valid
+;;    ones void the whole declaration, and zero accepted commands refuses —
+;;    never a silent drop, never a partial green;
+;;  - executable spans retain document order and join with &&.
 (define (normalize-declared-verify declaration)
-  (define (decorated? s)
-    (regexp-match? #px"(^|\n)\\s*[-*+]\\s" s))
-  (define executable-prefixes
-    '("racket " "raco "
-                "bash "
-                "sh "
-                "python "
-                "python3 "
-                "pytest "
-                "npm "
-                "pnpm "
-                "yarn "
-                "make "
-                "git "
-                "cd "
-                "env "
-                "./"
-                "<project-base>"))
-  (define (executable-span? span)
-    (for/or ([prefix (in-list executable-prefixes)])
-      (string-prefix? span prefix)))
-  (define (canonicalize-span span)
-    ;; Campaign criteria historically abbreviate this one repository command.
-    ;; Turn the shorthand into the executable form rather than asking /bin/sh
-    ;; to find a non-executable metrics.rkt on PATH.
-    (cond
-      [(string-prefix? span "metrics.rkt ") (string-append "racket scripts/" span)]
-      [(string-prefix? span "scripts/metrics.rkt ") (string-append "racket " span)]
-      [else span]))
-  (define trimmed (string-trim declaration))
-  (canonical-verify-command
-   (if (not (decorated? trimmed))
-       trimmed
-       (string-join
-        (for/list ([raw (in-list (regexp-match* #rx"`([^`]+)`" trimmed #:match-select cadr))]
-                   #:do [(define span (string-trim raw))]
-                   #:when (or (executable-span? span)
-                              (string-prefix? span "metrics.rkt ")
-                              (string-prefix? span "scripts/metrics.rkt ")))
-          (canonicalize-span span))
-        " && "))))
+  (hash-ref (verify-declaration-extraction declaration) 'canonical ""))
+
+;; The wave's DECLARED Verify section with the parser's structural verdict.
+;; Returns three values:
+;;   declaration    — the historical OR-selection (readable doc first, plan
+;;                    struct when the doc cannot be read), #f when empty
+;;   parser-refusal — the doc section's NAMED structural refusal (unclosed
+;;                    fence, non-shell-only fences), #f when well-formed;
+;;                    a malformed authoritative doc always wins over any
+;;                    fallback, including the compile gate
+;;   doc-path       — display path of the authoritative doc (rejections and
+;;                    refusals name it)
+(define (declared-verify-declaration base-dir wave-idx plan)
+  (define (non-empty s)
+    (and (string? s) (let ([v (string-trim s)]) (and (non-empty-string? v) v))))
+  ;; BUG-0082: the authoritative document is the index row's DECLARED arrow
+  ;; path (validated: syntax, then symlinks); synthesis only for arrowless
+  ;; legacy rows. A declared row whose document is missing REFUSES BY NAME
+  ;; (refusal channel below) — it never falls back to a stale synthesized
+  ;; twin and never to the plan struct. Arrowless/absent-index plans keep
+  ;; the plan-fallback (hand-built plans without an authored index).
+  (define-values (doc refusal doc-path) (declared-wave-doc-resolution base-dir wave-idx))
+  (define plan-fallback
+    (let ([wave (and plan (plan-wave-ref plan wave-idx))])
+      (and wave (non-empty (gsd-wave-verify wave)))))
+  (cond
+    [refusal (values #f refusal doc-path)]
+    [doc
+     (define parsed (parse-wave-content (hash-ref doc 'content "")))
+     (values (or (non-empty (hash-ref parsed 'verify #f)) plan-fallback)
+             (hash-ref parsed 'verify-refusal #f)
+             doc-path)]
+    [else (values plan-fallback #f doc-path)]))
 
 (define (check-verify-command base-dir wave-idx plan)
   (define root (git-root-for base-dir))
@@ -1068,25 +1212,76 @@
      (define cwd (declared-verify-cwd base-dir normalized))
      (unless (equal? (checkout-key cwd) (hash-ref supplemental 'cwd))
        (error 'delivery-verifier "supplemental execution cwd mismatch"))
-     (run-cmd (expand-project-base normalized base-dir) cwd " (authenticated supplemental C1)" #t)]
+     ;; R102: the authenticated supplemental admission IS the trusted attempt
+     ;; context — bind it around the launch so emitted events carry the
+     ;; attempt/fence triple bound at bridge entry.
+     (parameterize ([current-gsd-verification-attempt-context
+                     (hasheq 'attempt-id
+                             (hash-ref supplemental 'attempt-id #f)
+                             'attempt-fence
+                             (hash-ref supplemental 'attempt-fence #f)
+                             'coordinator-fence
+                             (hash-ref supplemental 'coordinator-fence #f))])
+       (run-cmd (expand-project-base normalized base-dir) cwd " (authenticated supplemental C1)" #t))]
     ;; explicit test override wins (fail-forcing / pinning)
     [explicit (run-cmd explicit run-cwd "")]
     [else
-     (define declared (declared-wave-verify base-dir wave-idx plan))
+     (define-values (declared parser-refusal doc-path)
+       (declared-verify-declaration base-dir wave-idx plan))
+     (define where (or doc-path (format "wave W~a" wave-idx)))
      (cond
+       ;; A malformed authoritative section (unclosed fence, non-shell-only
+       ;; fences) refuses BY NAME — it is never an empty declaration and can
+       ;; never reach the compile-gate fallback (R75).
+       [parser-refusal
+        (cons "verify"
+              (cons #f
+                    (format
+                     "declared Verify in ~a is malformed (~a); refusing to substitute a fallback gate"
+                     where
+                     parser-refusal)))]
        ;; the wave's DECLARED verify command is authoritative
        [(and declared (non-empty-string? declared))
-        (define normalized (normalize-declared-verify declared))
-        (if (non-empty-string? normalized)
-            (run-cmd (expand-project-base normalized base-dir)
-                     (declared-verify-cwd base-dir normalized)
-                     ""
-                     #t)
+        (define extraction (verify-declaration-extraction declared))
+        (define rejections (hash-ref extraction 'rejections '()))
+        (define canonical (hash-ref extraction 'canonical ""))
+        (define structural-refusal (hash-ref extraction 'refusal #f))
+        (cond
+          ;; R75: every authored span is an executed marker or a named
+          ;; rejection; an unsupported span among valid ones voids the whole
+          ;; declaration (partial green is impossible).
+          [(pair? rejections)
+           (cons "verify"
+                 (cons #f
+                       (format "declared Verify in ~a rejects ~a authored gate span(s): ~a"
+                               where
+                               (length rejections)
+                               (string-join
+                                (for/list ([rj (in-list rejections)])
+                                  (format "[~a] `~a`" (hash-ref rj 'reason) (hash-ref rj 'span)))
+                                "; "))))]
+          [structural-refusal
+           (cons
+            "verify"
             (cons
-             "verify"
-             (cons
-              #f
-              "declared Verify section contains no executable command or is ambiguous; refusing prose-as-shell")))]
+             #f
+             (format
+              "declared Verify section in ~a contains no executable command or is ambiguous (~a); refusing prose-as-shell"
+              where
+              structural-refusal)))]
+          [(non-empty-string? canonical)
+           (run-cmd (expand-project-base canonical base-dir)
+                    (declared-verify-cwd base-dir canonical)
+                    ;; N declared gates => N executed markers: the canonical
+                    ;; chain carries one fail-fast stage per declared gate.
+                    (format " (declared gates=~a)" (length (hash-ref extraction 'commands)))
+                    #t)]
+          [else
+           (cons
+            "verify"
+            (cons
+             #f
+             "declared Verify section contains no executable command or is ambiguous; refusing prose-as-shell"))])]
        ;; genuinely EMPTY verify declaration: the derived compile gate is a
        ;; separately described FALLBACK — never a silent substitute
        [else

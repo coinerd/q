@@ -133,3 +133,76 @@
   (define cfg (hash->session-config (hasheq)))
   (check-true (session-config? cfg)
               "hash->session-config with empty hash should produce valid config"))
+
+;; ---------------------------------------------------------------------------
+;; R99a (BUG-0099): the turn-context auto-distill augmentation path keeps the
+;; deterministic writer HELD — persisted fallbacks are recognized by the frozen
+;; recognizer and byte-identical to the pre-R99a writer output.
+;; ---------------------------------------------------------------------------
+
+(require (only-in "../runtime/context-assembly/turn-context.rkt"
+                  prepare-turn-context-state
+                  content-part->text)
+         (only-in "../runtime/context-assembly/auto-distillation.rkt"
+                  current-auto-distillation-enabled?)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt"
+                  current-ws-evolution-enabled?)
+         (only-in "../runtime/context-assembly/rollback-actions.rkt"
+                  current-rollback-state
+                  make-default-rollback-state)
+         (only-in "../runtime/working-set.rkt"
+                  make-working-set
+                  working-set-add!)
+         (only-in "../runtime/context-assembly/task-conclusion.rkt"
+                  task-conclusion
+                  task-conclusion?
+                  task-conclusion-id
+                  task-conclusion-text
+                  task-conclusion-category
+                  task-conclusion-origin-message-ids
+                  task-conclusion-relevance-tags
+                  task-conclusion-timestamp
+                  legacy-deterministic-fallback?
+                  conclusion->hash)
+         (only-in "../runtime/session/session-store-goal-task.rkt"
+                  conclusion-hash->json-safe)
+         (only-in "../util/message/protocol-types.rkt" make-message make-text-part)
+         (only-in "../runtime/session/session-types.rkt" agent-session-task-conclusions)
+         (only-in "helpers/session-fixture.rkt" make-test-session)
+         json)
+
+(define (r99a-turn-msg id text)
+  (make-message id #f 'user 'text (list (make-text-part text)) (current-seconds) (hasheq)))
+
+(test-case "R99a: prepare-turn-context-state fallbacks are recognized + byte-identical (writer HELD)"
+  (define ws (make-working-set))
+  (working-set-add! ws "/tmp/r99a-file-a.rkt" "m1" 10)
+  (define cfg (hash->session-config (hasheq 'working-set ws)))
+  (define sess (make-test-session))
+  (define ctx (list (r99a-turn-msg "m1" "parser code content")))
+  (parameterize ([current-auto-distillation-enabled? #t]
+                 [current-ws-evolution-enabled? #f]
+                 [current-rollback-state (make-default-rollback-state)])
+    (define-values (task-state-raw task-state augmented reflection)
+      (prepare-turn-context-state ctx cfg sess))
+    (define new-concs
+      (filter (λ (c) (equal? (task-conclusion-id c) "auto-m1"))
+              (agent-session-task-conclusions sess)))
+    (check-equal? (length new-concs) 1)
+    (define c (car new-concs))
+    ;; recognized legacy deterministic fallback
+    (check-true (legacy-deterministic-fallback? c))
+    ;; byte-identity pins: every field matches the frozen writer shape
+    (check-equal? (task-conclusion-id c) "auto-m1")
+    (check-equal? (task-conclusion-text c) "[Auto] parser code content")
+    (check-equal? (task-conclusion-category c) 'fact)
+    (check-equal? (task-conclusion-origin-message-ids c) '("m1"))
+    (check-equal? (task-conclusion-relevance-tags c) '(auto-distilled))
+    ;; serialized store bytes identical to the pre-R99a writer (timestamp pinned)
+    (define pinned-record
+      (task-conclusion "auto-m1" "[Auto] parser code content" 'fact 'idle '("m1") 0 '(auto-distilled) '()))
+    (define pinned (jsexpr->string (conclusion-hash->json-safe (conclusion->hash pinned-record))))
+    (define actual (jsexpr->string
+                    (conclusion-hash->json-safe
+                     (conclusion->hash (struct-copy task-conclusion c [timestamp 0])))))
+    (check-equal? actual pinned)))

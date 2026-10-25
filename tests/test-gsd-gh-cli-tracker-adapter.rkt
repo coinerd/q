@@ -45,6 +45,19 @@
     (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
     (check-exn exn:fail? (lambda () ((github-adapter-close-issue! adapter) 9763)))))
 
+(test-case "a close response that does not attest state=closed fails closed on exactly one PATCH"
+  ;; A tracker that reports the issue still open can never be recorded as
+  ;; reconciled: the readback is refused and the only external effect is the
+  ;; single (externally idempotent) close PATCH itself.
+  (define calls '())
+  (define (runner args)
+    (set! calls (append calls (list args)))
+    (values 0 "{\"number\":9763,\"state\":\"open\"}" ""))
+  (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
+  (check-exn exn:fail? (lambda () ((github-adapter-close-issue! adapter) 9763)))
+  (check-equal? (map (lambda (args) (take args 2)) calls)
+                '(("api" "repos/coinerd/q/issues/9763"))))
+
 (test-case "board mutation refuses absent project item and option IDs"
   (define calls 0)
   (define (runner _args)

@@ -16,12 +16,27 @@
 (require rackunit
          rackunit/text-ui
          racket/file
+         racket/hash
          racket/list
          racket/string
          racket/path
          racket/runtime-path
          "../extensions/gsd/wave-runner-port.rkt"
          "../extensions/gsd/events.rkt"
+         (only-in "../extensions/gsd/core.rkt" reset-all-gsd-state!)
+         (only-in "../extensions/gsd/wave-outcome-reporting.rkt"
+                  emit-wave-outcome-error!)
+         (only-in "../extensions/gsd-planning.rkt" gsd-planning-extension)
+         (only-in "../extensions/api.rkt" extension-hooks make-extension-registry)
+         (only-in "../extensions/context.rkt" make-extension-ctx)
+         (only-in "../tools/tool.rkt" make-tool-registry)
+         (only-in "../util/event/event-bus.rkt" make-event-bus subscribe!)
+         (only-in "../util/event/event.rkt"
+                  event?
+                  event-ev
+                  event-payload
+                  event-time
+                  make-event)
          "../tui/state.rkt"
          (only-in "tui/event-simulator.rkt"
                   make-test-event
@@ -33,6 +48,66 @@
 
 (define (fresh-state)
   (initial-ui-state #:session-id "outcome-err-sess" #:model-name "test-model"))
+
+;; ============================================================
+;; BUG-0093 (R93): the REAL production route
+;;
+;; Production shape: wave-outcome-reporting.rkt's emit-wave-outcome-error!
+;; → extensions/gsd/events.rkt wraps the outcome fields under a data
+;; envelope → the bridge installed by the gsd-planning extension's
+;; register-tools hook forwards that WRAPPER as the runtime event payload
+;; on the session bus → the TUI reducer applies it via
+;; apply-event-to-state. The helpers below drive exactly that route:
+;; register the actual extension against a fixture context/session bus,
+;; subscribe through the installed bridge, emit, and feed the captured
+;; runtime event through the reducer.
+;; ============================================================
+
+;; A long multiline recovery-guidance tail: the diagnostic must carry it
+;; verbatim (the whole BUG is that the tail was lost behind "unknown").
+(define r93-recovery-tail
+  (string-append
+   "wave runner died after 3 identical stall signatures.\n"
+   "Recovery guidance:\n"
+   "  1. Inspect .planning/HANDOFF.json for the last recorded wave state.\n"
+   "  2. Re-run /go to resume from the pending wave; completed waves are not re-executed.\n"
+   "  3. If the stall persists, narrow the wave's File: list to a single file and retry.\n"
+   "  4. Escalate to the operator once the slow-lane retry patience is exhausted."))
+
+(define (r93-capture-outcome-error-event! wave kind message)
+  (define bus (make-event-bus))
+  (define ctx (make-extension-ctx #:session-id "outcome-err-route"
+                                  #:session-dir "/tmp"
+                                  #:event-bus bus
+                                  #:extension-registry (make-extension-registry)
+                                  #:tool-registry (make-tool-registry)
+                                  #:command-registry (box (hash))))
+  (define captured (box #f))
+  (dynamic-wind
+   (lambda () (void))
+   (lambda ()
+     ;; install the REAL production bridge (the extension's register-tools
+     ;; hook wires extensions/gsd/events.rkt to the session bus) ...
+     ((hash-ref (extension-hooks gsd-planning-extension) 'register-tools) ctx (hasheq))
+     ;; ... subscribe through it, capturing the runtime event the TUI consumes
+     (subscribe! bus (lambda (evt) (set-box! captured evt)))
+     (emit-wave-outcome-error! wave kind message)
+     (unbox captured))
+   (lambda ()
+     ;; restore module-load defaults so later cases are unaffected
+     (set-gsd-event-bus! void)
+     (reset-all-gsd-state!))))
+
+;; Simulates the JSON transport round trip: every object key arrives as a
+;; string at every nesting level (wrapper AND inner outcome fields).
+(define (r93-keys->strings v)
+  (cond
+    [(hash? v)
+     (for/hash ([(k val) (in-hash v)])
+       (values (if (symbol? k) (symbol->string k) k)
+               (r93-keys->strings val)))]
+    [(pair? v) (map r93-keys->strings v)]
+    [else v]))
 
 (define outcome-error-surface-suite
   (test-suite "BUG-0043 W2: outcome errors ride the typed [SYS] [ERROR] transcript surface"
@@ -146,6 +221,86 @@
       (define next (apply-event-to-state st (make-test-event "gsd.wave.outcome-error" (hasheq))))
       (check-equal? (transcript-types next) '(system-error))
       (check-true (string-contains? (first (transcript-texts next)) "unknown")))
+
+    ;; ── BUG-0093 (R93): the real production route ───────────────
+    ;;
+    ;; The GSD extension emits wave/kind/message nested under a data
+    ;; wrapper and the installed bridge forwards that wrapper as the
+    ;; runtime payload. RED-first: these cases FAILED before the fix
+    ;; (reducer read only flat fields → "wave outcome: unknown"),
+    ;; swallowing the wave index, the kind and the full recovery tail.
+
+    (test-case "BUG-0093: emitted outcome error through the installed bridge renders full wave/kind/message incl recovery tail"
+      (define evt (r93-capture-outcome-error-event! 3 'infra-failed r93-recovery-tail))
+      (check-true (event? evt) "bridge must forward a runtime event")
+      (check-equal? (event-ev evt) 'gsd.wave.outcome-error)
+      (define next (apply-event-to-state (fresh-state) evt))
+      ;; exactly ONE diagnostic entry: the typed error surface, nothing else
+      (check-equal? (transcript-length next) 1)
+      (check-equal? (transcript-types next) '(system-error))
+      (define text (first (transcript-texts next)))
+      (check-false (string-contains? text "wave outcome: unknown")
+                   "the unknown fallback must be gone on the production route")
+      (check-true (string-contains? text "wave 3") "text must name the wave index")
+      (check-true (string-contains? text "infra-failed") "text must carry the outcome kind")
+      (check-true (string-contains? text r93-recovery-tail)
+                  "text must carry the FULL message incl multiline recovery tail verbatim"))
+
+    (test-case "BUG-0093: transport-shaped string keys at wrapper AND inner levels render identically"
+      (define evt (r93-capture-outcome-error-event! 3 'infra-failed r93-recovery-tail))
+      (define transported
+        (make-event (event-ev evt) (event-time evt) #f #f (r93-keys->strings (event-payload evt))))
+      (define next (apply-event-to-state (fresh-state) transported))
+      (check-equal? (transcript-types next) '(system-error))
+      (check-equal? (transcript-length next) 1)
+      (define text (first (transcript-texts next)))
+      (check-false (string-contains? text "wave outcome: unknown")
+                   "string-keyed wrapper+inner must NOT fall back to unknown")
+      (check-true (string-contains? text "wave 3"))
+      (check-true (string-contains? text "infra-failed"))
+      (check-true (string-contains? text r93-recovery-tail)))
+
+    ;; ── BUG-0093 controls: malformed data must not crash, flat paths unchanged ──
+
+    (test-case "BUG-0093: malformed nested data never crashes and keeps the honest fallback"
+      (for ([payload (in-list (list (hasheq 'data 42)
+                                    (hasheq 'data (hasheq))
+                                    (hasheq 'data (hasheq 'unrelated "junk"))
+                                    (hasheq "data" "garbage")
+                                    ;; non-hash payloads used to crash the flat hash-ref
+                                    "not-a-hash-at-all"))])
+        (define next
+          (apply-event-to-state (fresh-state)
+                                (make-test-event "gsd.wave.outcome-error" payload)))
+        (check-equal? (transcript-types next) '(system-error) (format "payload ~v" payload))
+        (check-true (string-contains? (first (transcript-texts next)) "wave outcome: unknown")
+                    (format "honest unknown fallback for payload ~v" payload))))
+
+    (test-case "BUG-0093: flat symbol payload control is unchanged by the envelope unwrap"
+      (define st (fresh-state))
+      (define next
+        (apply-event-to-state
+         st
+         (make-test-event "gsd.wave.outcome-error"
+                          (hasheq 'wave 1 'kind 'stalled 'level "error" 'message "flat control"))))
+      (check-equal? (transcript-types next) '(system-error))
+      (define text (first (transcript-texts next)))
+      (check-true (string-contains? text "wave 1"))
+      (check-true (string-contains? text "stalled"))
+      (check-true (string-contains? text "flat control")))
+
+    (test-case "BUG-0093: flat string payload control is unchanged by the envelope unwrap"
+      (define st (fresh-state))
+      (define next
+        (apply-event-to-state
+         st
+         (make-test-event "gsd.wave.outcome-error"
+                          (hasheq "wave" 1 "kind" "stalled" "level" "error" "message" "flat string control"))))
+      (check-equal? (transcript-types next) '(system-error))
+      (define text (first (transcript-texts next)))
+      (check-true (string-contains? text "wave 1"))
+      (check-true (string-contains? text "stalled"))
+      (check-true (string-contains? text "flat string control")))
 
     (test-case "done-class outcomes are unaffected: no error entry appears"
       (define st (fresh-state))

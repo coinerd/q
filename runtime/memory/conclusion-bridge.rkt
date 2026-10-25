@@ -13,11 +13,15 @@
                   task-conclusion-id
                   task-conclusion-text
                   task-conclusion-category
-                  task-conclusion-relevance-tags))
+                  task-conclusion-relevance-tags
+                  ;; R99a: shared frozen recognizer + provenance classification
+                  provenance-kind?))
 
 (provide current-conclusion-to-memory-bridge-enabled
          persist-high-value-conclusions!
-         high-value-categories)
+         high-value-categories
+         ;; R99a: shared no-promotion classifier (recognition-based exclusion)
+         high-value-conclusion?)
 
 (define current-conclusion-to-memory-bridge-enabled (make-parameter #f))
 
@@ -25,13 +29,23 @@
 ;; Facts, decisions, and patterns are high-value enough for project-scoped memory.
 (define high-value-categories '(decision pattern fact))
 
+;; R99a (BUG-0099): no-promotion rule. Recognized legacy deterministic
+;; fallbacks (frozen tag+auto-id+"[Auto] " signature) and future internal
+;; 'provenance records are NEVER promoted to high-value semantic memory.
+;; Valid LLM facts are unaffected: only the exact frozen fallback signature is
+;; excluded (tag-only or known-prefix alone is insufficient), so ambiguous or
+;; LLM-authored records still export.
+(define (high-value-conclusion? c)
+  (and (memq (task-conclusion-category c) high-value-categories)
+       (not (provenance-kind? c))))
+
 (define (persist-high-value-conclusions! conclusions
                                          #:backend backend
                                          #:session-id session-id
                                          #:project-root [project-root "."])
   (when (and (current-conclusion-to-memory-bridge-enabled) backend)
     (for ([c (in-list conclusions)]
-          #:when (memq (task-conclusion-category c) high-value-categories))
+          #:when (high-value-conclusion? c))
       (define item
         (memory-item (format "conc_~a" (task-conclusion-id c))
                      'semantic

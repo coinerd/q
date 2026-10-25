@@ -79,6 +79,18 @@
          slug-mismatch-doc-path
          ;; Functions (contracted)
          (contract-out
+          ;; BUG-0082: declared-path identity layer — one resolver, validated
+          ;; before any path resolution, and the shared declared reader.
+          [unsafe-declared-path-refusal (-> (or/c string? #f) (or/c string? #f))]
+          [wave-entry-effective-doc-rel-path
+           (-> wave-index-entry? (values (or/c string? #f) (or/c string? #f)))]
+          [declared-mapping-refusals (-> (listof wave-index-entry?) (listof string?))]
+          [symlinked-declared-doc-refusal (-> path-string? string? (or/c string? #f))]
+          [declared-wave-doc-resolution
+           (->* (path-string? exact-nonnegative-integer?)
+                ((listof wave-index-entry?))
+                (values (or/c hash? #f) (or/c string? #f) (or/c string? #f)))]
+          [read-declared-wave-doc (-> path-string? exact-nonnegative-integer? (or/c hash? #f))]
           [wave-doc-path (-> path-string? exact-nonnegative-integer? string? path?)]
           [write-wave-doc! (-> path-string? exact-nonnegative-integer? string? string? string? path?)]
           [read-wave-doc (-> path-string? exact-nonnegative-integer? string? (or/c hash? #f))]
@@ -102,6 +114,7 @@
           [check-status-consistency (-> path-string? (listof status-divergence?))]
           [format-status-divergence-warning (-> status-divergence? string?)]
           [resolve-status-precedence (-> string? string? string?)]
+          [effective-wave-status (-> path-string? wave-index-entry? string?)]
           [plan-format-deprecation-warnings (-> string? (listof string?))]
           [plan-format-deprecation-warning-lines (-> path-string? (listof string?))]
           ;; BUG-0041 (W4): wave-doc lint at /go entry with recorded verdicts
@@ -196,13 +209,21 @@
     (string-trim (cadr (regexp-match body-status-line-rx line)))))
 
 (define (write-wave-doc! base-dir idx slug content status)
-  (define path (wave-doc-path base-dir idx slug))
+  (write-wave-doc-at! (wave-doc-path base-dir idx slug) idx content status))
+
+;; write-wave-doc-at! : path? exact-nonnegative-integer? string? string? -> path?
+;; The single header-emitting writer (BUG-0050 sanitization shared with
+;; write-wave-doc!). header-idx is the wave number the MANAGED header
+;; carries — BUG-0082: the sanctioned dual-write passes the DECLARED doc's
+;; OWN header number, so a carrier doc keeps its carrier identity and the
+;; header is never rewritten to the selected W-number.
+(define (write-wave-doc-at! path header-idx content status)
   (define dir (path-only path))
   (unless (directory-exists? dir)
     (make-directory* dir))
   ;; BUG-0050 (W2): the authoring path emits exactly ONE `Status:` line
   ;; (the machine header); any body `Status:` line is stripped.
-  (define header (format "# Wave ~a\nStatus: ~a\n\n" idx status))
+  (define header (format "# Wave ~a\nStatus: ~a\n\n" header-idx status))
   (define sanitized-body (strip-body-status-lines content))
   (call-with-output-file path
                          (lambda (out)
@@ -210,6 +231,22 @@
                            (display sanitized-body out))
                          #:exists 'truncate)
   path)
+
+;; doc-header-wave-number : string? exact-nonnegative-integer? string?
+;;                          -> exact-nonnegative-integer?
+;; The wave number a doc's managed header must KEEP on rewrite: the
+;; doc's own `# Wave N` header when present (carrier identity preserved
+;; under a declared mapping), else the number encoded in its W<n>-…
+;; filename, else the writing row's index.
+(define (doc-header-wave-number wave-text fallback-idx rel-path)
+  (cond
+    [(regexp-match #rx"^# Wave ([0-9]+)" wave-text)
+     =>
+     (lambda (m) (string->number (cadr m)))]
+    [(and rel-path (regexp-match #rx"(?:^|/)W([0-9]+)-" rel-path))
+     =>
+     (lambda (m) (string->number (cadr m)))]
+    [else fallback-idx]))
 
 (define (parse-wave-doc-from-string text idx slug [path #f])
   (define status (extract-status text))
@@ -269,11 +306,208 @@
 
 ;; The wave's document path: the declared arrow path when present, else the
 ;; classic W<idx>-<slug>.md synthesis; #f when the wave is not in the index.
+;; BUG-0082: the declared path is validated FIRST — an unsafe arrow
+;; (traversal/absolute/malformed) raises naming the exact declared target
+;; instead of silently resolving (the lenient wave-ref-path-from-target
+;; extraction must not leak into path resolution). Callers that need the
+;; refusal as a value use wave-entry-effective-doc-rel-path.
 (define (wave-entry-doc-path entries idx)
   (define e (findf (lambda (e) (= (wave-index-entry-idx e) idx)) entries))
   (and e
-       (or (wave-index-entry-ref-path e)
-           (format "waves/W~a-~a.md" (wave-index-entry-idx e) (wave-index-entry-slug e)))))
+       (let-values ([(rel refusal) (wave-entry-effective-doc-rel-path e)])
+         (when refusal
+           (raise (exn:fail refusal (current-continuation-marks))))
+         rel)))
+
+;; ============================================================
+;; BUG-0082 declared-path identity layer
+;; ============================================================
+;; A wave's document identity is the DECLARED arrow path of its PLAN.md
+;; index row; the W<idx>-<slug>.md synthesis exists only for arrowless
+;; legacy authoring. One resolver (wave-entry-effective-doc-rel-path /
+;; declared-wave-doc-resolution) serves every reader and the sanctioned
+;; status writer so loader, verifier, prompts, recovery, hash binding and
+;; status selection all observe the SAME declared bytes — a stale
+;; synthesized twin (waves/W2-….md) can never win, and a missing declared
+;; target is refused BY NAME, never silently replaced.
+
+;; unsafe-declared-path-refusal : (or/c string? #f) -> (or/c string? #f)
+;; PURE syntactic validation of a declared doc path, run BEFORE any path
+;; resolution (the arrow target is whatever wave-ref-path-from-target
+;; extracted, so this re-checks the result instead of trusting it). #f when
+;; the path is safe; otherwise a refusal string naming the exact target.
+;; The path must be relative, anchored under waves/, and contain no
+;; traversal/empty/dot segments; every resolution stays inside
+;; .planning/waves.
+(define (unsafe-declared-path-refusal rel-path)
+  (cond
+    [(not rel-path) #f]
+    [(zero? (string-length rel-path)) "declared wave document path is empty"]
+    [(string-prefix? rel-path "/")
+     (format
+      "declared wave document path ~a is absolute; declare it relative to .planning (waves/….md)"
+      rel-path)]
+    [(not (string-prefix? rel-path "waves/"))
+     (format "declared wave document path ~a is not under waves/" rel-path)]
+    [else
+     (define segs (string-split rel-path "/"))
+     (cond
+       [(ormap (lambda (seg) (string=? seg "..")) segs)
+        (format "declared wave document path ~a escapes .planning/waves (.. segment)" rel-path)]
+       [(ormap (lambda (seg) (or (string=? seg "") (string=? seg "."))) segs)
+        (format "declared wave document path ~a contains an empty or `.` segment" rel-path)]
+       [else #f])]))
+
+;; wave-entry-effective-doc-rel-path : wave-index-entry? -> (values rel refusal)
+;; PURE. The .planning-relative document path for one index entry and its
+;; refusal: the declared arrow path when the row carries one (validated),
+;; else the classic synthesized waves/W<idx>-<slug>.md (arrowless legacy
+;; authoring only). rel is #f exactly when refusal is a string.
+(define (wave-entry-effective-doc-rel-path e)
+  (define declared (wave-index-entry-ref-path e))
+  (if declared
+      (let ([refusal (unsafe-declared-path-refusal declared)])
+        (if refusal
+            (values #f refusal)
+            (values declared #f)))
+      (values (format "waves/W~a-~a.md" (wave-index-entry-idx e) (wave-index-entry-slug e)) #f)))
+
+;; declared-mapping-refusals : (listof wave-index-entry?) -> (listof string?)
+;; PURE. Every AMBIGUOUS-mapping refusal for a whole index: duplicate wave
+;; indexes, and two or more entries whose effective doc path is the SAME
+;; document (a shared carrier). A shared multi-entry carrier cannot carry
+;; per-wave status through one header, so validation and selection refuse
+;; the mapping by name; mutation is additionally guarded pre-write. Empty
+;; when every wave owns exactly one document.
+(define (declared-mapping-refusals entries)
+  (define idx-counts (make-hash))
+  (for ([e (in-list entries)])
+    (hash-update! idx-counts (wave-index-entry-idx e) add1 0))
+  (define dup-refusals
+    (for/list ([idx (in-list (sort (hash-keys idx-counts) <))]
+               #:when (> (hash-ref idx-counts idx) 1))
+      (format "duplicate wave index: W~a appears ~a times in the PLAN.md index"
+              idx
+              (hash-ref idx-counts idx))))
+  (define by-doc (make-hash))
+  (for ([e (in-list entries)])
+    (define-values (rel _refusal) (wave-entry-effective-doc-rel-path e))
+    (when rel
+      (hash-update! by-doc rel (lambda (l) (cons e l)) '())))
+  (define shared-refusals
+    (for/list ([rel (in-list (sort (hash-keys by-doc) string<?))]
+               #:do [(define claimants (reverse (hash-ref by-doc rel)))]
+               #:when (> (length claimants) 1))
+      (format
+       (string-append "ambiguous shared carrier: .planning/~a is the declared document for waves ~a; "
+                      "shared multi-entry carrier mutation is unsupported — per-wave status cannot "
+                      "be tracked through one document header")
+       rel
+       (string-join (for/list ([e (in-list claimants)])
+                      (format "W~a" (wave-index-entry-idx e)))
+                    " and "))))
+  (append dup-refusals shared-refusals))
+
+;; symlink-path? : path? -> boolean?
+;; Same idiom as delivery-recovery.rkt: a path whose filesystem type is
+;; 'link (file-or-directory-type does not follow the final link).
+(define (symlink-path? p)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (eq? (file-or-directory-type p #f) 'link)))
+
+;; symlinked-declared-doc-refusal : path-string? string? -> (or/c string? #f)
+;; #f when no component of .planning/<rel-path> from .planning/waves
+;; downward is a symlink; otherwise a refusal naming the exact link. The
+;; <base>/.planning directory itself is the campaign convention and is not
+;; policed here — everything the DECLARED path adds must be physical, so a
+;; symlinked declared doc can never redirect reads/writes outside the
+;; planning tree.
+(define (symlinked-declared-doc-refusal base-dir rel-path)
+  (define chain
+    (let loop ([cur (build-path base-dir ".planning")]
+               [segs (string-split rel-path "/")]
+               [acc '()])
+      (if (null? segs)
+          (reverse acc)
+          (let ([next (build-path cur (car segs))]) (loop next (cdr segs) (cons next acc))))))
+  (for/first ([p (in-list chain)]
+              #:when (symlink-path? p))
+    (format "declared wave document path .planning/~a traverses or is the symlink ~a; refusing"
+            rel-path
+            (path->string p))))
+
+;; declared-wave-doc-resolution : path-string? exact-nonnegative-integer?
+;;                                [entries] -> (values doc refusal display)
+;; THE shared declared reader. Resolves wave <idx>'s document through the
+;; PLAN.md index: the declared arrow path when the row carries one
+;; (validated — syntax first, then filesystem symlinks), the classic
+;; synthesis only for arrowless legacy rows. Returns three values:
+;;   doc          — the parsed doc hash (same shape as read-wave-doc), #f
+;;                  when the document is absent/unreadable
+;;   refusal      — #f, or a NAMED refusal carrying the exact
+;;                  .planning/... path: unsafe arrow, symlinked doc, or a
+;;                  MISSING DECLARED doc (a declared row never falls back
+;;                  to a stale synthesized twin)
+;;   display-path — the .planning-relative display path resolved for the
+;;                  row, #f when there is no index row for <idx>
+;; A missing ARROWLESS doc is NOT a refusal (legacy plan-fallback flows
+;; preserved). A SHARED carrier is not a refusal either — reads honor the
+;; declared bytes deterministically; ambiguity is refused by
+;; declared-mapping-refusals at validation/selection and pre-mutation.
+(define (declared-wave-doc-resolution base-dir idx [entries #f])
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (cond
+    [(not (file-exists? plan-path)) (values #f #f #f)]
+    [else
+     (define es (or entries (parse-plan-index (call-with-input-file plan-path port->string))))
+     (define entry
+       (for/first ([e (in-list es)]
+                   #:when (= (wave-index-entry-idx e) idx))
+         e))
+     (cond
+       [(not entry) (values #f #f #f)]
+       [else
+        (define declared-row? (and (wave-index-entry-ref-path entry) #t))
+        (define-values (rel syntax-refusal) (wave-entry-effective-doc-rel-path entry))
+        (cond
+          [syntax-refusal
+           (values #f syntax-refusal (format ".planning/~a" (wave-index-entry-ref-path entry)))]
+          [else
+           (define display (format ".planning/~a" rel))
+           (define abs (build-path base-dir ".planning" rel))
+           (define link-refusal (symlinked-declared-doc-refusal base-dir rel))
+           (cond
+             [link-refusal (values #f link-refusal display)]
+             [(not (file-exists? abs))
+              ;; A declared row demands its exact document; an arrowless
+              ;; legacy row keeps the missing-doc fallback semantics.
+              (if declared-row?
+                  (values #f
+                          (format (string-append
+                                   "declared wave document ~a is missing; the plan index declares it "
+                                   "and no stale synthesized twin is substituted")
+                                  display)
+                          display)
+                  (values #f #f display))]
+             [else
+              (values (parse-wave-doc-from-string (call-with-input-file abs port->string)
+                                                  idx
+                                                  (wave-index-entry-slug entry)
+                                                  abs)
+                      #f
+                      display)])])])]))
+
+;; read-declared-wave-doc : path-string? exact-nonnegative-integer?
+;;                          -> (or/c hash? #f)
+;; The declared doc hash for wave <idx>, #f when absent (arrowless legacy
+;; rows). Refusals (unsafe arrow / symlink / missing declared doc) RAISE
+;; naming the exact .planning/... path — callers must never silently
+;; proceed past an unresolvable declared identity.
+(define (read-declared-wave-doc base-dir idx)
+  (define-values (doc refusal _display) (declared-wave-doc-resolution base-dir idx))
+  (if refusal
+      (raise (exn:fail refusal (current-continuation-marks)))
+      doc))
 
 (define (parse-plan-index md-text)
   (define lines (string-split md-text "\n"))
@@ -287,8 +521,7 @@
                [title (string-trim (cadddr m))]
                [target (and (list? m) (> (length m) 4) (list-ref m 4))]
                [slug (or (and target (extract-slug-from-target target)) (slugify title))])
-          (append entries
-                  (list (wave-index-entry idx title slug status (wave-ref-path-from-target target)))))
+          (append entries (list (wave-index-entry idx title slug status (declared-ref-path target)))))
         ;; Try relaxed format: - W0: Title (without status bracket)
         (let ([rm (regexp-match relaxed-index-line-rx line)])
           (if rm
@@ -298,8 +531,7 @@
                      [slug (or (and target (extract-slug-from-target target)) (slugify title))])
                 (append
                  entries
-                 (list
-                  (wave-index-entry idx title slug STATUS-INBOX (wave-ref-path-from-target target)))))
+                 (list (wave-index-entry idx title slug STATUS-INBOX (declared-ref-path target)))))
               entries)))))
 ;; BUG-0023 (W2): a target that does not follow the W<n>-<slug>.md
 ;; convention yields NO slug, so the caller falls back to slugify(title).
@@ -308,6 +540,17 @@
 (define (extract-slug-from-target target)
   (define m (regexp-match slug-from-target-rx target))
   (and m (cadr m)))
+
+;; BUG-0082: an arrow target that the LENIENT wave-ref-path-from-target
+;; extraction cannot turn into a conforming waves/….md path is still a
+;; DECLARED target — storing #f here would silently re-home the row to the
+;; synthesized W<idx>-<slug>.md identity (traversal/malformed arrows must
+;; be REJECTED, not silently synthesized). The raw target is kept and the
+;; validation layer (unsafe-declared-path-refusal) refuses it by name
+;; before any path resolution. Trailing prose after a conforming path is
+;; unaffected: the lenient extraction still wins there.
+(define (declared-ref-path target)
+  (and target (or (wave-ref-path-from-target target) (string-trim target))))
 
 ;; ============================================================
 ;; Plan-format provenance & strict index validation (BUG-0023, W2)
@@ -334,13 +577,38 @@
   (format ".planning/waves/W~a-~a.md" (wave-index-entry-idx e) (wave-index-entry-slug e)))
 
 ;; missing-index-doc-paths : path-string? (listof wave-index-entry?) -> (listof string?)
-;; Display paths of index entries whose target wave doc does not exist on
-;; disk. A non-empty result is a validation error (BUG-0023): previously the
-;; wave loaded with silent empty content instead of erroring.
+;; Display paths of index entries whose DECLARED wave doc does not exist on
+;; disk (BUG-0082: the declared arrow path when the row carries one — a
+;; missing declared target is reported under its exact declared name, never
+;; under a synthesized twin; symlinked declared docs count as missing).
+;; Arrowless legacy rows keep the W<idx>-<slug>.md display. A non-empty
+;; result is a validation error (BUG-0023): previously the wave loaded with
+;; silent empty content instead of erroring.
 (define (missing-index-doc-paths base-dir entries)
-  (for/list ([e (in-list entries)]
-             #:unless (wave-exists? base-dir (wave-index-entry-idx e) (wave-index-entry-slug e)))
-    (index-entry-doc-display-path e)))
+  ;; order-preserving dedupe: two rows may declare the SAME (missing)
+  ;; document — the shared-carrier refusal names the ambiguity separately.
+  (remove-duplicates (for/list ([e (in-list entries)]
+                                #:unless (declared-doc-present? base-dir e))
+                       (declared-doc-display-path e))
+                     string=?))
+
+;; declared-doc-display-path : wave-index-entry? -> string?
+;; The .planning-relative display path the row declares (exact declared
+;; name; unsafe arrows display the raw declared target).
+(define (declared-doc-display-path e)
+  (define-values (rel refusal) (wave-entry-effective-doc-rel-path e))
+  (if rel
+      (format ".planning/~a" rel)
+      (format ".planning/~a" (wave-index-entry-ref-path e))))
+
+;; declared-doc-present? : path-string? wave-index-entry? -> boolean?
+;; #t when the row's declared document physically exists (no symlink on
+;; the declared path). Unsafe arrows are never present.
+(define (declared-doc-present? base-dir e)
+  (define-values (rel refusal) (wave-entry-effective-doc-rel-path e))
+  (and rel
+       (not (symlinked-declared-doc-refusal base-dir rel))
+       (file-exists? (build-path base-dir ".planning" rel))))
 
 ;; ============================================================
 ;; Dual-source status consistency & precedence (BUG-0034, W2)
@@ -412,40 +680,48 @@
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (if (not (file-exists? plan-path))
       '()
-      (for/fold ([divs '()])
+      (for/fold ([divs '()]
+                 [claimed '()]
+                 #:result divs)
                 ([e (in-list (parse-plan-index (call-with-input-file plan-path port->string)))])
         (define idx (wave-index-entry-idx e))
-        (define doc
-          (and (wave-exists? base-dir idx (wave-index-entry-slug e))
-               (read-wave-doc base-dir idx (wave-index-entry-slug e))))
+        ;; BUG-0082: read the DECLARED document (arrow path when the row
+        ;; carries one). Unresolvable declared identities (unsafe arrow /
+        ;; symlink / missing declared doc) are hard-refusal territory for
+        ;; the loader, not a consistency divergence. A SHARED carrier is
+        ;; compared once — under the first claiming row — so one physical
+        ;; header cannot manufacture duplicate divergences for every
+        ;; sharing row.
+        (define-values (doc refusal display) (declared-wave-doc-resolution base-dir idx))
         (cond
-          [(not doc) divs]
+          [(or refusal (not doc) (member display claimed)) (values divs claimed)]
           [else
+           (define doc-display display)
            (define row-status (wave-index-entry-status e))
            (define header-status (hash-ref doc 'status))
-           (define doc-display (index-entry-doc-display-path e))
-           (append divs
-                   ;; BUG-0034: PLAN.md index row vs wave-doc header.
-                   (if (not (eq? (status->symbol row-status) (status->symbol header-status)))
-                       (list (status-divergence idx
-                                                row-status
-                                                header-status
-                                                ".planning/PLAN.md"
-                                                doc-display
-                                                'index-vs-doc-header))
-                       '())
-                   ;; BUG-0050: a second `Status:` line in the doc body. The
-                   ;; machine header (authoritative) rides plan-status; the
-                   ;; stale body line value rides doc-status.
-                   (let ([body (body-status-line (hash-ref doc 'content))])
-                     (if body
-                         (list (status-divergence idx
-                                                  header-status
-                                                  body
-                                                  ".planning/PLAN.md"
-                                                  doc-display
-                                                  'body-vs-header))
-                         '())))]))))
+           (values (append divs
+                           ;; BUG-0034: PLAN.md index row vs wave-doc header.
+                           (if (not (eq? (status->symbol row-status) (status->symbol header-status)))
+                               (list (status-divergence idx
+                                                        row-status
+                                                        header-status
+                                                        ".planning/PLAN.md"
+                                                        doc-display
+                                                        'index-vs-doc-header))
+                               '())
+                           ;; BUG-0050: a second `Status:` line in the doc body. The
+                           ;; machine header (authoritative) rides plan-status; the
+                           ;; stale body line value rides doc-status.
+                           (let ([body (body-status-line (hash-ref doc 'content))])
+                             (if body
+                                 (list (status-divergence idx
+                                                          header-status
+                                                          body
+                                                          ".planning/PLAN.md"
+                                                          doc-display
+                                                          'body-vs-header))
+                                 '())))
+                   (cons display claimed))]))))
 
 ;; format-status-divergence-warning : status-divergence? -> string?
 ;; One named, user-visible warning per divergent wave (BUG-0034): names
@@ -494,12 +770,14 @@
 ;; effective-wave-status : path-string? wave-index-entry? -> string?
 ;; Entry status resolved through the documented BUG-0034 precedence:
 ;; the wave-doc header when it exists, otherwise the PLAN.md row.
+;; BUG-0082: the header is read from the row's DECLARED document; an
+;; unresolvable declared identity (unsafe arrow / symlink / missing
+;; declared doc) never invents a header — the row status stands and the
+;; hard-refusal surfaces (loader/verifier) name the exact path.
 (define (effective-wave-status base-dir e)
   (define idx (wave-index-entry-idx e))
-  (define doc
-    (and (wave-exists? base-dir idx (wave-index-entry-slug e))
-         (read-wave-doc base-dir idx (wave-index-entry-slug e))))
-  (if doc
+  (define-values (doc refusal _display) (declared-wave-doc-resolution base-dir idx))
+  (if (and doc (not refusal))
       (resolve-status-precedence (wave-index-entry-status e) (hash-ref doc 'status))
       (wave-index-entry-status e)))
 
@@ -673,15 +951,20 @@
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (if (not (file-exists? plan-path))
       '()
-      (append* (for/list ([e (in-list (parse-plan-index (call-with-input-file plan-path
-                                                                              port->string)))])
-                 (define idx (wave-index-entry-idx e))
-                 (define doc
-                   (and (wave-exists? base-dir idx (wave-index-entry-slug e))
-                        (read-wave-doc base-dir idx (wave-index-entry-slug e))))
-                 (if doc
-                     (lint-wave-doc doc)
-                     '())))))
+      (let ([entries (parse-plan-index (call-with-input-file plan-path port->string))])
+        (for/fold ([violations '()]
+                   [claimed '()]
+                   #:result violations)
+                  ([e (in-list entries)])
+          (define idx (wave-index-entry-idx e))
+          ;; BUG-0082: lint the DECLARED document; the violation's doc path
+          ;; names the declared file. A shared carrier is linted once, under
+          ;; the first claiming row, so one physical doc cannot emit one
+          ;; warning per claiming row.
+          (define-values (doc refusal display) (declared-wave-doc-resolution base-dir idx))
+          (cond
+            [(or refusal (not doc) (member display claimed)) (values violations claimed)]
+            [else (values (append violations (lint-wave-doc doc)) (cons display claimed))])))))
 
 ;; Human label for each violation section, named verbatim in warnings.
 (define WAVE-DOC-LINT-SECTION-LABELS
@@ -752,19 +1035,31 @@
        (define verdict
          (list 'wave-doc-lint-verdict
                (list 'recorded-at (current-seconds))
-               (for/list ([e (in-list entries)])
+               (for/fold ([rows '()]
+                          [claimed '()]
+                          #:result rows)
+                         ([e (in-list entries)])
                  (define idx (wave-index-entry-idx e))
-                 (define doc
-                   (and (wave-exists? base-dir idx (wave-index-entry-slug e))
-                        (read-wave-doc base-dir idx (wave-index-entry-slug e))))
-                 (list 'wave
-                       idx
-                       'doc-path
-                       (index-entry-doc-display-path e)
-                       'violations
-                       (if doc
-                           (map wave-doc-violation-section (lint-wave-doc doc))
-                           '(missing-doc))))))
+                 ;; BUG-0082: verdict rows carry the DECLARED doc path; a
+                 ;; shared carrier records one row, under its first claimant.
+                 (define-values (doc refusal display) (declared-wave-doc-resolution base-dir idx))
+                 (cond
+                   [(or refusal (member display claimed))
+                    (values
+                     (cons (list 'wave idx 'doc-path display 'violations '(unresolvable-declared-doc))
+                           rows)
+                     claimed)]
+                   [else
+                    (values (cons (list 'wave
+                                        idx
+                                        'doc-path
+                                        display
+                                        'violations
+                                        (if doc
+                                            (map wave-doc-violation-section (lint-wave-doc doc))
+                                            '(missing-doc)))
+                                  rows)
+                            (cons display claimed))]))))
        (make-directory* (path-only dest))
        (call-with-output-file dest
                               (lambda (out)
@@ -909,13 +1204,35 @@
     [(not (file-exists? plan-path)) #f]
     [else
      (define text (call-with-input-file plan-path port->string))
-     ;; BUG-0034 (W2): selection honors the documented precedence — the
-     ;; EFFECTIVE status (doc header wins for progress statuses, row wins
-     ;; only for [DEFERRED]), not the raw PLAN.md row — so an externally
-     ;; doctored row can no longer silently steer next-wave selection.
-     (for/first ([e (in-list (parse-plan-index text))]
-                 #:when (memq (status->symbol (effective-wave-status base-dir e)) '(pending failed)))
-       e)]))
+     (define entries (parse-plan-index text))
+     ;; BUG-0082 (R2 decision): selection REFUSES an ambiguous declared
+     ;; mapping — duplicate wave indexes or a shared carrier claimed by two
+     ;; rows — BEFORE any selection, because one document header cannot
+     ;; carry two waves' statuses. Refuses malformed/traversal arrows too.
+     ;; Both refusals name the exact document path.
+     (define arrow-refusals
+       (for/list ([e (in-list entries)]
+                  #:do [(define-values (_rel r) (wave-entry-effective-doc-rel-path e))]
+                  #:when r)
+         r))
+     (define mapping-refusals (declared-mapping-refusals entries))
+     (cond
+       [(pair? arrow-refusals)
+        (raise (exn:fail (format "wave selection refused: ~a" (car arrow-refusals))
+                         (current-continuation-marks)))]
+       [(pair? mapping-refusals)
+        (raise (exn:fail (format "wave selection refused: ~a" (car mapping-refusals))
+                         (current-continuation-marks)))]
+       [else
+        ;; BUG-0034 (W2): selection honors the documented precedence — the
+        ;; EFFECTIVE status (doc header wins for progress statuses, row wins
+        ;; only for [DEFERRED]), not the raw PLAN.md row — so an externally
+        ;; doctored row can no longer silently steer next-wave selection.
+        ;; BUG-0082: the header is the DECLARED document's header.
+        (for/first ([e (in-list entries)]
+                    #:when (memq (status->symbol (effective-wave-status base-dir e))
+                                 '(pending failed)))
+          e)])]))
 
 ;; ============================================================
 ;; Dual-write status transition
@@ -928,27 +1245,73 @@
     [else
      (define text (call-with-input-file plan-path port->string))
      (define entries (parse-plan-index text))
-     (define entry
-       (for/first ([e entries]
-                   #:when (= (wave-index-entry-idx e) wave-idx))
+     (define matches
+       (for/list ([e (in-list entries)]
+                  #:when (= (wave-index-entry-idx e) wave-idx))
          e))
      (cond
-       [(not entry) #f]
+       [(null? matches) #f]
+       ;; BUG-0082 (R2 decision): the sanctioned dual-write REFUSES an
+       ;; ambiguous declared mapping BEFORE any status/index mutation — a
+       ;; shared carrier claimed by two rows (or a duplicated index) cannot
+       ;; carry another wave's status through one header. Zero file changes
+       ;; on refusal; validation/selection refuse the same mapping by name.
+       [(> (length matches) 1)
+        (wave-status-refusal!
+         base-dir
+         wave-idx
+         new-status
+         (format "duplicate wave index: W~a appears ~a times in the PLAN.md index"
+                 wave-idx
+                 (length matches)))
+        #f]
        [else
-        (define slug (wave-index-entry-slug entry))
-        (define wave-path (wave-doc-path base-dir wave-idx slug))
-        (when (file-exists? wave-path)
-          (define wave-text (call-with-input-file wave-path port->string))
-          (define content (strip-status-header wave-text))
-          (write-wave-doc! base-dir wave-idx slug content new-status))
-        (update-wave-in-index! base-dir wave-idx new-status)
-        ;; BUG-0034 (W2): audibility — the sanctioned dual-write leaves a
-        ;; debug-level trace so post-hoc divergence forensics can tell a
-        ;; sanctioned status transition from an external edit.
-        (log-debug "gsd: mark-wave-status! dual-write W~a → ~a (wave doc + PLAN.md index row)"
-                   wave-idx
-                   new-status)
-        #t])]))
+        (define entry (car matches))
+        (define-values (rel refusal) (wave-entry-effective-doc-rel-path entry))
+        (define mapping-refusals (declared-mapping-refusals entries))
+        (define link-refusal (and rel (symlinked-declared-doc-refusal base-dir rel)))
+        (cond
+          [refusal
+           (wave-status-refusal! base-dir wave-idx new-status refusal)
+           #f]
+          [link-refusal
+           (wave-status-refusal! base-dir wave-idx new-status link-refusal)
+           #f]
+          [(pair? mapping-refusals)
+           (wave-status-refusal! base-dir wave-idx new-status (car mapping-refusals))
+           #f]
+          [else
+           (define wave-path (build-path base-dir ".planning" rel))
+           (when (file-exists? wave-path)
+             (define wave-text (call-with-input-file wave-path port->string))
+             (define content (strip-status-header wave-text))
+             ;; BUG-0082: the DECLARED document is written, under its OWN
+             ;; header identity — a carrier keeps its carrier header number
+             ;; even when the writing row is another W-number; the header is
+             ;; never rewritten to the selected wave's index.
+             (write-wave-doc-at! wave-path
+                                 (doc-header-wave-number wave-text wave-idx rel)
+                                 content
+                                 new-status))
+           (update-wave-in-index! base-dir wave-idx new-status)
+           ;; BUG-0034 (W2): audibility — the sanctioned dual-write leaves a
+           ;; debug-level trace so post-hoc divergence forensics can tell a
+           ;; sanctioned status transition from an external edit.
+           (log-debug
+            "gsd: mark-wave-status! dual-write W~a → ~a (declared wave doc ~a + PLAN.md index row)"
+            wave-idx
+            new-status
+            rel)
+           #t])])]))
+
+;; wave-status-refusal! : path-string? exact-nonnegative-integer? string? string? -> void?
+;; Loud, named record of a refused status transition (zero file changes).
+(define (wave-status-refusal! base-dir wave-idx new-status reason)
+  (log-error "gsd: mark-wave-status! refused W~a → ~a in ~a: ~a (zero file changes)"
+             wave-idx
+             new-status
+             base-dir
+             reason))
 
 ;; ============================================================
 ;; Plan overall status

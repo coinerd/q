@@ -31,6 +31,8 @@
          (only-in "supplemental-evidence-publication.rkt"
                   load-supplemental-supersession-proposal!)
          (only-in "delivery-handoff.rkt" controller-environment redact-delivery-text)
+         ;; R76 (BUG-0076): shared authenticated delivery-root validation.
+         (only-in "git-root-layout.rkt" resolve-explicit-delivery-root!)
          (only-in "campaign-state.rkt"
                   campaign-record?
                   campaign-plan-id
@@ -376,43 +378,62 @@
                                          attempt-fence
                                          coordinator-fence
                                          evidence)
-  (define result
-    (run-subprocess "python3"
-                    #:args (list (path->string default-delivery-controller-script)
-                                 "publish-head"
-                                 "--repo"
-                                 (hash-ref snapshot 'repo)
-                                 "--plan"
-                                 plan
-                                 "--wave"
-                                 (number->string wave)
-                                 "--expected-branch"
-                                 (hash-ref snapshot 'branch)
-                                 "--expected-head"
-                                 (hash-ref snapshot 'head)
-                                 "--expected-origin"
-                                 (hash-ref snapshot 'origin)
-                                 "--expected-tree"
-                                 (hash-ref snapshot 'tree))
-                    #:directory base
-                    #:environment (controller-environment)
-                    #:timeout 240
-                    #:process-group? #t))
-  (cond
-    [(or (subprocess-result-timed-out? result)
-         (subprocess-result-truncated? result)
-         (not (zero? (subprocess-result-exit-code result))))
-     (define parsed (parse-controller-result (subprocess-result-stdout result)))
-     (hasheq 'status
-             "blocked"
-             'reason
-             (redact-delivery-text (format "~a"
-                                           (or (and parsed (hash-ref parsed 'reason #f))
-                                               (subprocess-result-stderr result)
-                                               "publication controller refused"))))]
-    [else
-     (or (parse-controller-result (subprocess-result-stdout result))
-         (hasheq 'status "blocked" 'reason "publication controller returned malformed JSON"))]))
+  ;; R76 (BUG-0076): the snapshot-derived --repo is no longer trusted
+  ;; blindly. The recorded repository identity must validate as a real git
+  ;; work tree whose toplevel realpath-equals it (the same authenticated-root
+  ;; law the verifier applies to branch contexts); an unverifiable identity
+  ;; is a typed blocked stop with the redacted refusal reason — publication
+  ;; never shells the controller against an unauthenticated checkout.
+  (define publisher-root
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (hasheq 'status
+                               "blocked"
+                               'reason
+                               (redact-delivery-text (exn-message e))))])
+      (resolve-explicit-delivery-root! (hash-ref snapshot 'repo))))
+  (if (hash? publisher-root)
+      publisher-root
+      (let ([publisher-root
+             ;; validated absolute root path (run-subprocess args are strings)
+             (if (path? publisher-root) (path->string publisher-root) publisher-root)])
+      (define result
+        (run-subprocess "python3"
+                        #:args (list (path->string default-delivery-controller-script)
+                                     "publish-head"
+                                     "--repo"
+                                     publisher-root
+                                     "--plan"
+                                     plan
+                                     "--wave"
+                                     (number->string wave)
+                                     "--expected-branch"
+                                     (hash-ref snapshot 'branch)
+                                     "--expected-head"
+                                     (hash-ref snapshot 'head)
+                                     "--expected-origin"
+                                     (hash-ref snapshot 'origin)
+                                     "--expected-tree"
+                                     (hash-ref snapshot 'tree))
+                        #:directory base
+                        #:environment (controller-environment)
+                        #:timeout 240
+                        #:process-group? #t))
+      (cond
+        [(or (subprocess-result-timed-out? result)
+             (subprocess-result-truncated? result)
+             (not (zero? (subprocess-result-exit-code result))))
+         (define parsed (parse-controller-result (subprocess-result-stdout result)))
+         (hasheq 'status
+                 "blocked"
+                 'reason
+                 (redact-delivery-text (format "~a"
+                                               (or (and parsed (hash-ref parsed 'reason #f))
+                                                   (subprocess-result-stderr result)
+                                                   "publication controller refused"))))]
+        [else
+         (or (parse-controller-result (subprocess-result-stdout result))
+             (hasheq 'status "blocked" 'reason "publication controller returned malformed JSON"))]))))
 
 (define current-gsd-approved-head-publisher (make-parameter default-approved-head-publisher))
 

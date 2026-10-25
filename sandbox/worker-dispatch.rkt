@@ -23,38 +23,43 @@
 ;; The working-dir field is honored (parameterized current-directory).
 ;; The request-id from the request is stamped into the response.
 ;;
-;; BUG-0028 core fix (v1.00.19 W1): the request working-dir ALSO extends the
-;; request-scoped allowed roots. `current-allowed-roots` is captured once at
-;; worker spawn (sandbox/worker-tools.rkt) and has no lifecycle entry point;
-;; with worktree isolation ON each attempt creates a NEW worktree while the
-;; captured root still references the old one, so every edit was rejected
-;; ("path not allowed"). Since worker-dispatch parameterizes current-directory
-;; per request anyway, we extend the roots for the SAME dynamic extent: the
-;; effective roots become spawn-root + this request's coordinator-supplied
-;; working directory. Trust note: the scheduler injects working-directory from
-;; the execution context (coordinator-authoritative; see the authoritative-
-;; injection hardening in tools/scheduler-execution.rkt), never from raw
-;; model-controlled arguments alone.
+;; BUG-0028 core fix (v1.00.19 W1): the request working-dir parameterizes
+;; current-directory. R91/BUG-0091 (frozen contract §2.2.1–§2.2.2): the
+;; request-scoped allowed roots extend if and only if the decoded
+;; trusted-working-dir is a valid absolute directory string. Model
+;; `working-dir`/`working-directory` NEVER extends roots — it keeps its plain
+;; cwd semantics. Roots are request-dynamic-extent only: the parameterize
+;; below restores the captured roots after success AND after any exception.
+;; §2.2.2: when twd is present but wd is absent, roots extend and the worker
+;; does NOT chdir to twd — trust is never a chdir channel.
+;; §2.2.4: an invalid trust value (possible only via a directly constructed
+;; struct, since the decoder refuses invalid trust) fails closed: the whole
+;; request is refused, never dispatched with silently dropped trust.
 (define (process-ipc-request request)
   (define req-id (ipc-request-request-id request))
   (define tool-name (ipc-request-tool-name request))
   (define arguments (ipc-request-arguments request))
-  ;; Parameterize CWD so changes don't leak across requests; BUG-0028 (W1):
-  ;; extend allowed roots with the request wd for the same dynamic extent so
-  ;; they track the active attempt worktree without a refresh entry point.
-  ;; The COORDINATOR's trusted-working-dir extends roots; the model-visible
-  ;; working-dir (bash tool feature) is honored as cwd but NEVER adds roots.
   (define response
     (let ([wd (ipc-request-working-dir request)]
           [twd (ipc-request-trusted-working-dir request)])
-      (if wd
-          (let* ([roots+ (if twd
-                             (cons (simplify-path (path->complete-path twd)) (current-allowed-roots))
-                             (current-allowed-roots))])
+      (cond
+        [(and twd (not (valid-trusted-working-dir? twd)))
+         (make-error-response req-id "refused: invalid trusted working directory")]
+        [else
+         (define roots+
+           (if twd
+               (cons (simplify-path (path->complete-path twd)) (current-allowed-roots))
+               (current-allowed-roots)))
+         (cond
+           [wd
             (parameterize ([current-directory wd]
                            [current-allowed-roots roots+])
-              (dispatch-tool tool-name arguments)))
-          (dispatch-tool tool-name arguments))))
+              (dispatch-tool tool-name arguments))]
+           ;; Trusted-only request: extend roots only; never chdir to twd.
+           [twd
+            (parameterize ([current-allowed-roots roots+])
+              (dispatch-tool tool-name arguments))]
+           [else (dispatch-tool tool-name arguments)])])))
   ;; Stamp the request-id into the response
   (ipc-response req-id
                 (ipc-response-status response)

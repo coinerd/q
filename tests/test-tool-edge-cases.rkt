@@ -129,9 +129,15 @@
          (define long-line (make-string 50000 #\X))
          (call-with-output-file f (lambda (out) (display long-line out)) #:exists 'replace)
          (define r (tool-read (hasheq 'path (path->string f))))
-         (check-false (result-is-error? r))
+         ;; R96 (BUG-0096): complete lines only. The single 50000-char line
+         ;; numbers to 50004 UTF-8 bytes ("1| " prefix + line + LF), which
+         ;; exceeds the 50000-byte page cap, so read returns the structured
+         ;; oversized-line error instead of the old mid-line cut (the exact
+         ;; fake-partial-read behavior BUG-0096 removes).
+         (check-true (result-is-error? r))
          (define c (string-join (result-content r) ""))
-         (check-true (regexp-match? #rx"X" c)))))
+         (check-true (regexp-match? #rx"line 1" c))
+         (check-true (regexp-match? #rx"50000" c)))))
 
     (test-case "read file with mixed line endings"
       (with-temp-dir (λ (dir)

@@ -30,7 +30,10 @@
                   task-conclusion-text
                   task-conclusion-origin-message-ids
                   task-conclusion-id
-                  task-conclusion-fsm-state-origin)
+                  task-conclusion-fsm-state-origin
+                  ;; R99a: shared frozen recognizer + provenance classification
+                  provenance-kind?
+                  insight-kind?)
          (only-in "state-relevance.rkt" context-level-for-state)
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "state-aware-helpers.rkt"
@@ -92,6 +95,15 @@
 
 ;; v0.99.7 W5: Blackboard context injection into system prompt preamble
 (define current-blackboard-injection-enabled (make-parameter #f))
+
+;; R99a: per-conclusion provider rendering label. Provenance-kind records
+;; (recognized legacy deterministic fallbacks and future internal 'provenance
+;; records) render as UNVERIFIED provenance — never as "[Conclusion]"/learned
+;; insight. Genuine insights keep the existing "[Conclusion]" label verbatim.
+(define (conclusion-entry-text c)
+  (if (provenance-kind? c)
+      (format "[Source provenance] (unverified) ~a" (task-conclusion-text c))
+      (format "[Conclusion] ~a" (task-conclusion-text c))))
 
 ;; build-tiered-context/state-aware :
 ;;   Same signature as build-tiered-context, plus optional task-state and conclusions.
@@ -232,7 +244,7 @@
                        #f
                        'system
                        'system-instruction
-                       (list (make-text-part (format "[Conclusion] ~a" (task-conclusion-text c))))
+                       (list (make-text-part (conclusion-entry-text c)))
                        (current-seconds)
                        (hasheq)))]
       [(eq? conclusions-level 'summary)
@@ -243,7 +255,7 @@
                            #f
                            'system
                            'system-instruction
-                           (list (make-text-part (format "[Conclusion] ~a" (task-conclusion-text c))))
+                           (list (make-text-part (conclusion-entry-text c)))
                            (current-seconds)
                            (hasheq)))
            ;; v0.78.3 G8: Use rank-and-budget for summary (not first+last)
@@ -257,8 +269,7 @@
                              #f
                              'system
                              'system-instruction
-                             (list (make-text-part (format "[Conclusion] ~a"
-                                                           (task-conclusion-text c))))
+                             (list (make-text-part (conclusion-entry-text c)))
                              (current-seconds)
                              (hasheq)))))]
       [else '()]))
@@ -428,25 +439,49 @@
      (define worker? (and (current-worker-tool-policy) #t))
      (define guidance (hash-ref state-guidance-table state-name "Focus on the current task."))
      ;; v0.95.18 F9: Filter bare [Auto] conclusions before count/render
-     (define visible-conclusions
+     ;; R99a: split into genuine insights vs provenance-kind records.
+     ;; Top conclusions lists ONLY insights (genuine insight wins sharing an
+     ;; origin is enforced in ws-entry->conclusion-or-self); recognized legacy
+     ;; deterministic fallbacks and future 'provenance records are listed in a
+     ;; separate bounded, labeled UNVERIFIED provenance section — never as
+     ;; learned insight/Top conclusions, and never silently dropped.
+     (define visible-insights
        (filter (lambda (c)
-                 (and (task-conclusion? c)
+                 (and (insight-kind? c)
                       (not (equal? (string-trim (task-conclusion-text c)) "[Auto]"))))
                conclusions))
-     (define conclusion-count (length visible-conclusions))
+     (define visible-provenance
+       (filter (lambda (c)
+                 (and (provenance-kind? c)
+                      (not (equal? (string-trim (task-conclusion-text c)) "[Auto]"))))
+               conclusions))
+     (define conclusion-count (length visible-insights))
      ;; GAP-A v0.97.7: Cap at 20 (not 10) — budget already controls count
      (define conclusion-section
-       (if (> conclusion-count 0)
-           (let* ([top (take visible-conclusions (min 20 (length visible-conclusions)))]
-                  [texts (for/list ([c (in-list top)])
-                           (format "  - ~a" (task-conclusion-text c)))])
-             (format "\n\nTop conclusions (~a total, ~a shown):\n~a"
-                     conclusion-count
-                     (length top)
-                     (string-join texts "\n")))
-           (if worker?
-               "\n\nNo conclusions in memory yet."
-               "\n\nNo conclusions in memory yet. Use record_conclusion to save findings.")))
+       (string-append
+        (if (> conclusion-count 0)
+            (let* ([top (take visible-insights (min 20 (length visible-insights)))]
+                   [texts (for/list ([c (in-list top)])
+                            (format "  - ~a" (task-conclusion-text c)))])
+              (format "\n\nTop conclusions (~a total, ~a shown):\n~a"
+                      conclusion-count
+                      (length top)
+                      (string-join texts "\n")))
+            (if worker?
+                "\n\nNo conclusions in memory yet."
+                "\n\nNo conclusions in memory yet. Use record_conclusion to save findings."))
+        ;; R99a: bounded labeled provenance block (deterministic input order,
+        ;; ranked below insights by conclusion-ranker).
+        (if (null? visible-provenance)
+            ""
+            (let* ([top (take visible-provenance (min 20 (length visible-provenance)))])
+              (format "\n\nProvenance sources (unverified, ~a of ~a, lowest ranked):\n~a"
+                      (length top)
+                      (length visible-provenance)
+                      (string-join
+                       (for/list ([c (in-list top)])
+                         (format "  - [Source provenance] (unverified) ~a" (task-conclusion-text c)))
+                       "\n"))))))
      (define reflection-reminder
        (if (and reflection-event (not worker?))
            "\n\nReminder: You recently received large tool results. Use record_conclusion to save key findings before taking more actions."

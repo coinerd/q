@@ -17,12 +17,14 @@
          "../tui/terminal.rkt"
          "../tui/state.rkt"
          "../tui/input.rkt"
+         (only-in "../tui/input/state-types.rkt" current-input-prompt-width)
          "../tui/sgr.rkt"
          "../tui/layout.rkt"
          "../tui/cell-buffer.rkt"
          "../tui/cell-diff.rkt"
          "../tui/cell-diff-render.rkt"
          "../tui/vdom-render.rkt"
+         (only-in "../ui-core/ui-diagnostics.rkt" ui-diagnostic!)
          (prefix-in vdom-comp: "../tui/vdom-components.rkt")
          (only-in "../tui/component.rkt"
                   q-component-render-fn
@@ -91,6 +93,15 @@
          cursor-blink-redraw-needed?
          render-cursor-blink-frame!
          write-cell!
+         ;; R100 cursor/buffer safety surface (tests + lifecycle)
+         tui-buffer-generation-box
+         bump-tui-buffer-generation!
+         invalidate-cursor-caches!
+         stamp-cursor-geometry!
+         cursor-cache-valid-for?
+         last-cursor-buffer-gen-box
+         last-cursor-buffer-cols-box
+         last-cursor-buffer-rows-box
          FULL-RENDER-INTERVAL-FRAMES
          incremental-frame-count
          last-composer-input-height
@@ -106,8 +117,8 @@
                        [render-frame-vdom!
                         (->* (any/c ui-state? input-state? hash?)
                              (#:component-registry (or/c (hash/c symbol? any/c) #f))
-                             (values exact-nonnegative-integer?
-                                     exact-nonnegative-integer?
+                             (values (or/c #f exact-nonnegative-integer?)
+                                     (or/c #f exact-nonnegative-integer?)
                                      ui-state?
                                      (listof string?)))]
                        [next-message (->* (tui-ctx?) (#:timeout number?) (or/c any/c #f))]
@@ -140,6 +151,46 @@
 (define last-cursor-row-box (box #f))
 (define last-cursor-base-cell-box (box #f))
 
+;; R100 (BUG-0100): cell-buffer GENERATION + physical geometry stamps.
+;; The generation is bumped every time the ubuf is (re)created (terminal
+;; init, resize). Cached base/blink cursor coordinates are stamped with
+;; the generation and the physical dims they were computed against; any
+;; consumer (blink save/paint/restore, hardware/IME positioning) refuses
+;; to touch cells unless the stamp matches the CURRENT buffer and the
+;; coordinates are in-bounds on BOTH axes. Resize therefore invalidates
+;; the caches structurally, not by convention.
+(define tui-buffer-generation-box (box 0))
+(define (bump-tui-buffer-generation!)
+  (set-box! tui-buffer-generation-box (add1 (unbox tui-buffer-generation-box))))
+(define last-cursor-buffer-gen-box (box #f))
+(define last-cursor-buffer-cols-box (box #f))
+(define last-cursor-buffer-rows-box (box #f))
+
+;; Clear every cached cursor coordinate/geometry stamp.
+(define (invalidate-cursor-caches!)
+  (set-box! last-cursor-col-box #f)
+  (set-box! last-cursor-row-box #f)
+  (set-box! last-cursor-base-cell-box #f)
+  (set-box! last-cursor-buffer-gen-box #f)
+  (set-box! last-cursor-buffer-cols-box #f)
+  (set-box! last-cursor-buffer-rows-box #f))
+
+;; Stamp the cursor caches with the geometry they were computed against.
+(define (stamp-cursor-geometry! ubuf)
+  (set-box! last-cursor-buffer-gen-box (unbox tui-buffer-generation-box))
+  (set-box! last-cursor-buffer-cols-box (cell-buffer-cols ubuf))
+  (set-box! last-cursor-buffer-rows-box (cell-buffer-rows ubuf)))
+
+;; Is a cached cursor coordinate still usable against `ubuf`? Requires the
+;; stamped generation + physical dims to match the CURRENT buffer AND the
+;; coordinates to be in-bounds on BOTH axes. Never dereferences.
+(define (cursor-cache-valid-for? ubuf col row)
+  (and (cell-buffer? ubuf)
+       (equal? (unbox last-cursor-buffer-gen-box) (unbox tui-buffer-generation-box))
+       (equal? (unbox last-cursor-buffer-cols-box) (cell-buffer-cols ubuf))
+       (equal? (unbox last-cursor-buffer-rows-box) (cell-buffer-rows ubuf))
+       (cell-buffer-in-bounds? ubuf col row)))
+
 ;; F-TUI-02 (v0.99.16 W1): Periodic full-render safety net.
 ;; After this many consecutive incremental renders, force a full render
 ;; to clear any accumulated snapshot drift.
@@ -163,9 +214,7 @@
   (set-box! blink-phase #t)
   (set-box! last-resize-poll-ms #f)
   (set-box! cursor-blink-redraw-needed-box #f)
-  (set-box! last-cursor-col-box #f)
-  (set-box! last-cursor-row-box #f)
-  (set-box! last-cursor-base-cell-box #f)
+  (invalidate-cursor-caches!)
   ;; F-TUI-02 (v0.99.16 W1): Reset incremental frame counter.
   (set-box! incremental-frame-count 0)
   (reset-composer-height-tracking!))
@@ -206,6 +255,10 @@
   (define-values (cols rows) (tui-screen-size))
   (define ubuf (make-cell-buffer cols rows))
   (set-box! (tui-ctx-ubuf-box ctx) ubuf)
+  ;; R100: a fresh buffer is a new generation — stale cursor caches must
+  ;; never survive terminal initialization.
+  (bump-tui-buffer-generation!)
+  (invalidate-cursor-caches!)
   (enable-mouse-tracking)
   (detect-sync-mode-support!)
   ;; Start idle timers from terminal initialization so an idle TUI does not
@@ -226,6 +279,10 @@
   (set-box! (tui-ctx-prev-ubuf-box ctx) #f)
   ;; F-TUI-02 (v0.99.16 W1): Reset incremental frame counter on resize.
   (set-box! incremental-frame-count 0)
+  ;; R100: resize invalidates cached base/blink cursor coordinates
+  ;; structurally — new generation + explicit cache clearing.
+  (bump-tui-buffer-generation!)
+  (invalidate-cursor-caches!)
   ;; GAP-LB (v0.98.8 W0): Classify layout breakpoints after resize.
   ;; classify-layout-breakpoint is a pure function — returns (listof symbol).
   ;; Components can query breakpoints via tui-ctx-layout-breakpoints for responsive layout.
@@ -247,21 +304,71 @@
 (define (render-frame! ctx)
   (define state (unbox (tui-ctx-ui-state-box ctx)))
   (define inp (unbox (tui-ctx-input-state-box ctx)))
-  (define ubuf (tui-ctx-ubuf ctx))
   (define term (tui-ctx-term ctx))
 
   (define-values (cols rows) (tui-screen-size))
+  ;; R100 (BUG-0100): zero-size or non-integer reported geometry produces
+  ;; an explicit DEFERRED frame — no layout (compute-layout requires
+  ;; positive dimensions), no cell access, no cursor. The redraw request
+  ;; stays armed so a later frame retries.
+  (cond
+    [(or (not (exact-integer? cols))
+         (not (exact-integer? rows))
+         (< cols 1)
+         (< rows 1))
+     (ui-diagnostic! 'renderer.frame-deferred
+                     "zero-size-screen"
+                     (format "screen reports cols=~a rows=~a; frame deferred" cols rows))
+     (invalidate-cursor-caches!)
+     (set-box! cursor-blink-redraw-needed-box #f)
+     (void)]
+    [else
+     ;; R100: reconcile inconsistent geometry. If the live ubuf no longer
+     ;; matches the reported screen size, rebuild it FIRST (which bumps the
+     ;; generation, invalidates cursor caches and clears diff snapshots) so
+     ;; this frame paints — and positions cursors — against the ACTUAL
+     ;; dimensions, never against a stale buffer.
+     (define ubuf-checked (tui-ctx-ubuf ctx))
+     (define ubuf-current
+       (if (and (cell-buffer? ubuf-checked)
+                (= cols (cell-buffer-cols ubuf-checked))
+                (= rows (cell-buffer-rows ubuf-checked)))
+           ubuf-checked
+           (begin
+             (ui-diagnostic! 'renderer.buffer-reconciled
+                             "stale-geometry"
+                             (format "screen ~ax~a vs buffer ~ax~a; rebuilding buffer"
+                                     cols
+                                     rows
+                                     (if (cell-buffer? ubuf-checked)
+                                         (cell-buffer-cols ubuf-checked)
+                                         '?)
+                                     (if (cell-buffer? ubuf-checked)
+                                         (cell-buffer-rows ubuf-checked)
+                                         '?)))
+             (tui-ctx-resize-ubuf! ctx)
+             (mark-dirty! ctx)
+             (tui-ctx-ubuf ctx))))
+     (render-frame!/geometry ctx state inp term ubuf-current cols rows)]))
+
+;; Body of a full frame render, with screen cols/rows and a buffer whose
+;; physical geometry is known consistent with them (R100).
+(define (render-frame!/geometry ctx state inp term ubuf cols rows)
   (define widget-lines (get-widget-lines-above state))
   ;; W3: composer text rows drive the input region height when the
   ;; multiline composer is enabled.  The row count comes from the SAME
   ;; shared visual layout (composer-layout) that frame-vdom uses to paint
   ;; text and position the cursor — the render loop never recomputes wrap.
+  ;; R100: that layout width is the PROMPT-AWARE text-area width (the q>
+  ;; prompt occupies current-input-prompt-width columns of the first text
+  ;; row), exactly what frame-vdom wraps at — heights and painting agree.
   (define composer-text-rows
     (and (tui-multiline-composer-enabled)
-         (composer-layout-row-count (compute-composer-layout (input-state-buffer inp)
-                                                             (input-state-cursor inp)
-                                                             (max 1 cols)
-                                                             string-visible-width))))
+         (composer-layout-row-count
+          (compute-composer-layout (input-state-buffer inp)
+                                   (input-state-cursor inp)
+                                   (composer-text-area-width cols (current-input-prompt-width))
+                                   string-visible-width))))
   (define layout
     (compute-layout rows
                     cols
@@ -293,26 +400,46 @@
 
   ;; Remember base cursor cell before applying software-cursor inversion.
   ;; Cursor blink can then update only this one cell without rebuilding VDOM.
-  (define cursor-cell (cell-buffer-ref ubuf cursor-col cursor-row))
-  (set-box! last-cursor-col-box cursor-col)
-  (set-box! last-cursor-row-box cursor-row)
-  (set-box! last-cursor-base-cell-box cursor-cell)
-
-  ;; Draw software cursor (inverse video) when blink phase is on.
-  ;; Hardware cursor is hidden for the entire session; this provides
-  ;; a stable, self-controlled cursor that never resets the terminal's
-  ;; hardware blink timer.
-  (when (unbox blink-phase)
-    (cell-buffer-set! ubuf
-                      cursor-col
-                      cursor-row
-                      #:char (cell-char cursor-cell)
-                      #:fg (cell-bg cursor-cell)
-                      #:bg (cell-fg cursor-cell)
-                      #:bold (cell-bold? cursor-cell)
-                      #:underline (cell-underline? cursor-cell)
-                      #:italic (cell-italic? cursor-cell)
-                      #:blink (cell-blink? cursor-cell)))
+  ;; R100: cursor-col/row are PHYSICAL cells projected by frame-vdom (the
+  ;; logical end-of-line sentinel col==width never leaves composer-layout
+  ;; unprojected). Save/paint only a validated in-bounds cell; otherwise
+  ;; defer cursor handling explicitly — never deref unchecked.
+  (cond
+    [(and (exact-integer? cursor-col)
+          (exact-integer? cursor-row)
+          (cell-buffer-in-bounds? ubuf cursor-col cursor-row))
+     (define cursor-cell (cell-buffer-ref ubuf cursor-col cursor-row))
+     (set-box! last-cursor-col-box cursor-col)
+     (set-box! last-cursor-row-box cursor-row)
+     (set-box! last-cursor-base-cell-box cursor-cell)
+     (stamp-cursor-geometry! ubuf)
+     ;; Draw software cursor (inverse video) when blink phase is on.
+     ;; Hardware cursor is hidden for the entire session; this provides
+     ;; a stable, self-controlled cursor that never resets the terminal's
+     ;; hardware blink timer.
+     (when (unbox blink-phase)
+       (cell-buffer-set! ubuf
+                         cursor-col
+                         cursor-row
+                         #:char (cell-char cursor-cell)
+                         #:fg (cell-bg cursor-cell)
+                         #:bg (cell-fg cursor-cell)
+                         #:bold (cell-bold? cursor-cell)
+                         #:underline (cell-underline? cursor-cell)
+                         #:italic (cell-italic? cursor-cell)
+                         #:blink (cell-blink? cursor-cell)))]
+    [else
+     ;; Explicit no-cursor frame: zero-size surface or geometry that has no
+     ;; physical cell for the logical cursor (bounded diagnostic, caches
+     ;; invalidated; the diff render below still proceeds).
+     (ui-diagnostic! 'renderer.cursor-deferred
+                     "no-physical-cell"
+                     (format "logical cursor (~a,~a) has no physical cell in ~ax~a buffer"
+                             cursor-col
+                             cursor-row
+                             (cell-buffer-cols ubuf)
+                             (cell-buffer-rows ubuf)))
+     (invalidate-cursor-caches!)])
 
   (atomic-state-update! (tui-ctx-ui-state-box ctx) (lambda (_) state*))
 
@@ -353,10 +480,15 @@
   ;; Position hardware cursor at input location for IME tracking.
   ;; Hardware cursor is hidden (ESC[?25l at startup), so this is invisible
   ;; but tells the terminal/IME where composition should occur.
-  (tui-cursor (+ cursor-col 1) (+ cursor-row 1) #f)
-  ;; Emit IME cursor marker for CJK input support
-  ;; Uses APC protocol — silently ignored by terminals that don't understand it
-  (display CURSOR-MARKER out)
+  ;; R100: only position hardware/IME cursor when a validated physical
+  ;; cursor cell exists for THIS buffer generation and geometry.
+  (define cached-col (unbox last-cursor-col-box))
+  (define cached-row (unbox last-cursor-row-box))
+  (when (and cached-col cached-row (cursor-cache-valid-for? ubuf cached-col cached-row))
+    (tui-cursor (+ cached-col 1) (+ cached-row 1) #f)
+    ;; Emit IME cursor marker for CJK input support
+    ;; Uses APC protocol — silently ignored by terminals that don't understand it
+    (display CURSOR-MARKER out))
   (terminal-sync-end!)
   (tui-flush)
   (set-box! last-render-ms (current-inexact-milliseconds))
@@ -383,9 +515,14 @@
   (define col (unbox last-cursor-col-box))
   (define row (unbox last-cursor-row-box))
   (define base-cell (unbox last-cursor-base-cell-box))
+  (define ubuf (tui-ctx-ubuf ctx))
   (cond
-    [(and col row base-cell (tui-ctx-ubuf ctx))
-     (define ubuf (tui-ctx-ubuf ctx))
+    ;; R100: blink may only save/paint/restore against a cursor cell whose
+    ;; stamped geometry (buffer generation + physical dims) matches the
+    ;; CURRENT buffer AND whose coordinates are in-bounds on BOTH axes.
+    ;; A stale cache (resize raced a blink) defers to a full
+    ;; reconcile/redraw with a bounded diagnostic — never an unchecked deref.
+    [(and col row base-cell (cursor-cache-valid-for? ubuf col row))
      (write-cell! ubuf col row base-cell #:inverse? (unbox blink-phase))
      (define prev-ubuf (unbox (tui-ctx-prev-ubuf-box ctx)))
      (define out (tui-output-port))
@@ -422,8 +559,24 @@
      (set-box! last-render-ms (current-inexact-milliseconds))
      #t]
     [else
-     ;; No previous full frame exists yet; leave a full redraw request for the
-     ;; normal path and consume the cursor-only request.
+     ;; No usable cursor cell: either no previous full frame exists yet, or
+     ;; the cached cursor was invalidated (resize/generation/dims). Leave a
+     ;; full redraw request for the normal path, consume the cursor-only
+     ;; request, and report bounded diagnostics for genuine staleness.
+     (when (and (or col row base-cell) (not (cursor-cache-valid-for? ubuf col row)))
+       (ui-diagnostic!
+        'renderer.cursor-cache-invalidated
+        "stale-cursor"
+        (format "cached cursor (~a,~a) gen=~a dims=~ax~a does not match buffer gen=~a dims=~ax~a"
+                col
+                row
+                (unbox last-cursor-buffer-gen-box)
+                (unbox last-cursor-buffer-cols-box)
+                (unbox last-cursor-buffer-rows-box)
+                (unbox tui-buffer-generation-box)
+                (if (cell-buffer? ubuf) (cell-buffer-cols ubuf) '?)
+                (if (cell-buffer? ubuf) (cell-buffer-rows ubuf) '?))))
+     (invalidate-cursor-caches!)
      (set-box! cursor-blink-redraw-needed-box #f)
      (mark-dirty! ctx)
      #f]))

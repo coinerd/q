@@ -20,7 +20,11 @@
                   task-conclusion-fsm-state-origin
                   task-conclusion-timestamp
                   task-conclusion-relevance-tags
-                  task-conclusion-dependencies)
+                  task-conclusion-dependencies
+                  ;; R99a: shared frozen recognizer re-exported for consumers of
+                  ;; this module. The deterministic fallback below is UNCHANGED
+                  ;; (R99b writer activation is HELD — output stays byte-identical).
+                  legacy-deterministic-fallback?)
          racket/string)
 
 ;; ── Uncovered Entry Detection ──
@@ -116,6 +120,9 @@
 
 (provide current-auto-distillation-enabled?
          current-llm-distill-fn
+         ;; R99a: frozen legacy deterministic-fallback recognizer (single shared
+         ;; definition lives in task-conclusion.rkt).
+         legacy-deterministic-fallback?
          (contract-out [find-uncovered-entries
                         (-> (listof string?) (listof task-conclusion?) (listof string?))]
                        [generate-fallback-conclusions

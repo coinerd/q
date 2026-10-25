@@ -61,7 +61,9 @@
          (only-in "../extensions/gsd/composition-root.rkt" current-gsd-verification-registry)
          (only-in "../extensions/gsd/verification-job.rkt"
                   make-verification-registry
-                  registry-active-count)
+                  registry-active-count
+                  verification-registry-incarnation)
+         (only-in "../extensions/gsd/events.rkt" set-gsd-event-bus!)
          (only-in "../extensions/gsd/campaign-state.rkt" migrate-campaign!)
          (only-in "../extensions/gsd/go-orchestrator.rkt" run-campaign-wave campaign-result-status))
 
@@ -250,6 +252,51 @@
       (check-true (string-contains? msg "exit=3") msg)
       (check-true (string-contains? msg "state=failed") msg)
       (check-true (string-contains? msg "log=") msg)
+      (cleanup-tmp base))
+
+    (test-case "R102: terminal verification events carry trusted registry identity"
+      ;; Public route: run-delivery-verification over a real isolated registry
+      ;; with a collector installed as the event bus; the declared gate fails
+      ;; with a real nonzero exit.
+      (define base (setup-standard-campaign!))
+      (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt") "echo boom >&2; exit 3")
+      (define plan (load-plan* base))
+      (define reg (make-verification-registry))
+      (define events (box '()))
+      (define (collect name wrapped)
+        (set-box! events (append (unbox events) (list (cons name (hash-ref wrapped 'data))))))
+      (dynamic-wind
+       (lambda () (set-gsd-event-bus! collect))
+       (lambda ()
+         (define result
+           (parameterize ([current-gsd-verification-registry reg])
+             (run-delivery-verification base plan 0)))
+         (check-false (delivery-verification-approved? result)))
+       (lambda () (set-gsd-event-bus! void)))
+      (define all (unbox events))
+      (define started
+        (for/first ([e (in-list all)] #:when (equal? (car e) 'gsd.verification.started)) (cdr e)))
+      (define completed
+        (for/first ([e (in-list all)] #:when (equal? (car e) 'gsd.verification.completed)) (cdr e)))
+      (check-true (and started #t) "started event published")
+      (check-true (and completed #t) "completed event published")
+      (when (and started completed)
+        (check-equal? (hash-ref completed 'state #f) 'failed)
+        (check-equal? (hash-ref completed 'exit-code #f) 3)
+        (check-true (symbol? (hash-ref started 'job-id #f)))
+        (check-equal? (hash-ref started 'job-id #f) (hash-ref completed 'job-id #f))
+        (check-equal? (hash-ref started 'registry-incarnation #f)
+                      (verification-registry-incarnation reg))
+        (check-equal? (hash-ref completed 'registry-incarnation #f)
+                      (verification-registry-incarnation reg))
+        (check-true (string? (hash-ref started 'verify-identity-key #f)))
+        (check-true (string? (hash-ref completed 'log-path #f))
+                    "terminal event carries the actual log identity"))
+      (check-equal? (length (for/list ([e (in-list all)]
+                                       #:when (equal? (car e) 'gsd.verification.completed))
+                                       e))
+                    1
+                    "exactly one terminal publication")
       (cleanup-tmp base))
 
     (test-case "BUG-0070: prose-only Verify declaration fails closed without shell launch"

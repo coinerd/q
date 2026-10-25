@@ -60,18 +60,18 @@
 ;;   reallocation or re-dispatch. Early ambiguous model/job-consumed cuts
 ;;   (everything through verifying/probing admission and completion) remain
 ;;   fail-closed blocked. Storage facts stay descriptors, never proof.
-(require json
-         racket/file
-         racket/list
+(require racket/file
          racket/path
-         racket/runtime-path
          "supplemental-evidence-store.rkt"
          "supplemental-evidence-format.rkt"
          "supplemental-evidence-authority.rkt"
+         "supplemental-evidence-store-core.rkt"
+         "supplemental-disposition-claim.rkt"
          (only-in "../gsd-planning/execution-policy.rkt" current-gsd-author-phase))
 (provide start-supplemental-operation!
          transition-supplemental-operation!
          load-supplemental-operation
+         supplemental-operation-view
          reconcile-supplemental-operation!
          recovery-pending-state-name
          current-supplemental-journal-crash-cut
@@ -82,69 +82,15 @@
          install-supplemental-recovery-claim!
          supplemental-recovery-pointer-claimed?)
 
-;; Fault injection may only interrupt storage, never supply authority or facts.
-(define current-supplemental-journal-crash-cut
-  (make-parameter
-   void
-   (lambda (v)
-     (unless (and (procedure? v) (procedure-arity-includes? v 1))
-       (raise-argument-error 'current-supplemental-journal-crash-cut "(-> symbol? any)" v))
-     v)))
-(define (cut! name)
-  ((current-supplemental-journal-crash-cut) name))
+;; Journal-local refusal identity for the WAL/transition checks that remain
+;; here; the extracted storage core raises with the same source symbol.
 (define (refuse message)
   (error 'supplemental-evidence-journal "~a" message))
-(define states
-  '("proposal-approved" "reserved"
-                        "launched"
-                        "candidate-sealed"
-                        "candidate-approved"
-                        "verifying"
-                        "green-captured"
-                        "probing"
-                        "probe-captured"
-                        "supersession-approved"
-                        "published"
-                        "receipt-certified"
-                        "registered"
-                        "completed"))
-(define terminal '("blocked" "revoked" "completed"))
-;; Typed recoverable pending states (BUG-0088): late cuts whose target holds
-;; fully bound captured facts recover as explicit pending views of the SAME
-;; operation instead of terminal blocked. Early ambiguous model/job-consumed
-;; cuts (reserved/launched through verifying/probing admission, sealing,
-;; approvals and completion) stay fail-closed blocked.
-(define recovery-pending-states
-  (hash "green-captured"
-        "recover-pending-verified"
-        "published"
-        "recover-pending-published"
-        "receipt-certified"
-        "recover-pending-receipt-certified"
-        "registered"
-        "recover-pending-registration"))
-(define pending-state-names (hash-values recovery-pending-states))
-(define (recovery-pending-state-name state)
-  (hash-ref recovery-pending-states
-            (if (symbol? state)
-                (symbol->string state)
-                state)
-            #f))
-(define all-states (append states '("blocked" "revoked") pending-state-names))
-(define (transition-allowed? from to)
-  (and (not (member from terminal))
-       (or (member to '("blocked" "revoked"))
-           (let ([tail (member from states)])
-             (and tail (pair? (cdr tail)) (equal? to (cadr tail)))))))
-(define (state-string s)
-  (define v
-    (if (symbol? s)
-        (symbol->string s)
-        s))
-  (unless (member v all-states)
-    (refuse "unknown operation state"))
-  (string->immutable-string v))
-
+;; Immutable lifecycle state tables and the storage/validation kernel now live
+;; in the acyclic supplemental-evidence-store-core helper (BUG-0090), which is
+;; also a direct dependency of the disposition claim: the journal -> claim ->
+;; core graph is static and acyclic, so first use can no longer re-enter
+;; partial instantiation through the old lazy dynamic-require seam.
 ;; Historical inspection is deliberately PURE: no operation lock and no WAL
 ;; reconciliation. The authority lock excludes all possible terminal writers.
 (define (inspect-supplemental-entry-operation grant)
@@ -155,91 +101,316 @@
      (when (present? intent)
        (refuse "entry cannot reconcile pending intent"))
      (and (present? snapshot) (validate-record! (read-sealed snapshot) grant proposal task expiry)))))
-(define (inspect-supplemental-recovery-parent grant)
-  (call-with-supplemental-authority-lock
-   (lambda ()
-     (define-values (proposal task expiry) (authenticated-task! grant #t))
-     (unless (equal? (hash-ref task 'kind) "supplemental-evidence-task/v1")
-       (refuse "recovery requires an original v1 parent; no grandchildren"))
-     (define-values (_dir snapshot intent _lock) (paths (root!) grant #f))
-     (when (present? intent)
-       (refuse "parent has pending write-ahead intent"))
-     (define record (validate-record! (read-sealed snapshot) grant proposal task expiry))
-     (unless (and (equal? (hash-ref record 'state) "blocked")
-                  (= (hash-ref record 'revision) 3)
-                  (hash-ref record 'launch-consumed)
-                  (exact-keys? (hash-ref record 'facts) '(allocation dispatch-id block-reason))
-                  (for/and ([key '(dispatch-id block-reason)])
-                    (define value (hash-ref (hash-ref record 'facts) key))
-                    (and (string? value) (positive? (string-length value))))
-                  (let ([a (hash-ref (hash-ref record 'facts) 'allocation)])
-                    (and (exact-keys? a '(attempt-id attempt-fence coordinator-fence))
-                         (string? (hash-ref a 'attempt-id))
-                         (positive? (string-length (hash-ref a 'attempt-id)))
-                         (exact-nonnegative-integer? (hash-ref a 'attempt-fence))
-                         (exact-nonnegative-integer? (hash-ref a 'coordinator-fence)))))
-       (refuse "parent is not an unambiguous spent blocked revision-3 launch"))
-     (values proposal task record))))
-;; Immutable known-source import avoids a static journal/helper cycle.
-(define-runtime-path disposition-store "supplemental-disposition-claim.rkt")
-(define (disposition-call name . args)
-  (apply (dynamic-require disposition-store name) args))
-(define (inspect-supplemental-disposition-parent grant)
-  (disposition-call 'inspect-supplemental-disposition-parent grant))
-(define (install-supplemental-disposition-claim! path old target proposal grant)
-  (disposition-call 'install-supplemental-disposition-claim! path old target proposal grant))
-(module* disposition-store-support #f
-  (provide authenticated-task!
-           paths
-           validate-record!
-           inspect-supplemental-recovery-parent
-           read-recovery-claim!
-           read-pointer!
-           canonical-pointer-path
-           cut!
-           (rename-out [claim-path recovery-claim-path])))
-(define (claim-path parent)
-  (build-path (root!) (string-append "supplemental-recovery-" (hash-ref parent 'sha256) ".json")))
-(define (canonical-pointer-path path)
-  (path->string (simplify-path (path->complete-path path) #f)))
-;; Storage-only validation: deliberately no approval, expiry, revocation,
-;; operation inspection or reconciliation. Ownership can only deny execution.
-(define (read-recovery-claim! path)
-  (define claim (read-sealed path))
-  (define r (hash-ref claim 'lineage #f))
-  (define target (hash-ref claim 'target #f))
-  (define bound (hash-ref claim 'pointer-path #f))
-  (define (ref? value kind)
-    (and (supplemental-reference? value) (equal? (hash-ref value 'kind) kind)))
-  (unless (and
-           (exact-keys? claim '(schema lineage pointer-path target sha256))
-           (equal? (hash-ref claim 'schema) "supplemental-recovery-claim/v1")
-           (exact-keys? r
-                        '(parent-proposal parent-approval terminal-sha256 pointer-sha256 allocation))
-           (ref? (hash-ref r 'parent-proposal) "task-proposal")
-           (ref? (hash-ref r 'parent-approval) "task-approval")
-           (for/and ([key '(terminal-sha256 pointer-sha256)])
-             (define digest (hash-ref r key))
-             (and (string? digest) (regexp-match? #px"^[0-9a-f]{64}$" digest)))
-           (let ([a (hash-ref r 'allocation)])
-             (and (exact-keys? a '(attempt-id attempt-fence coordinator-fence))
-                  (string? (hash-ref a 'attempt-id))
-                  (positive? (string-length (hash-ref a 'attempt-id)))
-                  (exact-nonnegative-integer? (hash-ref a 'attempt-fence))
-                  (exact-nonnegative-integer? (hash-ref a 'coordinator-fence))))
-           (string? bound)
-           (complete-path? bound)
-           (equal? bound (canonical-pointer-path bound))
-           (exact-keys? target '(schema task-proposal task-approval))
-           (equal? (hash-ref target 'schema) "supplemental-pointer/v1")
-           (ref? (hash-ref target 'task-proposal) "task-proposal")
-           (ref? (hash-ref target 'task-approval) "task-approval")
-           (equal? (file-name-from-path path)
-                   (string->path (string-append "supplemental-recovery-"
-                                                (hash-ref (hash-ref r 'parent-approval) 'sha256)
-                                                ".json"))))
-    (refuse "invalid permanent recovery claim"))
-  claim)
+;; ---- BUG-0101/R101 typed discovery view (strictly READ-ONLY) ----------
+;; One tagged, immutable view of a retained operation for the controller's
+;; typed discovery (security-contracts.md 3.1). Contract:
+;;   'status in 'absent | 'live | 'pending-wal | 'retained-ineligible
+;;                    | 'revoked-expired | 'unreadable
+;;   'cause  in #f | 'absent | 'unlaunched | 'expired | 'revoked
+;;                  | 'malformed | 'inaccessible
+;; plus 'message and safe identity only ('grant-ref 'proposal-ref 'task
+;; 'expires-at, the validated sealed record when readable, and the
+;; attempt/fence triple from the bound allocation fact when present).
+;; This view NEVER creates stores (paths create? #f), NEVER reconciles or
+;; settles a write-ahead intent (any sealed intent stays byte-identical on
+;; disk), NEVER mints or returns a capability: ownership can only deny. The
+;; fail-closed early-cut settlement that the historical load-on-observe
+;; performed stays in the journal's write path (under-lock), not here. The
+;; snapshot is taken inside the ONE shared admission/revocation section, so
+;; a concurrent revocation can never split the view; the operation-local
+;; write lock is deliberately not taken.
+(define (fs-errno-code e)
+  (and (exn:fail:filesystem:errno? e)
+       (pair? (exn:fail:filesystem:errno-errno e))
+       (eq? (cdr (exn:fail:filesystem:errno-errno e)) 'posix)
+       (car (exn:fail:filesystem:errno-errno e))))
+(define (view-storage-cause e [default 'malformed])
+  ;; EACCES/EPERM (posix 13/1) is inaccessible; absence (ENOENT 2),
+  ;; integrity refusals and every other read failure fail closed as
+  ;; retained-malformed (DEFAULT), unless the layer is the authority root
+  ;; itself, where a trust/mode failure denies as inaccessible.
+  (let ([code (fs-errno-code e)])
+    (cond
+      [(and code (or (= code 13) (= code 1))) 'inaccessible]
+      [code 'malformed]
+      [else default])))
+(define (storage-denial-status cause)
+  (if (eq? cause 'inaccessible) 'unreadable 'retained-ineligible))
+(define (supplemental-operation-view grant)
+  (define (brief e)
+    (define m (exn-message e))
+    (string->immutable-string (substring m 0 (min 300 (string-length m)))))
+  (define (finish status
+                  cause
+                  message
+                  #:operation [operation #f]
+                  #:proposal-ref [proposal-ref #f]
+                  #:task [task #f]
+                  #:expires-at [expires-at #f]
+                  #:intent-reconcilable? [reconcilable? #f]
+                  #:intent-target [intent-target #f])
+    (define allocation
+      (and operation
+           (let ([a (hash-ref (hash-ref operation 'facts) 'allocation #f)])
+             (and (exact-keys? a '(attempt-id attempt-fence coordinator-fence)) a))))
+    (hasheq 'status
+            status
+            'cause
+            cause
+            'message
+            message
+            'operation
+            operation
+            'grant-ref
+            grant
+            'proposal-ref
+            proposal-ref
+            'task
+            task
+            'expires-at
+            expires-at
+            'intent-reconcilable?
+            reconcilable?
+            'intent-target
+            intent-target
+            'attempt-id
+            (and allocation (hash-ref allocation 'attempt-id))
+            'attempt-fence
+            (and allocation (hash-ref allocation 'attempt-fence))
+            'coordinator-fence
+            (and allocation (hash-ref allocation 'coordinator-fence))))
+  (call/ec
+   (lambda (done)
+     (when (current-gsd-author-phase)
+       (done
+        (finish 'unreadable 'inaccessible "author phase cannot inspect the supplemental journal")))
+     (define root
+       (with-handlers ([exn:fail?
+                        (lambda (e)
+                          (done (finish 'unreadable
+                                        (view-storage-cause e 'inaccessible)
+                                        (format "supplemental authority root inaccessible: ~a"
+                                                (brief e)))))])
+         (or (root! #t) (done (finish 'absent 'absent "no private supplemental authority root")))))
+     (with-handlers ([exn:fail?
+                      (lambda (e)
+                        (done (finish 'unreadable
+                                      (view-storage-cause e 'inaccessible)
+                                      (format "supplemental authority section inaccessible: ~a"
+                                              (brief e)))))])
+       (call-with-supplemental-authority-lock
+        (lambda ()
+          ;; 1. The private approval record must be readable at all before
+          ;; revocation can be distinguished from access denial.
+          (with-handlers ([exn:fail? (lambda (e)
+                                       (define cause (view-storage-cause e))
+                                       (done (finish (storage-denial-status cause)
+                                                     cause
+                                                     (format "task approval record unreadable: ~a"
+                                                             (brief e)))))])
+            (load-supplemental-record grant))
+          ;; 2. Live unrevoked approval. Revocation shares this section, so
+          ;; a #f here is revoked/absent/foreign origin: typed denial.
+          (define approval
+            (or (validate-supplemental-approval grant)
+                (done (finish
+                       'revoked-expired
+                       'revoked
+                       "task approval is revoked, absent or foreign to this authority origin"))))
+          (define proposal-ref (hash-ref approval 'proposal))
+          (define proposal
+            (with-handlers ([exn:fail? (lambda (e)
+                                         (define cause (view-storage-cause e))
+                                         (done (finish (storage-denial-status cause)
+                                                       cause
+                                                       (format "retained task proposal unreadable: ~a"
+                                                               (brief e)))))])
+              (load-supplemental-record proposal-ref)))
+          (define payload (hash-ref proposal 'payload #f))
+          (define task (and (hash? payload) (hash-ref payload 'task #f)))
+          (define expires-at (and (hash? payload) (hash-ref payload 'expires-at #f)))
+          (unless (and (equal? (hash-ref proposal-ref 'kind) "task-proposal")
+                       (exact-keys? payload '(task expires-at))
+                       (valid-supplemental-task? task)
+                       (exact-positive-integer? expires-at))
+            (done (finish 'retained-ineligible
+                          'malformed
+                          "retained task proposal is not a valid bounded task"
+                          #:proposal-ref proposal-ref
+                          #:task task
+                          #:expires-at expires-at)))
+          ;; 3. Operator expiry: the exact admission boundary. now >= expiry
+          ;; is ALREADY expired (fail closed), matching the journal's
+          ;; `(< (current-seconds) expires-at)` admission check exactly.
+          (unless (< (current-seconds) expires-at)
+            (done (finish 'retained-ineligible
+                          'expired
+                          (format "retained task approval expired at ~a" expires-at)
+                          #:proposal-ref proposal-ref
+                          #:task task
+                          #:expires-at expires-at)))
+          (unless (<= expires-at
+                      (+ (current-seconds) (hash-ref (hash-ref task 'bounds) 'deadline-sec)))
+            (done (finish 'retained-ineligible
+                          'malformed
+                          "retained task expiry exceeds the task deadline bound"
+                          #:proposal-ref proposal-ref
+                          #:task task
+                          #:expires-at expires-at)))
+          ;; 4. Storage, read-only, never created. A missing operations
+          ;; directory is an UNLAUNCHED approved task, never a denial.
+          (unless (present? (build-path root "supplemental-operations"))
+            (done (finish 'absent
+                          'unlaunched
+                          "live approved task has no protected operation yet"
+                          #:proposal-ref proposal-ref
+                          #:task task
+                          #:expires-at expires-at)))
+          (define-values (dir snapshot intent _lock)
+            (with-handlers ([exn:fail?
+                             (lambda (e)
+                               (when (= 2 (or (fs-errno-code e) -1))
+                                 (done (finish 'absent
+                                               'unlaunched
+                                               "live approved task has no protected operation yet"
+                                               #:proposal-ref proposal-ref
+                                               #:task task
+                                               #:expires-at expires-at)))
+                               (raise e))])
+              (paths root grant #f)))
+          (define old
+            (and (present? snapshot)
+                 (with-handlers ([exn:fail?
+                                  (lambda (e)
+                                    (define cause (view-storage-cause e))
+                                    (done (finish (storage-denial-status cause)
+                                                  cause
+                                                  (format "retained operation record unreadable: ~a"
+                                                          (brief e))
+                                                  #:proposal-ref proposal-ref
+                                                  #:task task
+                                                  #:expires-at expires-at)))])
+                   (validate-record! (read-sealed snapshot) grant proposal-ref task expires-at))))
+          (define wal
+            (and (present? intent)
+                 (with-handlers ([exn:fail?
+                                  (lambda (e)
+                                    (define cause (view-storage-cause e))
+                                    (done (finish (storage-denial-status cause)
+                                                  cause
+                                                  (format "retained write-ahead intent unreadable: ~a"
+                                                          (brief e))
+                                                  #:operation old
+                                                  #:proposal-ref proposal-ref
+                                                  #:task task
+                                                  #:expires-at expires-at)))])
+                   (define w (read-sealed intent))
+                   (unless (and (exact-keys? w '(schema from-revision from-state next sha256))
+                                (equal? (hash-ref w 'schema) "supplemental-operation-intent/v1"))
+                     (refuse "invalid write-ahead intent"))
+                   w)))
+          (define (intent-unreadable! operation)
+            (done (finish 'retained-ineligible
+                          'malformed
+                          "write-ahead intent revision mismatch"
+                          #:operation operation
+                          #:proposal-ref proposal-ref
+                          #:task task
+                          #:expires-at expires-at)))
+          (cond
+            [(not wal)
+             (unless old
+               (done (finish 'absent
+                             'unlaunched
+                             "live approved task has no protected operation yet"
+                             #:proposal-ref proposal-ref
+                             #:task task
+                             #:expires-at expires-at)))
+             (finish 'live
+                     #f
+                     "authenticated retained operation"
+                     #:operation old
+                     #:proposal-ref proposal-ref
+                     #:task task
+                     #:expires-at expires-at)]
+            [else
+             ;; A pending view is DERIVED exactly like the journal's own
+             ;; read-only recovery of a typed recoverable cut; nothing is
+             ;; written and no intent is settled here.
+             (define next
+               (with-handlers ([exn:fail? (lambda (e) (intent-unreadable! old))])
+                 (validate-record! (hash-ref wal 'next) grant proposal-ref task expires-at)))
+             (define from-matches?
+               (and (= (hash-ref wal 'from-revision)
+                       (if old
+                           (hash-ref old 'revision)
+                           -1))
+                    (equal? (hash-ref wal 'from-state)
+                            (if old
+                                (hash-ref old 'state)
+                                "absent"))))
+             (define from-extends?
+               (and from-matches?
+                    (= (hash-ref next 'revision) (add1 (hash-ref wal 'from-revision)))
+                    (if old
+                        (and (binding-extends? old next)
+                             (transition-allowed? (hash-ref old 'state) (hash-ref next 'state)))
+                        (equal? (hash-ref next 'state) "proposal-approved"))))
+             (define target (hash-ref next 'state))
+             (define (with-identity status
+                                    cause
+                                    message
+                                    #:operation [operation #f]
+                                    #:reconcilable? [reconcilable? #f])
+               (finish status
+                       cause
+                       message
+                       #:operation operation
+                       #:proposal-ref proposal-ref
+                       #:task task
+                       #:expires-at expires-at
+                       #:intent-reconcilable? reconcilable?
+                       #:intent-target target))
+             (cond
+               [(recovery-pending-state-name target)
+                (cond
+                  [(and old (equal? old next))
+                   (with-identity
+                    'live
+                    #f
+                    "authenticated retained operation with a fenced reconciling intent")]
+                  [from-extends?
+                   (with-identity
+                    'pending-wal
+                    #f
+                    "typed recoverable write-ahead cut awaits authenticated reconciliation"
+                    #:operation (pending-view old next)
+                    #:reconcilable? #t)]
+                  [else (intent-unreadable! old)])]
+               [else
+                ;; Early ambiguous cut: the sealed intent stays on disk until
+                ;; a mutation-authorized observation settles it fail-closed.
+                (define already-blocked
+                  (and old
+                       (equal? (hash-ref old 'state) "blocked")
+                       (equal? (hash-ref (hash-ref old 'facts) 'interrupted-intent #f)
+                               (hash-ref wal 'sha256))))
+                (cond
+                  [(or already-blocked (and old (equal? old next)))
+                   (with-identity 'live #f "authenticated retained operation with a fenced intent")]
+                  [from-extends?
+                   (with-identity
+                    'pending-wal
+                    #f
+                    "fail-closed write-ahead cut awaits the journal's blocked settlement"
+                    #:operation old)]
+                  [else (intent-unreadable! old)])])])))))))
+;; ---- BUG-0101/R101 typed discovery view (strictly READ-ONLY) ----------
+;; BUG-0090: the disposition seam is now the static acyclic import above. The
+;; claim and the shared storage core are instantiated with this module by the
+;; module graph itself -- never lazily, mid-suite, on a worker thread -- and
+;; the old `disposition-store-support` submodule back-edge is gone. The
+;; journal re-exports the claim's disposition entry points unchanged.
 (define (supplemental-recovery-pointer-claimed? path)
   ;; Explicit #f is outside the trusted feature embedding: it cannot discover
   ;; private ownership. Any configured-but-invalid/inaccessible root or claim
@@ -254,38 +425,10 @@
          ;; Validate all candidates even after a match; ambiguity must stop.
          (define claim
            (if (regexp-match? #rx"^supplemental-disposition-" (path->string entry))
-               (disposition-call 'read-disposition-claim! (build-path root entry))
+               (read-disposition-claim! (build-path root entry))
                (read-recovery-claim! (build-path root entry))))
          (or (equal? bound (hash-ref claim 'pointer-path)) claimed?))
        #t))
-(define (read-pointer! path)
-  (check-file! path)
-  (define bytes (file->bytes path))
-  (define in (open-input-bytes bytes))
-  (define value (freeze (read-json in)))
-  (unless (and (eof-object? (peek-byte in)) (bytes=? bytes (bytes-for value)))
-    (refuse "noncanonical recovery pointer"))
-  value)
-(define (validate-recovery-claim! grant proposal task)
-  (define r (hash-ref task 'recovery))
-  (define claim (read-recovery-claim! (claim-path (hash-ref r 'parent-approval))))
-  (define target (hash-ref claim 'target))
-  (unless (and (equal? (hash-ref claim 'schema) "supplemental-recovery-claim/v1")
-               (equal? (hash-ref claim 'lineage) r)
-               (equal? (hash-ref target 'task-proposal) proposal)
-               (equal? (hash-ref target 'task-approval) grant)
-               (equal? target (read-pointer! (hash-ref claim 'pointer-path))))
-    (refuse "recovery child requires its permanent claim and exact active pointer"))
-  ;; Revocation of the parent remains effective, even after migration.
-  (define-values (_p parent terminal)
-    (inspect-supplemental-recovery-parent (hash-ref r 'parent-approval)))
-  (unless (and (equal? (hash-ref terminal 'proposal-ref) (hash-ref r 'parent-proposal))
-               (equal? (hash-ref terminal 'sha256) (hash-ref r 'terminal-sha256))
-               (equal? (hash-ref (hash-ref terminal 'facts) 'allocation) (hash-ref r 'allocation))
-               (for/and ([(key value) (in-hash parent)]
-                         #:unless (memq key '(kind sha256 control-plane-head)))
-                 (equal? value (hash-ref task key #f))))
-    (refuse "recovery lineage or inherited scope mismatch")))
 ;; Caller holds campaign lease and has revalidated live context/source. Claim
 ;; precedes CAS and is itself the permanent replay intent; never initialize a
 ;; child operation here (operation -> authority is the only lock order).
@@ -349,36 +492,19 @@
      (cut! 'recovery-pointer-written)
      (validate-recovery-claim! grant proposal task)
      target)))
+;; Admission wrapper (BUG-0090): the storage/authentication core lives in the
+;; acyclic store-core helper shared with the claim module. This thin wrapper
+;; adds the exact forward validation dispatch that must consult the claim
+;; module (which this journal statically requires) for live admissions:
+;; v3 tasks validate their permanent disposition claim, v2 recovery tasks
+;; their permanent recovery claim. Historical authentication -- the only mode
+;; the claim module itself uses -- is identical to the helper core.
 (define (authenticated-task! grant [historical? #f])
-  (when (current-gsd-author-phase)
-    (refuse "author phase cannot operate supplemental journal"))
-  (unless (supplemental-reference? grant)
-    (refuse "invalid private approval reference"))
-  (define approval (validate-supplemental-approval grant))
-  (unless (and (hash? approval)
-               (immutable? approval)
-               (equal? (hash-ref approval 'kind #f) "task-approval")
-               (supplemental-reference? (hash-ref approval 'proposal #f)))
-    (refuse "live authenticated task approval required"))
-  (define proposal-ref (hash-ref approval 'proposal))
-  (define proposal (load-supplemental-record proposal-ref))
-  (define payload (hash-ref proposal 'payload #f))
-  (define task (and (hash? payload) (hash-ref payload 'task #f)))
-  (define expiry (and (hash? payload) (hash-ref payload 'expires-at #f)))
-  (unless (and (equal? (hash-ref proposal-ref 'kind) "task-proposal")
-               (equal? (hash-ref proposal 'kind #f) "task-proposal")
-               (exact-keys? payload '(task expires-at))
-               (valid-supplemental-task? task)
-               (exact-positive-integer? expiry)
-               (or historical?
-                   (and (< (current-seconds) expiry)
-                        (<= expiry
-                            (+ (current-seconds) (hash-ref (hash-ref task 'bounds) 'deadline-sec))))))
-    (refuse "approval requires a valid bounded task and unexpired operator expiry"))
+  (define-values (proposal-ref task expiry) (authenticate-supplemental-task! grant historical?))
   (unless historical?
     (cond
       [(equal? (hash-ref task 'kind) "supplemental-evidence-task/v3")
-       (disposition-call 'validate-disposition-claim! grant proposal-ref task)]
+       (validate-disposition-claim! grant proposal-ref task)]
       [(hash-has-key? task 'recovery) (validate-recovery-claim! grant proposal-ref task)]))
   (values proposal-ref task expiry))
 (define (validate-linked-approvals! facts)
@@ -399,63 +525,8 @@
                    (equal? (hash-ref approved 'proposal #f) proposal))
         (refuse "linked private approval unavailable, revoked or expired"))
       (load-supplemental-record proposal))))
-(define record-keys
-  '(schema grant-ref
-           proposal-ref
-           base-binding
-           bounds
-           created-at
-           expires-at
-           deadline-at
-           revision
-           state
-           facts
-           launch-consumed
-           sha256))
-(define (base-matches-task? base task)
-  (define approved (hash-ref task 'context))
-  (or (equal? base approved) (equal? (hash-ref base 'context #f) approved)))
-(define (validate-record! record grant proposal task expiry)
-  (unless (and (exact-keys? record record-keys)
-               (equal? (hash-ref record 'schema) "supplemental-operation/v1")
-               (equal? (hash-ref record 'grant-ref) grant)
-               (equal? (hash-ref record 'proposal-ref) proposal)
-               (equal? (hash-ref record 'bounds) (hash-ref task 'bounds))
-               (equal? record (seal record))
-               (equal? (hash-ref record 'expires-at) expiry)
-               (hash? (hash-ref record 'base-binding))
-               (positive? (hash-count (hash-ref record 'base-binding)))
-               (base-matches-task? (hash-ref record 'base-binding) task)
-               (hash? (hash-ref record 'facts))
-               (exact-nonnegative-integer? (hash-ref record 'revision))
-               (member (hash-ref record 'state) all-states)
-               (exact-positive-integer? (hash-ref record 'created-at))
-               (= (hash-ref record 'deadline-at)
-                  (min expiry
-                       (+ (hash-ref record 'created-at)
-                          (hash-ref (hash-ref task 'bounds) 'deadline-sec))))
-               (boolean? (hash-ref record 'launch-consumed))
-               (equal? (hash-ref record 'launch-consumed)
-                       (not (member (hash-ref record 'state) '("proposal-approved" "reserved"))))
-               (or (member (hash-ref record 'state) '("blocked" "revoked"))
-                   (member (hash-ref record 'state) pending-state-names)
-                   (= (hash-ref record 'revision) (index-of states (hash-ref record 'state))))
-               (let ([key (hash-ref required-facts (string->symbol (hash-ref record 'state)) #f)])
-                 (or (not key) (hash-has-key? (hash-ref record 'facts) key))))
-    (refuse "invalid operation/base/grant binding"))
-  record)
-(define (paths root grant [create? #t])
-  (define dir (build-path root "supplemental-operations"))
-  (when (and create? (not (present? dir)))
-    (with-handlers ([exn:fail:filesystem:exists? void])
-      (make-directory dir #o700))
-    (sync-directory! root))
-  (private-directory! dir)
-  (define name (hash-ref grant 'sha256))
-  (values dir
-          (build-path dir (string-append name ".json"))
-          (build-path dir (string-append name ".intent.json"))
-          (build-path dir (string-append name ".lock"))))
+;; Storage-only validation tables and the sealed operation-record validator
+;; live in the acyclic store-core helper (BUG-0090) shared with the claim.
 (define (under-lock grant proc)
   (define-values (proposal task expiry) (authenticated-task! grant))
   (define root (root!))
@@ -656,33 +727,6 @@
                                (hasheq)
                                'launch-consumed
                                #f)))]))))
-(define required-facts
-  (hasheq 'reserved
-          'allocation
-          'launched
-          'dispatch-id
-          'candidate-sealed
-          'candidate-ref
-          'candidate-approved
-          'candidate-approval-ref
-          'verifying
-          'verify-job
-          'green-captured
-          'green-proof-ref
-          'probing
-          'probe-job
-          'probe-captured
-          'probe-proof-ref
-          'supersession-approved
-          'supersession-approval-ref
-          'published
-          'publication
-          'receipt-certified
-          'receipt
-          'registered
-          'registration
-          'completed
-          'readiness))
 (define (transition-supplemental-operation! grant expected-revision expected-state new-state facts)
   (unless (exact-nonnegative-integer? expected-revision)
     (refuse "exact revision required"))

@@ -10,6 +10,7 @@
          json
          (only-in "../util/json/checksum.rkt" sha256-file)
          "../extensions/gsd/review-proof.rkt"
+         "../extensions/gsd/verify-command-format.rkt"
          "helpers/private-fixture-templates.rkt"
          "helpers/delivery-fixtures.rkt"
          "../extensions/gsd/campaign-state.rkt"
@@ -21,7 +22,10 @@
          "../extensions/gsd/plan-snapshot.rkt")
 (define plan-id (make-string 64 #\a))
 (define command "printf 'owned-output\\n' && printf 'second-stage\\n'")
-(define (fixture f #:command [declared command])
+(define (fixture f
+                 #:command [declared command]
+                 #:plan-text [plan-text #f]
+                 #:wave-docs [wave-docs '()])
   (define root (make-temporary-file "owned-proof-~a" 'directory))
   (define repo (build-path root "q"))
   (define wt (build-path root "worker"))
@@ -35,8 +39,19 @@
      (git-quiet! repo "commit" "--allow-empty" "-qm" "baseline")
      (git-quiet! repo "worktree" "add" "-qb" "campaign/w2" (path->string wt))
      (make-directory* (build-path root ".planning" "waves"))
-     (write-plan! root 2 "Proof" "proof")
-     (write-wave-doc! root 2 "proof" '("q/proof.rkt") declared)
+     (if plan-text
+         ;; BUG-0082: verbatim plan + explicitly placed declared docs
+         (begin
+           (call-with-output-file (build-path root ".planning" "PLAN.md")
+                                  (lambda (out) (display plan-text out))
+                                  #:exists 'truncate)
+           (for ([doc (in-list wave-docs)])
+             (define p (build-path root ".planning" (car doc)))
+             (make-parent-directory* p)
+             (call-with-output-file p (lambda (out) (display (cdr doc) out)) #:exists 'truncate)))
+         (begin
+           (write-plan! root 2 "Proof" "proof")
+           (write-wave-doc! root 2 "proof" '("q/proof.rkt") declared)))
      (make-plan-snapshot! root plan-id (file->string (build-path root ".planning" "PLAN.md")))
      (define w (make-campaign-wave 2 "proof" 'awaiting-delivery 1 (campaign-attempt "attempt-1" 7 0)))
      (define rec
@@ -129,6 +144,64 @@
                                                #:guard guard))))
   (check-equal? (load-delivery-journal root plan-id 2) old))
 (module+ test
+  (test-case "BUG-0082: the frozen binding follows the DECLARED wave document"
+    ;; A frozen plan may route W2 through a carrier doc while a stale
+    ;; synthesized twin (its own frozen row) carries different Verify bytes.
+    ;; Retained authority is bound to the DECLARED document only, per row.
+    (define plan-text
+      (string-append "# Plan\n\n"
+                     "- [Inbox] W2: Proof → waves/W2-proof-carrier.md\n"
+                     "- [Inbox] W9: Stale twin → waves/W2-proof.md\n"))
+    (define (doc verify)
+      (string-append "# Wave doc\nStatus: Inbox\n\n"
+                     "## Files\n- File: q/proof.rkt\n\n"
+                     "## Verify\n- `"
+                     verify
+                     "`\n\n## Done\n- done\n"))
+    (fixture (lambda (root repo wt rec)
+               (define frozen (frozen-verify-binding root plan-id 2))
+               (check-equal? (hash-ref frozen 'normalized-command) "printf 'carrier-proof-5d7\\n'")
+               (define stale (frozen-verify-binding root plan-id 9))
+               (check-equal? (hash-ref stale 'normalized-command) "printf 'stale-weak-7c1\\n'")
+               ;; recomputation is stable per declared row
+               (check-equal? (frozen-verify-binding root plan-id 2) frozen))
+             #:command "printf 'carrier-proof-5d7\\n'"
+             #:plan-text plan-text
+             #:wave-docs
+             (list (cons "waves/W2-proof-carrier.md" (doc "printf 'carrier-proof-5d7\\n'"))
+                   (cons "waves/W2-proof.md" (doc "printf 'stale-weak-7c1\\n'")))))
+
+  (test-case "R75: retained bash -c gate declaration freezes its pinned normalized authority"
+    ;; The retained W0 pattern (every gate an explicit bash invocation span)
+    ;; must freeze to byte-identical normalized authority: no silent rebind
+    ;; of live commands across the R75 normalizer change.
+    (define declared
+      (string-append "- `bash -c 'test -s q/proof.rkt'` exists\n"
+                     "- `bash -c 'test \"$(grep -c \"required\" q/proof.rkt)\" -ge 1'` present\n"
+                     "- `bash -c '! grep -q \"FORBIDDEN\" q/proof.rkt'` absent\n"))
+    (define expected
+      (string-append "bash -c 'test -s q/proof.rkt'"
+                     " && bash -c 'test \"$(grep -c \"required\" q/proof.rkt)\" -ge 1'"
+                     " && bash -c '! grep -q \"FORBIDDEN\" q/proof.rkt'"))
+    (fixture (lambda (root repo wt rec)
+               (define frozen (frozen-verify-binding root plan-id 2))
+               (check-equal? (hash-ref frozen 'normalized-command) expected)
+               (check-equal? (hash-ref frozen 'normalizer-version) verify-normalizer-version)
+               ;; recomputation is stable: the same bytes freeze to the same binding
+               (check-equal? (frozen-verify-binding root plan-id 2) frozen))
+             #:command declared))
+  (test-case "R75: a declaration with an unsupported span refuses at freeze — drift is loud"
+    ;; Historical normalization silently DROPPED a bare grep span (partial
+    ;; green). A retained authority recorded under the dropped-span semantics
+    ;; can never be silently rebound: the new normalizer refuses the
+    ;; declaration outright, so any retained base-command equality check
+    ;; fails loudly instead of rebinding.
+    (define declared
+      (string-append "- `bash -c 'test -s q/proof.rkt'` exists\n"
+                     "- `grep -q required q/proof.rkt` present\n"))
+    (fixture (lambda (root repo wt rec)
+               (check-exn exn:fail? (lambda () (frozen-verify-binding root plan-id 2))))
+             #:command declared))
   (test-case "fast operational jobs flag is preserved but partial/dry-run profiles cannot certify broad"
     (check-true (proof-verify-command-eligible? "racket scripts/run-tests.rkt fast --jobs 2"))
     (for ([flag '("--impact-dry-run" "--changed-base abc"

@@ -274,6 +274,26 @@
 
 ;; ── Execution ───────────────────────────────────────────────────
 
+;; R91/BUG-0091 (frozen contract §2.2.7): owned worktree execution is REFUSED
+;; on the remote seam — never silently dispatched with wd=#f. The remote
+;; producer stays 7-arg in this wave: mapping a coordinator-local trusted root
+;; to an executor-local scope requires a future reviewed contract (mTLS peer
+;; identity / capability tokens are not task-root scope). Refusal triggers are
+;; the coordinator-execution-cwd signal (`working-directory`, the approval-
+;; visible scheduler injection) and any misplaced trust field; plain tool
+;; arguments such as the bash `cwd` argument keep their ordinary semantics
+;; and remain subject to the remote worker's own root checks.
+(define (remote-refusal-response arguments)
+  (and (hash? arguments)
+       (or (hash-has-key? arguments 'working-directory)
+           (hash-has-key? arguments 'trusted-working-dir))
+       (make-error-response
+        #f
+        (string-append
+         "refused: remote execution does not support coordinator-owned working directories"
+         " (no executor-local trusted root mapping is authorized); run owned worktree work through a local worker")
+        #:error-class 'remote-owned-cwd-refused)))
+
 ;; Execute a tool call via the remote executor.
 ;; Checks circuit breaker state before executing.
 ;; Attempts reconnection if connection is dead.
@@ -283,21 +303,27 @@
                             arguments
                             capability
                             [timeout-ms DEFAULT-REQUEST-TIMEOUT-MS])
-  (define cb (remote-executor-circuit executor))
-  ;; Check circuit breaker
-  (define circuit-verdict (circuit-check! cb))
-  (cond
-    [(eq? circuit-verdict 'reject)
-     (log-remote-executor-warning "circuit breaker open — fast-failing request")
-     (make-error-response #f "circuit breaker is open — too many consecutive failures")]
-    [else
-     ;; Circuit allows request — execute with retry + reconnect
-     (define result (execute-with-resilience executor tool-name arguments capability timeout-ms))
-     ;; Record outcome
-     (if (eq? (ipc-response-status result) 'ok)
-         (circuit-record-success! cb)
-         (circuit-record-failure! cb))
-     result]))
+  ;; Refuse unsupported owned/cwd-carrying work BEFORE any transport or
+  ;; circuit-breaker accounting: a policy refusal is not a transport failure.
+  (define refusal (remote-refusal-response arguments))
+  (if refusal
+      refusal
+      (let ([cb (remote-executor-circuit executor)])
+        ;; Check circuit breaker
+        (define circuit-verdict (circuit-check! cb))
+        (cond
+          [(eq? circuit-verdict 'reject)
+           (log-remote-executor-warning "circuit breaker open — fast-failing request")
+           (make-error-response #f "circuit breaker is open — too many consecutive failures")]
+          [else
+            ;; Circuit allows request — execute with retry + reconnect
+            (define result
+              (execute-with-resilience executor tool-name arguments capability timeout-ms))
+            ;; Record outcome
+            (if (eq? (ipc-response-status result) 'ok)
+                (circuit-record-success! cb)
+                (circuit-record-failure! cb))
+            result]))))
 
 ;; Execute with reconnection + retry logic.
 ;; F-09 fix: Uses if/cond instead of broken `return` identity function.

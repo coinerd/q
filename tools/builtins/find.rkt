@@ -4,6 +4,27 @@
 ;;
 ;; v0.33.2 W0: Converted to define-tool macro.
 ;; v0.84.4: BUG-1 early termination, BUG-2 root guard, BUG-3 scan budget.
+;;
+;; R97 (BUG-0097) — absolute, openable find -> read roundtrip:
+;; - Every content result string is an ABSOLUTE path in the executing
+;;   filesystem namespace, directly passable as read's path argument there.
+;;   Output compatibility change: results were root-relative display
+;;   strings before R97 (documented in the schema description).
+;; - Results are built from traversal paths (build-path descent from the
+;;   search root), never by concatenating user-supplied strings.
+;; - details carry 'path-base 'absolute; 'search-root stays absolute.
+;; - Symlinks: directory symlinks are NEVER recursed into (cycle/escape
+;;   defense). Every symlink entry's resolved target is checked before
+;;   emission: dangling targets and targets escaping the search root are
+;;   denied and recorded as structured records in details 'denied. When
+;;   safe mode is active, the existing safety policy (allowed-path? via
+;;   require-safe-path!) is additionally applied to each emitted path and
+;;   its resolved target BEFORE emission; policy-denied entries are omitted
+;;   and recorded.
+;; - max-results / max-depth / scan budget / early termination / protected
+;;   root guards are unchanged.
+;; - Absolute paths are NOT permission: confinement to the search root and
+;;   the safe-mode policy still apply to every emitted absolute path.
 
 (require "../../util/error/error-helpers.rkt"
          racket/file
@@ -40,27 +61,51 @@
 (define MAX-SCAN-BUDGET 50000)
 
 ;; --------------------------------------------------
+;; R97: path helpers
+;; --------------------------------------------------
+
+;; #t when P is BASE or one of its descendants (lexically, no '..' escape).
+(define (path-within? base p)
+  (not (ormap (lambda (e) (eq? e 'up)) (explode-path (find-relative-path base p)))))
+
+;; Fully-resolved absolute path for P, or #f when the path cannot be
+;; resolved (e.g. missing parent). Note: resolve-path resolves the final
+;; symlink component WITHOUT checking target existence, so dangling links
+;; are detected separately via file-exists?/directory-exists? in walk-dir.
+(define (resolved-absolute-path p)
+  (with-handlers ([exn:fail:filesystem? (lambda (_) #f)])
+    (simple-form-path (resolve-path p))))
+
+;; --------------------------------------------------
 ;; Core recursive walk
 ;; --------------------------------------------------
 
 (define (walk-dir root-path
+                  resolved-root
                   name-re
                   type-filter
                   max-depth
                   max-results
                   root-is-hidden
                   #:max-scanned [max-scanned MAX-SCAN-BUDGET])
-  ;; Returns (values results total-scanned entries-scanned)
+  ;; Returns (values results total-scanned entries-scanned denied-records)
   ;; BUG-1: Stops recursing into subdirectories once max-results are found.
   ;; BUG-3: Hard cap on entries scanned via max-scanned budget.
+  ;; R97: results are ABSOLUTE traversal paths; symlink/policy denials are
+  ;; recorded as structured records (path + reason) in denied-records.
   (define results (box '()))
   (define total (box 0))
   (define scanned (box 0))
+  (define denied (box '()))
 
-  (define (add-result! rel)
+  (define (add-result! abs-str)
     (set-box! total (add1 (unbox total)))
     (when (< (length (unbox results)) max-results)
-      (set-box! results (append (unbox results) (list rel)))))
+      (set-box! results (append (unbox results) (list abs-str)))))
+
+  (define (deny! full-path reason)
+    (set-box! denied
+              (append (unbox denied) (list (hasheq 'path (path->string full-path) 'reason reason)))))
 
   (define (results-full?)
     (>= (length (unbox results)) max-results))
@@ -83,6 +128,13 @@
       [(and (hidden-name? name) (not root-is-hidden)) #t]
       [else #f]))
 
+  ;; Existing safety policy applied BEFORE emission (no-op unless safe mode
+  ;; is active): the emitted traversal path AND the resolved symlink target
+  ;; must both be allowed.
+  (define (emission-allowed? full-path resolved-target)
+    (and (not (require-safe-path! (path->string full-path) "find"))
+         (or (not resolved-target) (not (require-safe-path! (path->string resolved-target) "find")))))
+
   ;; depth-first walk
   (define (walk current-dir depth)
     (when (budget-remaining?)
@@ -92,25 +144,49 @@
         (set-box! scanned (add1 (unbox scanned)))
         (define entry-str (path->string entry))
         (define full-path (build-path current-dir entry))
-        (define rel-path (find-relative-path root-path full-path))
 
         ;; Skip VCS dirs and hidden entries (unless root is hidden)
         (unless (should-skip-entry? entry-str)
-          ;; Check type match
-          (when (matches-type? full-path)
-            ;; Check name match — always count, only store if not full
-            (when (matches-name? entry-str)
-              (add-result! (path->string rel-path))))
-          ;; BUG-1: Recurse into subdirectories only if results NOT full,
-          ;; depth allows, and budget remains.
-          (when (and (directory-exists? full-path)
-                     (< depth max-depth)
-                     (not (results-full?))
-                     (budget-remaining?))
-            (walk full-path (add1 depth)))))))
+          (define entry-is-link? (link-exists? full-path))
+          ;; Dangling detection: file-exists?/directory-exists? follow the link;
+          ;; #f for a broken link. (resolve-path alone does NOT raise for a
+          ;; dangling final component, so it cannot detect dangling here.)
+          (define resolved-target
+            (and entry-is-link?
+                 (or (file-exists? full-path) (directory-exists? full-path))
+                 (resolved-absolute-path full-path)))
+          (define candidate? (and (matches-type? full-path) (matches-name? entry-str)))
+          (cond
+            ;; dangling symlink: never emitted, structured denial record
+            [(and entry-is-link? (not resolved-target))
+             (when candidate?
+               (deny! full-path "dangling-symlink"))]
+            ;; symlink whose resolved target escapes the search root:
+            ;; denied (confinement applies to resolved targets, not just
+            ;; path strings)
+            [(and entry-is-link? (not (path-within? resolved-root resolved-target)))
+             (when candidate?
+               (deny! full-path "symlink-target-outside-root"))]
+            ;; existing safety policy denied this entry
+            [(not (emission-allowed? full-path resolved-target))
+             (when candidate?
+               (deny! full-path "safe-mode-path-denied"))]
+            [else
+             ;; Check type + name match — emit the ABSOLUTE traversal path
+             (when candidate?
+               (add-result! (path->string full-path)))
+             ;; BUG-1: Recurse into subdirectories only if results NOT full,
+             ;; depth allows, and budget remains. R97: NEVER recurse into
+             ;; directory symlinks (cycle/escape defense).
+             (when (and (not entry-is-link?)
+                        (directory-exists? full-path)
+                        (< depth max-depth)
+                        (not (results-full?))
+                        (budget-remaining?))
+               (walk full-path (add1 depth)))])))))
 
   (walk root-path 0)
-  (values (unbox results) (unbox total) (unbox scanned)))
+  (values (unbox results) (unbox total) (unbox scanned) (unbox denied)))
 
 ;; --------------------------------------------------
 ;; Handler function
@@ -135,7 +211,7 @@
         (make-error-result (format "Path is not a directory: ~a" path-str))]
 
        [else
-        ;; Resolve to absolute path for checks
+        ;; Resolve to absolute path for checks and traversal
         (define root-path (simple-form-path path-str))
 
         ;; BUG-2: Reject filesystem root and system directories
@@ -161,13 +237,25 @@
            ;; Check if root path itself is under a hidden directory
            (define root-is-hidden (path-component-hidden? root-path))
 
+           ;; R97: resolved root — used to confine symlink targets when the
+           ;; search root itself is reached through a symlink
+           (define resolved-root (or (resolved-absolute-path root-path) root-path))
+
            ;; 5. Walk the tree (BUG-3: with scan budget)
-           (define-values (results total-found entries-scanned)
-             (walk-dir root-path name-re type-filter max-depth max-results root-is-hidden))
+           (define-values (results total-found entries-scanned denied-records)
+             (walk-dir root-path
+                       resolved-root
+                       name-re
+                       type-filter
+                       max-depth
+                       max-results
+                       root-is-hidden))
 
            (define budget-exceeded? (>= entries-scanned MAX-SCAN-BUDGET))
            (define truncated? (or (> total-found max-results) budget-exceeded?))
 
+           ;; R97: results are absolute filesystem paths, openable by read
+           ;; in the executing filesystem namespace regardless of CWD.
            (make-success-result results
                                 (hasheq 'total-found
                                         total-found
@@ -175,8 +263,12 @@
                                         truncated?
                                         'search-root
                                         (path->string root-path)
+                                        'path-base
+                                        'absolute
                                         'scanned
-                                        entries-scanned))])])]))
+                                        entries-scanned
+                                        'denied
+                                        denied-records))])])]))
 
 ;; --------------------------------------------------
 ;; Tool definition via define-tool macro
@@ -185,13 +277,16 @@
 (define-tool
  find
  #:description
- "Recursively list files and directories matching a name pattern. Supports glob patterns and type filtering."
+ "List matching files/directories. Results are ABSOLUTE paths passable as read.path; details carry path-base 'absolute and a structured 'denied list."
  #:required ("path")
- #:properties [(path "string" "Root directory to search")
-               (name "string" "Name pattern (glob, optional)")
-               (type "string" "Type filter: 'file', 'dir', or 'any' (default)")
-               (max-depth "integer" "Maximum directory depth to search (default 10)")
-               (max-results "integer" "Maximum results to return (default 100)")]
+ #:properties
+ [(path
+   "string"
+   "Root directory to search (relative paths resolve against the executing process CWD; results are absolute)")
+  (name "string" "Name pattern (glob, optional)")
+  (type "string" "Type filter: 'file', 'dir', or 'any' (default)")
+  (max-depth "integer" "Maximum directory depth to search (default 10)")
+  (max-results "integer" "Maximum results to return (default 100)")]
  find-handler)
 
 (provide find)
