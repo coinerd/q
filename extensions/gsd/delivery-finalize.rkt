@@ -33,6 +33,7 @@
                   supplemental-resumable?
                   supplemental-author-pending?
                   supplemental-pointer-retained?
+                  supplemental-entry-outcome
                   supplemental-checkpoint-step!)
          (only-in "delivery-journal.rkt"
                   journal-evidence-author-repair
@@ -380,8 +381,10 @@
                                      on-blocked)]
     [(and (campaign-wave? extra)
           (supplemental-pointer-retained? dir plan-id (campaign-wave-index extra)))
-     (on-blocked
-      "retained supplemental task is not launchable; ordinary coordinator fallback refused")]
+     ;; A spent non-terminal retained operation must reach the entry seam
+     ;; (which seals it blocked, secondary and idempotent) BEFORE the typed
+     ;; denial; the denial itself is unchanged.
+     (on-blocked (supplemental-entry-outcome dir plan-id (campaign-wave-index extra)))]
     [else
      (if (and extra (campaign-record-cancellation (load-campaign-record dir plan-id)))
          (on-cancel message)
