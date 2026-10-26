@@ -47,8 +47,19 @@
          (define v (hash-ref facts key))
          (and (string? v) (positive? (string-length v))))))
 (define (inspect-supplemental-disposition-parent grant)
-  (inspect-parent grant (disposition-amendment) (disposition-predecessor)))
-(define (inspect-parent grant a predecessor)
+  (inspect-parent grant (disposition-amendment) (disposition-ancestors)))
+(define (inspect-parent grant a ancestors)
+  ;; The active amendment binds its own nearest predecessor; each earlier
+  ;; generation is inspected recursively through the remaining immutable
+  ;; ancestor chain, so every frame re-checks its own parent generation,
+  ;; spent terminal and permanent claim. No generic chain construction: the
+  ;; chain is exactly the fixed amendment list from the policy module.
+  (define predecessor (and (pair? ancestors) (car ancestors)))
+  (define rest (if (pair? ancestors) (cdr ancestors) '()))
+  (define prior-keys
+    (if (hash-has-key? a 'prior-parent-proposal)
+        '(prior-parent-proposal prior-parent-approval)
+        '(v2-proposal v2-approval)))
   (call-with-supplemental-authority-lock
    (lambda ()
      (define-values (proposal task expiry) (authenticate-supplemental-task! grant #t))
@@ -60,10 +71,10 @@
        (refuse "amendment requires its exact parent generation"))
      (when predecessor
        (define-values (pp pt po)
-         (inspect-parent (hash-ref predecessor 'parent-approval) predecessor #f))
+         (inspect-parent (hash-ref predecessor 'parent-approval) predecessor rest))
        (define previous (read-disposition-claim! (claim-path (hash-ref predecessor 'sha256))))
-       (unless (and (equal? (hash-ref a 'v2-proposal) pp)
-                    (equal? (hash-ref a 'v2-approval) (hash-ref predecessor 'parent-approval))
+       (unless (and (equal? (hash-ref a (car prior-keys)) pp)
+                    (equal? (hash-ref a (cadr prior-keys)) (hash-ref predecessor 'parent-approval))
                     (equal? (hash-ref previous 'amendment) predecessor)
                     (equal? (hash-ref previous 'target) (pointer proposal grant))
                     (equal? (hash-ref previous 'lineage) (hash-ref task 'disposition))
@@ -150,7 +161,13 @@
   (define bound (hash-ref c 'pointer-path #f))
   (unless (and (exact-keys? c '(schema amendment lineage pointer-path target sha256))
                (equal? (hash-ref c 'schema) "supplemental-disposition-claim/v1")
-               (exact-keys? (hash-remove (hash-remove a 'v2-proposal) 'v2-approval)
+               (exact-keys? (hash-remove
+                             (hash-remove
+                              (hash-remove
+                               (hash-remove a 'v2-proposal)
+                               'v2-approval)
+                              'prior-parent-proposal)
+                             'prior-parent-approval)
                             '(kind plan-id
                                    wave
                                    root-proposal
@@ -167,6 +184,10 @@
                (or (and (not (hash-has-key? a 'v2-proposal)) (not (hash-has-key? a 'v2-approval)))
                    (and (ref? (hash-ref a 'v2-proposal #f) "task-proposal")
                         (ref? (hash-ref a 'v2-approval #f) "task-approval")))
+               (or (and (not (hash-has-key? a 'prior-parent-proposal))
+                        (not (hash-has-key? a 'prior-parent-approval)))
+                   (and (ref? (hash-ref a 'prior-parent-proposal #f) "task-proposal")
+                        (ref? (hash-ref a 'prior-parent-approval #f) "task-approval")))
                (equal? a (seal-supplemental-record a))
                (equal? (hash-ref a 'kind) "supplemental-disposition-amendment/v1")
                (digest? (hash-ref a 'plan-id))

@@ -24,6 +24,7 @@
          "../extensions/gsd/supplemental-evidence-controller.rkt"
          "../extensions/gsd/supplemental-evidence-journal.rkt"
          "../extensions/gsd/supplemental-evidence-authority.rkt"
+         (submod "../extensions/gsd/supplemental-disposition-policy.rkt" ancestry-support)
          (only-in "../extensions/gsd/review-proof-format.rkt" valid-owned-proof-manifest?))
 
 ;; Source-anchored CLI path: the dispatcher lives at the repository root,
@@ -79,7 +80,7 @@
          ;; production policy or substitute literal attempt/fence allocations.
          (define-values (ref task) (propose))
          ;; Exercise the actual CLI dispatcher with the same isolated authority
-         ;; binding. It must retain amendment-2, never select amendment-1.
+         ;; binding. It must retain amendment-3, never select an ancestor.
          (define cli-output (open-output-string))
          (parameterize ([current-command-line-arguments (vector "--verb"
                                                                 "propose-disposition"
@@ -163,13 +164,26 @@
                             ;; The persisted bytes include current allocation, attempt count,
                             ;; cancellation, budget pause and all usage accounting fields.
                             (check-equal? (file->bytes campaign-path) accounting-before)))
-         (refused! "old amendment-1 proposal install (production f4238535 analogue)"
+         (refused! "old predecessor parent proposal install (production f4238535 analogue)"
                    (lambda ()
-                     (install-supplemental-disposition! base
-                                                        plan
-                                                        1
-                                                        (hash-ref parent 'task-proposal)
-                                                        (hash-ref parent 'task-approval))))
+                     ;; The exhausted amendment-2 parent pair is neither a fresh
+                     ;; child nor the active amendment's parent: both the active
+                     ;; policy mismatch and the predecessor's permanent claim
+                     ;; independently refuse it.
+                     (install-supplemental-disposition!
+                      base
+                      plan
+                      1
+                      (hash-ref (disposition-predecessor) 'parent-proposal)
+                      (hash-ref (disposition-predecessor) 'parent-approval))))
+         (refused! "grand-predecessor v2 parent proposal install"
+                   (lambda ()
+                     (install-supplemental-disposition!
+                      base
+                      plan
+                      1
+                      (hash-ref (cadr (disposition-ancestors)) 'parent-proposal)
+                      (hash-ref (cadr (disposition-ancestors)) 'parent-approval))))
          (define (both! label [target base])
            (refused! (string-append label "/proposal") (lambda () (propose target)))
            (refused! (string-append label "/install")
@@ -267,6 +281,17 @@
                                             (hash-ref a 'v2-proposal)
                                             'task-approval
                                             (hash-ref a 'v2-approval)))))
+            (file-case "spent v3 pointer cannot select amendment-2"
+                       pointer
+                       (lambda (p)
+                         (define a (disposition-fixture-amendment df))
+                         (put-json! p
+                                    (hasheq 'schema
+                                            "supplemental-pointer/v1"
+                                            'task-proposal
+                                            (hash-ref a 'prior-parent-proposal)
+                                            'task-approval
+                                            (hash-ref a 'prior-parent-approval)))))
             (file-case "alternate pointer contents"
                        pointer
                        (lambda (p) (put-json! p (disposition-fixture-root-pointer df))))))
@@ -336,7 +361,7 @@
          (check-no-operation!)
          (check-equal? (campaign-usage-summary (load-campaign-record base plan))
                        (campaign-usage-summary initial-rec)))
-       #:second? #t))))
+       #:third? #t))))
 (module+ main
   (exit (run-tests eligibility-suite)))
 (module+ test

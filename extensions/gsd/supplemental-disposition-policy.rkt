@@ -6,7 +6,8 @@
          "supplemental-evidence-authority.rkt")
 (provide disposition-amendment
          disposition-amendment-1
-         disposition-amendment-2)
+         disposition-amendment-2
+         disposition-amendment-3)
 (define production-home (simplify-path (find-system-path 'home-dir) #f))
 (define production-root (build-path production-home ".q" "agent" "supplemental-evidence"))
 (define (ref kind digest)
@@ -56,15 +57,67 @@
               "0c9e45d27cfb3934c29dc9bdc44686b62a6011ddf21c08d8c507beaf88e6e5c0"
               'allocation
               (hasheq 'attempt-id "attempt-5" 'attempt-fence 8 'coordinator-fence 8))))
-(define default-amendment disposition-amendment-2)
+;; DISPOSITION-AMENDMENT-3 TERMINAL BINDING IS DELIBERATELY PENDING. The
+;; owner-authorized third bounded grant for campaign
+;; 79a69b427b40fb6c6b68b4fd1484a74551db182afa9b96f065353324af16b19e wave 1
+;; binds the exact live v3 pair 15e68c8b…/ccf20bc9… (the amendment-2
+;; disposition child), its consumed attempt-6/fence-9 lineage and the spent
+;; amendment-2 parent pair f4238535…/f8ea96b8… as immutable prior ancestry.
+;; Attempt-6 has not sealed a spent terminal record: its operation sits at
+;; state "verifying" revision 5 (past the blocked/revision-3 typed-loss
+;; window) and the journal never rewrites bound facts or lowers revisions,
+;; so both terminal digest namespaces cannot be derived yet. They hold the
+;; documented all-zero pending marker and EVERY production admission
+;; refuses fail-closed ("exact spent terminal amendment facts required")
+;; until the owner replaces this one binding per the runbook in
+;; .planning/bugs/remediation-planning/impl/AMENDMENT-3.md. Nothing else in
+;; the record may change; snapshot, model-dispatches and successor-permitted
+;; stay inherited, and no fourth successor is permitted.
+(define pending-terminal-digest (make-string 64 #\0))
+(define disposition-amendment-3
+  (seal-supplemental-record
+   (hash-set* disposition-amendment-2
+              'prior-parent-proposal
+              (hash-ref disposition-amendment-2 'parent-proposal)
+              'prior-parent-approval
+              (hash-ref disposition-amendment-2 'parent-approval)
+              'parent-proposal
+              (ref "task-proposal" "15e68c8b1ddd822a969b18ebfb7e22c425a0f74e0a68ec48a2b712d1cd05e49d")
+              'parent-approval
+              (ref "task-approval" "ccf20bc98f7688b4bb5fa69226c54a876038c88fd28a8fe476dcad9ae7e1f9ac")
+              'terminal-body-sha256
+              pending-terminal-digest
+              'terminal-record-sha256
+              pending-terminal-digest
+              'allocation
+              (hasheq 'attempt-id "attempt-6" 'attempt-fence 9 'coordinator-fence 9))))
+(define default-amendment disposition-amendment-3)
 (define fixture-amendment (make-parameter #f))
+;; Immutable fixture ancestry DATA: the nearest-first chain of ancestor
+;; amendments for the currently bound fixture generation (empty for
+;; amendment-1). Same restricted seam as fixture-amendment; never authority.
 (define fixture-predecessor (make-parameter #f))
 (module+ ancestry-support
-  (provide disposition-predecessor)
-  (define (disposition-predecessor)
+  (provide disposition-predecessor
+           disposition-ancestors)
+  (define (disposition-ancestors)
     (if (fixture-amendment)
         (fixture-predecessor)
-        disposition-amendment-1)))
+        (list disposition-amendment-2 disposition-amendment-1)))
+  (define (disposition-predecessor)
+    (car (disposition-ancestors))))
+;; The amendment's own keys pin its generation: prior-parent links make a
+;; third amendment, v2 links a second, and the bare canonical shape is the
+;; first. Key sets must match that generation exactly.
+(define (generation-template amendment)
+  (cond
+    [(hash-has-key? amendment 'prior-parent-proposal) disposition-amendment-3]
+    [(hash-has-key? amendment 'v2-proposal) disposition-amendment-2]
+    [else disposition-amendment-1]))
+(define (prior-link-keys amendment)
+  (if (hash-has-key? amendment 'prior-parent-proposal)
+      '(prior-parent-proposal prior-parent-approval)
+      '(v2-proposal v2-approval)))
 (define (disposition-amendment)
   (define fixture (fixture-amendment))
   (cond
@@ -107,8 +160,7 @@
              (immutable? amendment)
              (equal?
               (sort (hash-keys amendment) symbol<?)
-              (sort (hash-keys (if predecessor disposition-amendment-2 disposition-amendment-1))
-                    symbol<?))
+              (sort (hash-keys (generation-template amendment)) symbol<?))
              (equal? amendment (seal-supplemental-record amendment))
              (equal? (hash-ref amendment 'kind) "supplemental-disposition-amendment/v1")
              (for/and ([key '(plan-id terminal-body-sha256 terminal-record-sha256 snapshot-sha256)])
@@ -131,9 +183,29 @@
       (error 'call-with-test-disposition-amendment "invalid immutable fixture amendment"))
     (when predecessor
       (call-with-test-disposition-amendment predecessor void)
-      (unless (and (equal? (hash-ref amendment 'v2-proposal) (hash-ref predecessor 'parent-proposal))
-                   (equal? (hash-ref amendment 'v2-approval) (hash-ref predecessor 'parent-approval)))
-        (error 'call-with-test-disposition-amendment "fixture predecessor mismatch")))
+      (define prior-keys (prior-link-keys amendment))
+      (unless (and (equal? (hash-ref amendment (car prior-keys))
+                           (hash-ref predecessor 'parent-proposal))
+                   (equal? (hash-ref amendment (cadr prior-keys))
+                           (hash-ref predecessor 'parent-approval)))
+        (error 'call-with-test-disposition-amendment "fixture predecessor mismatch"))
+      ;; A third fixture generation must also keep the inherited v2 link
+      ;; pinned to its grand-predecessor's parent pair, mirroring the
+      ;; production private recovery claim target check.
+      (define ancestors
+        (if (fixture-amendment) (fixture-predecessor) '()))
+      (when (pair? ancestors)
+        (define grand (car ancestors))
+        (unless (and (equal? (hash-ref amendment 'v2-proposal)
+                             (hash-ref grand 'parent-proposal))
+                     (equal? (hash-ref amendment 'v2-approval)
+                             (hash-ref grand 'parent-approval)))
+          (error 'call-with-test-disposition-amendment "fixture grand-predecessor mismatch"))))
     (parameterize ([fixture-amendment (cons root (seal-supplemental-record amendment))]
-                   [fixture-predecessor predecessor])
+                   [fixture-predecessor (if predecessor
+                                            (cons predecessor
+                                                  (if (fixture-amendment)
+                                                      (fixture-predecessor)
+                                                      '()))
+                                            '())])
       (thunk))))

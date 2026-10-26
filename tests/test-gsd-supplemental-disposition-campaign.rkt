@@ -123,7 +123,7 @@
      (check-equal? (file->bytes (delivery-journal-path base plan 1)) receipt)
      (preserved! before))))
 
-(define (exercise-disposition [cut-state #f] #:second? [second? #f])
+(define (exercise-disposition [cut-state #f] #:second? [second? #f] #:third? [third? #f])
   (call-with-disposition-fixture
    (lambda (df)
      (define fx (disposition-fixture-fx df))
@@ -179,7 +179,7 @@
      (check-equal? (length (find-files (lambda (p)
                                          (regexp-match? #rx"supplemental-disposition-.*[.]json$" p))
                                        private))
-                   (if second? 1 0))
+                   (cond [third? 2] [second? 1] [else 0]))
      (define approval (fixture-approve! ref))
      ((api 'install-supplemental-disposition!) base plan 1 ref approval)
      (define installed-private (files-under private))
@@ -449,7 +449,8 @@
                                                             1
                                                             (hash-ref ref 'sha256)
                                                             (+ (current-seconds) 14400)))))
-   #:second? second?))
+   #:second? second?
+   #:third? third?))
 (define evidence-suite
   (test-suite "one further disposition through the actual campaign runner"
     (test-case "failed v3 is permanently spent; no fourth generation or redispatch"
@@ -463,13 +464,15 @@
     (test-case "v3 certified receipt before promotion resumes from zero registrations to one"
       (exercise-disposition "receipt-certified"))
     (test-case "amendment-2: spent v3 ancestry, real worker and complete K/S proof ladder; no successor"
-      (exercise-disposition #f #:second? #t))))
+      (exercise-disposition #f #:second? #t))
+    (test-case "amendment-3: three-link spent ancestry, real worker and complete K/S proof ladder; no fourth successor"
+      (exercise-disposition #f #:third? #t))))
 (module+ main
   ;; The explicit slow command exercises the new route once, not five historical
-  ;; amendment-1 campaigns as well. raco test retains the full regression suite.
-  (exit (run-tests (test-suite "amendment-2 production campaign"
-                     (test-case "real amendment-2 ladder"
-                       (exercise-disposition #f #:second? #t))))))
+  ;; amendment-1/2 campaigns as well. raco test retains the full regression suite.
+  (exit (run-tests (test-suite "amendment-3 production campaign"
+                     (test-case "real amendment-3 ladder"
+                       (exercise-disposition #f #:third? #t))))))
 (provide evidence-suite)
 (module+ test
   (define transcript (open-output-string))

@@ -179,8 +179,7 @@
                  (install-supplemental-disposition-claim! path parent-pointer competitor cp cg)))))
            (proc f path target t terminal second))
          #:predecessor a))))))
-(define (child! parent old a [offset 1600])
-  (define d
+(define (child! parent old a [offset 1600])  (define d
     (hash-set* disposition
                'amendment-id
                (hash-ref a 'sha256)
@@ -207,6 +206,42 @@
     (propose-retain! "task-proposal" (hasheq 'task t 'expires-at (+ (current-seconds) offset))))
   (define g (approve! p))
   (values p g t (pointer p g)))
+;; Third bounded generation: one more genuinely spent child derived from
+;; sealed records only. The amendment-2 permanent claim installs inside its
+;; own frame (moving the pointer), then the immutable amendment-3 fixture
+;; binds its exact pair, both terminal digest namespaces and failed attempt
+;; allocation. No fourth successor is ever bound.
+(define (with-spent3 proc)
+  (with-spent
+   (lambda (f path old parent po a)
+     (define-values (p2 g2 t2 target2) (child! parent old a))
+     ;; The second amendment's claim/pointer install stays in its own frame
+     ;; and MUST precede spending the new child: v3 operation admission
+     ;; validates the permanent claim and active pointer.
+     (install-supplemental-disposition-claim! path old target2 p2 g2)
+     (define owned3 (hasheq 'attempt-id "attempt-6" 'attempt-fence 9 'coordinator-fence 9))
+     (define terminal3 (spend! g2 owned3))
+     (define third
+       (seal-supplemental-record
+        (hash-set* a
+                   'prior-parent-proposal
+                   (hash-ref a 'parent-proposal)
+                   'prior-parent-approval
+                   (hash-ref a 'parent-approval)
+                   'parent-proposal
+                   p2
+                   'parent-approval
+                   g2
+                   'terminal-body-sha256
+                   (hash-ref terminal3 'sha256)
+                   'terminal-record-sha256
+                   (sha256-string (canonical-evidence-json terminal3))
+                   'allocation
+                   owned3)))
+     (call-with-test-disposition-amendment
+      third
+      (lambda () (proc f path target2 t2 terminal3 third p2 g2))
+      #:predecessor a))))
 (define-runtime-path self "test-gsd-supplemental-disposition-store.rkt")
 (define (worker root a path old target p g)
   (define-values (process out in err)
@@ -254,24 +289,42 @@
     (check-false (valid-supplemental-task?
                   (seal-supplemental-record
                    (hash-set v3 'disposition (hash-set disposition 'extra #t))))))
-  (test-case "active production amendment-2 ID is derived from its public binding fields"
+  (test-case "active production amendment-3 ID is derived from its public binding fields"
     (check-equal? (hash-ref (disposition-amendment) 'sha256)
-                  "645a6a88de529fa239edbda468b8c12e64df1c0c1fbff859db4a9f284e242505")
+                  (hash-ref disposition-amendment-3 'sha256))
     ;; Drop the published ID and use the policy's own canonical sealing path.
     (define derived (seal-supplemental-record (hash-remove (disposition-amendment) 'sha256)))
     (check-equal? (hash-ref derived 'sha256)
+                  (hash-ref disposition-amendment-3 'sha256))
+    ;; Exhausted ancestors keep their published identities and remain reachable
+    ;; only as immutable provenance through the fixed ancestor chain.
+    (check-equal? (hash-ref disposition-amendment-1 'sha256)
+                  "e608629026bfd787c7c34a7dc163ebdc15f8c7ba82fff46277ba428037f82313")
+    (check-equal? (hash-ref disposition-amendment-2 'sha256)
                   "645a6a88de529fa239edbda468b8c12e64df1c0c1fbff859db4a9f284e242505")
-    (check-not-equal? (hash-ref disposition-amendment-1 'sha256)
-                      "645a6a88de529fa239edbda468b8c12e64df1c0c1fbff859db4a9f284e242505")
-    (check-equal? (disposition-predecessor) disposition-amendment-1))
+    (check-not-equal? (hash-ref disposition-amendment-2 'sha256)
+                      (hash-ref disposition-amendment-3 'sha256))
+    (check-equal? (disposition-predecessor) disposition-amendment-2)
+    (check-equal? (disposition-ancestors)
+                  (list disposition-amendment-2 disposition-amendment-1)))
   (test-case "production policy is frozen; real/default root cannot use fixture seam"
     (define a (disposition-amendment))
     (check-equal? (hash-ref a 'plan-id)
                   "79a69b427b40fb6c6b68b4fd1484a74551db182afa9b96f065353324af16b19e")
     (check-equal? (hash-ref a 'wave) 1)
-    (check-equal? (hash-ref a 'terminal-body-sha256)
+    ;; OWNER RUNBOOK PENDING BINDING (failing-first): attempt-6 has sealed no
+    ;; spent terminal record, so both terminal digest namespaces hold the
+    ;; documented all-zero pending marker. Every production admission refuses
+    ;; fail-closed until the owner replaces this one binding in the policy
+    ;; module with real sealed-record digests AND updates both digest pins in
+    ;; this test in the same change. See
+    ;; .planning/bugs/remediation-planning/impl/AMENDMENT-3.md.
+    (check-equal? (hash-ref a 'terminal-body-sha256) (make-string 64 #\0))
+    (check-equal? (hash-ref a 'terminal-record-sha256) (make-string 64 #\0))
+    ;; The exhausted amendment-2 predecessor keeps its real terminal history.
+    (check-equal? (hash-ref disposition-amendment-2 'terminal-body-sha256)
                   "b60c5f76528c76ff66ce98943633c93fed570e80b60a99192150d178c86d8259")
-    (check-equal? (hash-ref a 'terminal-record-sha256)
+    (check-equal? (hash-ref disposition-amendment-2 'terminal-record-sha256)
                   "0c9e45d27cfb3934c29dc9bdc44686b62a6011ddf21c08d8c507beaf88e6e5c0")
     (check-equal? (hash-ref a 'snapshot-sha256)
                   "5d10ae297263d52f60e2305365b299f6060c232c9459168fc8b1fdba32071077")
@@ -285,31 +338,48 @@
                           "task-approval"
                           'sha256
                           "87838ebf39cea992c9064590df7c35078f2d6ff64c52c37ddb9c62bef4cc5b78"))
+    ;; The active parent is the exact amendment-2 disposition child, whose
+    ;; launch permission attempt-6 consumed.
     (check-equal? (hash-ref a 'parent-proposal)
                   (hasheq 'kind
                           "task-proposal"
                           'sha256
-                          "f4238535e291e23062926f698c922da75fd3caadcd2de160e8b3ca68b33ba764"))
+                          "15e68c8b1ddd822a969b18ebfb7e22c425a0f74e0a68ec48a2b712d1cd05e49d"))
     (check-equal? (hash-ref a 'parent-approval)
                   (hasheq 'kind
                           "task-approval"
                           'sha256
+                          "ccf20bc98f7688b4bb5fa69226c54a876038c88fd28a8fe476dcad9ae7e1f9ac"))
+    ;; The spent amendment-2 parent pair is pinned as immutable prior ancestry
+    ;; and the inherited v2 link still names amendment-1's parent pair.
+    (check-equal? (hash-ref a 'prior-parent-proposal)
+                  (hasheq 'kind
+                          "task-proposal"
+                          'sha256
+                          "f4238535e291e23062926f698c922da75fd3caadcd2de160e8b3ca68b33ba764"))
+    (check-equal? (hash-ref a 'prior-parent-approval)
+                  (hasheq 'kind
+                          "task-approval"
+                          'sha256
                           "f8ea96b875e8b05fc2f5800674270c6dddf93b4e256fa6b8fc1ed650fcd5b816"))
-    (check-equal? a disposition-amendment-2)
-    (check-equal? (hash-ref disposition-amendment-1 'sha256)
-                  "e608629026bfd787c7c34a7dc163ebdc15f8c7ba82fff46277ba428037f82313")
+    (check-equal? (hash-ref a 'prior-parent-proposal)
+                  (hash-ref disposition-amendment-2 'parent-proposal))
+    (check-equal? (hash-ref a 'prior-parent-approval)
+                  (hash-ref disposition-amendment-2 'parent-approval))
+    (check-equal? a disposition-amendment-3)
     (check-equal? (hash-ref disposition-amendment-1 'parent-proposal) (hash-ref a 'v2-proposal))
     (check-equal? (hash-ref disposition-amendment-1 'parent-approval) (hash-ref a 'v2-approval))
-    (check-not-equal? (hash-ref disposition-amendment-1 'parent-proposal)
-                      (hash-ref a 'parent-proposal))
+    (check-not-equal? (hash-ref a 'prior-parent-proposal) (hash-ref a 'parent-proposal))
     (check-equal? (hash-ref a 'allocation)
-                  (hasheq 'attempt-id "attempt-5" 'attempt-fence 8 'coordinator-fence 8))
+                  (hasheq 'attempt-id "attempt-6" 'attempt-fence 9 'coordinator-fence 9))
     (check-equal? (hash-ref a 'model-dispatches) 1)
     (check-false (hash-ref a 'successor-permitted))
     (check-true (immutable? a))
     (check-true (immutable? (hash-ref a 'allocation)))
-    (for ([key '(root-proposal root-approval parent-proposal parent-approval)]
-          [kind '("task-proposal" "task-approval" "task-proposal" "task-approval")])
+    (for ([key '(root-proposal root-approval prior-parent-proposal prior-parent-approval
+                                parent-proposal parent-approval)]
+          [kind '("task-proposal" "task-approval" "task-proposal" "task-approval"
+                  "task-proposal" "task-approval")])
       (check-true (immutable? (hash-ref a key)))
       (check-true (supplemental-reference? (hash-ref a key)))
       (check-equal? (hash-ref (hash-ref a key) 'kind) kind))
@@ -579,4 +649,123 @@
        (define-values (p g t target) (child! parent old a))
        (install-supplemental-disposition-claim! path old target p g)
        (check-equal? (hash-ref (start-supplemental-operation! g base-binding) 'revision) 0))
-     #:short-parent? #t)))
+     #:short-parent? #t))
+  (test-case "amendment-3 admits its exact consumed lineage through both permanent predecessor claims"
+    (with-spent3
+     (lambda (f path old t2 terminal3 third p2 g2)
+       ;; The amendment-3 parent is not yet claimed: its install binds the
+       ;; third permanent claim and moves the pointer in one transition.
+       (define-values (p3 g3 t3 target3) (child! t2 old third))
+       (install-supplemental-disposition-claim! path old target3 p3 g3)
+       (define claims
+         (find-files (lambda (p)
+                       (regexp-match? #rx"/supplemental-disposition-.*[.]json$" (path->string p)))
+                     (fixture-root f)))
+       (check-equal? (length claims) 3)
+       ;; Passive three-link ancestry resolves through both permanent claims;
+       ;; the active frame returns its own exact spent terminal.
+       (define-values (pp pt terminal)
+         (inspect-supplemental-disposition-parent g2))
+       (check-equal? pp p2)
+       (check-equal? terminal terminal3)
+       (check-exn exn:fail? (lambda () (load-supplemental-operation g2)))
+       ;; New admission follows the NEW grant, never any immutable failed
+       ;; ancestor approval, and it starts unspent.
+       (check-equal? (hash-ref (start-supplemental-operation! g3 base-binding) 'revision) 0)
+       (check-exn exn:fail?
+                  (lambda () (start-supplemental-operation! g2 base-binding)))))))
+  (test-case "no fourth successor: successor-permitted #f refuses a v3 child of the new grant permanently"
+    (with-spent3
+     (lambda (f path old t2 terminal3 third p2 g2)
+       (define-values (p3 g3 t3 target3) (child! t2 old third))
+       (install-supplemental-disposition-claim! path old target3 p3 g3)
+       ;; A genuinely approved competitor of the amendment-3 parent can never
+       ;; claim: the amendment is a single permanent winner. The distinct
+       ;; expiry offset makes this a genuinely distinct approved competitor,
+       ;; never a same-identity replay of the installed target.
+       (define-values (p4 g4 t4 target4) (child! t2 old third 1650))
+       (check-exn #rx"already permanently claimed"
+                  (lambda ()
+                    (install-supplemental-disposition-claim! path old target4 p4 g4)))
+       ;; A v3 successor OF the NEW grant (fourth successor generation) can
+       ;; never claim or move the pointer, however it is presented.
+       (define-values (p5 g5 t5 target5) (child! t3 target3 third 1650))
+       (check-exn exn:fail?
+                  (lambda ()
+                    (install-supplemental-disposition-claim! path target3 target5 p5 g5)))
+       (check-exn exn:fail?
+                  (lambda ()
+                    (install-supplemental-disposition-claim! path old target5 p5 g5)))
+       (check-true (supplemental-recovery-pointer-claimed? path))
+       (check-equal?
+        (length
+         (find-files (lambda (p)
+                       (regexp-match? #rx"/supplemental-disposition-.*[.]json$" (path->string p)))
+                     (fixture-root f)))
+        3))))
+  (test-case "terminal facts mismatch refuses amendment-3 before any claim or pointer write"
+    (with-spent3
+     (lambda (f path old t2 terminal3 third p2 g2)
+       (define (bad-variant changed)
+         (seal-supplemental-record changed))
+       (define bads
+         (list (bad-variant (hash-set third 'terminal-body-sha256 (make-string 64 #\f)))
+               (bad-variant (hash-set third
+                                      'terminal-record-sha256
+                                      (hash-ref third 'terminal-body-sha256)))
+               (bad-variant (hash-set third
+                                      'allocation
+                                      (hash-set (hash-ref third 'allocation)
+                                                'coordinator-fence
+                                                99)))))
+       (define second-fixture (car (disposition-ancestors)))
+       (define first-fixture (cadr (disposition-ancestors)))
+       (for ([bad bads])
+         ;; (i) Under the live amendment, a child whose descriptor carries the
+         ;; mismatched terminal facts never claims.
+         (define-values (bp bg _bt _btarget) (child! t2 old bad))
+         (check-exn exn:fail?
+                    (lambda ()
+                      (install-supplemental-disposition-claim! path old (pointer bp bg) bp bg)))
+         ;; (ii) Under the mismatched amendment binding itself, the parent's
+         ;; real spent terminal no longer matches: admission refuses.
+         (call-with-test-disposition-amendment
+          first-fixture
+          (lambda ()
+            (call-with-test-disposition-amendment
+             second-fixture
+             (lambda ()
+               (call-with-test-disposition-amendment
+                bad
+                (lambda ()
+                  (check-exn #rx"exact spent terminal amendment facts required"
+                             (lambda ()
+                               (install-supplemental-disposition-claim!
+                                path old (pointer bp bg) bp bg))))
+                #:predecessor second-fixture))
+             #:predecessor first-fixture))))
+       (check-false
+        (file-exists?
+         (build-path (fixture-root f)
+                     (string-append "supplemental-disposition-"
+                                    (hash-ref third 'sha256)
+                                    ".json"))))
+       ;; The real binding still admits after every negative probe.
+       (define-values (p3 g3 _t3 target3) (child! t2 old third))
+       (install-supplemental-disposition-claim! path old target3 p3 g3)
+       (check-true (supplemental-recovery-pointer-claimed? path)))))
+  (test-case "revocation at any of the five live links denies passive ancestry and child admission"
+    (for ([key '(root-approval v2-approval prior-parent-approval parent-approval)])
+      (with-spent3
+       (lambda (f path old t2 terminal3 third p2 g2)
+         (revoke-approval! (hash-ref third key))
+         (check-exn exn:fail?
+                    (lambda ()
+                      (inspect-supplemental-disposition-parent (hash-ref third 'parent-approval))))
+         (check-exn exn:fail? (lambda () (start-supplemental-operation! g2 base-binding)))
+         (check-false
+          (file-exists?
+           (build-path (fixture-root f)
+                       (string-append "supplemental-disposition-"
+                                      (hash-ref third 'sha256)
+                                      ".json"))))))))
