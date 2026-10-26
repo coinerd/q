@@ -2428,6 +2428,55 @@
      "line": 378,
      "reason": "R101 unit-2 expiry-boundary canary: the fixture task is created with a real operator expires-at five seconds out and the test sleeps six seconds so the live journal refuses the DEAD grant fail-closed with typed cause, then proves the CURRENT coordinator lease still authenticates the terminal observation; production current-seconds authentication exposes no fixture clock override. Not a process-settle delay.",
      "text": "(sleep 6)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 183,
+     "reason": "R101 expired-terminalizer fixture: bounded synchronization wait on a real lock/expiry seam where the production code exposes no completion event; exits as soon as the observed state flips.",
+     "text": "\"(define (wait-for-expiry)\\n  (let loop ()\\n    (unless (>= (current-seconds) ~a)\\n      (sleep 1)\\n      (loop))))\\n\""
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 412,
+     "reason": "R101 expired-terminalizer fixture: bounded synchronization wait on a real lock/expiry seam where the production code exposes no completion event; exits as soon as the observed state flips.",
+     "text": "(sleep 6)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 741,
+     "reason": "R101 expired-terminalizer fixture: bounded synchronization wait on a real lock/expiry seam where the production code exposes no completion event; exits as soon as the observed state flips.",
+     "text": "(sleep 6)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 772,
+     "reason": "R101 expired-terminalizer fixture: bounded synchronization wait on a real lock/expiry seam where the production code exposes no completion event; exits as soon as the observed state flips.",
+     "text": "(sleep 6)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 787,
+     "reason": "R101 expired-terminalizer fixture: bounded synchronization wait on a real lock/expiry seam where the production code exposes no completion event; exits as soon as the observed state flips.",
+     "text": "(sleep 6)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 829,
+     "reason": "R101 expired-terminalizer fixture: bounded synchronization wait on a real lock/expiry seam where the production code exposes no completion event; exits as soon as the observed state flips.",
+     "text": "(sleep 6)"
+    },
+    {
+     "class": "B",
+     "disposition": "retained-canary",
+     "line": 859,
+     "reason": "R101 expired-terminalizer fixture: bounded synchronization wait on a real lock/expiry seam where the production code exposes no completion event; exits as soon as the observed state flips.",
+     "text": "(sleep 6)"
     }
    ],
    "suite": "slow/L4"
@@ -2465,8 +2514,8 @@
   "sha256-at-w0": "6fbd4343b95217f847fd6a05d946d064f1ef98d3110266451cc651ab8d549166"
  },
  "summary": {
-  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll); BUG-0088 amendment-2 registers the store historical-expiry canary (bounded 3s expiry crossing for the two-link v1-v2-v3 spent history); R101 (BUG-0101) registers tests/test-gsd-supplemental-advance-failure.rkt (one generated-fixture source literal, not-a-test-sleep; one bounded expiry-boundary re-observation canary, class A retained with reason; two bounded 50ms lock-exclusion fixture polls, class B retained with reason); R102 (BUG-0102) registers tests/test-gsd-verification-terminal-events.rkt (one bounded log-drain settle before pump teardown, class C retained with reason; two bounded async-determinism polls for the attach and orphan-reconcile paths, class B retained with reason); R98 (BUG-0098) registers tests/test-tui-diagnostic-surface.rkt (three bounded async-delivery polls through the real installed stderr-guard route, class B retained with reason; one bounded negative-observation window after guard restore, class C retained with reason); R98 audit refresh: tests/test-tui-stderr-guard.rkt re-measured after the R98 additions (two carried-forward drain settles at their new lines plus one new drain settle and two bounded spill-disclosure polls, all retained with reasons); R101 unit-2 (BUG-0101 terminal-observation) registers tests/test-gsd-supplemental-terminal-observation.rkt (one generated-fixture source literal, not-a-test-sleep; one bounded six-second real-expiry re-observation canary, class A retained with reason)",
-  "total-occurrences": 272,
+  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll); BUG-0088 amendment-2 registers the store historical-expiry canary (bounded 3s expiry crossing for the two-link v1-v2-v3 spent history); R101 (BUG-0101) registers tests/test-gsd-supplemental-advance-failure.rkt (one generated-fixture source literal, not-a-test-sleep; one bounded expiry-boundary re-observation canary, class A retained with reason; two bounded 50ms lock-exclusion fixture polls, class B retained with reason); R102 (BUG-0102) registers tests/test-gsd-verification-terminal-events.rkt (one bounded log-drain settle before pump teardown, class C retained with reason; two bounded async-determinism polls for the attach and orphan-reconcile paths, class B retained with reason); R98 (BUG-0098) registers tests/test-tui-diagnostic-surface.rkt (three bounded async-delivery polls through the real installed stderr-guard route, class B retained with reason; one bounded negative-observation window after guard restore, class C retained with reason); R98 audit refresh: tests/test-tui-stderr-guard.rkt re-measured after the R98 additions (two carried-forward drain settles at their new lines plus one new drain settle and two bounded spill-disclosure polls, all retained with reasons); R101 unit-2 (BUG-0101 terminal-observation) registers tests/test-gsd-supplemental-terminal-observation.rkt (one generated-fixture source literal, not-a-test-sleep; one bounded six-second real-expiry re-observation canary, class A retained with reason); R101 expired-terminalizer re-measures tests/test-gsd-supplemental-terminal-observation.rkt (new bounded seam waits at lines 183,412,741,772,787,829,859, class B retained with reason)",
+  "total-occurrences": 279,
   "unit-fast-files": 5,
   "unit-fast-occurrences": 6,
   "unjustified-unit-fast-sleeps": 0

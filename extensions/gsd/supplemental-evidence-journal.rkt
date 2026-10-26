@@ -94,7 +94,9 @@
          supplemental-coordinator-lease
          record-supplemental-terminal-observation!
          supplemental-terminal-observation
-         supplemental-retained-operation-sha)
+         supplemental-retained-operation-sha
+         supplemental-retained-operation
+         terminalize-expired-supplemental-operation!)
 
 ;; Journal-local refusal identity for the WAL/transition checks that remain
 ;; here; the extracted storage core raises with the same source symbol.
@@ -1249,3 +1251,167 @@
      root
      (let-values ([(_dir snapshot intent _lock) (paths root grant #f)])
        (and (present? snapshot) (not (present? intent)) (hash-ref (read-sealed snapshot) 'sha256))))))
+;; Read-only peek of the CURRENT retained sealed snapshot (the exact
+;; historically validated record) for the controller's expired-retained seal
+;; path: NO approval-liveness consult (a dead task grant neither authorizes
+;; nor blocks a terminal-only seal), NO lock, NO store creation, NO WAL
+;; reconciliation and NO authority revalidation. #f when the root/snapshot is
+;; absent or a write-ahead intent leaves the operation identity unsettled;
+;; anything present-but-invalid refuses loudly (never a silent fake absence).
+(define (supplemental-retained-operation grant)
+  (unless (supplemental-reference? grant)
+    (refuse "invalid private approval reference"))
+  (define root (root! #t))
+  (and root
+       (present? (build-path root "supplemental-operations"))
+       (let-values ([(_dir snapshot intent _lock) (paths root grant #f)])
+         (and (present? snapshot)
+              (not (present? intent))
+              (let* ([operation (read-sealed snapshot)]
+                     [proposal-ref (hash-ref operation 'proposal-ref)]
+                     [payload (hash-ref (load-supplemental-record proposal-ref) 'payload)])
+                (validate-record! operation
+                                  grant
+                                  proposal-ref
+                                  (hash-ref payload 'task)
+                                  (hash-ref payload 'expires-at)))))))
+;; ---- Amendment-3: the expired retained-operation terminalizer -------------
+;; ONE narrow, lease-authenticated terminalizer for a retained supplemental
+;; operation whose task authority is SPENT (operator deadline expired or the
+;; private approval revoked) while the sealed record is still NON-terminal:
+;; it transitions the operation to "blocked" with a typed block-reason, so a
+;; spent terminal record can exist at all. Same trust discipline as the
+;; unit-2 terminal-observation writer (security-contracts.md 3.2/3.3):
+;;   - AUTHENTICATION is ONLY the CURRENT coordinator lease/fence, re-read
+;;     under the shared admission/revocation lock; the dead task grant is
+;;     consulted for HISTORICAL binding only and never authorizes;
+;;   - the exact operation sha256 is the CAS: the supplied digest must equal
+;;     the CURRENT sealed snapshot's sha256, and the supplied attempt triple
+;;     must equal the lease AND the operation's durably bound allocation;
+;;   - the seal is terminal-ONLY: non-terminal -> "blocked" at revision +1
+;;     with exactly one NEW typed fact ('block-reason, derived from the
+;;     spent-authority condition, never caller-supplied free text); an
+;;     already-blocked record replays as an idempotent no-op; "revoked"/
+;;     "completed" and pending-recovery states refuse; no transition ever
+;;     leaves a terminal state or makes a blocked record launchable;
+;;   - NO write-ahead intent is written, settled or consumed (a pending
+;;     intent refuses: the operation identity is unsettled), and no
+;;     eligibility/capability/receipt/proof surface is touched: the only
+;;     durable write is the single atomic sealed snapshot replacement.
+(define (spent-authority-reason! operation grant)
+  ;; The seal's own gate: the task authority must already be spent. Returns
+  ;; the typed block-reason; a live unexpired authority refuses loudly.
+  (cond
+    [(>= (current-seconds) (hash-ref operation 'deadline-at))
+     "operator deadline expired"]
+    [(not (validate-supplemental-approval grant))
+     "operator approval revoked"]
+    [else (refuse "operation is not expired or revoked; terminalization refused")]))
+(define (terminalize-expired-supplemental-operation! grant
+                                                     #:lease lease
+                                                     #:operation-sha256 operation-sha256
+                                                     #:attempt-id attempt-id
+                                                     #:attempt-fence attempt-fence
+                                                     #:coordinator-fence coordinator-fence)
+  (when (current-gsd-author-phase)
+    (refuse "author phase cannot operate supplemental journal"))
+  (unless (supplemental-reference? grant)
+    (refuse "invalid private approval reference"))
+  (validate-lease-shape! lease)
+  (unless (and (string? operation-sha256) (regexp-match? #px"^[0-9a-f]{64}$" operation-sha256))
+    (refuse "exact operation sha256 required"))
+  (unless (and (string? attempt-id) (positive? (string-length attempt-id)) (immutable? attempt-id))
+    (refuse "exact attempt id required"))
+  (unless (exact-nonnegative-integer? attempt-fence)
+    (refuse "exact attempt fence required"))
+  (unless (exact-nonnegative-integer? coordinator-fence)
+    (refuse "exact coordinator fence required"))
+  (unless (and (equal? attempt-id (hash-ref lease 'attempt-id))
+               (= attempt-fence (hash-ref lease 'attempt-fence))
+               (= coordinator-fence (hash-ref lease 'coordinator-fence)))
+    (refuse "terminalization identity does not match the current coordinator lease"))
+  (define root (root!))
+  (unless (present? (build-path root "supplemental-operations"))
+    (refuse "no protected operation record for this grant"))
+  (define-values (dir snapshot intent lock) (paths root grant #f))
+  (unless (present? snapshot)
+    (refuse "no protected operation record for this grant"))
+  ;; The journal's established lock order: the operation file lock
+  ;; (outermost) inside which the ONE shared admission/revocation section is
+  ;; taken (innermost), so a concurrent revocation can never interleave
+  ;; between the spent-authority gate and the durable seal.
+  (call-with-semaphore (local-lock lock)
+                       (lambda ()
+                         (unless (present? lock)
+                           (with-handlers ([exn:fail:filesystem:exists? void])
+                             (call-with-output-file lock void #:exists 'error #:permissions #o600)))
+                         (check-file! lock)
+                         (call-with-file-lock/timeout
+                          #f
+                          'exclusive
+                          (lambda ()
+                            (check-file! lock)
+                            (private-directory! dir)
+                            (call-with-supplemental-authority-lock
+                             (lambda ()
+                               ;; 1. The ONLY authority: a live coordinator lease/fence.
+                               (authenticate-coordinator-lease! lease)
+                               ;; 2. Exact durable operation identity, read-only. A
+                               ;; pending write-ahead intent is never written, settled
+                               ;; or consumed here; validation is HISTORICAL.
+                               (when (present? intent)
+                                 (refuse "pending write-ahead intent; operation identity unsettled"))
+                               (define operation (read-sealed snapshot))
+                               (define proposal-ref (hash-ref operation 'proposal-ref))
+                               (define payload (hash-ref (load-supplemental-record proposal-ref) 'payload))
+                               (define task (hash-ref payload 'task))
+                               (validate-record! operation
+                                                 grant
+                                                 proposal-ref
+                                                 task
+                                                 (hash-ref payload 'expires-at))
+                               (unless (equal? (hash-ref operation 'sha256) operation-sha256)
+                                 (refuse "stale or unknown operation sha256"))
+                               (define allocation (hash-ref (hash-ref operation 'facts) 'allocation #f))
+                               (unless (and (exact-keys? allocation
+                                                         '(attempt-id attempt-fence coordinator-fence))
+                                            (equal? (hash-ref allocation 'attempt-id) attempt-id)
+                                            (= (hash-ref allocation 'attempt-fence) attempt-fence)
+                                            (= (hash-ref allocation 'coordinator-fence) coordinator-fence))
+                                 (refuse "stale or unknown attempt fences"))
+                               ;; 3. Terminal-ONLY state gate.
+                               (define state (hash-ref operation 'state))
+                               (cond
+                                 [(equal? state "blocked") operation]
+                                 [(member state '("revoked" "completed"))
+                                  (refuse "terminal operation cannot transition")]
+                                 [(member state pending-state-names)
+                                  (refuse "pending recovery must reconcile before any transition")]
+                                 [else
+                                  (when (hash-has-key? (hash-ref operation 'facts) 'block-reason)
+                                    (refuse "bound fact cannot change: block-reason already bound"))
+                                  (define reason (spent-authority-reason! operation grant))
+                                  (define next
+                                    (seal (hash-set* operation
+                                                     'revision
+                                                     (add1 (hash-ref operation 'revision))
+                                                     'state
+                                                     "blocked"
+                                                     'launch-consumed
+                                                     #t
+                                                     'facts
+                                                     (hash-set* (hash-ref operation 'facts)
+                                                                'block-reason
+                                                                reason))))
+                                  (validate-record! next
+                                                    grant
+                                                    proposal-ref
+                                                    task
+                                                    (hash-ref payload 'expires-at))
+                                  ;; One atomic sealed write: no WAL, no other surface.
+                                  (atomic-write! snapshot next)
+                                  (cut! 'expired-terminalized)
+                                  next]))))
+                          (lambda () (refuse "operation lock busy"))
+                          #:lock-file lock
+                          #:max-delay 0.5))))
