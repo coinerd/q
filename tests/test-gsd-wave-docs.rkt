@@ -568,3 +568,17 @@ Some description without status header.")
                     (string-contains? (exn-message e) "escapes")))
              (lambda () (read-declared-wave-doc root 0)))
   (delete-directory/files root #:must-exist? #f))
+
+;; GSD-SIMPLIFICATION W1: the marker vocabulary is owned by wave-status.rkt;
+;; wave-docs keeps only its historical accessor shape (no second table).
+(test-case "W1: wave-status-markers delegates to the single shared vocabulary"
+  (define markers (wave-status-markers))
+  (check-equal? (assoc "Inbox" markers) (cons "Inbox" "[Inbox]"))
+  (check-equal? (assoc "In-Progress" markers) (cons "In-Progress" "[In-Progress]"))
+  (check-equal? (assoc "DONE" markers) (cons "DONE" "[DONE]"))
+  (check-equal? (assoc "DEFERRED" markers) (cons "DEFERRED" "[DEFERRED]"))
+  (check-equal? (assoc "FAILED" markers) (cons "FAILED" "[FAILED]"))
+  ;; Legacy marker spellings are retained verbatim, not rewritten.
+  (check-equal? (cdr (assoc "COMPLETED" markers)) "[COMPLETED]")
+  (check-equal? (cdr (assoc "CANCELLED" markers)) "[CANCELLED]")
+  (check-equal? (length markers) 7))

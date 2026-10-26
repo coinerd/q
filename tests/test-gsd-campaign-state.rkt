@@ -97,6 +97,23 @@
       (check-true (actionable-status? 'failed))
       (check-true (actionable-status? 'interrupted))
       (check-false (actionable-status? 'done))
+      (check-false (actionable-status? 'deferred)))
+
+    ;; GSD-SIMPLIFICATION W1: the canonical vocabulary now lives in
+    ;; wave-status.rkt. These pins prove the campaign API kept its exact
+    ;; legacy spellings and its disjoint deferred semantics.
+    (test-case "W1: legacy spellings and fallback are preserved verbatim"
+      (check-eq? (canonical-wave-status "COMPLETED") 'done)
+      (check-eq? (canonical-wave-status "NOT STARTED") 'pending)
+      (check-eq? (canonical-wave-status "IN PROGRESS") 'in-progress)
+      ;; Unknown input keeps the historical pending fallback (no new meaning).
+      (check-eq? (canonical-wave-status "CANCELLED") 'pending)
+      (check-eq? (canonical-wave-status "nonsense") 'pending))
+
+    (test-case "W1: deferred stays disjoint from done/completed"
+      (check-true (completed-status? 'done))
+      (check-false (completed-status? 'deferred))
+      (check-false (retryable-status? 'deferred))
       (check-false (actionable-status? 'deferred)))))
 
 ;; ============================================================

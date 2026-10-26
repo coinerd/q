@@ -34,6 +34,13 @@
          racket/port
          (only-in "../../util/version.rkt" q-version)
          (only-in "shared.rkt" slugify)
+         (only-in (rename-in "planning-paths.rkt" [waves-dir planning-waves-dir])
+                  campaign-path
+                  plan-file
+                  planning-path
+                  planning-root
+                  planning-waves-dir
+                  wave-doc-file)
          (only-in "wave-status.rkt"
                   STATUS-INBOX
                   STATUS-DONE
@@ -41,7 +48,11 @@
                   STATUS-FAILED
                   done-or-deferred?
                   active-status?
-                  normalize-status!))
+                  normalize-status!
+                  WAVE-STATUS-MARKERS
+                  wave-status-marker
+                  wave-status-recognized?
+                  wave-status-symbol))
 
 ;; Struct exports (plain)
 (provide wave-index-entry
@@ -132,13 +143,9 @@
 ;; Constants
 ;; ============================================================
 
-(define WAVE-STATUS-MARKERS
-  (list (cons STATUS-INBOX "[Inbox]")
-        (cons "In-Progress" "[In-Progress]")
-        (cons STATUS-DONE "[DONE]")
-        (cons STATUS-DEFERRED "[DEFERRED]")
-        (cons STATUS-FAILED "[FAILED]")))
-
+;; THE marker vocabulary is owned by wave-status.rkt (one table, including the
+;; verbatim legacy [COMPLETED]/[CANCELLED] spellings). This accessor keeps the
+;; historical wave-docs export shape.
 (define (wave-status-markers)
   WAVE-STATUS-MARKERS)
 
@@ -166,7 +173,7 @@
 ;; ============================================================
 
 (define (wave-doc-path base-dir idx slug)
-  (build-path base-dir ".planning" "waves" (format "W~a-~a.md" idx slug)))
+  (wave-doc-file base-dir idx slug))
 
 ;; ============================================================
 ;; Wave document I/O
@@ -424,7 +431,7 @@
 ;; planning tree.
 (define (symlinked-declared-doc-refusal base-dir rel-path)
   (define chain
-    (let loop ([cur (build-path base-dir ".planning")]
+    (let loop ([cur (planning-root base-dir)]
                [segs (string-split rel-path "/")]
                [acc '()])
       (if (null? segs)
@@ -455,7 +462,7 @@
 ;; declared bytes deterministically; ambiguity is refused by
 ;; declared-mapping-refusals at validation/selection and pre-mutation.
 (define (declared-wave-doc-resolution base-dir idx [entries #f])
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) (values #f #f #f)]
     [else
@@ -474,7 +481,7 @@
            (values #f syntax-refusal (format ".planning/~a" (wave-index-entry-ref-path entry)))]
           [else
            (define display (format ".planning/~a" rel))
-           (define abs (build-path base-dir ".planning" rel))
+           (define abs (planning-path base-dir rel))
            (define link-refusal (symlinked-declared-doc-refusal base-dir rel))
            (cond
              [link-refusal (values #f link-refusal display)]
@@ -608,7 +615,7 @@
   (define-values (rel refusal) (wave-entry-effective-doc-rel-path e))
   (and rel
        (not (symlinked-declared-doc-refusal base-dir rel))
-       (file-exists? (build-path base-dir ".planning" rel))))
+       (file-exists? (planning-path base-dir rel))))
 
 ;; ============================================================
 ;; Dual-source status consistency & precedence (BUG-0034, W2)
@@ -637,30 +644,13 @@
 (struct status-divergence (wave-idx plan-status doc-status plan-path doc-path kind) #:transparent)
 
 ;; status->symbol : (or/c string? symbol?) -> symbol?
-;; Canonical comparison key. Mirrors campaign-state.rkt's
-;; canonical-wave-status vocabulary so semantically IDENTICAL statuses
-;; spelled differently ("Inbox" row vs "PENDING" doc header) compare
-;; equal: the same meaning is not a BUG-0034 divergence. Unrecognized
-;; values canonicalize to 'pending (same fallback as the campaign layer).
-(define STATUS-CONSIDERED-EQUAL
-  (list (list 'pending "INBOX" "PENDING" "NOT STARTED")
-        (list 'in-progress "IN-PROGRESS" "IN PROGRESS")
-        (list 'verifying "VERIFYING")
-        (list 'done "DONE" "COMPLETED")
-        (list 'failed "FAILED")
-        (list 'interrupted "INTERRUPTED")
-        (list 'deferred "DEFERRED")))
-
+;; Canonical comparison key, DELEGATED to wave-status.rkt (the single
+;; vocabulary owner). Semantically IDENTICAL statuses spelled differently
+;; ("Inbox" row vs "PENDING" doc header) compare equal: the same meaning is
+;; not a BUG-0034 divergence. Unrecognized values keep the historical
+;; 'pending fallback shared with the campaign layer.
 (define (status->symbol s)
-  (define up
-    (string-upcase (string-trim (if (symbol? s)
-                                    (symbol->string s)
-                                    s))))
-  (define hit
-    (for/first ([group (in-list STATUS-CONSIDERED-EQUAL)]
-                #:when (member up (cdr group)))
-      (car group)))
-  (or hit 'pending))
+  (wave-status-symbol s))
 
 ;; check-status-consistency : path-string? -> (listof status-divergence?)
 ;; Pure read path: compares every PLAN.md index-row status against its
@@ -677,7 +667,7 @@
 ;; consistency concern. Never writes; callers turn divergences into
 ;; named warnings.
 (define (check-status-consistency base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (if (not (file-exists? plan-path))
       '()
       (for/fold ([divs '()]
@@ -832,7 +822,7 @@
 ;; for its text. No plan file → no warnings (nothing loaded, nothing
 ;; deprecated). Non-fatal: this never blocks a campaign.
 (define (plan-format-deprecation-warning-lines base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (if (not (file-exists? plan-path))
       '()
       (plan-format-deprecation-warnings (call-with-input-file plan-path port->string))))
@@ -887,15 +877,10 @@
   (ormap (lambda (l) (not (string=? (string-trim l) ""))) (wave-doc-section-body content name)))
 
 ;; recognized-status? : (or/c string? symbol?) -> boolean?
-;; #t iff the status is in the STATUS-CONSIDERED-EQUAL vocabulary (i.e.
-;; status->symbol found a real group, not the 'pending fallback).
+;; #t iff the spelling is part of the shared vocabulary (i.e. a real
+;; canonical status was found, not the 'pending fallback).
 (define (recognized-status? s)
-  (define up
-    (string-upcase (string-trim (if (symbol? s)
-                                    (symbol->string s)
-                                    s))))
-  (for/or ([group (in-list STATUS-CONSIDERED-EQUAL)])
-    (and (member up (cdr group)) #t)))
+  (wave-status-recognized? s))
 
 ;; lint-wave-doc : hash? -> (listof wave-doc-violation?)
 ;; PURE. Lints ONE parsed wave doc (the hash read-wave-doc /
@@ -948,7 +933,7 @@
 ;; missing on disk are BUG-0023 strict-validation territory (/go errors
 ;; before lint), never lint violations.
 (define (lint-campaign-wave-docs base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (if (not (file-exists? plan-path))
       '()
       (let ([entries (parse-plan-index (call-with-input-file plan-path port->string))])
@@ -1023,11 +1008,11 @@
                                           plan-id
                                           (exn-message e))
                                #f)])
-    (define dest (build-path base-dir ".planning" "campaigns" plan-id "lint-verdict.rktd"))
+    (define dest (campaign-path base-dir plan-id "lint-verdict.rktd"))
     (cond
       [(file-exists? dest) #f]
       [else
-       (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+       (define plan-path (plan-file base-dir))
        (define entries
          (if (file-exists? plan-path)
              (parse-plan-index (call-with-input-file plan-path port->string))
@@ -1107,14 +1092,14 @@
 ;; misnamed doc still reports, because then the arrow target is missing and the
 ;; only candidate carries a different slug.
 (define (check-slug-consistency base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (if (not (file-exists? plan-path))
       '()
       (append*
        (for/list ([e (in-list (parse-plan-index (call-with-input-file plan-path port->string)))])
          (define idx (wave-index-entry-idx e))
          (define idx-prefix-rx (regexp (format "^W~a-" idx)))
-         (define waves-dir (build-path base-dir ".planning" "waves"))
+         (define waves-dir (planning-waves-dir base-dir))
          (if (wave-exists? base-dir idx (wave-index-entry-slug e))
              '()
              (for/list ([f (in-list (if (directory-exists? waves-dir)
@@ -1153,11 +1138,11 @@
 ;; ============================================================
 
 (define (update-plan-index-text text wave-idx new-status)
-  (define marker (status->marker new-status))
+  (define marker (wave-status-marker new-status))
   (update-index-line text wave-idx marker))
 
 (define (update-wave-in-index! base-dir wave-idx new-status)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) #f]
     [else
@@ -1165,16 +1150,6 @@
      (define new-text (update-plan-index-text text wave-idx new-status))
      (call-with-output-file plan-path (lambda (out) (display new-text out)) #:exists 'truncate)
      #t]))
-
-(define (status->marker status)
-  (cond
-    [(string? status)
-     (define entry (assoc status WAVE-STATUS-MARKERS))
-     (if entry
-         (cdr entry)
-         (format "[~a]" status))]
-    [(symbol? status) (status->marker (symbol->string status))]
-    [else "[Inbox]"]))
 
 (define (update-index-line text wave-idx new-marker)
   (define lines (string-split text "\n"))
@@ -1199,7 +1174,7 @@
     e))
 
 (define (next-inbox-wave base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) #f]
     [else
@@ -1239,7 +1214,7 @@
 ;; ============================================================
 
 (define (mark-wave-status! base-dir wave-idx new-status)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) #f]
     [else
@@ -1281,7 +1256,7 @@
            (wave-status-refusal! base-dir wave-idx new-status (car mapping-refusals))
            #f]
           [else
-           (define wave-path (build-path base-dir ".planning" rel))
+           (define wave-path (planning-path base-dir rel))
            (when (file-exists? wave-path)
              (define wave-text (call-with-input-file wave-path port->string))
              (define content (strip-status-header wave-text))
@@ -1334,7 +1309,7 @@
        [else 'in-progress])]))
 
 (define (plan-overall-status base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) 'not-started]
     [else
@@ -1347,7 +1322,7 @@
 
 ;; Slug for one wave index, read from the PLAN.md index.
 (define (wave-slug base-dir wave-idx)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) #f]
     [else
@@ -1360,7 +1335,7 @@
 
 ;; Whole-index slug map (idx → slug) from the PLAN.md index.
 (define (plan-slug-map base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (if (file-exists? plan-path)
       (for/hash ([e (parse-plan-index (call-with-input-file plan-path port->string))])
         (values (wave-index-entry-idx e) (wave-index-entry-slug e)))

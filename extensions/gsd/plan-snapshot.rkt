@@ -23,7 +23,15 @@
          racket/port
          racket/string
          (only-in racket/list first)
-         (only-in "../../util/json/checksum.rkt" sha256-string sha256-file))
+         (only-in "../../util/json/checksum.rkt" sha256-string sha256-file)
+         (only-in "planning-paths.rkt"
+                  campaign-dir
+                  campaign-snapshot-dir
+                  campaign-snapshot-manifest-file
+                  plan-file
+                  planning-path
+                  planning-root
+                  snapshot-manifest-filename))
 
 (provide plan-snapshot-manifest?
          plan-snapshot-manifest-schema-version
@@ -114,10 +122,10 @@
 ;; ---------------------------------------------------------------------------
 
 (define (snapshot-dir base-dir campaign-id)
-  (build-path base-dir ".planning" "campaigns" campaign-id "plan-snapshot"))
+  (campaign-snapshot-dir base-dir campaign-id))
 
 (define (snapshot-manifest-path base-dir campaign-id)
-  (build-path (snapshot-dir base-dir campaign-id) "snapshot-manifest.rktd"))
+  (campaign-snapshot-manifest-file base-dir campaign-id))
 
 (define wave-doc-status-header-rx #rx"^(# Wave [0-9]+\n)Status: [^\n]+\n")
 (define plan-index-status-rx #px"(?m:^([-*] +)\\[[A-Za-z-]+\\]( +W[0-9]+:.*)$)")
@@ -189,7 +197,7 @@
     (snapshot-fail "plan-snapshot: immutable snapshot already exists for ~a" campaign-id))
   (define wave-paths (plan-references->wave-doc-paths plan-text))
   ;; 1. Read every referenced doc BEFORE touching the filesystem target.
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (unless (file-exists? plan-path)
     (raise (make-exn:fail:gsd-missing-wave-doc (format "plan-snapshot: PLAN.md missing under ~a"
                                                        base-dir)
@@ -198,7 +206,7 @@
   (define plan-bytes (file->bytes plan-path))
   (define wave-bytes
     (for/list ([rel (in-list wave-paths)])
-      (define p (build-path base-dir ".planning" rel))
+      (define p (planning-path base-dir rel))
       (unless (file-exists? p)
         (raise (make-exn:fail:gsd-missing-wave-doc
                 (format "plan-snapshot: referenced wave document missing: ~a" rel)
@@ -216,7 +224,7 @@
   (define manifest
     (plan-snapshot-manifest 1 campaign-id (or now-ms (current-inexact-milliseconds)) plan-id files))
   ;; 2. Write into a temporary sibling, then atomically rename.
-  (define campaigns-dir (build-path base-dir ".planning" "campaigns" campaign-id))
+  (define campaigns-dir (campaign-dir base-dir campaign-id))
   (make-directory* campaigns-dir)
   (define tmp (make-temporary-file "plan-snapshot.tmp-~a" #f campaigns-dir))
   ;; make-temporary-file yields a file; the staging area must be a directory.
@@ -229,7 +237,7 @@
        (define target (build-path tmp (car wb)))
        (make-directory* (path-only target))
        (call-with-output-file target (lambda (out) (write-bytes (cdr wb) out)) #:exists 'truncate))
-     (call-with-output-file (build-path tmp "snapshot-manifest.rktd")
+     (call-with-output-file (build-path tmp snapshot-manifest-filename)
                             (lambda (out) (write (manifest->datum manifest) out))
                             #:exists 'truncate)
      ;; 3. Publish the create-once immutable snapshot atomically.
@@ -249,7 +257,7 @@
     ;; F13 (v1.00.31 W5): reuse is only sound when the authored plan body
     ;; still matches the frozen contract. Amended bodies are refused with a
     ;; typed failure — never silently rebound, never silently rewritten.
-    (define live-plan-path (build-path base-dir ".planning" "PLAN.md"))
+    (define live-plan-path (plan-file base-dir))
     (define frozen-entry
       (for/first ([f (in-list (plan-snapshot-manifest-files existing))]
                   #:when (equal? (snapshot-file-path f) "PLAN.md"))
@@ -271,7 +279,7 @@
               authored-sha))))
   (define m
     (or existing
-        (let* ([plan-path (build-path base-dir ".planning" "PLAN.md")]
+        (let* ([plan-path (plan-file base-dir)]
                [plan-text (file->string plan-path)])
           (make-plan-snapshot! base-dir campaign-id plan-text #:plan-id campaign-id))))
   (values (path->string (snapshot-dir base-dir campaign-id)) (snapshot-manifest-digest m)))
@@ -339,7 +347,7 @@
   (when (or (snapshot-link? snapshot-root) (snapshot-link? mp))
     (snapshot-fail "plan-snapshot: refusing symlinked snapshot boundary"))
   (unless (file-exists? mp)
-    (define snapshot-parent (build-path base-dir ".planning" "campaigns" campaign-id))
+    (define snapshot-parent (campaign-dir base-dir campaign-id))
     (when (directory-exists? snapshot-parent)
       (sweep-stale-tmp-dirs! snapshot-parent)))
   (and (file-exists? mp)
@@ -363,10 +371,10 @@
          m)))
 
 (define (live-path-has-link? base-dir rel)
-  (define planning-root (build-path base-dir ".planning"))
-  (define live (build-path planning-root rel))
-  (or (snapshot-link? planning-root)
-      (and (string-prefix? rel "waves/") (snapshot-link? (build-path planning-root "waves")))
+  (define root (planning-root base-dir))
+  (define live (build-path root rel))
+  (or (snapshot-link? root)
+      (and (string-prefix? rel "waves/") (snapshot-link? (build-path root "waves")))
       (snapshot-link? live)))
 
 ;; Paths of live plan/wave documents that drifted from the snapshot
@@ -385,7 +393,7 @@
   (define m (load-snapshot-manifest base-dir campaign-id))
   (reverse (for/fold ([acc '()]) ([f (in-list (plan-snapshot-manifest-files m))])
              (define rel (snapshot-file-path f))
-             (define live (build-path base-dir ".planning" rel))
+             (define live (planning-path base-dir rel))
              (define kind
                (cond
                  [(live-path-has-link? base-dir rel) 'symlink]
@@ -418,7 +426,7 @@
   (define existing-drift
     (for/list ([item (in-list classified)]
                #:when (and (not (eq? (cadr item) 'symlink))
-                           (file-exists? (build-path base-dir ".planning" (car item)))))
+                           (file-exists? (planning-path base-dir (car item)))))
       (car item)))
   (unless (or (null? existing-drift) override?)
     (raise (make-exn:fail
@@ -439,7 +447,7 @@
              #:when (memq (cadr item) '(missing content-drift frozen-contract-stale)))
     (define rel (car item))
     (define src (build-path (snapshot-dir base-dir campaign-id) rel))
-    (define dest (build-path base-dir ".planning" rel))
+    (define dest (planning-path base-dir rel))
     (make-directory* (path-only dest))
     ;; Overridden drift replaces the existing (non-symlink) live file.
     (when (and (memq (cadr item) '(content-drift frozen-contract-stale)) (file-exists? dest))
