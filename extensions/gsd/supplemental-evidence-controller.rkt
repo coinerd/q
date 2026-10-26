@@ -216,6 +216,63 @@
   (if pending
       (string-append detail " [terminal observation pending: " pending "]")
       detail))
+;; ---- Amendment-3: the expired retained-operation seal --------------------
+;; The typed retained-ineligible/expired entry path: a retained NON-terminal
+;; operation whose task authority is SPENT (operator deadline expired or the
+;; approval revoked) can never advance, and the ordinary blocked CAS can
+;; never persist (every transition revalidates the live task grant). Here the
+;; controller best-effort seals that operation blocked so the spent terminal
+;; record finally exists: try the ordinary blocked transition FIRST, and ONLY
+;; when it was refused by the spent task authority AND the CURRENT coordinator
+;; lease is available, seal it through the journal's narrow terminalizer.
+;; This is a SECONDARY outcome: the typed denial is never masked, and a seal
+;; that did not happen stays an explicitly pending note. Idempotent: an
+;; already-blocked retained operation adds no note and writes nothing.
+(define expired-authority-refusals
+  (list
+   "task deadline expired"
+   "approval requires a valid bounded task and unexpired operator expiry"
+   "live authenticated task approval required"
+   "linked private approval unavailable, revoked or expired"))
+(define (expired-authority-refusal? secondary)
+  (and (string? secondary)
+       (for/or ([text (in-list expired-authority-refusals)])
+         (string-contains? secondary text))))
+(define (seal-expired-retained! base plan wave disc)
+  (define grant (hash-ref disc 'grant-ref #f))
+  (cond
+    [(not (and grant
+               (memq (hash-ref disc 'status #f) '(retained-ineligible revoked-expired))
+               (memq (hash-ref disc 'cause #f) '(expired revoked))))
+     #f]
+    [else
+     (with-handlers ([exn:fail?
+                      (lambda (e)
+                        (format " [expired operation seal pending: ~a]" (trim-message e 200)))])
+       (define operation (supplemental-retained-operation grant))
+       (cond
+         [(not operation) #f]
+         [(member (hash-ref operation 'state) '("blocked" "revoked" "completed")) #f]
+         [else
+          (define-values (persisted? secondary)
+            (blocked-transition! grant operation "spent supplemental task authority"))
+          (cond
+            [persisted? " [expired retained operation sealed blocked]"]
+            [(not (expired-authority-refusal? secondary))
+             (format " [expired operation seal pending: ~a]" (or secondary "unknown refusal"))]
+            [else
+             (define lease (supplemental-coordinator-lease base plan wave))
+             (unless lease
+               (error 'supplemental-evidence-controller "current coordinator lease unavailable"))
+             (define allocation (hash-ref (hash-ref operation 'facts) 'allocation))
+             (terminalize-expired-supplemental-operation!
+              grant
+              #:lease lease
+              #:operation-sha256 (hash-ref operation 'sha256)
+              #:attempt-id (hash-ref allocation 'attempt-id)
+              #:attempt-fence (hash-ref allocation 'attempt-fence)
+              #:coordinator-fence (hash-ref allocation 'coordinator-fence))
+             " [expired retained operation sealed blocked]"])]))]))
 ;; One typed-loss settlement: the unit-1 blocked transition (primary
 ;; secondary outcome) plus the unit-2 best-effort terminal observation.
 ;; Returns (values persisted? blocked-secondary observation-pending).
@@ -1493,10 +1550,17 @@
           (not (supplemental-author-pending? base plan wave)))
      ;; Retention is ownership, NOT permission. Terminal, revoked, expired
      ;; or invalid tasks cannot release this checkout to ordinary authors.
-     (campaign-result
-      'wave-blocked
-      '()
-      "retained supplemental task is not launchable; ordinary author fallback refused")]
+     ;; A spent NON-terminal retained operation is sealed blocked here
+     ;; (secondary, best-effort, idempotent) so the spent terminal record
+     ;; exists; the typed denial itself is unchanged.
+     (define detail
+       (let ([note (seal-expired-retained! base plan wave (supplemental-discover base plan wave))])
+         (if note
+             (string-append
+              "retained supplemental task is not launchable; ordinary author fallback refused"
+              note)
+             "retained supplemental task is not launchable; ordinary author fallback refused")))
+     (campaign-result 'wave-blocked '() detail)]
     [else #f]))
 ;; Orchestrator done-case seam: continues the flow after the author attempt
 ;; returns done (candidate approval, G1, R1, S, publication) and parks the

@@ -48,9 +48,15 @@
                   fixture-workspace
                   base-binding
                   operation-path
+                  revoke-approval!
                   step!)
          "helpers/supplemental-go-fixture.rkt"
          "../runtime/approval/broker.rkt"
+         (only-in "../extensions/gsd/evidence-repair-format.rkt" canonical-evidence-json)
+         (only-in "../extensions/gsd/supplemental-evidence-store.rkt"
+                  bytes-for
+                  read-sealed)
+         (only-in "../util/json/checksum.rkt" sha256-string)
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
          "../extensions/gsd/go-orchestrator.rkt"
@@ -243,6 +249,34 @@
 (define (peek-record fx)
   (with-handlers ([exn:fail? (lambda (_) #f)])
     (call-with-input-file (go-operation-path fx) read-json)))
+
+;; Amendment-3 terminalizer helpers: the exact lease-authenticated seal of a
+;; spent non-terminal retained operation (mirrors observe! above).
+(define (terminalize! f
+                      plan
+                      #:sha [sha (retained-sha-of f)]
+                      #:lease [lease (lease-of f plan)])
+  (terminalize-expired-supplemental-operation! (fixture-grant f)
+                                               #:lease lease
+                                               #:operation-sha256 sha
+                                               #:attempt-id "fixture-new-attempt"
+                                               #:attempt-fence 4
+                                               #:coordinator-fence 8))
+
+;; The durable sealed snapshot, read back byte-exactly (the live journal
+;; refuses expired grants, so the historical read is deliberate here).
+(define (op-record f)
+  (read-sealed (operation-path f)))
+
+(define (expired-obs-fixture proc)
+  (with-obs-fixture proc #:payload (hasheq 'task task 'expires-at (+ (current-seconds) 5))))
+
+(define (write-fixture-pointer! f plan)
+  (write-supplemental-pointer! (fixture-workspace f)
+                               plan
+                               1
+                               (hash-ref (load-supplemental-record (fixture-grant f)) 'proposal)
+                               (fixture-grant f)))
 
 (define (steal-attempt! fx)
   ;; A successor coordinator attempt takes the campaign lease mid-C1.
@@ -540,6 +574,7 @@
 
   (test-case "crash cut after accounting recovers without double-charge"
     (with-obs-fixture (lambda (f plan)
+                        (define evidence (terminal-evidence-fixture))
                         (check-exn exn:fail?
                                    (lambda ()
                                      (parameterize ([current-supplemental-journal-crash-cut
@@ -547,8 +582,8 @@
                                                        (when (eq? name
                                                                   'observation-accounting-applied)
                                                          (error 'crash-cut "simulated crash")))])
-                                       (observe! f plan #:usage (hasheq 'cost-usd 150)))))
-                        (define recovered (observe! f plan #:usage (hasheq 'cost-usd 150)))
+                                       (observe! f plan #:terminal evidence #:usage (hasheq 'cost-usd 150)))))
+                        (define recovered (observe! f plan #:terminal evidence #:usage (hasheq 'cost-usd 150)))
                         (check-equal? (length (observation-entries recovered)) 1)
                         (check-equal? (length (hash-ref recovered 'accounting-keys)) 1)
                         (check-equal? (hash-ref (hash-ref recovered 'usage) 'cost-usd)
@@ -694,4 +729,143 @@
          (check-false (file-exists? (build-path (supplemental-fixture-private fx)
                                                 "supplemental-terminal-observations"
                                                 (string-append (hash-ref grant 'sha256)
-                                                               ".json")))))))))
+                                                               ".json"))))))))
+
+  ;; --------------------------------------------------------------
+  ;; Part C — amendment-3: the expired retained-operation terminalizer
+  ;; --------------------------------------------------------------
+  (test-case "terminalizer seals an expired non-terminal operation blocked under the current lease"
+    (expired-obs-fixture
+     (lambda (f plan)
+       (define grant (fixture-grant f))
+       (sleep 6)
+       (define pre-seal-sha (retained-sha-of f))
+       (define sealed (terminalize! f plan))
+       ;; Exact typed blocked transition: revision +1, launch consumed, and
+       ;; the derived typed block-reason — never caller-supplied free text.
+       (check-equal? (hash-ref sealed 'state) "blocked")
+       (check-equal? (hash-ref sealed 'revision) 2 "reserved(1) + 1")
+       (check-true (hash-ref sealed 'launch-consumed))
+       (check-equal? (hash-ref (hash-ref sealed 'facts) 'block-reason)
+                     "operator deadline expired")
+       (check-equal? (hash-ref (hash-ref sealed 'facts) 'allocation)
+                     (hasheq 'attempt-id "fixture-new-attempt" 'attempt-fence 4 'coordinator-fence 8))
+       (check-equal? (file->bytes (operation-path f)) (bytes-for sealed))
+       ;; AMENDMENT-3 digest derivation: terminal-body-sha256 is the record's
+       ;; own sha256 field; terminal-record-sha256 is sha256 over the complete
+       ;; canonical JSON bytes durably on disk.
+       (define body (hash-ref sealed 'sha256))
+       (check-true (and (string? body) (regexp-match? #px"^[0-9a-f]{64}$" body)))
+       (check-not-equal? body pre-seal-sha)
+       (define record-digest
+         (sha256-string (bytes->string/utf-8 (file->bytes (operation-path f)))))
+       (check-equal? record-digest (sha256-string (canonical-evidence-json sealed)))
+       ;; The sealed record is structurally valid historical storage.
+       (check-equal? (op-record f) sealed)
+       ;; No WAL and no observation were created by the seal.
+       (check-false (file-exists? (operation-path f ".intent.json")))
+       (check-false (supplemental-terminal-observation grant)))))
+
+  (test-case "already-blocked replay is an idempotent no-op; a stale sha refuses"
+    (expired-obs-fixture
+     (lambda (f plan)
+       (sleep 6)
+       (define sealed (terminalize! f plan))
+       (define bytes (file->bytes (operation-path f)))
+       (define replay (terminalize! f plan))
+       (check-equal? replay sealed)
+       (check-equal? (hash-ref replay 'revision) 2 "no second revision bump")
+       (check-equal? (file->bytes (operation-path f)) bytes "byte-identical replay")
+       (check-exn #rx"stale or unknown operation sha256"
+                  (lambda () (terminalize! f plan #:sha (make-string 64 #\0))))
+       (check-equal? (file->bytes (operation-path f)) bytes))))
+
+  (test-case "a stale coordinator lease refuses; nothing is sealed"
+    (expired-obs-fixture
+     (lambda (f plan)
+       (define lease (lease-of f plan))
+       (sleep 6)
+       (persist-campaign-fixture! (fixture-workspace f) plan #:fence 9)
+       (check-exn #rx"stale coordinator lease fence" (lambda () (terminalize! f plan #:lease lease)))
+       (check-exn #rx"invalid coordinator lease proof" (lambda () (terminalize! f plan #:lease #f)))
+       (check-equal? (hash-ref (op-record f) 'state) "reserved")
+       ;; A successor attempt's lease mismatches the bound allocation too.
+       (persist-campaign-fixture! (fixture-workspace f)
+                                  plan
+                                  #:fence 8
+                                  #:attempt-id "fixture-successor"
+                                  #:attempt-fence 5)
+       (check-exn #rx"terminalization identity does not match the current coordinator lease"
+                  (lambda () (terminalize! f plan)))
+       (check-equal? (hash-ref (op-record f) 'state) "reserved")
+       (check-false (file-exists? (operation-path f ".intent.json"))))))
+
+  (test-case "an unexpired live operation refuses terminalization"
+    (with-obs-fixture
+     (lambda (f plan)
+       (define bytes (file->bytes (operation-path f)))
+       (check-exn #rx"operation is not expired or revoked; terminalization refused"
+                  (lambda () (terminalize! f plan)))
+       (check-equal? (file->bytes (operation-path f)) bytes)
+       (check-equal? (hash-ref (op-record f) 'state) "reserved"))))
+
+  (test-case "a revoked approval permits the seal on an unexpired deadline"
+    (with-obs-fixture
+     (lambda (f plan)
+       (revoke-approval! (fixture-grant f))
+       (define sealed (terminalize! f plan))
+       (check-equal? (hash-ref sealed 'state) "blocked")
+       (check-equal? (hash-ref sealed 'revision) 2)
+       (check-equal? (hash-ref (hash-ref sealed 'facts) 'block-reason)
+                     "operator approval revoked")
+       (check-false (file-exists? (operation-path f ".intent.json")))
+       (check-false (supplemental-terminal-observation (fixture-grant f)))))
+
+  (test-case "a plain entry on the expired retained operation seals it blocked"
+    (expired-obs-fixture
+     (lambda (f plan)
+       (define grant (fixture-grant f))
+       (write-fixture-pointer! f plan)
+       (sleep 6)
+       (define result (supplemental-entry-outcome (fixture-workspace f) plan 1))
+       (check-equal? (campaign-result-status result) 'wave-blocked)
+       (define message (campaign-result-message result))
+       ;; The typed denial is unchanged; the seal is a distinct secondary note.
+       (check-true (string-prefix? message
+                                   "retained supplemental task is not launchable;")
+                   message)
+       (check-true (string-contains? message "expired retained operation sealed blocked")
+                   message)
+       (define sealed (op-record f))
+       (check-equal? (hash-ref sealed 'state) "blocked")
+       (check-equal? (hash-ref sealed 'revision) 2)
+       (check-equal? (hash-ref (hash-ref sealed 'facts) 'block-reason)
+                     "operator deadline expired")
+       ;; No WAL and no observation; the AMENDMENT-3 digests are derivable.
+       (check-false (file-exists? (operation-path f ".intent.json")))
+       (check-false (supplemental-terminal-observation grant))
+       (check-equal? (sha256-string (bytes->string/utf-8 (file->bytes (operation-path f))))
+                     (sha256-string (canonical-evidence-json sealed)))
+       ;; Replay: a second plain entry is an idempotent no-op.
+       (define bytes (file->bytes (operation-path f)))
+       (define result2 (supplemental-entry-outcome (fixture-workspace f) plan 1))
+       (check-equal? (campaign-result-status result2) 'wave-blocked)
+       (check-equal? (file->bytes (operation-path f)) bytes))))
+
+  (test-case "without a current lease the seal stays explicitly pending, nothing written"
+    (with-obs-fixture
+     (lambda (f plan)
+       (write-fixture-pointer! f plan)
+       (sleep 6)
+       (define result (supplemental-entry-outcome (fixture-workspace f) plan 1))
+       (check-equal? (campaign-result-status result) 'wave-blocked)
+       (check-true (string-contains? (campaign-result-message result)
+                                     "expired operation seal pending")
+                   (campaign-result-message result))
+       (check-true (string-contains? (campaign-result-message result)
+                                     "current coordinator lease unavailable")
+                   (campaign-result-message result))
+       (check-equal? (hash-ref (op-record f) 'state) "reserved")
+       (check-false (file-exists? (operation-path f ".intent.json"))))
+     #:payload (hasheq 'task task 'expires-at (+ (current-seconds) 5))
+     #:campaign? #f))))
