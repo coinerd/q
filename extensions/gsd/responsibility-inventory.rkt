@@ -284,10 +284,8 @@
    ;; pure planning
    (make-entry "shared.rkt" 'pure-planning '() '() '("racket/string" "racket/list"))
    (make-entry "wave-status.rkt" 'pure-planning '() '() '())
-   ;; BUG-0077: the campaign terminal result struct, extracted from
-   ;; go-orchestrator so the delivery checkpoint modules can construct
-   ;; results without depending on the orchestrator (size pin).
-   (make-entry "campaign-result.rkt" 'pure-planning '() '() '())
+   ;; Campaign terminal values, structured diagnostics, and pure stop text.
+   (make-entry "campaign-result.rkt" 'pure-planning '() '() '("racket/string"))
    (make-entry "stall-policy.rkt"
                'transition-logic
                '(parameterize make-param
@@ -336,10 +334,7 @@
                'pure-planning
                '(git make-param path-ops parameterize)
                '(current-git-root-layout-run-git)
-               '("racket/file" "racket/path"
-                                "racket/port"
-                                "racket/string"
-                                "racket/system"))
+               '("racket/file" "racket/path" "racket/port" "racket/string" "racket/system"))
    (make-entry "plan-context-builder.rkt"
                'pure-planning
                '(git make-param path-ops fs-read parameterize)
@@ -1112,13 +1107,12 @@
                'persistence
                '(fs-write fs-delete dir-list path-ops)
                '()
-               '("racket/file"
-                 "racket/path"
-                 "supplemental-evidence-store"
-                 "supplemental-evidence-store-core"
-                 "supplemental-disposition-claim"
-                 "supplemental-evidence-format"
-                 "supplemental-evidence-authority"))
+               '("racket/file" "racket/path"
+                               "supplemental-evidence-store"
+                               "supplemental-evidence-store-core"
+                               "supplemental-disposition-claim"
+                               "supplemental-evidence-format"
+                               "supplemental-evidence-authority"))
    ;; Effective C1 owned-Verify capture and private authority reload. Git,
    ;; verification capture and proof retention delegate to their owners.
    (make-entry "supplemental-evidence-proof.rkt"

@@ -55,6 +55,10 @@
                   wave-failure-reason
                   attempt-failure-reason)
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
+         (only-in "../extensions/gsd/campaign-result.rkt"
+                  campaign-result-code
+                  campaign-result-diagnostics
+                  render-campaign-stop-text)
          (only-in "../extensions/gsd/delivery-journal.rkt"
                   record-delivery-receipt!
                   update-delivery-journal!)
@@ -667,6 +671,24 @@ check-equal? actual 14 expected 12")
       (release-lease! lease3)
       (cleanup-tmp dir))
 
+    (test-case "lease contention returns canonical operator diagnostics"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define lease (acquire-lease dir (campaign-plan-id rec) #:session-id "holder"))
+      (define result
+        (run-campaign! dir
+                       rec
+                       #:runner (lambda (_) (error 'runner "must not run without the lease"))))
+      (define diagnostics (campaign-result-diagnostics result))
+      (check-eq? (campaign-result-status result) 'busy)
+      (check-eq? (campaign-result-code result) 'lease-busy)
+      (for ([key '(code summary detail next-action artifacts)])
+        (check-true (hash-has-key? diagnostics key) (format "canonical key ~a" key)))
+      (check-true (string-contains? (render-campaign-stop-text result)
+                                    "Next action: inspect the lock holder"))
+      (release-lease! lease)
+      (cleanup-tmp dir))
+
     (test-case "stale lock file does not block restart"
       (define dir (make-tmp-campaign-dir 1))
       (define rec (load-or-migrate dir))
@@ -1157,35 +1179,34 @@ check-equal? actual 14 expected 12")
     (test-case "F-7: find-git-root handles a real .git FILE worktree (linked worktree)"
       (define GIT (find-executable-path "git"))
       (define tmp (make-temporary-file "git-root-test-~a" 'directory))
-      (dynamic-wind void
-                    (lambda ()
-                      (when GIT
-                        (parameterize ([current-output-port (open-output-string)]
-                                       [current-error-port (open-output-string)])
-                          (system*/exit-code GIT "-C" tmp "init" "--quiet")
-                          (system*/exit-code GIT "-C" tmp "commit" "--allow-empty" "-q" "-m" "base")
-                          (system*/exit-code GIT
-                                              "-C"
-                                              tmp
-                                              "worktree"
-                                              "add"
-                                              "-q"
-                                              "-b"
-                                              "wt-branch"
-                                              (path->string (build-path tmp "linked-wt"))))
-                        ;; The linked worktree carries a .git FILE pointing at
-                        ;; the controlling repository; it resolves to its own
-                        ;; physical toplevel.
-                        (define result (find-git-root (build-path tmp "linked-wt")))
-                        (check-pred path? result)
-                        (when result
-                          (check-equal?
-                           (string-trim (path->string (simple-form-path result)) "/" #:right? #t)
-                           (string-trim
-                            (path->string (simple-form-path (build-path tmp "linked-wt")))
-                            "/"
-                            #:right? #t)))))
-                    (lambda () (delete-directory/files tmp))))
+      (dynamic-wind
+       void
+       (lambda ()
+         (when GIT
+           (parameterize ([current-output-port (open-output-string)]
+                          [current-error-port (open-output-string)])
+             (system*/exit-code GIT "-C" tmp "init" "--quiet")
+             (system*/exit-code GIT "-C" tmp "commit" "--allow-empty" "-q" "-m" "base")
+             (system*/exit-code GIT
+                                "-C"
+                                tmp
+                                "worktree"
+                                "add"
+                                "-q"
+                                "-b"
+                                "wt-branch"
+                                (path->string (build-path tmp "linked-wt"))))
+           ;; The linked worktree carries a .git FILE pointing at
+           ;; the controlling repository; it resolves to its own
+           ;; physical toplevel.
+           (define result (find-git-root (build-path tmp "linked-wt")))
+           (check-pred path? result)
+           (when result
+             (check-equal? (string-trim (path->string (simple-form-path result)) "/" #:right? #t)
+                           (string-trim (path->string (simple-form-path (build-path tmp "linked-wt")))
+                                        "/"
+                                        #:right? #t)))))
+       (lambda () (delete-directory/files tmp))))
 
     (test-case "F-7: a .git file with a broken gitdir pointer refuses (typed)"
       (define tmp (make-temporary-file "git-root-test-~a" 'directory))

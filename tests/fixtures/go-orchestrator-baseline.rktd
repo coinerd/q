@@ -71,10 +71,14 @@
 ;; the wave-merge-sha one-line wrapper was inlined. Bounded routing call
 ;; sites, no new defines. 1696 -> 1698 lines, defines unchanged at 19,
 ;; below the unchanged 1700 target.
+;;
+;; GSD simplification W0: campaign-result reconstruction now delegates to
+;; campaign-result-with-completed, preserving diagnostics without new
+;; top-level definitions. 1698 -> 1699 lines; still below the 1700 target.
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "BUG-0088: supplemental done-route + checkout-retention call sites and widened author-lane require; wave-merge-sha wrapper inlined: 1698 lines / 19 defines; below the unchanged 1700 target")
- (line-count . 1698)
+  "GSD simplification W0: diagnostic-preserving result reconstruction; 1699 lines / 19 defines; below 1700")
+ (line-count . 1699)
  (top-level-define-count . 19)
  (w7-target-max-lines . 1700))

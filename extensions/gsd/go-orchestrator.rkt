@@ -29,7 +29,10 @@
                   campaign-result
                   campaign-result-status
                   campaign-result-completed-waves
-                  campaign-result-message)
+                  campaign-result-message
+                  campaign-result-with-completed
+                  campaign-diagnostics
+                  campaign-result-with-diagnostics)
          "campaign-repository.rkt"
          "wave-completion.rkt"
          "delivery-handoff.rkt"
@@ -56,7 +59,9 @@
                   delivery-outcome-message)
          "wave-runner-port.rkt"
          (only-in "author-checkpoint.rkt"
-                  author-lane-pending? supplemental-done-route! supplemental-checkout-retained?)
+                  author-lane-pending?
+                  supplemental-done-route!
+                  supplemental-checkout-retained?)
          (only-in "owned-lane.rkt" make-owned-runner-port owned-lane? owned-entry-block)
          (only-in "wave-scope.rkt" call-with-wave-scope)
          (only-in "wave-docs.rkt" wave-slug plan-slug-map read-wave-doc)
@@ -460,7 +465,8 @@
 ;; missing entry means the wave has no Delivery-Contract PR proof —
 ;; exactly the v1.00.27 failure mode (W0→W6 advanced with zero merges).
 ;; Returns the sha string, or #f when the wave is not merged-proven.
-(define (wave-merge-sha base-dir plan-id wave-idx) (verified-wave-merge-sha base-dir plan-id wave-idx))
+(define (wave-merge-sha base-dir plan-id wave-idx)
+  (verified-wave-merge-sha base-dir plan-id wave-idx))
 
 (define (run-campaign-wave base-dir
                            rec
@@ -560,7 +566,9 @@
          (memq (campaign-wave-status initial-wave) '(done deferred))
          (<= fence (campaign-fence-token active)))
      (campaign-result 'wave-cancelled '() "stale campaign request ignored")]
-    [(owned-entry-block base-dir active wave-idx) => (lambda (r) r)]
+    [(owned-entry-block base-dir active wave-idx)
+     =>
+     (lambda (r) r)]
     ;; BUG-0064 (v1.00.29 W1, #9620): Delivery-Contract wave-advance gate.
     ;; A wave may launch only when its predecessor carries a merge-SHA
     ;; binding in its evidence trio. W0 (no predecessor) is never gated.
@@ -836,7 +844,9 @@
                                                  expected-id
                                                  'cancelled)
                 (campaign-result 'meta-fix (list wave-idx) "meta-fix wave reset")]
-               [(supplemental-done-route! base-dir active wave-idx expected-id fence) => values]
+               [(supplemental-done-route! base-dir active wave-idx expected-id fence)
+                =>
+                values]
                [else
                 (define verifying (persist-current-status! 'verifying))
                 (if (not verifying)
@@ -1404,11 +1414,15 @@
     (with-handlers ([exn:fail? void])
       (notify-terminal-transition! notify-sinks
                                    (make-gsd-notification plan-id wave-idx kind #:reason reason))))
-  ;; D4 (#9351): pass the owning session id so the lease file names its
-  ;; holder instead of the opaque "unknown" observed in incident 81f9be4b.
+  ;; Name the lease holder instead of the opaque "unknown" from incident 81f9be4b.
   (define lease (acquire-lease base-dir plan-id #:session-id lease-owner))
   (if (not lease)
-      (campaign-result 'busy '() "campaign lease held by another process")
+      (campaign-result-with-diagnostics
+       (campaign-result 'busy '() "campaign lease held by another process")
+       (campaign-diagnostics
+        'lease-busy
+        #:next-action
+        "inspect the lock holder; wait for release or stop that process, then re-run /go"))
       (dynamic-wind
        void
        (lambda ()
@@ -1553,22 +1567,13 @@
                        (loop refreshed completed)
                        (campaign-result 'error (reverse completed) "campaign record disappeared"))]
                   [(wave-failed wave-cancelled)
-                   ;; The runner timeout/cancellation boundary owns only its wave
-                   ;; thread. Do not stop the process-global gateway worker: it
-                   ;; may be serving an unrelated interactive or SDK session.
-                   (campaign-result (campaign-result-status result)
-                                    (reverse completed)
-                                    (campaign-result-message result))]
-                  ;; v1.00.29 W1 (BUG-0064): a blocked advance is a clean,
-                  ;; auditable stop — NOT a coordinator error. The operator
-                  ;; binds the missing Delivery-Contract merge SHA, then /go
-                  ;; resumes.
-                  [(wave-blocked)
-                   (campaign-result 'wave-blocked
-                                    (reverse completed)
-                                    (campaign-result-message result))]
+                   (campaign-result-with-completed result (reverse completed))]
+                  [(wave-blocked) (campaign-result-with-completed result (reverse completed))]
                   [else
-                   (campaign-result 'error (reverse completed) "unexpected coordinator state")])])))
+                   (campaign-result-with-completed result
+                                                   (reverse completed)
+                                                   #:status 'error
+                                                   #:message "unexpected coordinator state")])])))
          ;; v1.00.21 W5 (BUG-0029 action 3): the campaign ended (success OR
          ;; terminal failure) — report non-delivery leftover artifacts and
          ;; offer operator-approved reclaim. NEVER auto-deletes.
@@ -1599,10 +1604,6 @@
          campaign-result-status
          campaign-result-completed-waves
          campaign-result-message
-         ;; re-provided from campaign-result.rkt (extracted to keep the
-         ;; orchestrator under its size pin).
-         ;; v1.00.29 W1 (BUG-0064, #9620): Delivery-Contract merge-SHA
-         ;; provenance + wave-advance gate.
          wave-merge-sha
          run-campaign-wave
          run-campaign!
