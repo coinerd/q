@@ -42,7 +42,11 @@
          validate-record!
          inspect-supplemental-recovery-parent
          validate-recovery-claim!
-         authenticate-supplemental-task!)
+         authenticate-supplemental-task!
+         observation-directory
+         observation-paths
+         observation-terminal-states
+         validate-observation-record!)
 ;; Fault injection may only interrupt storage, never supply authority or facts.
 (define current-supplemental-journal-crash-cut
   (make-parameter
@@ -318,3 +322,86 @@
           (build-path dir (string-append name ".json"))
           (build-path dir (string-append name ".intent.json"))
           (build-path dir (string-append name ".lock"))))
+;; ---- BUG-0101 unit 2: terminal observation storage -----------------------
+;; Private, sealed, append-only terminal observation records for a
+;; supplemental operation that failed or lost authority. Pure storage and
+;; structural validation only: NO authentication, NO authority and NO
+;; eligibility decision lives here, and these records are never workflow
+;; state -- the journal's authenticated writer is the only mutator, and the
+;; operation snapshot/WAL/revision are never touched by this directory.
+(define (observation-directory root)
+  (build-path root "supplemental-terminal-observations"))
+(define (observation-paths root grant [create? #t])
+  (define dir (observation-directory root))
+  (when (and create? (not (present? dir)))
+    (with-handlers ([exn:fail:filesystem:exists? void])
+      (make-directory dir #o700))
+    (sync-directory! root))
+  (private-directory! dir)
+  (define name (hash-ref grant 'sha256))
+  (values dir
+          (build-path dir (string-append name ".json"))
+          (build-path dir (string-append name ".lock"))))
+;; Terminal registry job states only (verification-job.rkt vocabulary minus
+;; 'running): a non-terminal observation is refused, never stored.
+(define observation-terminal-states '(completed failed timed-out cancelled orphan-recovered))
+(define (observation-digest? v)
+  (and (string? v) (regexp-match? #px"^[0-9a-f]{64}$" v)))
+(define (observation-usage-field-valid? key value)
+  ;; Canonical private JSON admits exact integers only; usage is recorded in
+  ;; whole observed units (token counts, integral cost units), never floats.
+  (exact-nonnegative-integer? value))
+(define (validate-observation-record! record grant)
+  (unless (and
+           (exact-keys?
+            record
+            '(schema grant-ref proposal-ref identity entries usage accounting-keys sha256))
+           (equal? (hash-ref record 'schema) "supplemental-terminal-observation/v1")
+           (equal? (hash-ref record 'grant-ref) grant)
+           (supplemental-reference? (hash-ref record 'proposal-ref))
+           (let ([i (hash-ref record 'identity)])
+             (and (exact-keys? i '(attempt-id attempt-fence coordinator-fence))
+                  (string? (hash-ref i 'attempt-id))
+                  (positive? (string-length (hash-ref i 'attempt-id)))
+                  (exact-nonnegative-integer? (hash-ref i 'attempt-fence))
+                  (exact-nonnegative-integer? (hash-ref i 'coordinator-fence))))
+           (let ([entries (hash-ref record 'entries)])
+             (and
+              (list? entries)
+              (for/and ([e (in-list entries)])
+                (and (exact-keys? e '(key operation-sha256 terminal usage-declared))
+                     (observation-digest? (hash-ref e 'key))
+                     (observation-digest? (hash-ref e 'operation-sha256))
+                     (let ([t (hash-ref e 'terminal)])
+                       (and (exact-keys? t '(state exit-code reaped? log-path captured-at identities))
+                            (member (hash-ref t 'state)
+                                    (map symbol->string observation-terminal-states))
+                            (let ([x (hash-ref t 'exit-code)]) (or (not x) (exact-integer? x)))
+                            (boolean? (hash-ref t 'reaped?))
+                            (let ([l (hash-ref t 'log-path)])
+                              (or (not l) (and (string? l) (positive? (string-length l)))))
+                            (exact-positive-integer? (hash-ref t 'captured-at))
+                            (let ([i2 (hash-ref t 'identities)])
+                              (and (exact-keys? i2 '(registry-incarnation job-id command-digest))
+                                   (for/and ([k '(registry-incarnation job-id command-digest)])
+                                     (let ([v (hash-ref i2 k)])
+                                       (and (string? v) (positive? (string-length v)))))))))
+                     (let ([u (hash-ref e 'usage-declared)])
+                       (or (not u)
+                           (equal? u "unknown")
+                           (and (hash? u)
+                                (immutable? u)
+                                (positive? (hash-count u))
+                                (for/and ([k (in-hash-keys u)])
+                                  (memq k '(input-tokens output-tokens total-tokens cost-usd)))
+                                (for/and ([(k v) (in-hash u)])
+                                  (observation-usage-field-valid? k v)))))))))
+           (let ([u (hash-ref record 'usage)])
+             (and (exact-keys? u '(coverage input-tokens output-tokens total-tokens cost-usd))
+                  (member (hash-ref u 'coverage) '("none" "known" "unknown"))
+                  (for/and ([k '(input-tokens output-tokens total-tokens cost-usd)])
+                    (let ([v (hash-ref u k)]) (or (not v) (observation-usage-field-valid? k v))))))
+           (let ([keys (hash-ref record 'accounting-keys)])
+             (and (list? keys) (andmap observation-digest? keys))))
+    (refuse "invalid terminal observation record"))
+  record)

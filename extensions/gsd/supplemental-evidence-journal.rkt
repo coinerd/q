@@ -61,12 +61,22 @@
 ;;   (everything through verifying/probing admission and completion) remain
 ;;   fail-closed blocked. Storage facts stay descriptors, never proof.
 (require racket/file
+         racket/list
          racket/path
          "supplemental-evidence-store.rkt"
          "supplemental-evidence-format.rkt"
          "supplemental-evidence-authority.rkt"
          "supplemental-evidence-store-core.rkt"
          "supplemental-disposition-claim.rkt"
+         (only-in "campaign-repository.rkt" load-campaign-record)
+         (only-in "campaign-state.rkt"
+                  campaign-attempt-fence-token
+                  campaign-attempt-id
+                  campaign-fence-token
+                  campaign-record-cancellation
+                  campaign-record-waves
+                  campaign-wave-current-attempt
+                  campaign-wave-index)
          (only-in "../gsd-planning/execution-policy.rkt" current-gsd-author-phase))
 (provide start-supplemental-operation!
          transition-supplemental-operation!
@@ -80,7 +90,11 @@
          inspect-supplemental-disposition-parent
          install-supplemental-disposition-claim!
          install-supplemental-recovery-claim!
-         supplemental-recovery-pointer-claimed?)
+         supplemental-recovery-pointer-claimed?
+         supplemental-coordinator-lease
+         record-supplemental-terminal-observation!
+         supplemental-terminal-observation
+         supplemental-retained-operation-sha)
 
 ;; Journal-local refusal identity for the WAL/transition checks that remain
 ;; here; the extracted storage core raises with the same source symbol.
@@ -841,3 +855,397 @@
      (sync-directory! (path-only intent))
      (cut! 'reconcile-intent-cleared)
      next)))
+
+;; ---- BUG-0101 unit 2: terminal-only observation writer --------------------
+;; ONE narrow, separately-reviewed writer (security-contracts.md 3.2/3.3,
+;; plan R101 design gate, R1/R2 conditions): an idempotent, terminal-ONLY
+;; observation + usage recorder for a supplemental operation that FAILED or
+;; LOST authority. It confers NO execution authority: no WAL advancement, no
+;; operation revision/state change, no capability issuance, no revision
+;; rollback, no receipt/proof rewrite and no change to task eligibility.
+;;
+;; AUTHENTICATION is the CURRENT coordinator lease/fence -- NEVER the task
+;; approval. An expired or revoked task grant never suffices (and never
+;; blocks a terminal record either): the writer validates the live campaign
+;; record's fence token and current attempt against the supplied lease
+;; proof, then the exact operation/attempt identity against the durable
+;; private operation snapshot (exact sha256 + its bound allocation fact).
+;; Stale or unknown fences, stale operation digests and a missing campaign
+;; lease refuse fail-closed: an unrecordable observation stays explicitly
+;; pending, never silently successful.
+;;
+;; DURABILITY: one sealed record per grant under
+;; <root>/supplemental-terminal-observations/ holding append-only
+;; content-addressed entries. The idempotency key is the exact canonical
+;; digest of identity+terminal-facts+declared-usage. Identical replay is a
+;; no-op (single durable observation per job evidence); the same job
+;; identity with DIFFERENT terminal facts refuses loudly as contradictory.
+;; Usage accounting is applied AT MOST ONCE per key, onto a cumulative
+;; private ledger that never resets and never discards prior known
+;; contributions; unknown usage stays explicitly unknown/pending.
+;;
+;; CRASH CUTS: observation-before-accounting and accounting-before-ack are
+;; two atomic writes with named cut points on the shared journal crash-cut
+;; parameter ('observation-appended, 'observation-accounting-applied). A
+;; replay after either cut recovers without double-charge or loss: a cut
+;; after the entry append leaves the entry durable with its accounting key
+;; absent (visibly pending), and the next identical call performs exactly
+;; the missing accounting; a cut after accounting leaves the key recorded
+;; and replay is a no-op.
+(define (validate-lease-shape! lease)
+  (unless (and (hash? lease)
+               (immutable? lease)
+               (exact-keys? lease '(schema base plan wave coordinator-fence attempt-id attempt-fence))
+               (equal? (hash-ref lease 'schema) "supplemental-coordinator-lease/v1")
+               (let ([b (hash-ref lease 'base)])
+                 (and (string? b) (positive? (string-length b)) (immutable? b)))
+               (let ([p (hash-ref lease 'plan)])
+                 (and (string? p) (= 64 (string-length p)) (regexp-match? #px"^[0-9a-f]{64}$" p)))
+               (exact-nonnegative-integer? (hash-ref lease 'wave))
+               (exact-nonnegative-integer? (hash-ref lease 'coordinator-fence))
+               (let ([a (hash-ref lease 'attempt-id)])
+                 (and (string? a) (positive? (string-length a)) (immutable? a)))
+               (exact-nonnegative-integer? (hash-ref lease 'attempt-fence)))
+    (refuse "invalid coordinator lease proof")))
+;; Capture (never refuse) the CURRENT coordinator lease/fence proof for a
+;; campaign wave from the durable campaign record. #f means the lease is
+;; unavailable right now; callers must report pending rather than invent
+;; authority. The proof carries no authority by itself: the writer
+;; revalidates it against the record under the shared lock.
+(define (supplemental-coordinator-lease base plan wave)
+  (unless (path-string? base)
+    (refuse "campaign base path required"))
+  (unless (and (string? plan) (= 64 (string-length plan)) (regexp-match? #px"^[0-9a-f]{64}$" plan))
+    (refuse "campaign plan id required"))
+  (unless (exact-nonnegative-integer? wave)
+    (refuse "wave index required"))
+  (define rec
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (load-campaign-record base plan)))
+  (define w
+    (and rec
+         (for/first ([x (in-list (campaign-record-waves rec))]
+                     #:when (= (campaign-wave-index x) wave))
+           x)))
+  (define attempt (and w (campaign-wave-current-attempt w)))
+  (define fence (and rec (campaign-fence-token rec)))
+  (and rec
+       w
+       attempt
+       fence
+       (not (campaign-record-cancellation rec))
+       (hasheq 'schema
+               "supplemental-coordinator-lease/v1"
+               'base
+               (string->immutable-string (path->string (simplify-path (path->complete-path base) #f)))
+               'plan
+               plan
+               'wave
+               wave
+               'coordinator-fence
+               fence
+               'attempt-id
+               (string->immutable-string (campaign-attempt-id attempt))
+               'attempt-fence
+               (campaign-attempt-fence-token attempt))))
+;; Live lease match against the durable campaign record, mirroring the
+;; coordinator's own attempt-fencing predicate exactly: current fence token,
+;; current attempt id and current attempt fence. A cancelled campaign has
+;; released its lease. Stale proof refuses; an absent record refuses as
+;; "unavailable" (explicitly pending, never invented authority).
+(define (authenticate-coordinator-lease! lease)
+  (define rec (load-campaign-record (hash-ref lease 'base) (hash-ref lease 'plan)))
+  (unless rec
+    (refuse "current coordinator lease unavailable"))
+  (when (campaign-record-cancellation rec)
+    (refuse "coordinator lease is cancelled"))
+  (define w
+    (for/first ([x (in-list (campaign-record-waves rec))]
+                #:when (= (campaign-wave-index x) (hash-ref lease 'wave)))
+      x))
+  (unless w
+    (refuse "coordinator lease names no such wave"))
+  (define attempt (campaign-wave-current-attempt w))
+  (unless (= (campaign-fence-token rec) (hash-ref lease 'coordinator-fence))
+    (refuse "stale coordinator lease fence"))
+  (unless (and attempt
+               (equal? (campaign-attempt-id attempt) (hash-ref lease 'attempt-id))
+               (equal? (campaign-attempt-fence-token attempt) (hash-ref lease 'attempt-fence)))
+    (refuse "stale coordinator lease attempt")))
+;; Immutable terminal job evidence captured from the verification registry
+;; (state/exit/log-path + registry incarnation/job-id/command digest). The
+;; durable form is canonical JSON: the state is stored as its string name.
+(define (normalize-terminal! terminal)
+  (define (bad!)
+    (refuse "invalid terminal job evidence"))
+  (unless (and (hash? terminal)
+               (immutable? terminal)
+               (exact-keys? terminal '(state exit-code reaped? log-path captured-at identities)))
+    (bad!))
+  (define state (hash-ref terminal 'state))
+  (unless (symbol? state)
+    (bad!))
+  (unless (memq state observation-terminal-states)
+    (refuse "terminal-ONLY observation: registry job state is not terminal"))
+  (define exit-code (hash-ref terminal 'exit-code))
+  (unless (or (not exit-code) (exact-integer? exit-code))
+    (bad!))
+  (unless (boolean? (hash-ref terminal 'reaped?))
+    (bad!))
+  (define log-path (hash-ref terminal 'log-path))
+  (unless (or (not log-path) (and (string? log-path) (positive? (string-length log-path))))
+    (bad!))
+  (unless (exact-positive-integer? (hash-ref terminal 'captured-at))
+    (bad!))
+  (define ids (hash-ref terminal 'identities))
+  (unless (and (hash? ids)
+               (immutable? ids)
+               (exact-keys? ids '(registry-incarnation job-id command-digest))
+               (for/and ([k '(registry-incarnation job-id command-digest)])
+                 (define v (hash-ref ids k))
+                 ;; Mutable caller strings are frozen by the canonical seal.
+                 (and (string? v) (positive? (string-length v)))))
+    (bad!))
+  (hasheq 'state
+          (symbol->string state)
+          'exit-code
+          exit-code
+          'reaped?
+          (hash-ref terminal 'reaped?)
+          'log-path
+          log-path
+          'captured-at
+          (hash-ref terminal 'captured-at)
+          'identities
+          ids))
+(define (normalize-usage! usage)
+  (cond
+    [(not usage) #f]
+    [(eq? usage 'unknown) "unknown"]
+    [(and (hash? usage)
+          (immutable? usage)
+          (positive? (hash-count usage))
+          (for/and ([k (in-hash-keys usage)])
+            (memq k '(input-tokens output-tokens total-tokens cost-usd)))
+          (for/and ([(k v) (in-hash usage)])
+            ;; Canonical private JSON admits exact integers only: usage is
+            ;; recorded in whole observed units, never floats.
+            (exact-nonnegative-integer? v)))
+     usage]
+    [else (refuse "invalid supplemental usage observation")]))
+;; Content-addressed idempotency key: the exact canonical digest of the
+;; observation identity (operation sha + attempt triple), the immutable
+;; terminal facts and the declared usage evidence. Identical bytes => the
+;; same key => idempotent replay; any difference => a different key.
+(define (observation-key identity operation-sha256 terminal usage-declared)
+  (hash-ref (seal (hasheq 'schema
+                          "supplemental-terminal-observation-key/v1"
+                          'identity
+                          identity
+                          'operation-sha256
+                          operation-sha256
+                          'terminal
+                          terminal
+                          'usage-declared
+                          usage-declared))
+            'sha256))
+;; Cumulative usage accounting: known numeric fields ADD to prior known
+;; contributions (a #f field is unknown-pending until first observed);
+;; unknown coverage is sticky and never presents partial totals as
+;; complete. Nothing is ever reset, decreased or discarded.
+(define (usage-accounted prior declared)
+  (define prior-coverage (hash-ref prior 'coverage))
+  (cond
+    [(equal? declared "unknown") (hash-set prior 'coverage "unknown")]
+    [(hash? declared)
+     (define fully-known? (= (hash-count declared) 4))
+     (define coverage
+       (if (or (equal? prior-coverage "unknown") (not fully-known?)) "unknown" "known"))
+     (for/fold ([u (hash-set prior 'coverage coverage)]) ([(k v) (in-hash declared)])
+       (define p (hash-ref u k #f))
+       (hash-set u
+                 k
+                 (if p
+                     (+ p v)
+                     v)))]
+    [else prior]))
+;; Per-grant critical section for the observation ledger: the observation
+;; file's own OS lock (outermost) inside which the ONE shared root-private
+;; admission/revocation section is taken (innermost) -- the journal's only
+;; other lock order is operation -> authority, so no cycle exists. Deliberately
+;; NO task-approval revalidation here: expired/revoked task authority must
+;; neither authorize nor block a terminal observation.
+(define (under-observation-lock grant proc)
+  (define root (root!))
+  (define-values (dir snapshot lock) (observation-paths root grant))
+  (call-with-semaphore (local-lock lock)
+                       (lambda ()
+                         (unless (present? lock)
+                           (with-handlers ([exn:fail:filesystem:exists? void])
+                             (call-with-output-file lock void #:exists 'error #:permissions #o600)))
+                         (check-file! lock)
+                         (call-with-file-lock/timeout
+                          #f
+                          'exclusive
+                          (lambda ()
+                            (check-file! lock)
+                            (private-directory! dir)
+                            (call-with-supplemental-authority-lock (lambda () (proc root snapshot))))
+                          (lambda () (refuse "observation lock busy"))
+                          #:lock-file lock
+                          #:max-delay 0.5))))
+(define (record-supplemental-terminal-observation! grant
+                                                   #:lease lease
+                                                   #:operation-sha256 operation-sha256
+                                                   #:attempt-id attempt-id
+                                                   #:attempt-fence attempt-fence
+                                                   #:coordinator-fence coordinator-fence
+                                                   #:terminal terminal
+                                                   #:usage [usage #f])
+  (when (current-gsd-author-phase)
+    (refuse "author phase cannot operate supplemental journal"))
+  (unless (supplemental-reference? grant)
+    (refuse "invalid private approval reference"))
+  (validate-lease-shape! lease)
+  (unless (and (string? operation-sha256) (regexp-match? #px"^[0-9a-f]{64}$" operation-sha256))
+    (refuse "exact operation sha256 required"))
+  (unless (and (string? attempt-id) (positive? (string-length attempt-id)) (immutable? attempt-id))
+    (refuse "exact attempt id required"))
+  (unless (exact-nonnegative-integer? attempt-fence)
+    (refuse "exact attempt fence required"))
+  (unless (exact-nonnegative-integer? coordinator-fence)
+    (refuse "exact coordinator fence required"))
+  (unless (and (equal? attempt-id (hash-ref lease 'attempt-id))
+               (= attempt-fence (hash-ref lease 'attempt-fence))
+               (= coordinator-fence (hash-ref lease 'coordinator-fence)))
+    (refuse "observation identity does not match the current coordinator lease"))
+  (define terminal* (normalize-terminal! terminal))
+  (define usage-declared (normalize-usage! usage))
+  (define attempt-identity
+    (hasheq 'attempt-id attempt-id 'attempt-fence attempt-fence 'coordinator-fence coordinator-fence))
+  (define key (observation-key attempt-identity operation-sha256 terminal* usage-declared))
+  (under-observation-lock
+   grant
+   (lambda (root snapshot)
+     ;; 1. The ONLY authority: a live coordinator lease/fence match.
+     (authenticate-coordinator-lease! lease)
+     ;; 2. Exact durable operation/attempt identity, read-only. A pending
+     ;; write-ahead intent means the operation identity is unsettled; it is
+     ;; never reconciled or settled here. Validation is HISTORICAL: the
+     ;; retained records must bind grant/proposal/task/expiry exactly, but
+     ;; liveness (expiry/revocation) is deliberately not consulted.
+     (define-values (_op-dir op-snapshot op-intent _op-lock) (paths root grant #f))
+     (when (present? op-intent)
+       (refuse "pending write-ahead intent; operation identity unsettled"))
+     (unless (present? op-snapshot)
+       (refuse "no protected operation record for this grant"))
+     (define operation (read-sealed op-snapshot))
+     (define proposal-ref (hash-ref operation 'proposal-ref))
+     (define payload (hash-ref (load-supplemental-record proposal-ref) 'payload))
+     (validate-record! operation
+                       grant
+                       proposal-ref
+                       (hash-ref payload 'task)
+                       (hash-ref payload 'expires-at))
+     (unless (equal? (hash-ref operation 'sha256) operation-sha256)
+       (refuse "stale or unknown operation sha256"))
+     (define allocation (hash-ref (hash-ref operation 'facts) 'allocation #f))
+     (unless (and (exact-keys? allocation '(attempt-id attempt-fence coordinator-fence))
+                  (equal? (hash-ref allocation 'attempt-id) attempt-id)
+                  (= (hash-ref allocation 'attempt-fence) attempt-fence)
+                  (= (hash-ref allocation 'coordinator-fence) coordinator-fence))
+       (refuse "stale or unknown attempt fences"))
+     ;; 3. Observation entry append (phase A) then usage accounting (phase
+     ;; B), each one atomic sealed write with a named cut between them.
+     (define existing
+       (and (present? snapshot) (validate-observation-record! (read-sealed snapshot) grant)))
+     (when (and existing (not (equal? (hash-ref existing 'identity) attempt-identity)))
+       (refuse "observation identity mismatch for this grant"))
+     (define entry
+       (hasheq 'key
+               key
+               'operation-sha256
+               operation-sha256
+               'terminal
+               terminal*
+               'usage-declared
+               usage-declared))
+     (define entries
+       (if existing
+           (hash-ref existing 'entries)
+           '()))
+     (define match (findf (lambda (e) (equal? (hash-ref e 'key) key)) entries))
+     (unless match
+       ;; The same job evidence recorded again with different facts must
+       ;; refuse loudly; a different job identity appends its own entry.
+       (for ([e (in-list entries)])
+         (define recorded-ids (hash-ref (hash-ref e 'terminal) 'identities))
+         (when (equal? recorded-ids (hash-ref terminal* 'identities))
+           (refuse
+            "contradictory supplemental terminal observation: this job evidence is already recorded with different facts"))))
+     (define blank
+       (seal
+        (hasheq
+         'schema
+         "supplemental-terminal-observation/v1"
+         'grant-ref
+         grant
+         'proposal-ref
+         proposal-ref
+         'identity
+         attempt-identity
+         'entries
+         '()
+         'usage
+         (hasheq 'coverage "none" 'input-tokens #f 'output-tokens #f 'total-tokens #f 'cost-usd #f)
+         'accounting-keys
+         '())))
+     (define with-entry
+       (if match
+           existing
+           (seal (hash-set (or existing blank) 'entries (append entries (list entry))))))
+     (unless match
+       (atomic-write! snapshot with-entry)
+       (cut! 'observation-appended))
+     ;; Phase B: usage accounting at most once per key.
+     (define accounting-keys (hash-ref with-entry 'accounting-keys))
+     (define final
+       (if (member key accounting-keys)
+           with-entry
+           (seal (hash-set* with-entry
+                            'usage
+                            (usage-accounted (hash-ref with-entry 'usage) usage-declared)
+                            'accounting-keys
+                            (append accounting-keys (list key))))))
+     (unless (member key accounting-keys)
+       (atomic-write! snapshot final)
+       (cut! 'observation-accounting-applied))
+     final)))
+;; Read-only reader of a retained terminal observation record: #f when the
+;; private root/directory/record is absent, structural validation + refusal
+;; on anything present-but-invalid (never a silent fake "no observation").
+;; No lock, no store creation, no authority revalidation.
+(define (supplemental-terminal-observation grant)
+  (unless (supplemental-reference? grant)
+    (refuse "invalid private approval reference"))
+  (when (current-gsd-author-phase)
+    (refuse "author phase cannot operate supplemental journal"))
+  (define root (root! #t))
+  (and root
+       (present? (observation-directory root))
+       (let-values ([(dir snapshot _lock) (observation-paths root grant #f)])
+         (and (present? snapshot) (validate-observation-record! (read-sealed snapshot) grant)))))
+;; Read-only peek of the CURRENT retained sealed snapshot digest, for the
+;; controller's secondary loss reporting (the exact operation sha input of
+;; the observation writer). No lock, no reconciliation, no authority
+;; revalidation, no store creation; #f for anything absent, unsettled or
+;; unreadable -- a pending observation, never an invented identity.
+(define (supplemental-retained-operation-sha grant)
+  (unless (supplemental-reference? grant)
+    (refuse "invalid private approval reference"))
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (define root (root! #t))
+    (and
+     root
+     (let-values ([(_dir snapshot intent _lock) (paths root grant #f)])
+       (and (present? snapshot) (not (present? intent)) (hash-ref (read-sealed snapshot) 'sha256))))))

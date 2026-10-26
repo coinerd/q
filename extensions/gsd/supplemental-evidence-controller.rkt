@@ -66,7 +66,16 @@
          (submod "supplemental-author-contract.rkt" owner)
          (only-in "../gsd-planning/execution-policy.rkt" current-gsd-author-phase)
          (only-in "composition-root.rkt" current-gsd-verification-registry)
-         (only-in "verification-job.rkt" make-verification-registry verification-close-registry!)
+         (only-in "verification-job.rkt"
+                  make-verification-registry
+                  verification-close-registry!
+                  verification-registry-incarnation
+                  verification-job-command-digest
+                  verification-job-exit-code
+                  verification-job-id
+                  verification-job-log-path
+                  verification-job-reaped?
+                  verification-job-state)
          (only-in "wave-executor.rkt" wave-worktree)
          "wave-runner-port.rkt"
          (only-in "../../util/json/checksum.rkt" sha256-file sha256-string))
@@ -153,6 +162,74 @@
   (if secondary
       (string-append primary " [blocked not persisted: " secondary "]")
       primary))
+
+;; ---- BUG-0101 unit 2: terminal-observation loss hook -------------------
+;; At every typed authority-loss/phase-failure path (the unit-1 secondary
+;; sites), the controller BEST-EFFORT records the captured terminal job
+;; evidence through the narrow journal writer, authenticating with the
+;; CURRENT owner lease/fence (this process runs under the owner). The
+;; observation is a SECONDARY outcome: it is never the primary cause, its
+;; failure never blocks the typed failure return, and an observation that
+;; could not durably record stays EXPLICITLY pending — reported distinctly
+;; as "[terminal observation pending: …]" — never silently successful.
+;; No captured registry evidence (author-lane dispatch losses, losses before
+;; C1) records nothing and reports nothing: evidence is never fabricated.
+(define (terminal-evidence registry rec)
+  (hasheq 'state
+          (verification-job-state rec)
+          'exit-code
+          (verification-job-exit-code rec)
+          'reaped?
+          (verification-job-reaped? rec)
+          'log-path
+          (verification-job-log-path rec)
+          'captured-at
+          (current-seconds)
+          'identities
+          (hasheq 'registry-incarnation
+                  (symbol->string (verification-registry-incarnation registry))
+                  'job-id
+                  (symbol->string (verification-job-id rec))
+                  'command-digest
+                  (verification-job-command-digest rec))))
+(define (observation-on-loss! base plan wave grant operation terminal-jobs)
+  (define records (unbox terminal-jobs))
+  (if (null? records)
+      (values #f #f)
+      (with-handlers ([exn:fail? (lambda (e) (values #f (trim-message (exn-message e) 200)))])
+        (define allocation (allocation-of operation))
+        ;; The C1 capture owns exactly one registry job; the primary (first)
+        ;; captured record is the observation. Exact operation sha is read
+        ;; fresh from the retained snapshot: a blocked transition may already
+        ;; have advanced the revision captured at loop entry.
+        (record-supplemental-terminal-observation!
+         grant
+         #:lease (supplemental-coordinator-lease base plan wave)
+         #:operation-sha256 (supplemental-retained-operation-sha grant)
+         #:attempt-id (hash-ref allocation 'attempt-id)
+         #:attempt-fence (hash-ref allocation 'attempt-fence)
+         #:coordinator-fence (hash-ref allocation 'coordinator-fence)
+         #:terminal (car records)
+         #:usage 'unknown)
+        (values #t #f))))
+(define (with-observation-note detail pending)
+  (if pending
+      (string-append detail " [terminal observation pending: " pending "]")
+      detail))
+;; One typed-loss settlement: the unit-1 blocked transition (primary
+;; secondary outcome) plus the unit-2 best-effort terminal observation.
+;; Returns (values persisted? blocked-secondary observation-pending).
+(define (settle-typed-loss! base
+                            plan
+                            wave
+                            grant
+                            operation
+                            reason
+                            #:terminal-jobs [terminal-jobs (box '())])
+  (define-values (persisted? secondary) (blocked-transition! grant operation reason))
+  (define-values (_observed? pending)
+    (observation-on-loss! base plan wave grant operation terminal-jobs))
+  (values persisted? secondary pending))
 
 ;; ----------------------------------------------------------------------
 ;; Public inert pointer: how the private operation is FOUND for a campaign.
@@ -928,7 +1005,7 @@
 ;; Fresh admission only. A durable verifying state spends C1 even if the
 ;; process died before launch: a new registry cannot prove prior quiescence.
 ;; Resume must not enter this capture path again.
-(define (verification-step! base plan wave operation grant task)
+(define (verification-step! base plan wave operation grant task #:terminal-jobs [terminal-jobs #f])
   (unless (equal? (hash-ref operation 'state) "candidate-approved")
     (raise-pause! "ambiguous supplemental verification admission; no C1 relaunch"))
   (define context (hash-ref task 'context))
@@ -989,8 +1066,17 @@
                          (define check (check-verify-command base wave #f))
                          (delivery-verification (cadr check) (list check) (format "~a" check)))))
                     (lambda ()
-                      ;; Exact subprocess-group quiescence before releasing admission.
-                      (verification-close-registry! registry)))))
+                      ;; Exact subprocess-group quiescence before releasing admission,
+                      ;; and BUG-0101 unit 2: capture the terminal registry records
+                      ;; (first-terminal attribution, frozen by the registry) so a
+                      ;; loss handler can observe them without touching the closed
+                      ;; registry. Never a fabricated fact: a run with no jobs
+                      ;; captures nothing.
+                      (define terminal-records (verification-close-registry! registry))
+                      (when terminal-jobs
+                        (set-box! terminal-jobs
+                                  (for/list ([rec (in-list terminal-records)])
+                                    (terminal-evidence registry rec))))))))
   (define green-ref (hash-ref proposed 'owned-proof))
   ;; Stage the DISTINCT wrapper (T/A/K/G1 + the exact proposed receipt r* and
   ;; its predicted next-generation evidence context E) through the publication
@@ -1223,21 +1309,26 @@
                                         #:publisher
                                         [publisher (current-supplemental-operator-publisher)])
   (define identity (box #f)) ; (cons grant operation) captured at each loop entry
-  (with-handlers ([exn:supplemental-pause? (lambda (e) (values 'paused (exn-message e)))]
-                  [exn:fail? (lambda (e)
-                               (define primary (trim-message (exn-message e)))
-                               (define id (unbox identity))
-                               (define-values (persisted? secondary)
-                                 (if id
-                                     (blocked-transition! (car id) (cdr id) e)
-                                     (values #f #f)))
-                               (values 'failed
-                                       (if persisted?
-                                           primary
-                                           (with-secondary primary secondary))))])
+  (define terminal-jobs (box '())) ; captured C1 registry terminal evidence, reset per loop
+  (with-handlers
+      ([exn:supplemental-pause? (lambda (e) (values 'paused (exn-message e)))]
+       [exn:fail?
+        (lambda (e)
+          (define primary (trim-message (exn-message e)))
+          (define id (unbox identity))
+          (define-values (persisted? secondary obs-pending)
+            (if id
+                (settle-typed-loss! base plan wave (car id) (cdr id) e #:terminal-jobs terminal-jobs)
+                (values #f #f #f)))
+          (values 'failed
+                  (with-observation-note (if persisted?
+                                             primary
+                                             (with-secondary primary secondary))
+                                         obs-pending)))])
     (let loop ([steps 0])
       (when (> steps 16)
         (raise-pause! "supplemental advance exceeded its bounded step count"))
+      (set-box! terminal-jobs '())
       (define disc (supplemental-discover base plan wave))
       (define status (hash-ref disc 'status))
       (unless (memq status '(live pending-wal))
@@ -1275,21 +1366,24 @@
       ;; recoverable outcome, not a semantic phase failure). Every other
       ;; failure returns immediately; the loop is never re-entered blindly.
       (define (phase! run wrap)
-        (with-handlers ([exn:supplemental-pause? (lambda (e) (raise e))]
-                        [exn:fail? (lambda (e)
-                                     (define primary (wrap (trim-message (exn-message e))))
-                                     (define-values (persisted? secondary)
-                                       (blocked-transition! grant operation e))
-                                     (define detail
-                                       (if persisted?
-                                           primary
-                                           (with-secondary primary secondary)))
-                                     (define post (supplemental-discover base plan wave))
-                                     (if (and (eq? (hash-ref post 'status) 'pending-wal)
-                                              (hash-ref post 'intent-reconcilable? #f)
-                                              (equal? (hash-ref post 'grant-ref #f) grant))
-                                         (values 'recover detail)
-                                         (values 'failed detail)))])
+        (with-handlers
+            ([exn:supplemental-pause? (lambda (e) (raise e))]
+             [exn:fail?
+              (lambda (e)
+                (define primary (wrap (trim-message (exn-message e))))
+                (define-values (persisted? secondary obs-pending)
+                  (settle-typed-loss! base plan wave grant operation e #:terminal-jobs terminal-jobs))
+                (define detail
+                  (with-observation-note (if persisted?
+                                             primary
+                                             (with-secondary primary secondary))
+                                         obs-pending))
+                (define post (supplemental-discover base plan wave))
+                (if (and (eq? (hash-ref post 'status) 'pending-wal)
+                         (hash-ref post 'intent-reconcilable? #f)
+                         (equal? (hash-ref post 'grant-ref #f) grant))
+                    (values 'recover detail)
+                    (values 'failed detail)))])
           (values 'success (run))))
       (case (hash-ref operation 'state)
         [("proposal-approved" "reserved")
@@ -1298,11 +1392,13 @@
         [("launched")
          (define reason "launch consumed without captured author output; task stays spent")
          (define primary "ambiguous supplemental launch: no captured author output; task spent")
-         (define-values (persisted? secondary) (blocked-transition! grant operation reason))
+         (define-values (persisted? secondary obs-pending)
+           (settle-typed-loss! base plan wave grant operation reason #:terminal-jobs terminal-jobs))
          (values 'failed
-                 (if persisted?
-                     primary
-                     (with-secondary primary secondary)))]
+                 (with-observation-note (if persisted?
+                                            primary
+                                            (with-secondary primary secondary))
+                                        obs-pending))]
         [("candidate-sealed")
          (define-values (kind detail) (candidate-approval-step! operation grant publisher))
          (if (eq? kind 'next)
@@ -1317,8 +1413,10 @@
           "ambiguous supplemental verification: admission already consumed; no C1 relaunch; owner recovery required")]
         [("candidate-approved")
          (define-values (phase-kind detail)
-           (phase! (lambda () (verification-step! base plan wave operation grant task))
-                   (lambda (msg) (format "supplemental C1 verify failed: ~a" msg))))
+           (phase!
+            (lambda ()
+              (verification-step! base plan wave operation grant task #:terminal-jobs terminal-jobs))
+            (lambda (msg) (format "supplemental C1 verify failed: ~a" msg))))
          ;; Continuation is OUTSIDE the handler and only on explicit success
          ;; (or the journal's own typed recoverable cut): a pause raised by a
          ;; LATER state must not be mislabeled as a C1 verify failure, and a
