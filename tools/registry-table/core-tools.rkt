@@ -24,18 +24,30 @@
    ;; read
    (make-tool-spec*
     "read"
-    "Read file contents"
-    (hasheq 'type
-            "object"
-            'required
-            '("path")
-            'properties
-            (hasheq 'path
-                    (hasheq 'type "string" 'description "Path to file to read")
-                    'offset
-                    (hasheq 'type "integer" 'description "Line offset (1-indexed)")
-                    'limit
-                    (hasheq 'type "integer" 'description "Max lines to return")))
+    (string-append
+     "Read a bounded page of file contents with line numbers (default limit 2000 lines; "
+     "hard caps 2000 lines and 50000 UTF-8 bytes per page; complete lines only). "
+     "Paginate large files with offset/limit and follow the truncation notice's next offset. "
+     "A single line larger than the byte cap returns a structured oversized-line error instead of a partial line.")
+    (hasheq
+     'type
+     "object"
+     'required
+     '("path")
+     'properties
+     (hasheq
+      'path
+      (hasheq 'type "string" 'description "Path to file to read")
+      'offset
+      (hasheq 'type "integer" 'minimum 1 'description "1-based line number to start from (default 1)")
+      'limit
+      (hasheq
+       'type
+       "integer"
+       'minimum
+       1
+       'description
+       "Max display lines per page (default 2000, hard cap 2000; pages are also capped at 50000 UTF-8 bytes)")))
     tool-read
     "When making parallel read calls, include the 'path' parameter in EVERY call. Never pass a bare line number without a path."
     'read-only)
@@ -139,22 +151,33 @@
    ;; find
    (make-tool-spec*
     "find"
-    "Find files and directories by name or type"
-    (hasheq 'type
-            "object"
-            'required
-            '("path")
-            'properties
-            (hasheq 'path
-                    (hasheq 'type "string" 'description "Root directory")
-                    'name
-                    (hasheq 'type "string" 'description "Filename glob pattern")
-                    'type
-                    (hasheq 'type "string" 'description "\"file\", \"dir\", or \"any\"")
-                    'max-depth
-                    (hasheq 'type "integer" 'description "Max recursion depth")
-                    'max-results
-                    (hasheq 'type "integer" 'description "Max results")))
+    (string-append
+     "Find files and directories by name or type. R97 output contract: every content result string is an ABSOLUTE filesystem path "
+     "(was root-relative display), directly passable as read's path argument; "
+     "details carry path-base 'absolute, absolute search-root, scanned, and a 'denied list of structured records "
+     "(symlink targets outside the search root, dangling links, safe-mode-denied paths). Directory symlinks are never recursed into.")
+    (hasheq
+     'type
+     "object"
+     'required
+     '("path")
+     'properties
+     (hasheq
+      'path
+      (hasheq
+       'type
+       "string"
+       'description
+       (string-append
+        "Root directory to search (relative paths resolve against the executing process CWD; results are absolute)"))
+      'name
+      (hasheq 'type "string" 'description "Filename glob pattern")
+      'type
+      (hasheq 'type "string" 'description "\"file\", \"dir\", or \"any\"")
+      'max-depth
+      (hasheq 'type "integer" 'description "Max recursion depth")
+      'max-results
+      (hasheq 'type "integer" 'description "Max results")))
     tool-find
     #f
     'read-only)

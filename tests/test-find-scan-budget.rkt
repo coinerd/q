@@ -8,10 +8,15 @@
 
 ;; test-find-scan-budget.rkt — BUG-3 regression tests
 ;; Validates that find has a hard scan budget and reports scanned count.
+;;
+;; R97 (BUG-0097) additions: absolute-path emission and denial records do
+;; not change budget accounting — max-results/total-found/scanned semantics
+;; are preserved; denied entries never consume result slots.
 
 (require rackunit
          rackunit/text-ui
          racket/file
+         racket/path
          "../tools/builtins/find.rkt"
          (only-in "../tools/tool.rkt" tool-result-content tool-result-details tool-result-is-error?)
          "helpers/fixtures.rkt")
@@ -20,6 +25,12 @@
   (tool-result-details r))
 (define (result-is-error? r)
   (tool-result-is-error? r))
+(define (result-content-strings r)
+  (for/list ([part (in-list (tool-result-content r))])
+    (cond
+      [(string? part) part]
+      [(hash? part) (hash-ref part 'text "")]
+      [else (~a part)])))
 
 (define (create-file dir name [content ""])
   (define f (build-path dir name))
@@ -69,6 +80,54 @@
                        (create-file dir "single.txt")
                        (define r (tool-find (hasheq 'path (path->string dir))))
                        (check-false (result-is-error? r))
-                       (check-true (hash-has-key? (result-details r) 'scanned)))))))
+                       (check-true (hash-has-key? (result-details r) 'scanned)))))
+
+;; ============================================================
+    ;; R97: absolute emission must not disturb budget accounting
+    ;; ============================================================
+
+    ;; max-results counts only EMITTED matches; a dangling symlink denial must
+    ;; not consume a result slot (old relative-display code counted it as a
+    ;; match).
+    (test-case "R97: denied dangling link does not consume max-results slots"
+      (with-temp-dir (λ (dir)
+                       (for ([i (in-range 5)])
+                         (create-file dir (format "f~a.txt" i)))
+                       (make-file-or-directory-link (build-path dir "missing-target")
+                                                    (build-path dir "dangle"))
+                       (define r (tool-find (hasheq 'path (path->string dir) 'max-results 5)))
+                       (check-false (result-is-error? r))
+                       (define d (result-details r))
+                       (check-equal? (hash-ref d 'total-found) 5)
+                       (check-equal? (length (result-content-strings r)) 5)
+                       (check-false (hash-ref d 'truncated?))
+                       ;; structured denial is recorded separately
+                       (define denied (hash-ref d 'denied))
+                       (check-equal? (length denied) 1)
+                       (check-equal? (hash-ref (car denied) 'reason) "dangling-symlink")
+                       ;; all emitted results are absolute
+                       (for ([s (in-list (result-content-strings r))])
+                         (check-true (absolute-path? s) (format "must be absolute: ~a" s)))
+                       ;; budget metadata untouched
+                       (check-true (>= (hash-ref d 'scanned) (hash-ref d 'total-found))))))
+
+    ;; scanned/total-found/truncated? accounting is identical with absolute
+    ;; results on a broad flat tree.
+    (test-case "R97: budget accounting unchanged with absolute results"
+      (with-temp-dir (λ (dir)
+                       (for ([i (in-range 50)])
+                         (create-file dir (format "file~a.txt" i)))
+                       (define r (tool-find (hasheq 'path (path->string dir)
+                                                 'max-results 10 'max-depth 10)))
+                       (check-false (result-is-error? r))
+                       (define d (result-details r))
+                       (check-equal? (hash-ref d 'total-found) 50)
+                       (check-equal? (length (result-content-strings r)) 10)
+                       (check-true (hash-ref d 'truncated?))
+                       (check-true (>= (hash-ref d 'scanned) 50))
+                       ;; path-base metadata declares the absolute namespace
+                       (check-equal? (hash-ref d 'path-base) 'absolute)))))
+
+)
 
 (run-tests scan-budget-tests)

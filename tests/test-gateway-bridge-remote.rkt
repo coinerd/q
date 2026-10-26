@@ -17,6 +17,7 @@
          racket/file
          racket/string
          racket/port
+         racket/runtime-path
          json
          openssl
          racket/tcp
@@ -24,12 +25,25 @@
          (only-in "../util/security/capability-tokens.rkt" sign-capability-token)
          (only-in "../util/security/tls-contexts.rkt" make-server-ssl-context make-client-ssl-context)
          (only-in "../util/message/mas-envelope.rkt" make-mas-envelope mas-envelope-trace-id)
-         (only-in "../sandbox/executor-server.rkt" start-executor-server! shutdown-executor-server!)
+         (only-in "../sandbox/executor-server.rkt"
+                  start-executor-server!
+                  shutdown-executor-server!
+                  executor-server-running?)
          (only-in "../agent/distributed/remote-executor.rkt"
                   start-remote-executor!
                   shutdown-remote-executor!
+                  execute-via-remote
                   remote-executor?)
-         "../sandbox/gateway-bridge.rkt")
+         (only-in "../sandbox/ipc-protocol.rkt"
+                  ipc-request?
+                  ipc-request-working-dir
+                  ipc-request-trusted-working-dir)
+         (only-in "../tools/registry-defaults.rkt" register-default-tools!)
+         (only-in "../tools/tool.rkt" make-tool-registry lookup-tool)
+         "../sandbox/gateway-bridge.rkt"
+         "helpers/fast-fixtures.rkt")  ; wait-until: deterministic test sync
+
+(define-runtime-path worker-main-path "../sandbox/worker-main.rkt")
 
 ;; ── Test Fixture: generate certs once at module level ──
 
@@ -140,6 +154,90 @@
           (define result (execute-via-remote-envelope env))
           (check-equal? (hash-ref result 'status) 'error))
         (shutdown-remote-executor! executor)))
+
+    ;; ════════════════════════════════════════════════════════════
+    ;; R91/BUG-0091: trust never crosses the remote seam; the local
+    ;; bridge producer normalizes path cwd values to JSON strings.
+    ;; ════════════════════════════════════════════════════════════
+
+    (test-case "R91: envelope path builds trust-free requests (legacy wire unchanged)"
+      (define env (make-test-envelope))
+      (define req (envelope->ipc-request env))
+      (check-true (ipc-request? req))
+      (check-false (ipc-request-working-dir req))
+      (check-false (ipc-request-trusted-working-dir req)))
+
+    (test-case "R91: remote producer refuses cwd/trust-carrying arguments"
+      (define port (find-free-port))
+      (define server
+        (start-executor-server! #:port port #:ssl-context server-ctx #:capability-secret TEST-SECRET))
+      ;; R91-SLEEP: deterministic readiness synchronization replaces the raw
+      ;; settle sleep. start-executor-server! binds its ssl-listen synchronously,
+      ;; so instead of guessing with a fixed 0.2s wait we poll the observable
+      ;; accept-loop predicate (wait-until: no live sleep, no fixed-delay race).
+      (check-true (wait-until (lambda () (executor-server-running? server)) 5.0)
+                  "executor server accept loop must be running before the client connects")
+      (define executor
+        (start-remote-executor! #:host "localhost"
+                                #:port port
+                                #:ssl-context client-ctx
+                                #:capability-secret TEST-SECRET
+                                #:agent-id TEST-AGENT
+                                #:health-check-enabled #f))
+      ;; Coordinator-owned worktree intent (the approval-visible scheduler
+      ;; injection) is refused explicitly — never silently dispatched wd=#f.
+      (define refused-owned
+        (execute-via-remote executor "bash"
+                            (hasheq 'command "echo hi" 'working-directory "/some/owned/worktree")
+                            'shell-exec 5000))
+      (check-equal? (ipc-response-status refused-owned) 'error)
+      (check-true (string-contains? (or (ipc-response-error-message refused-owned) "")
+                                    "refused"))
+      (check-true (string-contains? (or (ipc-response-error-message refused-owned) "")
+                                    "owned working directories"))
+      ;; Misplaced trust fields are refused the same way.
+      (define refused-trust
+        (execute-via-remote executor "bash"
+                            (hasheq 'command "echo hi" 'trusted-working-dir "/some/owned/worktree")
+                            'shell-exec 5000))
+      (check-equal? (ipc-response-status refused-trust) 'error)
+      (check-true (string-contains? (or (ipc-response-error-message refused-trust) "")
+                                    "refused"))
+      ;; A policy refusal is not a transport failure: the executor stays usable.
+      (define still-ok
+        (execute-via-remote executor "bash" (hasheq 'command "echo clean") 'shell-exec 5000))
+      (check-equal? (ipc-response-status still-ok) 'ok)
+      (check-equal? (ipc-response-content still-ok) "clean")
+      (shutdown-remote-executor! executor)
+      (shutdown-executor-server! server))
+
+    (test-case "R91: bridge producer normalizes path coordinator-wd to a JSON string on the wire"
+      (define repo (make-temporary-file "r91-bridge-~a" 'directory))
+      (define elsewhere (make-temporary-file "r91-bridge-spawn-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define registry (make-tool-registry))
+         (register-default-tools! registry)
+         (check-not-false (lookup-tool registry "bash") "bash tool must be registered")
+         (parameterize ([current-execution-plane-enabled #t]
+                        [current-worker-args (list "-tm" (path->string worker-main-path))])
+           ;; Spawn roots cover `elsewhere` only; the request carries the
+           ;; coordinator wd as a PATH OBJECT and must still run inside `repo`.
+           (parameterize ([current-directory elsewhere])
+             (ensure-worker!))
+           (define resp
+             (execute-tool-via-worker "bash"
+                                      (hasheq 'command "pwd")
+                                      'shell-exec
+                                      #:coordinator-wd repo))
+           (check-equal? (ipc-response-status resp) 'ok (ipc-response-error-message resp))
+           (check-equal? (string-trim (format "~a" (ipc-response-content resp)))
+                         (path->string repo))))
+       (lambda ()
+         (shutdown-worker!)
+         (delete-directory/files repo #:must-exist? #f)
+         (delete-directory/files elsewhere #:must-exist? #f))))
 
     ;; ════════════════════════════════════════════════════════════
     ;; current-remote-executor parameter is thread-local

@@ -22,6 +22,7 @@
          racket/path
          racket/string
          racket/system
+         (only-in "../extensions/gsd/git-root-layout.rkt" exn:fail:git-root?)
          (only-in "../extensions/gsd/campaign-state.rkt"
                   make-campaign-manifest
                   make-campaign-wave-descriptor
@@ -1057,34 +1058,50 @@ check-equal? actual 14 expected 12")
 
 (define git-root-suite
   (test-suite "F-7: find-git-root"
-    (test-case "find-git-root finds .git in the start directory"
+    ;; R76 (BUG-0076): root resolution validates real git work trees via
+    ;; `git rev-parse` — marker existence alone is never authority. These
+    ;; fixtures use REAL repositories; a bare .git marker now refuses with a
+    ;; typed git-root-refusal instead of returning a bogus root.
+    (test-case "find-git-root finds the git work tree in the start directory"
+      (define GIT (find-executable-path "git"))
       (define tmp (make-temporary-file "git-root-test-~a" 'directory))
       (dynamic-wind void
                     (lambda ()
-                      (make-directory (build-path tmp ".git"))
+                      (when GIT
+                        (parameterize ([current-output-port (open-output-string)]
+                                       [current-error-port (open-output-string)])
+                          (system*/exit-code GIT "-C" tmp "init" "--quiet")))
                       (define result (find-git-root tmp))
                       (check-pred path? result)
                       (check-equal? (path->string (path->complete-path tmp))
                                     (path->string (path->complete-path result))))
                     (lambda () (delete-directory/files tmp))))
 
-    (test-case "F-7: find-git-root finds .git in q/ subdirectory (two-tier layout)"
+    (test-case "F-7: find-git-root finds a real nested q/ repository (two-tier layout)"
+      (define GIT (find-executable-path "git"))
       (define tmp (make-temporary-file "git-root-test-~a" 'directory))
       (dynamic-wind void
                     (lambda ()
-                      (make-directory* (build-path tmp "q" ".git"))
+                      (when GIT
+                        (parameterize ([current-output-port (open-output-string)]
+                                       [current-error-port (open-output-string)])
+                          (system*/exit-code GIT "-C" (build-path tmp "q") "init" "--quiet")))
                       (define result (find-git-root tmp))
                       (check-pred path? result "should find q/ subdir")
                       (when result
                         (check-true (string-contains? (path->string result) "q"))))
                     (lambda () (delete-directory/files tmp))))
 
-    (test-case "F-7: find-git-root walks up to parent directory"
+    (test-case "F-7: find-git-root walks up to the enclosing work tree"
+      (define GIT (find-executable-path "git"))
       (define tmp (make-temporary-file "git-root-test-~a" 'directory))
       (dynamic-wind
        void
        (lambda ()
-         (make-directory (build-path tmp ".git"))
+         (when GIT
+           (parameterize ([current-output-port (open-output-string)]
+                          [current-error-port (open-output-string)])
+             (system*/exit-code GIT "-C" tmp "init" "--quiet")))
          (define sub (build-path tmp "subdir" "nested"))
          (make-directory* sub)
          (define result (find-git-root sub))
@@ -1094,6 +1111,16 @@ check-equal? actual 14 expected 12")
            (define res-str (string-trim (path->string (simple-form-path result)) "/" #:right? #t))
            (check-equal? tmp-str res-str)))
        (lambda () (delete-directory/files tmp))))
+
+    (test-case "F-7: a bare .git marker without a usable repository refuses (typed)"
+      ;; R76: marker existence is not identity. A fake .git directory must
+      ;; never be returned as a root — the refusal names the root and reason.
+      (define tmp (make-temporary-file "git-root-test-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      (make-directory (build-path tmp ".git"))
+                      (check-exn exn:fail:git-root? (lambda () (find-git-root tmp))))
+                    (lambda () (delete-directory/files tmp))))
 
     (test-case "F-7: find-git-root returns #f when no .git anywhere"
       (define tmp (make-temporary-file "git-root-test-~a" 'directory))
@@ -1127,15 +1154,46 @@ check-equal? actual 14 expected 12")
                         (check-true (git-available? tmp))))
                     (lambda () (delete-directory/files tmp))))
 
-    (test-case "F-7: find-git-root handles .git as file (worktree/submodule)"
+    (test-case "F-7: find-git-root handles a real .git FILE worktree (linked worktree)"
+      (define GIT (find-executable-path "git"))
       (define tmp (make-temporary-file "git-root-test-~a" 'directory))
       (dynamic-wind void
                     (lambda ()
-                      ;; .git as a file (gitdir pointer) should also be detected
+                      (when GIT
+                        (parameterize ([current-output-port (open-output-string)]
+                                       [current-error-port (open-output-string)])
+                          (system*/exit-code GIT "-C" tmp "init" "--quiet")
+                          (system*/exit-code GIT "-C" tmp "commit" "--allow-empty" "-q" "-m" "base")
+                          (system*/exit-code GIT
+                                              "-C"
+                                              tmp
+                                              "worktree"
+                                              "add"
+                                              "-q"
+                                              "-b"
+                                              "wt-branch"
+                                              (path->string (build-path tmp "linked-wt"))))
+                        ;; The linked worktree carries a .git FILE pointing at
+                        ;; the controlling repository; it resolves to its own
+                        ;; physical toplevel.
+                        (define result (find-git-root (build-path tmp "linked-wt")))
+                        (check-pred path? result)
+                        (when result
+                          (check-equal?
+                           (string-trim (path->string (simple-form-path result)) "/" #:right? #t)
+                           (string-trim
+                            (path->string (simple-form-path (build-path tmp "linked-wt")))
+                            "/"
+                            #:right? #t)))))
+                    (lambda () (delete-directory/files tmp))))
+
+    (test-case "F-7: a .git file with a broken gitdir pointer refuses (typed)"
+      (define tmp (make-temporary-file "git-root-test-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
                       (call-with-output-file (build-path tmp ".git")
                                              (lambda (out) (display "gitdir: /fake/path\n" out)))
-                      (define result (find-git-root tmp))
-                      (check-pred path? result))
+                      (check-exn exn:fail:git-root? (lambda () (find-git-root tmp))))
                     (lambda () (delete-directory/files tmp))))))
 
 ;; ============================================================

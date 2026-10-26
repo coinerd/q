@@ -11,9 +11,12 @@
 ;; Wave 3a: Verify all prompt templates contain required content.
 
 (require rackunit
+         racket/list
+         racket/string
          "../extensions/gsd/prompts.rkt"
          "../extensions/gsd/plan-types.rkt"
-         "../extensions/gsd/wave-executor.rkt")
+         "../extensions/gsd/wave-executor.rkt"
+         "../extensions/gsd/wave-docs.rkt")
 
 (test-case "retry context supplements rather than masks durable verifier diagnostics"
   (check-false (wave-retry-context #f #f))
@@ -42,8 +45,30 @@
 
 (test-case "planning-prompt enforces write-immediately workflow"
   (define p (planning-prompt "test"))
-  (check-true (string-contains? p "IMMEDIATELY write") "mentions write-immediately")
-  (check-true (string-contains? p "NEVER re-read") "mentions never re-read"))
+  (check-true (string-contains? p "IMMEDIATELY write") "mentions write-immediately"))
+
+(test-case "R96: planning-prompt read rules are bounded and honest"
+  (define p (planning-prompt "test"))
+  ;; no absolute full-file promises (BUG-0096)
+  (check-false (string-contains? p "full file") "no full-file promise")
+  (check-false (string-contains? p "no offset needed") "no no-offset promise")
+  ;; bounded pages + follow notices
+  (check-true (string-contains? p "bounded") "mentions bounded reads")
+  (check-true (string-contains? p "truncation notice") "mentions truncation notices")
+  (check-true (string-contains? p "offset") "mentions offset continuation")
+  ;; rereading for continuation is allowed; no NEVER-reread wording
+  (check-false (string-contains? p "NEVER re-read") "no absolute never-reread rule")
+  (check-true (string-contains? p "rereading for continuation")
+              "rereading for continuation is allowed"))
+
+(test-case "R96: planning-implement-prompt keeps read-before-edit without full-file promises"
+  (check-true (string-contains? planning-implement-prompt
+                                "Read each target file BEFORE editing")
+              "read-before-edit rule retained")
+  (check-false (string-contains? planning-implement-prompt "full file")
+               "no full-file promise")
+  (check-false (string-contains? planning-implement-prompt "NEVER re-read")
+               "no absolute never-reread rule"))
 
 (test-case "W0: planning-prompt contains - File: format instruction"
   (define p (planning-prompt "test"))
@@ -79,6 +104,87 @@
   (define p (planning-prompt "test"))
   (check-false (string-contains? p "q/path/to") "no q/ hardcoded path")
   (check-false (string-contains? p "raco test") "no raco test hardcoded"))
+
+;; ============================================================
+;; BUG-0095 (#9854): the emitted mandatory wave-doc template must pass
+;; canonical lint WITHOUT test-added repairs. planning-write stores the
+;; author's content VERBATIM, so the exact bytes the prompt instructs
+;; the author to emit must already carry the sanctioned machine header
+;; (one `# Wave N` H1 + exactly one `Status: Inbox` line).
+;; ============================================================
+
+(define (string-index-of s sub [from 0])
+  (define len (string-length sub))
+  (let loop ([i from])
+    (cond
+      [(> (+ i len) (string-length s)) #f]
+      [(string=? (substring s i (+ i len)) sub) i]
+      [else (loop (add1 i))])))
+
+;; Extract the exact fenced mandatory wave-doc template emitted by
+;; planning-prompt — byte-for-byte, with NO test-added repairs.
+(define (emitted-wave-doc-template)
+  (define p (planning-prompt "test"))
+  (define m (regexp-match-positions #rx"### Wave Doc Format[^\n]*\n```\n" p))
+  (check-true (pair? m) "wave-doc format fence found in planning-prompt")
+  (if (not m)
+      #f
+      (let ([body-start (cdr (car m))]
+            [close (string-index-of p "\n```" (cdr (car m)))])
+        (check-not-false close "closing fence found")
+        (and close (substring p body-start close)))))
+
+(define (count-lines-matching s rx)
+  (count (lambda (line) (regexp-match? rx line)) (string-split s "\n")))
+
+(test-case "BUG-0095: emitted template carries the sanctioned machine header"
+  (define tpl (emitted-wave-doc-template))
+  (check-true (string? tpl))
+  (when (string? tpl)
+    (check-equal? (count-lines-matching tpl #rx"^# Wave [0-9]+$") 1 "exactly one # Wave N H1")
+    (check-equal? (count-lines-matching tpl #px"^Status:") 1 "exactly one Status line")
+    (check-true (string-prefix? tpl "# Wave 0\nStatus: Inbox\n")
+                "header is the document prefix: H1 then Status: Inbox")))
+
+(test-case "BUG-0095: emitted template names the wave-index substitution rule"
+  (define p (planning-prompt "test"))
+  (check-true (string-contains? p "SUBSTITUTE the wave index")
+              "explicit wave-index substitution instruction")
+  (check-true (string-contains? p "# Wave 2") "shows a substituted nonzero-wave example"))
+
+(test-case "BUG-0095: emitted template (W0 literal) lints clean with zero violations"
+  (define tpl (emitted-wave-doc-template))
+  (check-true (string? tpl))
+  (when (string? tpl)
+    (define doc (parse-wave-doc-from-string tpl 0 "short-title"))
+    (check-true (hash-ref doc 'status-header?) "managed status header present")
+    (check-equal? (hash-ref doc 'status) "Inbox")
+    (define violations (lint-wave-doc doc))
+    (check-equal? (map wave-doc-violation-section violations)
+                  '()
+                  "canonical lint-wave-doc reports zero violations")))
+
+(test-case "BUG-0095: substituted nonzero-wave template (W2) lints clean"
+  (define tpl (emitted-wave-doc-template))
+  (check-true (string? tpl))
+  (when (string? tpl)
+    (define tpl2 (string-replace tpl "# Wave 0" "# Wave 2"))
+    (define doc (parse-wave-doc-from-string tpl2 2 "short-title"))
+    (check-true (hash-ref doc 'status-header?) "managed status header present")
+    (check-equal? (hash-ref doc 'status) "Inbox")
+    (check-equal? (count-lines-matching tpl2 #rx"^# Wave [0-9]+$") 1 "still exactly one H1")
+    (check-equal? (map wave-doc-violation-section (lint-wave-doc doc))
+                  '()
+                  "canonical lint-wave-doc reports zero violations")))
+
+(test-case "BUG-0095: emitted template keeps the executor-contract sections"
+  (define tpl (emitted-wave-doc-template))
+  (check-true (string? tpl))
+  (when (string? tpl)
+    (check-true (string-contains? tpl "## Files") "Files section present")
+    (check-true (string-contains? tpl "- File: ") "File bullet syntax present")
+    (check-true (string-contains? tpl "## Verify") "Verify section present")
+    (check-true (string-contains? tpl "## Done") "Done section present")))
 
 ;; ============================================================
 ;; Executing prompt

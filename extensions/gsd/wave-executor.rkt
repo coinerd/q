@@ -60,6 +60,8 @@
                   STALL-BACKSTOP-LIMIT-DEFAULT)
          "../gsd/wave-docs.rkt"
          (only-in "shared.rkt" extract-plan-title)
+         ;; R76 (BUG-0076): shared layout-aware delivery-root resolution.
+         (only-in "git-root-layout.rkt" delivery-root-or-raise)
          (only-in "state-machine.rkt"
                   gsd-wave-gate-counter
                   gsd-wave-gate-interval
@@ -445,32 +447,54 @@
              [entries (parse-plan-index text)])
         (if (null? entries)
             #f
-            ;; BUG-0023 (W2): strict index validation. An index entry whose
-            ;; target wave doc does not exist is a load ERROR naming the
-            ;; expected path — previously read-wave-doc returned #f and the
-            ;; wave loaded with silent empty content.
-            (let ([missing (missing-index-doc-paths base-dir entries)])
-              (if (pair? missing)
-                  (raise (exn:fail (missing-wave-docs-error-text entries missing)
-                                   (current-continuation-marks)))
-                  (let* ([title (extract-plan-title text)]
-                         [waves (for/list ([e entries])
-                                  (define idx (wave-index-entry-idx e))
-                                  (define slug (wave-index-entry-slug e))
-                                  (define wave-data (read-wave-doc base-dir idx slug))
-                                  (define wave-content
-                                    (if wave-data
-                                        (hash-ref wave-data 'content)
-                                        ""))
-                                  (gsd-wave idx
-                                            (wave-index-entry-title e)
-                                            (string->wave-status-from-entry e)
-                                            wave-content
-                                            (extract-files-from-content wave-content)
-                                            '()
-                                            (extract-verify-from-content wave-content)
-                                            '()))])
-                    (gsd-plan waves #f '() '()))))))))
+            ;; BUG-0082 (R2): declared-path identity — every read resolves the
+            ;; row's DECLARED arrow path. Validation order: malformed/
+            ;; traversal/absolute arrows refuse FIRST (parser-validated before
+            ;; path resolution), then symlinked declared docs, then missing
+            ;; declared docs — each naming the exact .planning/... path, and
+            ;; never falling back to a stale synthesized twin.
+            (let* ([arrow-refusals (for/list ([e (in-list entries)]
+                                              #:do [(define-values (_rel r)
+                                                      (wave-entry-effective-doc-rel-path e))]
+                                              #:when r)
+                                     r)]
+                   [link-refusals
+                    (for/list ([e (in-list entries)]
+                               #:do [(define-values (rel _r) (wave-entry-effective-doc-rel-path e))
+                                     (define lr
+                                       (and rel (symlinked-declared-doc-refusal base-dir rel)))]
+                               #:when lr)
+                      lr)]
+                   [missing (missing-index-doc-paths base-dir entries)])
+              (cond
+                [(pair? arrow-refusals)
+                 (raise (exn:fail (car arrow-refusals) (current-continuation-marks)))]
+                [(pair? link-refusals)
+                 (raise (exn:fail (car link-refusals) (current-continuation-marks)))]
+                [(pair? missing)
+                 (raise (exn:fail (missing-wave-docs-error-text entries missing)
+                                  (current-continuation-marks)))]
+                [else
+                 (let* ([title (extract-plan-title text)]
+                        [waves (for/list ([e entries])
+                                 (define idx (wave-index-entry-idx e))
+                                 ;; BUG-0082: the wave's content is the
+                                 ;; DECLARED document's content — a stale
+                                 ;; synthesized twin never loads.
+                                 (define wave-data (read-declared-wave-doc base-dir idx))
+                                 (define wave-content
+                                   (if wave-data
+                                       (hash-ref wave-data 'content)
+                                       ""))
+                                 (gsd-wave idx
+                                           (wave-index-entry-title e)
+                                           (string->wave-status-from-entry e)
+                                           wave-content
+                                           (extract-files-from-content wave-content)
+                                           '()
+                                           (extract-verify-from-content wave-content)
+                                           '()))])
+                   (gsd-plan waves #f '() '()))]))))))
 
 ;; extract-plan-title: imported from shared.rkt (v0.32.1 Wave 1 DRY)
 
@@ -596,12 +620,21 @@
                 (list (plan-validation-finding #f 'error msg)))]
        [else
         (define strict (validate-plan-strict plan-or-exn))
+        ;; BUG-0082 (R2 decision): validation REFUSES an ambiguous declared
+        ;; mapping — duplicate wave indexes, or a shared carrier claimed by
+        ;; two rows — before any status/index mutation could ever happen
+        ;; (one document header cannot carry two waves' statuses). Reads
+        ;; still resolve the declared bytes deterministically; the refusal
+        ;; blocks /go by name.
+        (define mapping-refusals (declared-mapping-refusals (parse-plan-index text)))
         (define lint-lines (wave-doc-lint-warning-lines base-dir))
         (define findings
           (append (for/list ([e (in-list (validation-errors strict))])
                     (plan-validation-finding #f 'error e))
-                  (for/list ([w (in-list (validation-warnings strict))])
-                    (plan-validation-finding #f 'warning w))
+                  (for/list ([e (in-list (validation-warnings strict))])
+                    (plan-validation-finding #f 'warning e))
+                  (for/list ([r (in-list mapping-refusals)])
+                    (plan-validation-finding #f 'error r))
                   (for/list ([l (in-list lint-lines)])
                     (plan-validation-finding #f 'warning l))
                   (file-attribution-findings base-dir plan-or-exn)))
@@ -1150,20 +1183,16 @@
       (apply system*/exit-code git "-C" (path->string repo) args)))
   (git-result code (get-output-string out) (get-output-string err)))
 
-;; Pure marker check (no subprocess): the supported layouts are
-;; base-dir itself being a work tree, or base-dir/q being one — the same
-;; precedence as go-orchestrator's find-git-root.
-(define (git-marker-dir? d)
-  (define g (build-path d ".git"))
-  (or (directory-exists? g) (file-exists? g)))
-
+;; Pure marker check (no subprocess) retired by R76 (BUG-0076): marker
+;; existence is not identity. find-repo-root delegates to the shared
+;; layout-aware helper — Git's own rev-parse toplevel/realpath answers select
+;; a direct repository or a genuinely nested q repository; a decoy outer
+;; repository beside an independent nested q, and any broken .git marker,
+;; refuse with a typed exn:fail:git-root (root+reason). Only the no-repository
+;; case still yields #f, preserving the make-wave-worktree! argument-error
+;; contract for repositories that simply are not there.
 (define (find-repo-root base-dir)
-  (define base (->path base-dir))
-  (define q-sub (build-path base "q"))
-  (cond
-    [(git-marker-dir? base) base]
-    [(and (directory-exists? q-sub) (git-marker-dir? q-sub)) q-sub]
-    [else #f]))
+  (delivery-root-or-raise base-dir))
 
 ;; ---- Worktree record ------------------------------------------------------
 

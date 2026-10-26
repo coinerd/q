@@ -15,8 +15,16 @@
 ;;;   - Extension tool is blocked in safe mode
 ;;;   - Safe mode inactive — all tools and paths allowed
 ;;;   - Multiple tool calls in batch — some blocked, some allowed
+;;;
+;;; R97 (BUG-0097) additions: the REAL find tool must run under the
+;;; scheduler in safe mode, emit absolute results for in-root files, and
+;;; DENY symlink results whose resolved target escapes the project root
+;;; (checked against the existing safety policy before emission). A
+;;; find -> read roundtrip with the emitted absolute path stays allowed.
 
 (require rackunit
+         racket/file
+         racket/path
          (only-in "../tools/tool.rkt"
                   tool?
                   tool-name
@@ -56,7 +64,10 @@
                   allowed-path?
                   safe-mode-project-root
                   trust-level
-                  blocked-tools))
+                  blocked-tools)
+         (only-in "../tools/builtins/find.rkt" tool-find)
+         (only-in "../tools/builtins/read.rkt" tool-read)
+         "helpers/fixtures.rkt")
 
 ;; ============================================================
 ;; Helper: build a registry with various tool types
@@ -415,3 +426,106 @@
 ;; ============================================================
 
 (displayln "All scheduler safe-mode tests passed.")
+
+;; ============================================================
+;; R97 (BUG-0097): REAL find tool under the scheduler in safe mode —
+;; absolute in-root results emitted, escaping symlink results denied
+;; against the existing safety policy before emission, and the find ->
+;; read roundtrip stays allowed for emitted absolute paths.
+;; ============================================================
+
+(define (make-real-find-tool)
+  (make-tool "find"
+             "Find files and directories by name or type"
+             (hasheq 'type
+                     "object"
+                     'required
+                     '("path")
+                     'properties
+                     (hasheq 'path (hasheq 'type "string" 'description "Root directory")))
+             tool-find))
+
+(define (make-real-read-tool-safe)
+  (make-tool "read"
+             "Read file contents"
+             (hasheq 'type
+                     "object"
+                     'required
+                     '("path")
+                     'properties
+                     (hasheq 'path (hasheq 'type "string" 'description "File to read")))
+             tool-read))
+
+(define (result-strings tr)
+  (for/list ([part (in-list (tool-result-content tr))])
+    (cond
+      [(string? part) part]
+      [(hash? part) (hash-ref part 'text "")]
+      [else (~a part)])))
+
+(test-case "R97: safe-mode find emits absolute in-root results and denies escaping symlink"
+  ;; REAL fixture under the suite's project root; fixture in/out cleanup is
+  ;; guaranteed by the nested with-temp-dir outer scope
+  (with-temp-dir
+   (lambda (fixture)
+     (call-with-output-file (build-path fixture "inside.txt")
+                            (lambda (out) (display "inside-sentinel" out))
+                            #:exists 'replace)
+     ;; symlink whose resolved target escapes the fixture root (and, being
+     ;; under the safe-mode project root fixture, also escapes any root)
+     (make-file-or-directory-link "/etc/passwd" (build-path fixture "escape-link"))
+     (define reg (make-tool-registry))
+     (register-tool! reg (make-real-find-tool))
+     (register-tool! reg (make-real-read-tool-safe))
+     (parameterize ([current-safe-mode #t]
+                    [project-root fixture])
+       (define sr
+         (run-tool-batch
+          (list (tool-call "tc-find" "find" (hasheq 'path (path->string fixture))))
+          reg))
+       (define r (first (scheduler-result-results sr)))
+       (check-false (tool-result-is-error? r)
+                    (string-join (result-strings r) ""))
+       (define content (result-strings r))
+       (define d (tool-result-details r))
+       ;; the real file is emitted with an ABSOLUTE path
+       (check-equal? (length content) 1)
+       (check-equal? (first content)
+                     (path->string (build-path fixture "inside.txt")))
+       (check-true (absolute-path? (first content)))
+       ;; the escaping symlink is NOT emitted and is recorded as denied
+       (check-false (member (path->string (build-path fixture "escape-link")) content)
+                    "escaping symlink result must be denied in safe mode")
+       (check-true (hash-has-key? d 'denied) (format "details: ~a" d))
+       (check-not-false
+        (findf (lambda (rec)
+                 (and (equal? (hash-ref rec 'path #f)
+                              (path->string (build-path fixture "escape-link")))
+                      (string? (hash-ref rec 'reason #f))))
+               (hash-ref d 'denied))
+        (format "expected structured denial record, got: ~a" (hash-ref d 'denied #f)))
+       ;; find -> read roundtrip with the emitted absolute path is allowed
+       (define sr2
+         (run-tool-batch
+          (list (tool-call "tc-read" "read" (hasheq 'path (first content))))
+          reg))
+       (define r2 (first (scheduler-result-results sr2)))
+       (check-false (tool-result-is-error? r2)
+                    (string-join (result-strings r2) ""))
+       (check-true (string-contains? (string-join (result-strings r2) "")
+                                     "inside-sentinel"))))))
+
+;; Safe mode stays enforced for find itself: a search root OUTSIDE the
+;; project root is still blocked by the scheduler preflight (unchanged).
+(test-case "R97: safe-mode still blocks find with root outside project root"
+  (parameterize ([current-safe-mode #t]
+                 [project-root test-project-root])
+    (define reg (make-tool-registry))
+    (register-tool! reg (make-real-find-tool))
+    (define sr
+      (run-tool-batch
+       (list (tool-call "tc-find" "find" (hasheq 'path "/etc")))
+       reg))
+    (define r (first (scheduler-result-results sr)))
+    (check-true (tool-result-is-error? r))
+    (check-true (string-contains? (string-join (result-strings r) "") "Access denied"))))

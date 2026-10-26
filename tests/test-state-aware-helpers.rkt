@@ -12,13 +12,20 @@
 (require rackunit
          rackunit/text-ui
          racket/string
-         (only-in "../util/content/content-parts.rkt" make-text-part text-part)
+         (only-in "../util/content/content-parts.rkt"
+                  make-text-part
+                  text-part
+                  text-part?
+                  text-part-text)
          (only-in "../util/message/message.rkt" make-message message-id message-role message-content)
          (only-in "../runtime/context-assembly/task-conclusion.rkt"
                   task-conclusion
                   task-conclusion?
                   task-conclusion-text
-                  task-conclusion-origin-message-ids)
+                  task-conclusion-origin-message-ids
+                  provenance-kind?)
+         (only-in "../runtime/context-assembly/auto-distillation.rkt"
+                  generate-fallback-conclusions)
          (only-in "../util/fsm/fsm.rkt" fsm-state fsm-state?)
          "../runtime/context-assembly/state-aware-helpers.rkt")
 
@@ -246,6 +253,92 @@
                      (check-equal? (message-role result) 'assistant)))
 
 ;; ============================================================
+;; R99a (BUG-0099): provenance-labeled working-set replacement
+;; ============================================================
+
+(define (message-text msg)
+  (define parts (message-content msg))
+  (if (and (pair? parts) (text-part? (car parts)))
+      (text-part-text (car parts))
+      ""))
+
+(define-test-suite r99a-ws-provenance-replacement-tests
+                   (test-case "R99a: recognized fallback replacement is labeled provenance, not Conclusion"
+                     (define ws-msg (make-text-message 'assistant "long original file content"))
+                     (define fallback
+                       (task-conclusion "auto-m1"
+                                        "[Auto] Previously read file (origin: m1)"
+                                        'fact
+                                        'implementation
+                                        (list (message-id ws-msg))
+                                        (current-seconds)
+                                        '(auto-distilled)
+                                        '()))
+                     (define result (ws-entry->conclusion-or-self ws-msg (list fallback)))
+                     (check-equal? (message-role result) 'system)
+                     (define text (message-text result))
+                     (check-true (string-contains? text "[Source provenance replaces context]"))
+                     (check-true (string-contains? text "(unverified)"))
+                     (check-true (string-contains? text "[Auto] Previously read file (origin: m1)"))
+                     (check-false (string-contains? text "[Conclusion replaces context]")))
+                   (test-case "R99a: provenance-category replacement is labeled provenance"
+                     (define ws-msg (make-text-message 'assistant "long original file content"))
+                     (define prov
+                       (task-conclusion "p1"
+                                        "[Auto] provenance record"
+                                        'provenance
+                                        'implementation
+                                        (list (message-id ws-msg))
+                                        (current-seconds)
+                                        '(auto-distilled)
+                                        '()))
+                     (define result (ws-entry->conclusion-or-self ws-msg (list prov)))
+                     (define text (message-text result))
+                     (check-true (string-contains? text "[Source provenance replaces context]"))
+                     (check-false (string-contains? text "[Conclusion replaces context]")))
+                   (test-case "R99a: genuine insight sharing the origin wins over a fallback"
+                     (define ws-msg (make-text-message 'assistant "long original file content"))
+                     (define origin (list (message-id ws-msg)))
+                     (define fallback
+                       (task-conclusion "auto-m1" "[Auto] fallback text" 'fact 'implementation origin
+                                        (current-seconds) '(auto-distilled) '()))
+                     (define insight
+                       (task-conclusion "i1" "Curated insight" 'fact 'implementation origin
+                                        (current-seconds) '() '()))
+                     ;; Either input order: the insight must win.
+                     (define r1 (ws-entry->conclusion-or-self ws-msg (list fallback insight)))
+                     (define r2 (ws-entry->conclusion-or-self ws-msg (list insight fallback)))
+                     (check-true (string-contains? (message-text r1) "[Conclusion replaces context] Curated insight"))
+                     (check-false (string-contains? (message-text r1) "provenance"))
+                     (check-true (string-contains? (message-text r2) "[Conclusion replaces context] Curated insight")))
+                   (test-case "R99b: activated writer's record replaces WS entry labeled provenance with the honest text"
+                     (define ws-msg (make-text-message 'assistant "long original file content"))
+                     (define record
+                       (car (generate-fallback-conclusions
+                             (list (message-id ws-msg)) 'implementation)))
+                     (check-true (provenance-kind? record))
+                     (check-false (string-contains? (task-conclusion-text record) "long original file content"))
+                     (define result (ws-entry->conclusion-or-self ws-msg (list record)))
+                     (define text (message-text result))
+                     (check-true (string-contains? text "[Source provenance replaces context]"))
+                     (check-true (string-contains? text "(unverified)"))
+                     (check-true (string-contains?
+                                  text
+                                  (format "Source message ~a retained as provenance; no distilled insight available."
+                                          (message-id ws-msg))))
+                     (check-false (string-contains? text "[Conclusion replaces context]"))
+                     (check-false (string-contains? text "long original file content")))
+                   (test-case "R99a: insight replacement text unchanged (existing behavior)"
+                     (define ws-msg (make-text-message 'assistant "long original file content"))
+                     (define insight
+                       (task-conclusion "i1" "Curated insight" 'fact 'implementation
+                                        (list (message-id ws-msg))
+                                        (current-seconds) '() '()))
+                     (define result (ws-entry->conclusion-or-self ws-msg (list insight)))
+                     (check-equal? (message-text result)
+                                   "[Conclusion replaces context] Curated insight")))
+
+;; ============================================================
 ;; All tests
 ;; ============================================================
 
@@ -255,7 +348,8 @@
                    state-guidance-table-tests
                    check-rollback-triggers-tests
                    triggers-with-actions-tests
-                   ws-entry->conclusion-or-self-tests)
+                   ws-entry->conclusion-or-self-tests
+                   r99a-ws-provenance-replacement-tests)
 
 (module+ test
   (run-tests all-state-aware-helpers-tests))

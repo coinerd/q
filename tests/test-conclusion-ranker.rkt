@@ -9,7 +9,12 @@
          (only-in "../runtime/context-assembly/task-conclusion.rkt"
                   task-conclusion
                   task-conclusion-text
-                  task-conclusion-id)
+                  task-conclusion-id
+                  task-conclusion-category
+                  legacy-deterministic-fallback?
+                  provenance-kind?)
+         (only-in "../runtime/context-assembly/auto-distillation.rkt"
+                  generate-fallback-conclusions)
          (only-in "../runtime/context-assembly/conclusion-ranker.rkt"
                   score-conclusion
                   rank-and-budget))
@@ -77,3 +82,102 @@
       (check-equal? (length result) 1))))
 
 (run-tests suite)
+
+;; ---------------------------------------------------------------------------
+;; R99a (BUG-0099): provenance ranks below insights, deterministic order,
+;; budget pressure admits insights first.
+;; ---------------------------------------------------------------------------
+
+(define c-prov-rec
+  (task-conclusion "auto-old1" "[Auto] Previously read file (origin: old1)" 'fact 'implementation '("old1") 5000 '(auto-distilled) '()))
+(define c-prov-category
+  (task-conclusion "p1" "[Auto] provenance-category record" 'provenance 'implementation '("old2") 5000 '(auto-distilled) '()))
+(define c-insight-fact
+  (task-conclusion "if1" "Genuine fact insight" 'fact 'implementation '() 5000 '() '()))
+
+(define-test-suite r99a-provenance-rank-tests
+  (test-case "R99a: recognized fallback scores below a genuine fact insight"
+    (check-true (< (score-conclusion c-prov-rec 'implementation '())
+                   (score-conclusion c-insight-fact 'implementation '()))))
+
+  (test-case "R99a: provenance-category record scores 0 (no boosts)"
+    (check-equal? (score-conclusion c-prov-category 'implementation '(auto-distilled)) 0))
+
+  (test-case "R99a: provenance ranks below insights regardless of input order"
+    (define r1 (rank-and-budget (list c-prov-rec c-insight-fact) #:current-state 'implementation))
+    (define r2 (rank-and-budget (list c-insight-fact c-prov-rec) #:current-state 'implementation))
+    (check-equal? (map task-conclusion-id r1) '("if1" "auto-old1"))
+    (check-equal? (map task-conclusion-id r2) '("if1" "auto-old1")))
+
+  (test-case "R99a: insight wins score tie against provenance (deterministic)"
+    ;; Same timestamps/states/tags: provenance still sorts last.
+    (define r (rank-and-budget (list c-prov-category c-insight-fact) #:current-state #f))
+    (check-equal? (map task-conclusion-id r) '("if1" "p1")))
+
+  (test-case "R99a: ordering is deterministic across repeated runs"
+    (define input (list c-prov-rec c-insight-fact c-error c-decision c-fact))
+    (define r1 (rank-and-budget input #:current-state 'implementation))
+    (define r2 (rank-and-budget input #:current-state 'implementation))
+    (check-equal? (map task-conclusion-id r1) (map task-conclusion-id r2)))
+
+  (test-case "R99a: budget pressure admits insights before provenance"
+    (define result
+      (rank-and-budget (list c-prov-rec c-insight-fact)
+                       #:current-state 'implementation
+                       #:max-conclusion-tokens 100
+                       #:token-estimate (lambda (_) 60)))
+    (check-equal? (map task-conclusion-id result) '("if1")))
+
+  (test-case "R99a: larger budget still includes provenance (never silently dropped)"
+    (define result
+      (rank-and-budget (list c-prov-rec c-insight-fact)
+                       #:current-state 'implementation
+                       #:max-conclusion-tokens 500
+                       #:token-estimate (lambda (_) 60)))
+    (check-equal? (map task-conclusion-id result) '("if1" "auto-old1")))
+
+  (test-case "R99a: legacy fallback still recognized after ranking roundtrip"
+    (check-true (legacy-deterministic-fallback? (car (rank-and-budget (list c-prov-rec) #:current-state #f))))))
+
+(run-tests r99a-provenance-rank-tests)
+
+;; ---------------------------------------------------------------------------
+;; R99b (BUG-0099): the ACTIVATED writer's provenance records (category
+;; 'provenance, honest text, 'deterministic-fallback tag) rank at exactly 0
+;; and below every insight — order deterministic in both input orders.
+;; ---------------------------------------------------------------------------
+(define r99b-writer-record
+  (car (generate-fallback-conclusions (list "new1") 'implementation)))
+
+(define-test-suite r99b-writer-rank-tests
+  (test-case "R99b: writer provenance record scores 0 (no boosts from tags/state)"
+    (check-equal? (score-conclusion r99b-writer-record 'implementation '(auto-distilled deterministic-fallback)) 0)
+    (check-true (< (score-conclusion r99b-writer-record 'implementation '())
+                   (score-conclusion c-insight-fact 'implementation '()))))
+
+  (test-case "R99b: writer record is provenance-kind by category, not legacy signature"
+    (check-true (provenance-kind? r99b-writer-record))
+    (check-false (legacy-deterministic-fallback? r99b-writer-record))
+    (check-equal? (task-conclusion-category r99b-writer-record) 'provenance))
+
+  (test-case "R99b: writer record ranks below an insight in both input orders"
+    (define r1 (rank-and-budget (list r99b-writer-record c-insight-fact) #:current-state 'implementation))
+    (define r2 (rank-and-budget (list c-insight-fact r99b-writer-record) #:current-state 'implementation))
+    (check-equal? (map task-conclusion-id r1) '("if1" "auto-new1"))
+    (check-equal? (map task-conclusion-id r2) '("if1" "auto-new1")))
+
+  (test-case "R99b: budget pressure admits the insight first; larger budget keeps provenance"
+    (define tight
+      (rank-and-budget (list r99b-writer-record c-insight-fact)
+                       #:current-state 'implementation
+                       #:max-conclusion-tokens 100
+                       #:token-estimate (lambda (_) 60)))
+    (check-equal? (map task-conclusion-id tight) '("if1"))
+    (define ample
+      (rank-and-budget (list r99b-writer-record c-insight-fact)
+                       #:current-state 'implementation
+                       #:max-conclusion-tokens 500
+                       #:token-estimate (lambda (_) 60)))
+    (check-equal? (map task-conclusion-id ample) '("if1" "auto-new1"))))
+
+(run-tests r99b-writer-rank-tests)

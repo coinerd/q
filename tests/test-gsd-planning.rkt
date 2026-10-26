@@ -45,7 +45,9 @@
                   lookup-campaign-request)
          (only-in "../extensions/gsd/delivery-verifier.rkt"
                   delivery-verification?
-                  delivery-verification-approved?))
+                  delivery-verification-approved?)
+         (only-in "../extensions/gsd/wave-outcome-reporting.rkt"
+                  emit-wave-outcome-error!))
 
 ;; ============================================================
 ;; Helpers
@@ -919,6 +921,46 @@
                       ;; Should not raise an error
                       (emit-gsd-event! 'gsd.mode.changed (hasheq 'key 'value))
                       (check-false (gsd-event-bus) "bus should still be #f"))))
+
+;; ============================================================
+;; BUG-0093 (R93): pin the wrapper contract of the installed bridge.
+;; The bridge (register-tools hook) forwards gsd/events.rkt emissions as
+;; runtime events whose payload nests the outcome fields under a 'data
+;; wrapper — this is the envelope the TUI outcome-error reducer must
+;; unwrap. Outer keys are transport metadata, NOT outcome details.
+;; ============================================================
+
+(test-case "BUG-0093: installed bridge forwards outcome-error as data-wrapped runtime event"
+  (with-gsd-cleanup
+   (lambda ()
+     (dynamic-wind
+      (lambda () (void))
+      (lambda ()
+        (define ctx (make-test-ctx))
+        (define bus (ctx-event-bus ctx))
+        (define captured (box '()))
+        (subscribe! bus (lambda (evt) (set-box! captured (cons evt (unbox captured)))))
+        ;; install the REAL production bridge via the extension hook
+        ((hash-ref (extension-hooks gsd-planning-extension) 'register-tools) ctx (hasheq))
+        (emit-wave-outcome-error! 2 'stalled "hard stall: no forward progress")
+        (define evts (unbox captured))
+        (check-equal? (length evts) 1 "bridge must forward exactly one runtime event")
+        (define evt (first evts))
+        (check-equal? (event-ev evt) 'gsd.wave.outcome-error)
+        (define payload (event-payload evt))
+        (check-true (hash? payload))
+        (define data (hash-ref payload 'data #f))
+        (check-true (hash? data) "runtime payload must nest outcome fields under a data wrapper")
+        (check-equal? (hash-ref data 'wave #f) 2)
+        (check-equal? (hash-ref data 'kind #f) 'stalled)
+        (check-equal? (hash-ref data 'message #f) "hard stall: no forward progress")
+        ;; outer wrapper keys are transport metadata — no flat outcome fields
+        (check-false (hash-has-key? payload 'kind))
+        (check-false (hash-has-key? payload 'message))
+        (check-false (hash-has-key? payload 'wave)))
+      (lambda ()
+        ;; restore the module-load default no-op bus so later cases are unaffected
+        (events:set-gsd-event-bus! void))))))
 
 ;; ============================================================
 ;; Wave progress tracking tests (v0.21.2 W1)

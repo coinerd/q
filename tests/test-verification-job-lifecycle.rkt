@@ -42,6 +42,78 @@
   (check-equal? (vj:verification-identity-key a) (vj:verification-identity-key b))
   (check-not-equal? (vj:verification-identity-key a) (vj:verification-identity-key c)))
 
+;; ------------------------------------------------------ R102 identity coordination
+
+(test-case "R102: each registry mints its own incarnation token"
+  (define reg1 (vj:make-verification-registry))
+  (define reg2 (vj:make-verification-registry))
+  (check-true (symbol? (vj:verification-registry-incarnation reg1)))
+  (check-true (symbol? (vj:verification-registry-incarnation reg2)))
+  (check-not-equal? (vj:verification-registry-incarnation reg1)
+                    (vj:verification-registry-incarnation reg2)
+                    "registry recreation is distinguishable from one registry")
+  (check-false (vj:verification-job-facts reg1 'vj-999) "unknown job: #f, never an error"))
+
+(test-case "R102: a replaced job's captured terminal record stays attributable (tombstone)"
+  (define reg (vj:make-verification-registry))
+  (define ident (vj:verification-identity "camp-tomb" "W1" "fast" "/repo" "local"))
+  (define r1 (vj:verification-start! reg ident "/bin/sh" '("-c" "sleep 30")))
+  (define id1 (vj:start-result-job-id r1))
+  (check-pred vj:verification-job? (vj:verification-job-facts reg id1))
+  (define cancelled (vj:verification-cancel! reg id1))
+  (check-equal? (vj:verification-job-state cancelled) 'cancelled)
+  (define r2 (vj:verification-start! reg ident "/bin/sh" '("-c" "exit 0")))
+  (define id2 (vj:start-result-job-id r2))
+  (check-not-equal? id2 id1 "replacement allocates a fresh job id")
+  (define tomb (vj:verification-job-facts reg id1))
+  (check-true (vj:verification-terminal-tombstone? tomb)
+              "the replaced job is retained as a bounded tombstone")
+  (when (vj:verification-terminal-tombstone? tomb)
+    (check-equal? (vj:verification-terminal-tombstone-job-id tomb) id1)
+    (check-equal? (vj:verification-terminal-tombstone-state tomb) 'cancelled)
+    (check-true (vj:verification-terminal-tombstone-reaped? tomb))
+    (check-equal? (vj:verification-terminal-tombstone-replacement-id tomb) id2)
+    (check-true (string? (vj:verification-terminal-tombstone-log-path tomb))))
+  (check-pred vj:verification-job? (vj:verification-job-facts reg id2))
+  (vj:verification-close-registry! reg))
+
+(test-case "R102: a terminal job completed normally is tombstoned with its real facts"
+  (define reg (vj:make-verification-registry))
+  (define ident (vj:verification-identity "camp-tomb2" "W1" "fast" "/repo" "local"))
+  (define r1 (vj:verification-start! reg ident "/bin/sh" '("-c" "exit 0")))
+  (define id1 (vj:start-result-job-id r1))
+  (define done (vj:verification-wait reg id1 5000))
+  (check-equal? (vj:verification-job-state done) 'completed)
+  (define r2 (vj:verification-start! reg ident "/bin/sh" '("-c" "exit 0")))
+  (define tomb (vj:verification-job-facts reg id1))
+  (check-true (vj:verification-terminal-tombstone? tomb))
+  (when (vj:verification-terminal-tombstone? tomb)
+    (check-equal? (vj:verification-terminal-tombstone-state tomb) 'completed)
+    (check-equal? (vj:verification-terminal-tombstone-replacement-id tomb)
+                  (vj:start-result-job-id r2)))
+  (check-pred vj:verification-job? (vj:verification-job-facts reg (vj:start-result-job-id r2)))
+  (vj:verification-close-registry! reg))
+
+(test-case "R102: the tombstone window is bounded with explicit FIFO eviction"
+  (define reg (vj:make-verification-registry))
+  (define ident (vj:verification-identity "camp-tombcap" "W1" "fast" "/repo" "local"))
+  (define first-id #f)
+  (define second-id #f)
+  (for ([i (in-range (+ vj:registry-tombstone-capacity 2))])
+    (define r
+      (vj:verification-start! reg ident "/bin/sh" (list "-c" (if (zero? i) "sleep 30" "exit 0"))))
+    (when (zero? i)
+      (set! first-id (vj:start-result-job-id r))
+      (vj:verification-cancel! reg first-id))
+    (when (= i 1) (set! second-id (vj:start-result-job-id r)))
+    (unless (zero? i)
+      (vj:verification-wait reg (vj:start-result-job-id r) 10000)))
+  (check-false (vj:verification-job-facts reg first-id)
+               "the oldest captured record is evicted at the fixed capacity")
+  (check-true (vj:verification-terminal-tombstone? (vj:verification-job-facts reg second-id))
+              "recent records stay attributable")
+  (vj:verification-close-registry! reg))
+
 ;; ------------------------------------------------------------ singleton
 
 (test-case "F/WP3.4-1: same identity twice reuses the active job (no duplicate launch)"

@@ -19,12 +19,19 @@
          racket/string
          "campaign-state.rkt"
          "campaign-repository.rkt"
+         ;; R76 (BUG-0076): shared layout-aware delivery-root resolution.
+         (only-in "git-root-layout.rkt" delivery-root-or-raise)
          (only-in "delivery-journal.rkt" load-delivery-journal)
          (only-in "delivery-receipt.rkt" delivery-receipt-blocker)
          "../../sandbox/subprocess.rkt")
 (provide verified-wave-merge-sha
          delivery-handoff-status
          delivery-readback
+         ;; R76 (BUG-0076): the readback repository identity selector, shared
+         ;; by delivery-readback and exported for the root-identity contract
+         ;; tests (all resolver call sites must agree on ONE authenticated
+         ;; repository).
+         delivery-readback-repo
          delivered-proof-merge-sha
          undelivered-proof-reason
          delivery-pending-wave
@@ -79,16 +86,26 @@
                        "\\1=[redacted]")
       "invalid delivery controller response"))
 
+;; R76 (BUG-0076): the ONE readback repository-identity selector.
+;; Layout-aware resolution shared with the coordinator seams: a decoy outer
+;; repository beside an independent nested q, and any broken .git marker,
+;; raise the typed git-root refusal; delivery-readback maps it to the
+;; redacted delivery-pending reason — readback never queries a foreign
+;; checkout. Only a marker-less plain source tree keeps the legacy child q/
+;; naming (synthetic-fixture law).
+(define (delivery-readback-repo base-dir)
+  (or (delivery-root-or-raise base-dir)
+      (let ([marker (build-path base-dir ".git")])
+        (if (or (directory-exists? marker) (file-exists? marker))
+            #f
+            (build-path base-dir "q")))))
+
 (define (delivery-readback base-dir plan-id wave-index)
   (with-handlers
       ([exn:fail?
         (lambda (e)
           (hasheq 'status "delivery-pending" 'reason (redact-delivery-text (exn-message e))))])
-    (define repo
-      (if (or (directory-exists? (build-path base-dir ".git"))
-              (file-exists? (build-path base-dir ".git")))
-          base-dir
-          (build-path base-dir "q")))
+    (define repo (delivery-readback-repo base-dir))
     (define result
       (run-subprocess "python3"
                       #:args (list (path->string controller)

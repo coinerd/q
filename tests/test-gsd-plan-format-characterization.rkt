@@ -202,7 +202,7 @@ Do the thing.
                       (check-false (load-plan-from-index tmp)))
                     (lambda () (rm-tmp-planning tmp))))
 
-    (test-case "non-W<n>-slug wave-doc target now raises, naming the expected path (BUG-0023, W2 flip)"
+    (test-case "existing declared arrow target loads as-is; no W<idx>-<slug> synthesis demanded (R82 declared identity supersedes BUG-0023 W2 pin)"
       (define plan-text "# Plan: Odd Name
 
 ## Waves
@@ -211,20 +211,25 @@ Do the thing.
 ")
       (define tmp
         (make-tmp-planning plan-text
-                           ;; The on-disk name does not follow W<n>-slug; the loader expects
-                           ;; W0-setup.md, so strict index validation must ERROR naming that
-                           ;; path (previously: silent empty content).
+                           ;; R82 declared-identity: the row's DECLARED arrow
+                           ;; path is the wave's identity. A well-shaped
+                           ;; declared target that EXISTS on disk (even one
+                           ;; not named W<n>-<slug>.md) loads its content —
+                           ;; the loader never substitutes a synthesized
+                           ;; waves/W0-setup.md twin nor errors about the
+                           ;; filename convention. (Only MISSING declared
+                           ;; docs refuse, naming the declared path — pinned
+                           ;; by the neighboring case below.)
                            (list (list "notes.md" wave-doc-with-annotated-file))))
       (dynamic-wind void
                     (lambda ()
-                      (define msg
-                        (with-handlers ([exn:fail? exn-message])
-                          (load-plan-from-index tmp)
-                          "no error raised — BUG-0023 regression: silent empty wave"))
-                      (check-true (string-contains? msg ".planning/waves/W0-setup.md")
-                                  "error must name the expected wave-doc path")
-                      (check-true (string-contains? msg "W<idx>-<slug>.md")
-                                  "error must state the filename convention"))
+                      (define plan (load-plan-from-index tmp))
+                      (check-not-false plan)
+                      (check-equal? (length (gsd-plan-waves plan)) 1)
+                      ;; The DECLARED target's content loads: files come from
+                      ;; notes.md's annotated declaration.
+                      (check-equal? (gsd-wave-files (plan-wave-ref plan 0))
+                                    '("q/from-index.rkt")))
                     (lambda () (rm-tmp-planning tmp))))
 
     (test-case "index entry whose target doc does not exist is a validation error (BUG-0023, W2)"

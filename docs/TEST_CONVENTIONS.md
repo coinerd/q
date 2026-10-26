@@ -288,6 +288,66 @@ SHA-256 digest over the sorted normalized paths, file count, per-area counts,
 and full violation details); a clean local run of the same command must match
 that digest for the same commit.
 
+## Standalone Execution Contract (BUG-0092)
+
+Every test file must execute its tests identically under plain `raco test`,
+direct `racket` execution, and the runner's subprocess and grouped
+in-process modes. The contract (BUG-0092, R92):
+
+1. **Sole suite invocation in `(module+ test ...)`** — the only `run-tests`
+   call lives in the `test` submodule. A file whose entry point is
+   `module+ main` with no `test` submodule executes ZERO tests under
+   `raco test` and still exits 0 (a vacuous green; named explicitly in the
+   frozen wait-audit release-preflight evidence), so a bare `raco test` pass
+   proves nothing for such files.
+2. **`module+ main` defers, never re-runs.** A direct `racket file.rkt`
+   run reaches the SAME `test` submodule through `main`:
+
+   ```racket
+   (define-runtime-path this-test-file "test-my-module.rkt")
+
+   (module+ test
+     (define failure-count (run-tests my-suite))
+     (unless (zero? failure-count)
+       (error 'test-my-module "~a test failure(s)" failure-count)))
+
+   (module+ main
+     (dynamic-require
+      (make-resolved-module-path (cons (simple-form-path this-test-file) '(test)))
+      #f))
+   ```
+
+   The suite is never executed twice in any mode.
+3. **Signal failures — never merely return the integer.** When `run-tests`
+   returns a nonzero failure count, the `test` submodule RAISES. It never
+   calls `(exit ...)`: the raise makes a direct racket execution exit
+   nonzero, while the grouped in-process host records the failure for that
+   file and survives to run the rest of the suite.
+4. **Anchor every filesystem path with `define-runtime-path`** (or the
+   resolved-module-path equivalent). `raco test` binds CWD to the test
+   file's directory, grouped in-process execution does the same, and direct
+   execution inherits the caller's CWD, so repo-relative literals (frozen
+   audit artifacts, `tests/` trees, benchmark manifests) mean a different
+   thing in each mode. Anchor reads to the source file — while keeping any
+   hash/row KEY derived from a path byte-identical across modes (the
+   wait-audit lint in `tests/test-deterministic-clock.rkt` keeps
+   repo-relative row keys and resolves reads through the anchored root;
+   the frozen audit data itself is never regenerated or suppressed).
+
+This contract is pinned behaviorally by the BUG-0092 section of
+`tests/test-run-tests.rkt`: a temporary counter fixture with an EXTERNAL
+invocation count proves exactly one execution on parsed-output routes
+(plain raco, direct racket, runner subprocess, and forced
+`#:mode 'grouped-in-process` — actual mode asserted via `execution-mode-of`
+and `grouped-fallback-reason` telemetry), including a deliberately failing
+fixture; a healthy fixture right after the failure proves the grouped host
+survives; the intentional zero-parsed-output route is asserted via its
+named `'zero-parsed-output` telemetry (its counter reads 2 by contract:
+grouped attempt + named subprocess rerun — never forced to 1); a
+policy-grouped request in an un-expanded area names `'area-not-expanded`
+without changing the area rollout; and the runner aggregate exits nonzero
+when any file fails.
+
 ## Test Sandbox
 
 Use `with-test-sandbox` for tests that need isolated filesystem:

@@ -233,6 +233,47 @@
       (check-false (hash-ref (snapshot-facts dir campaign-id 1) 'frozen-plan-title #f))
       (delete-directory/files dir)))
 
+  (test-case "BUG-0082: declared-path frozen identity — carrier doc is the frozen authority"
+    ;; A frozen plan row may route W1 through a carrier doc; snapshot-facts
+    ;; must read the DECLARED document (tracker facts from its bytes) and
+    ;; never a stale W1-* twin that happens to share the snapshot.
+    (define dir (make-temporary-file "binding-data-0082-~a" 'directory))
+    (write-text! (build-path dir ".planning" "PLAN.md")
+                 "# Plan\n\n- [Inbox] W1: Carrier → waves/W1-frozen-carrier.md\n")
+    (write-text! (build-path dir ".planning" "waves" "W1-frozen-carrier.md")
+                 (string-append
+                  "# W1: Carrier\n\n"
+                  "Branch: `campaign/v9.9.9-w1`; GitHub issue "
+                  "[#9686](https://github.com/owner/repo/issues/9686), milestone #895.\n"))
+    ;; stale synthesized twin — different tracker facts, never authoritative
+    (write-text! (build-path dir ".planning" "waves" "W1-elsewhere.md")
+                 "# W1: Stale\n\nW1 = #12345\n")
+    (bind-snapshot! dir)
+    (define facts (snapshot-facts dir campaign-id 1))
+    (check-equal? (hash-ref facts 'wave-doc) "waves/W1-frozen-carrier.md")
+    (check-equal? (hash-ref facts 'issue #f) 9686)
+    (delete-directory/files dir))
+
+  (test-case "BUG-0082: snapshot missing the declared wave document fails with the typed assertion"
+    ;; The declared path is legal but the snapshot freeze does not contain
+    ;; it (a nested waves/… path the freeze extractor does not pick up): the
+    ;; typed refusal must NAME the exact declared document, never fall back
+    ;; to a unique-prefix scan over other frozen docs.
+    (define dir (make-temporary-file "binding-data-0082b-~a" 'directory))
+    (write-text! (build-path dir ".planning" "PLAN.md")
+                 "# Plan\n\n- [Inbox] W1: Nested → waves/custom/carrier-8f3.md\n")
+    (write-text! (build-path dir ".planning" "waves" "custom" "carrier-8f3.md")
+                 "# W1: Nested carrier\n\nW1 = #9686\n")
+    (write-text! (build-path dir ".planning" "waves" "W1-fixture.md") "# W1: Fixture\n\nW1 = #9686\n")
+    (bind-snapshot! dir)
+    (check-exn (lambda (e)
+                 (and (exn:fail? e)
+                      (string-contains? (exn-message e)
+                                        "snapshot does not freeze the declared wave document")
+                      (string-contains? (exn-message e) "waves/custom/carrier-8f3.md")))
+               (lambda () (snapshot-facts dir campaign-id 1)))
+    (delete-directory/files dir))
+
   (test-case "tampered snapshot content never verifies (trusted module)"
     (define dir (plan-tree))
     (bind-snapshot! dir)

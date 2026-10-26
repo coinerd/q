@@ -19,6 +19,7 @@
                   task-conclusion?
                   task-conclusion-id
                   task-conclusion-text
+                  task-conclusion-category
                   task-conclusion-origin-message-ids))
 
 (define (make-mock-conclusion id text)
@@ -50,8 +51,13 @@
                                                (error "mock LLM failure"))])
         (define result (auto-distill '("m1" "m2" "m3") '() 'exploration))
         (check-equal? (length result) 3)
-        (for ([c (in-list result)])
-          (check-not-false (string-contains? (task-conclusion-text c) "Previously read")))))
+        ;; R99b: the deterministic fallback is an honest internal provenance
+        ;; record — no "Previously read" claim.
+        (for ([c (in-list result)]
+              [mid (in-list '("m1" "m2" "m3"))])
+          (check-equal? (task-conclusion-text c)
+                        (format "Source message ~a retained as provenance; no distilled insight available." mid))
+          (check-equal? (task-conclusion-category c) 'provenance))))
 
     ;; GAP-C: Content summaries forwarded
     (test-case "pipeline: content summaries forwarded to LLM function"

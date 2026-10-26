@@ -113,3 +113,26 @@
                                  #:delivery-reader (lambda _ (error 'test "not consulted"))))
   (check-equal? (unbox calls) (list #t "coinerd/q"))
   (check-equal? (reconciliation-checkpoint-result-status result) 'blocked))
+
+(test-case "the same wave title in another campaign/project is not identity"
+  ;; Identity is the exact plan-id + wave binding and nothing else. A binding
+  ;; that names the same wave index and issue number for a DIFFERENT plan —
+  ;; i.e. an issue that could share the wave's title in another project or
+  ;; milestone — never targets this campaign: the gate refuses and no adapter
+  ;; is ever constructed.
+  (for ([tracker (in-list (list (hash-set full-binding 'plan-id (make-string 64 #\b))
+                                (hash-set full-binding 'wave 7)))])
+    ;; The resume sweep gate excludes the foreign binding entirely...
+    (check-false (live-tracker-target? "/tmp/no-real-campaign" PLAN 1 #:settings (settings tracker)))
+    ;; ...and even a directly-invoked resolver refuses before any GitHub
+    ;; command and before any adapter construction.
+    (define-values (reconciler made) (attempt tracker))
+    (check-true (procedure? reconciler))
+    (define outcome
+      (run-tracker-reconciliation! "/tmp/no-real-campaign"
+                                   PLAN
+                                   1
+                                   reconciler
+                                   #:delivery-reader (lambda _ (error 'test "not consulted"))))
+    (check-equal? (reconciliation-checkpoint-result-status outcome) 'blocked)
+    (check-equal? (unbox made) 0)))

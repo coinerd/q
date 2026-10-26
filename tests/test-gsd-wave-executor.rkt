@@ -199,3 +199,60 @@
   (define w1 (list-ref (gsd-plan-waves plan) 1))
   (check-eq? (gsd-wave-status w1) 'pending)
   (delete-directory/files dir #:must-exist? #f))
+
+(test-case "BUG-0082: loader content comes from the DECLARED doc, never the stale twin"
+  (define dir (make-temporary-file "gsd-index-declared-~a" 'directory))
+  (define planning-dir (build-path dir ".planning"))
+  (make-directory planning-dir)
+  (make-directory (build-path planning-dir "waves"))
+  (define plan-md "# Plan: Declared\n\n## Waves\n- [Inbox] W2: Canary → waves/W0-carrier-eight.md\n")
+  (call-with-output-file (build-path planning-dir "PLAN.md")
+                         (lambda (out) (display plan-md out))
+                         #:exists 'truncate)
+  ;; the DECLARED carrier
+  (call-with-output-file
+   (build-path planning-dir "waves" "W0-carrier-eight.md")
+   (lambda (out) (display "# Wave 0\nStatus: Inbox\n\n## Verify\nstrong-carrier-verify-9f2\n" out))
+   #:exists 'truncate)
+  ;; a stale synthesized twin — different bytes, never authoritative
+  (call-with-output-file (build-path planning-dir "waves" "W2-canary.md")
+                         (lambda (out)
+                           (display "# Wave 2\nStatus: Inbox\n\nweak-stale-verify-3b7\n" out))
+                         #:exists 'truncate)
+  (define plan (load-plan-from-index dir))
+  (check-not-false plan)
+  (define w2 (list-ref (gsd-plan-waves plan) 0))
+  (check-equal? (gsd-wave-index w2) 2)
+  (check-true (string-contains? (gsd-wave-verify w2) "strong-carrier-verify-9f2"))
+  (check-false (string-contains? (gsd-wave-verify w2) "weak-stale-verify-3b7"))
+  ;; missing-declared: deleting the carrier refuses BY NAME despite the twin
+  (delete-file (build-path planning-dir "waves" "W0-carrier-eight.md"))
+  (check-exn (lambda (e)
+               (and (exn:fail? e)
+                    (string-contains? (exn-message e) ".planning/waves/W0-carrier-eight.md")))
+             (lambda () (load-plan-from-index dir)))
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "BUG-0082: shared-carrier validation refuses the ambiguous mapping"
+  (define dir (make-temporary-file "gsd-index-shared-~a" 'directory))
+  (define planning-dir (build-path dir ".planning"))
+  (make-directory planning-dir)
+  (make-directory (build-path planning-dir "waves"))
+  (call-with-output-file
+   (build-path planning-dir "PLAN.md")
+   (lambda (out)
+     (display (string-append "# Plan\n\n## Waves\n"
+                             "- [Inbox] W0: carrier → waves/W0-carrier-nine.md\n"
+                             "- [Inbox] W2: twin → waves/W0-carrier-nine.md\n")
+              out))
+   #:exists 'truncate)
+  (call-with-output-file (build-path planning-dir "waves" "W0-carrier-nine.md")
+                         (lambda (out) (display "# Wave 0\nStatus: Inbox\n\nBody.\n" out))
+                         #:exists 'truncate)
+  (define result (validate-plan-artifacts dir))
+  (check-false (hash-ref result 'ok?))
+  (check-true (ormap (lambda (f)
+                       (string-contains? (plan-validation-finding-message f)
+                                         ".planning/waves/W0-carrier-nine.md"))
+                     (plan-validation-error-findings (hash-ref result 'findings))))
+  (delete-directory/files dir #:must-exist? #f))

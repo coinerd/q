@@ -97,14 +97,20 @@
   (define sid
     (or (hash-ref payload 'sessionId #f) (hash-ref payload 'session-id #f) (event-session-id evt) ""))
   (define s1 (struct-copy ui-state state [session-id sid]))
-  (append-entry s1 (make-entry 'system (format "Session started: ~a" sid) (event-time evt) (hash))))
+  ;; R102: a session attach clears foreground verification state belonging to
+  ;; a different (switched-away) session; same-session keeps it.
+  (append-entry
+   (clear-foreign-session-verification s1 sid)
+   (make-entry 'system (format "Session started: ~a" sid) (event-time evt) (hash))))
 
 (define (handle-session-resumed state evt)
   (define payload (event-payload evt))
   (define sid
     (or (hash-ref payload 'sessionId #f) (hash-ref payload 'session-id #f) (event-session-id evt) ""))
   (define s1 (struct-copy ui-state state [session-id sid]))
-  (append-entry s1 (make-entry 'system (format "Session resumed: ~a" sid) (event-time evt) (hash))))
+  (append-entry
+   (clear-foreign-session-verification s1 sid)
+   (make-entry 'system (format "Session resumed: ~a" sid) (event-time evt) (hash))))
 
 (define (handle-turn-started state evt)
   (define payload (event-payload evt))
@@ -406,9 +412,26 @@
         (for/hash ([(k v) (in-hash payload)])
           (values (string->symbol k) v))
         payload))
-  (define kind (hash-ref payload* 'kind 'unknown))
-  (define message (hash-ref payload* 'message ""))
-  (define wave-idx (hash-ref payload* 'wave #f))
+  ;; BUG-0093 (R93): flat fields stay the priority/compatibility path
+  ;; (symbol keys directly; string keys via the BUG-0067 normalization
+  ;; above, which does not descend into nested values). When the flat read
+  ;; misses, fall back to the ONE nested envelope the GSD event bridge
+  ;; forwards (outcome fields under a data wrapper, read by symbol then by
+  ;; string). Missing or malformed data — including a payload that is not
+  ;; a hash at all, which used to crash the flat hash-ref — keeps the
+  ;; honest fallback rendering below, and outer wrapper fields are never
+  ;; merged into the outcome details.
+  (define (outcome-field key default)
+    (or (and (hash? payload*)
+             (or (hash-ref payload* key #f)
+                 (wave-outcome-envelope-ref payload* key #f)))
+        default))
+  (define kind (outcome-field 'kind 'unknown))
+  ;; a malformed (non-string) message must not crash string=? below
+  (define message
+    (let ([m (outcome-field 'message "")])
+      (if (string? m) m "")))
+  (define wave-idx (outcome-field 'wave #f))
   (define text
     (cond
       [(and (not (string=? message "")) wave-idx) (format "wave ~a [~a]: ~a" wave-idx kind message)]
@@ -455,34 +478,120 @@
    (make-entry 'system text (event-time evt) (hasheq 'infra-retry #t 'phase phase 'wave wave))))
 
 ;; ============================================================
-;; Verification event handlers (W6 v0.99.5)
+;; Verification event handlers (W6 v0.99.5; R102 identity contract)
 ;; ============================================================
 
+;; R102: an event whose attachment generation is OLDER than the foreground
+;; session's generation belongs to a detached / switched-away session. It can
+;; neither set nor clear the foreground verification state (A->B->A queued
+;; events). Only comparable when BOTH sides carry a generation; generation-0
+;; or missing generations keep legacy behavior.
+(define (stale-verification-generation? state ident)
+  (define ev-gen (and ident (hash-ref ident 'session-attachment-generation #f)))
+  (and ev-gen
+       (let ([foreground (ui-state-attachment-generation state)])
+         (and (> foreground 0) (< ev-gen foreground)))))
+
+;; R102: a session attach/switch clears foreground verification state that
+;; belongs to a DIFFERENT session (the reducer-side guarantee backing the
+;; commands.rkt lifecycle). Same-session resumes keep it: reattachment is
+;; handled by the registry-facts route, not by dropping the state here.
+(define (clear-foreign-session-verification state sid)
+  (define progress (ui-state-verification-progress state))
+  (define progress-sid (and (hash? progress) (hash-ref progress 'session-id #f)))
+  (if (and progress-sid sid (not (equal? progress-sid sid)))
+      (set-status-message (set-verification-progress state #f) #f)
+      state))
+
 (define (handle-verification-started state evt)
+  (define ident (verification-event-identity evt))
   (define wave (verification-payload-ref evt 'wave #f))
   (define log-path (verification-payload-ref evt 'log-path #f))
-  (if wave
-      ;; BUG-0058: coordinator-owned gate — truthful wave-scoped status plus a
-      ;; stored start time so the status bar renders live elapsed while the
-      ;; multi-minute verify command runs.
-      (let* ([budget (verification-payload-ref evt 'timeout-sec #f)]
-             [start-ms (verification-payload-ref evt 'start-ms (current-inexact-milliseconds))]
-             [status (format "W~a verifying — budget ~as~a"
-                             wave
-                             (or budget "?")
-                             (if log-path
-                                 (format " · log ~a" log-path)
-                                 ""))])
-        (set-verification-progress (set-status-message state status)
-                                   (hasheq 'wave wave 'started-ms start-ms 'log-path log-path)))
-      ;; Legacy payload (artifact-count): keep the historical rendering.
-      (set-verification-progress
-       (set-status-message state
-                           (format "Verifying ~a artifacts..."
-                                   (verification-payload-ref evt 'artifact-count 0)))
-       #f)))
+  (cond
+    [(not wave)
+     ;; Legacy payload (artifact-count): keep the historical rendering.
+     (set-verification-progress
+      (set-status-message
+       state
+       (format "Verifying ~a artifacts..." (verification-payload-ref evt 'artifact-count 0)))
+      #f)]
+    ;; R102: stale-generation (old session) starts can never resurrect a timer.
+    [(stale-verification-generation? state ident) state]
+    ;; R102: a late start of an already-terminal job never resurrects progress.
+    [(and ident (verification-terminal-recorded? state (hash-ref ident 'key))) state]
+    [ident
+     ;; R102 identified start: progress carries identity+generation; a
+     ;; duplicate delivery of the SAME start keeps the ORIGINAL clock.
+     (let* ([budget (verification-payload-ref evt 'timeout-sec #f)]
+            [existing (ui-state-verification-progress state)]
+            [id-key (hash-ref ident 'key)]
+            [start-ms
+             (if (and (hash? existing)
+                      (equal? (hash-ref existing 'identity-key #f) id-key)
+                      (real? (hash-ref existing 'started-ms #f)))
+                 (hash-ref existing 'started-ms)
+                 (verification-payload-ref evt 'start-ms (current-inexact-milliseconds)))]
+            [status (format "W~a verifying — budget ~as~a"
+                            wave
+                            (or budget "?")
+                            (if log-path
+                                (format " · log ~a" log-path)
+                                ""))])
+       (set-verification-progress
+        (set-status-message state status)
+        (hash-set
+         (hash-set
+          (hash-set
+           (hash-set
+            (hasheq 'wave wave 'started-ms start-ms 'log-path log-path)
+            'identity-key
+            id-key)
+           'job-id
+           (hash-ref ident 'job-id))
+          'registry-incarnation
+          (hash-ref ident 'registry-incarnation))
+         'session-id
+         (event-session-id evt))))]
+    ;; BUG-0058: coordinator-owned gate — truthful wave-scoped status plus a
+    ;; stored start time so the status bar renders live elapsed while the
+    ;; multi-minute verify command runs.
+    [else
+     (let* ([budget (verification-payload-ref evt 'timeout-sec #f)]
+            [start-ms (verification-payload-ref evt 'start-ms (current-inexact-milliseconds))]
+            [status (format "W~a verifying — budget ~as~a"
+                            wave
+                            (or budget "?")
+                            (if log-path
+                                (format " · log ~a" log-path)
+                                ""))])
+       (set-verification-progress (set-status-message state status)
+                                  (hasheq 'wave wave 'started-ms start-ms 'log-path log-path)))]))
 
 (define (handle-verification-completed state evt)
+  (define ident (verification-event-identity evt))
+  (define progress (ui-state-verification-progress state))
+  (define progress-id (and (hash? progress) (hash-ref progress 'identity-key #f)))
+  (cond
+    ;; R102: stale-generation (old session) terminals are dropped entirely.
+    [(stale-verification-generation? state ident) state]
+    ;; R102: duplicate delivery of an already-reduced terminal dedupes to an
+    ;; exactly-once UI transition (no second transcript entry, no re-clear).
+    [(and ident (verification-terminal-recorded? state (hash-ref ident 'key))) state]
+    [ident
+     (define state1 (record-verification-terminal-id state (hash-ref ident 'key)))
+     ;; completion clears only the MATCHING identity (or a non-identified
+     ;; foreground, which the newer trusted terminal supersedes)
+     (finish-verification-terminal
+      state1
+      evt
+      (or (not progress) (not progress-id) (equal? progress-id (hash-ref ident 'key))))]
+    [else
+     ;; R102 legacy contract: an identity-less terminal may clear only a
+     ;; legacy (unidentified) foreground progress — NEVER an identified
+     ;; newer one. It is still recorded truthfully in the transcript.
+     (finish-verification-terminal state evt (not progress-id))]))
+
+(define (finish-verification-terminal state evt clear-foreground?)
   (define verdict
     (verification-payload-ref evt
                               'verdict
@@ -503,8 +612,15 @@
                        (format " · log ~a" log-path)
                        "")))
   ;; Every terminal verdict ends the running status, including rejection
-  ;; and unknown/escalated results. The transcript retains the verdict.
-  (define cleared (set-status-message (set-verification-progress state #f) #f))
+  ;; and unknown/escalated results — ONLY when it owns the foreground
+  ;; (R102: mismatched/legacy terminals keep the newer progress). The
+  ;; transcript retains the verdict. Clearing the DISPLAY state is never
+  ;; cancellation/reaping/approval evidence: attribution lives in the
+  ;; registry, never in the UI.
+  (define cleared
+    (if clear-foreground?
+        (set-status-message (set-verification-progress state #f) #f)
+        state))
   (match verdict
     ;; Approval: clear status message. BUG-0062: an approval must also leave
     ;; a durable, truthful transcript trace (elapsed + log path) — clearing

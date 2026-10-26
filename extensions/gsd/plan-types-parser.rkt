@@ -103,6 +103,18 @@
 ;; Fenced shell declarations are authoritative: surrounding Verify prose is
 ;; documentation, not executable input. Preserve legacy unfenced declarations
 ;; only when no fence occurs. An unclosed fence fails closed (no command).
+;;
+;; BUG-0075 (R75): the scan reports its structural verdict, so a malformed
+;; section can never be mistaken for an EMPTY declaration (and thereby reach
+;; a fallback). Returns two values:
+;;   payload — legacy unfenced lines, or (when any fence occurred) the
+;;             newline-joined shell-fence payload; fenced shell is
+;;             authoritative, so surrounding prose lines are dropped
+;;   refusal — #f or a NAMED structural refusal string:
+;;             "unclosed code fence in ## Verify section" (fail closed —
+;;             heredocs/compounds inside the fence stay byte-identical),
+;;             "no executable shell fence in ## Verify section" (every fence
+;;             was a non-shell language example)
 (define (verify-section-lines lines)
   (let loop ([remaining lines]
              [fence #f]
@@ -114,11 +126,16 @@
       [(or (null? remaining)
            (and (not fence) (regexp-match? #rx"^## " (string-trim (car remaining)))))
        (cond
-         [fence '()]
+         [fence (values '() "unclosed code fence in ## Verify section")]
          ;; Keep shell newlines: semicolon joining breaks comments, continuations,
-         ;; heredocs and compound commands inside fenced scripts.
-         [saw-fence? (list (string-join (reverse commands) "\n"))]
-         [else (reverse legacy)])]
+         ;; heredocs and compound commands inside fenced scripts. R75: the same
+         ;; newline grammar is preserved for legacy unfenced lines so bullet
+         ;; anchors after prose survive into the declaration.
+         [saw-fence?
+          (if (null? commands)
+              (values '() "no executable shell fence in ## Verify section")
+              (values (list (string-join (reverse commands) "\n")) #f))]
+         [else (values (reverse legacy) #f)])]
       [else
        (define line (string-trim (car remaining)))
        (define marker (regexp-match #px"^(`{3,}|~{3,})(.*)$" line))
@@ -161,14 +178,22 @@
   (define root-cause "")
   (define files '())
   (define verify-cmd "")
+  (define verify-refusal #f)
   (define done-criteria '())
   (define in-files-section #f)
   ;; BUG-0070: scan the complete section, not a four-line lookahead.
   ;; When fenced, execute only shell blocks, never surrounding prose.
-  (define heading-verify-lines
+  ;; BUG-0075 (R75): the section payload preserves its own line grammar —
+  ;; newlines, never a "; " join. The historical join flattened
+  ;; prose-before-bullets sections into one shell line: decorated? then
+  ;; matched only at position 0 and the whole section (English included)
+  ;; was handed to /bin/sh byte-for-byte. Structural refusals (unclosed
+  ;; fence, non-shell-only fences) surface as 'verify-refusal so the
+  ;; verifier can refuse by name instead of reaching a fallback.
+  (define-values (heading-verify-lines heading-verify-refusal)
     (let find-heading ([remaining lines])
       (cond
-        [(null? remaining) '()]
+        [(null? remaining) (values '() #f)]
         [(string-prefix? (string-trim (car remaining)) "## Verify")
          (verify-section-lines (cdr remaining))]
         [else (find-heading (cdr remaining))])))
@@ -179,7 +204,9 @@
     (cond
       [(string-prefix? trimmed "## Verify")
        (when (and (string=? verify-cmd "") (not (null? heading-verify-lines)))
-         (set! verify-cmd (string-join heading-verify-lines "; ")))]
+         (set! verify-cmd (string-join heading-verify-lines "\n")))
+       (when (and (string=? verify-cmd "") heading-verify-refusal)
+         (set! verify-refusal heading-verify-refusal))]
       [(regexp-match #rx"^- +[Rr]oot *[Cc]ause *: *(.+)$" line)
        =>
        (lambda (m) (set! root-cause (string-trim (cadr m))))]
@@ -199,11 +226,18 @@
        (lambda (m) (set! files (append files (list (clean-file-path (string-trim (cadr m)))))))]
       [(regexp-match #rx"^- +[Vv]erify *: *(.+)$" line)
        =>
-       (lambda (m) (set! verify-cmd (string-trim (cadr m))))]
+       (lambda (m)
+         (set! verify-cmd (string-trim (cadr m)))
+         ;; an explicit single-line declaration supersedes a structural refusal
+         (set! verify-refusal #f))]
       [(regexp-match #rx"^- +[Dd]one *: *(.+)$" line)
        =>
        (lambda (m) (set! done-criteria (append done-criteria (list (string-trim (cadr m))))))]))
-  (hasheq 'root-cause root-cause 'files files 'verify verify-cmd 'done done-criteria))
+  (hasheq 'root-cause root-cause
+          'files files
+          'verify verify-cmd
+          'done done-criteria
+          'verify-refusal verify-refusal))
 
 ;; Parse a single wave section → raw data hash (not a gsd-wave struct).
 ;; plan-types.rkt wraps this into a gsd-wave.

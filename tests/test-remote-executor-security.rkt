@@ -24,7 +24,10 @@
                   ipc-response?
                   ipc-response-status
                   ipc-response-error-message
-                  ipc-response-content)
+                  ipc-response-content
+                  jsexpr->ipc-response
+                  IPC-SCHEMA-VERSION)
+         (only-in "../sandbox/worker-tools.rkt" current-allowed-roots)
          (only-in "../util/security/cert-generator.rkt" generate-cert-set!)
          (only-in "../util/security/tls-contexts.rkt" make-server-ssl-context make-client-ssl-context)
          (only-in "../util/security/capability-tokens.rkt"
@@ -32,14 +35,18 @@
                   validate-capability-token
                   validate-capability-token/claims
                   CAPABILITY-TOKEN-TTL)
-         (only-in "../sandbox/executor-server.rkt" start-executor-server! shutdown-executor-server!)
+         (only-in "../sandbox/executor-server.rkt"
+                  start-executor-server!
+                  shutdown-executor-server!
+                  executor-server-running?)
          (only-in "../agent/distributed/remote-executor.rkt"
                   start-remote-executor!
                   shutdown-remote-executor!
                   execute-via-remote
                   remote-executor-alive?
                   remote-executor-circuit-state
-                  remote-executor-circuit-failure-count))
+                  remote-executor-circuit-failure-count)
+         "helpers/fast-fixtures.rkt")  ; wait-until: deterministic test sync
 
 ;; ── Test Fixture ──
 
@@ -163,6 +170,20 @@
 
 ;; ── Executor Security Integration Tests ──
 
+;; R91/BUG-0091: send one raw wire line to the real secure executor server
+;; and parse the JSON response line back into an ipc-response.
+(define (r91-raw-wire line port)
+  (define-values (in out) (ssl-connect "localhost" port client-ctx))
+  (displayln line out)
+  (flush-output out)
+  (define response-line (read-line in 'any))
+  (close-input-port in)
+  (close-output-port out)
+  (and (string? response-line)
+       (let ([data (with-handlers ([exn:fail? (lambda (_) #f)])
+                     (string->jsexpr (string-trim response-line)))])
+         (and data (jsexpr->ipc-response data)))))
+
 (define security-suite
   (test-suite "Remote Executor Security Integration"
 
@@ -248,7 +269,122 @@
           (define-values (_in _out) (ssl-connect "localhost" port no-cert-ctx))
           #t))
       (check-false connected? "server rejects connection without client cert")
-      (stop-server))))
+      (stop-server))
+
+    ;; ── R91/BUG-0091: server-side trust refusal on the REAL executor server ──
+    ;; A raw wire request to the actual secure server with a VALID capability
+    ;; token but a forged top-level trusted working directory must be refused
+    ;; by the server itself — no dispatch, no in-process/local fallback, and
+    ;; outside bytes preserved.
+    (test-case "R91: valid token + forged top-level trusted root refused server-side, no fallback"
+      (define victim-dir (make-temporary-file "r91-remote-victim-~a" 'directory))
+      (define spawn-root (make-temporary-file "r91-remote-spawn-~a" 'directory))
+      (define port (let ([l (tcp-listen 0)])
+                     (define-values (_h p _a _b) (tcp-addresses l #t))
+                     (tcp-close l)
+                     p))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define victim (build-path victim-dir "victim.txt"))
+         (call-with-output-file victim #:exists 'truncate (lambda (p) (display "REMOTE-OUTSIDE" p)))
+         ;; The server's dispatch threads inherit these spawn roots (worker
+         ;; tools capture them at the test process level), so the positive
+         ;; control below is an honest in-root success.
+         (parameterize ([current-allowed-roots (list spawn-root)])
+           (define server
+             (start-executor-server! #:port port
+                                     #:ssl-context server-ctx
+                                     #:capability-secret TEST-SECRET))
+           ;; R91-SLEEP: deterministic readiness synchronization replaces the raw
+           ;; settle sleep (wait-until on the observable accept-loop predicate;
+           ;; start-executor-server! binds its ssl-listen synchronously).
+           (check-true (wait-until (lambda () (executor-server-running? server)) 5.0)
+                       "executor server accept loop must be running before raw wire sends")
+           (define token (sign-capability-token 'execute-tools TEST-AGENT TEST-SECRET))
+           (define (wire-request twd target)
+             (define base
+               (hash 'request-id
+                     "r91-forged"
+                     'tool-name
+                     "write"
+                     'arguments
+                     (hasheq 'path target 'content "FORGED" 'capability-token token)
+                     'timeout-ms
+                     5000
+                     'working-dir
+                     #f
+                     'capability
+                     "execute-tools"
+                     'schema-version
+                     IPC-SCHEMA-VERSION))
+             ;; Legacy absence means the field is ABSENT, not null.
+             (jsexpr->string (if twd (hash-set base 'trusted-working-dir twd) base)))
+           ;; 1. The forged-trust request: VALID token, top-level trusted root
+           ;;    naming the victim's parent (which would authorize the write if
+           ;;    the server extended roots). The server must refuse explicitly
+           ;;    — never dispatch, never fall back to local execution.
+           (define forged (r91-raw-wire (wire-request (path->string victim-dir) (path->string victim)) port))
+           (check-true (ipc-response? forged) "forged-trust request must get a response")
+           (check-equal? (ipc-response-status forged) 'error)
+           (check-true (string-contains? (or (ipc-response-error-message forged) "")
+                                         "refused")
+                       (format "expected explicit server-side refusal, got: ~a"
+                               (ipc-response-error-message forged)))
+           (check-true (string-contains? (or (ipc-response-error-message forged) "")
+                                         "trusted working directory"))
+           (check-equal? (file->string victim) "REMOTE-OUTSIDE" "outside bytes must be preserved")
+           ;; 2. Control: the same authenticated request WITHOUT trust — the
+           ;;    server dispatches it and the write is refused only by the
+           ;;    worker's own root checks (victim is outside the spawn root).
+           ;;    Legacy wire shape keeps working.
+           (define legacy (r91-raw-wire (wire-request #f (path->string victim)) port))
+           (check-true (ipc-response? legacy))
+           (check-equal? (ipc-response-status legacy) 'error)
+           (check-true (string-contains? (or (ipc-response-error-message legacy) "")
+                                         "not allowed")
+                       (format "legacy refusal must come from root checks, got: ~a"
+                               (ipc-response-error-message legacy)))
+           (check-equal? (file->string victim) "REMOTE-OUTSIDE")
+           ;; 3. Positive control: an in-root write on the legacy shape
+           ;;    succeeds, proving the server still dispatches and the refusal
+           ;;    in (1) is specifically trust carriage, not general breakage.
+           (define in-root-target (build-path spawn-root "in-root.txt"))
+           (define in-root (r91-raw-wire (wire-request #f (path->string in-root-target)) port))
+           (check-equal? (ipc-response-status in-root) 'ok (ipc-response-error-message in-root))
+           (check-equal? (file->string in-root-target) "FORGED")
+           (shutdown-executor-server! server)))
+       (lambda ()
+         (delete-directory/files victim-dir #:must-exist? #f)
+         (delete-directory/files spawn-root #:must-exist? #f))))
+
+    (test-case "R91: remote producer stays 7-arg — clean requests carry no trust"
+      ;; The REAL server would refuse any request carrying a trusted working
+      ;; directory, so a clean execute-via-remote round-trip succeeding is the
+      ;; end-to-end proof that the producer still builds 7-arg requests.
+      (define port (let ([l (tcp-listen 0)])
+                     (define-values (_h p _a _b) (tcp-addresses l #t))
+                     (tcp-close l)
+                     p))
+      (define server
+        (start-executor-server! #:port port #:ssl-context server-ctx #:capability-secret TEST-SECRET))
+      ;; R91-SLEEP: deterministic readiness synchronization replaces the raw
+      ;; settle sleep (wait-until on the observable accept-loop predicate;
+      ;; start-executor-server! binds its ssl-listen synchronously).
+      (check-true (wait-until (lambda () (executor-server-running? server)) 5.0)
+                  "executor server accept loop must be running before the client connects")
+      (define exec
+        (start-remote-executor! #:host "localhost"
+                                #:port port
+                                #:ssl-context client-ctx
+                                #:capability-secret TEST-SECRET
+                                #:agent-id TEST-AGENT
+                                #:health-check-enabled #f))
+      (define resp (execute-via-remote exec "bash" (hasheq 'command "echo seven-arg") 'execute-tools 5000))
+      (check-equal? (ipc-response-status resp) 'ok (ipc-response-error-message resp))
+      (check-equal? (ipc-response-content resp) "seven-arg")
+      (shutdown-remote-executor! exec)
+      (shutdown-executor-server! server))))
 
 (run-tests token-suite)
 (run-tests security-suite)

@@ -41,7 +41,7 @@
                      'items
                      (hasheq 'type "string")
                      'description
-                     "List of relevance tags (symbols) for state-aware filtering")))
+                     "List of relevance tags for state-aware filtering (JSON strings, normalized internally)")))
     tool-save-conclusion
     #f
     'memory-write)

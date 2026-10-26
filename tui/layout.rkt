@@ -67,6 +67,17 @@
 (define (composer-input-height text-rows [max-rows default-max-composer-text-rows])
   (+ composer-chrome-rows (clamp-composer-text-rows text-rows max-rows)))
 
+;; Width of the composer TEXT AREA inside a terminal/input region of the
+;; given width: the "q> " prompt occupies `prompt-width` columns of the
+;; first composer text row (legacy input-visible-window contract via
+;; current-input-prompt-width); the shared composer layout wraps in the
+;; remaining width. When the surface is too narrow to show the prompt plus
+;; at least one text column, the prompt is hidden and the full width is
+;; the text area. R100 repair: restores the prompt dropped in f68aebb1.
+(define (composer-text-area-width term-width [prompt-width 3])
+  (define w (max 1 term-width))
+  (if (> w prompt-width) (- w prompt-width) w))
+
 ;; Compute the 5-region layout for a given terminal size.
 ;; Returns a hash of region-name -> layout-region.
 ;; Canonical positional args: (term-height, term-width).
@@ -177,7 +188,11 @@
          composer-chrome-rows
          clamp-composer-text-rows
          composer-input-height
-         (contract-out [compute-layout
+         (contract-out [composer-text-area-width
+                        (->* (exact-nonnegative-integer?)
+                             (exact-nonnegative-integer?)
+                             exact-positive-integer?)]
+                       [compute-layout
                         (->* (exact-positive-integer? exact-positive-integer?)
                              (#:widget-bar-h exact-nonnegative-integer?
                                              #:has-widgets? boolean?
@@ -239,4 +254,10 @@
   (check-equal? (clamp-composer-text-rows 99) 6)
   (check-equal? (composer-input-height 1) 3)
   (check-equal? (composer-input-height 6) 8)
-  (check-equal? (composer-input-height 9) 8))
+  (check-equal? (composer-input-height 9) 8)
+  ;; R100: prompt-aware composer text-area width (legacy q> contract)
+  (check-equal? (composer-text-area-width 80) 77)
+  (check-equal? (composer-text-area-width 5) 2)
+  (check-equal? (composer-text-area-width 3) 3) ; too narrow for prompt + 1 col
+  (check-equal? (composer-text-area-width 0) 1)
+  (check-equal? (composer-text-area-width 80 0) 80))

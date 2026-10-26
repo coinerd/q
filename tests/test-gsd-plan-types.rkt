@@ -290,7 +290,7 @@
   ;; raco test is captured (not a fence line), fence lines are skipped
   (check-equal? (hash-ref result 'verify) "raco test"))
 
-(test-case "BUG-0070: parse-wave-content captures the complete Verify section"
+(test-case "BUG-0070/R75: parse-wave-content captures the complete Verify section"
   (define content
     (string-append
      "## Verify\n"
@@ -303,11 +303,49 @@
      "- `racket scripts/run-tests.rkt --suite fast` green; `metrics.rkt --lint` green.\n"
      "\n## Done\n- delivered\n"))
   (define result (parse-wave-content content))
+  ;; R75 (BUG-0075): the section's own line grammar is PRESERVED — newlines
+  ;; are the bullet anchors the normalizer needs. The historical "; " join
+  ;; flattened prose+bullets into one shell line and made decorated? match
+  ;; only at position 0, handing the whole section to /bin/sh verbatim.
   (check-equal? (hash-ref result 'verify)
                 (string-append
-                 "- criterion one; - criterion two; - criterion three; - criterion four; "
-                 "- criterion five; - criterion six; "
-                 "- `racket scripts/run-tests.rkt --suite fast` green; `metrics.rkt --lint` green.")))
+                 "- criterion one\n- criterion two\n- criterion three\n- criterion four\n"
+                 "- criterion five\n- criterion six\n"
+                 "- `racket scripts/run-tests.rkt --suite fast` green; `metrics.rkt --lint` green."))
+  (check-false (hash-ref result 'verify-refusal #f)))
+
+(test-case "R75: prose-before-bullets keeps the bullet anchors for the normalizer"
+  (define content
+    (string-append
+     "## Verify\n"
+     "The gates below must all pass.\n"
+     "- `racket a.rkt` green\n"
+     "- `raco make b.rkt` ok\n"
+     "\n## Done\n- delivered\n"))
+  (define verify (hash-ref (parse-wave-content content) 'verify))
+  (check-equal? verify
+                "The gates below must all pass.\n- `racket a.rkt` green\n- `raco make b.rkt` ok"))
+
+(test-case "R75: unclosed fence is a named refusal (never an empty declaration)"
+  (define parsed (parse-wave-content "## Verify\nRun this:\n```sh\nraco test x.rkt\n"))
+  (check-equal? (hash-ref parsed 'verify) "")
+  (check-true (string-contains? (hash-ref parsed 'verify-refusal "missing") "unclosed")))
+
+(test-case "R75: a section whose only fences are non-shell is a named refusal"
+  (define parsed
+    (parse-wave-content "## Verify\n```json\n{}\n```\n## Done\nfinished\n"))
+  (check-equal? (hash-ref parsed 'verify) "")
+  (check-true (string-contains? (hash-ref parsed 'verify-refusal "missing") "shell")))
+
+(test-case "R75: genuinely empty Verify section carries no refusal (fallback territory)"
+  (define parsed (parse-wave-content "## Verify\n\n## Done\n- delivered\n"))
+  (check-equal? (hash-ref parsed 'verify) "")
+  (check-false (hash-ref parsed 'verify-refusal #f)))
+
+(test-case "R75: legacy bullet-style - Verify: is untouched and refusal-free"
+  (define parsed (parse-wave-content "- Verify: raco test q/tests/foo.rkt"))
+  (check-equal? (hash-ref parsed 'verify) "raco test q/tests/foo.rkt")
+  (check-false (hash-ref parsed 'verify-refusal #f)))
 
 (test-case "W2: parse-wave-content empty content returns empty fields"
   (define result (parse-wave-content ""))

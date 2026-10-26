@@ -46,7 +46,11 @@
          (only-in "review-dispatch.rkt"
                   current-gsd-auto-review-runner
                   review-runner-installed?
-                  auto-review-dispatch!))
+                  auto-review-dispatch!)
+         ;; R76 (BUG-0076): shared layout-aware delivery-root resolution.
+         (only-in "git-root-layout.rkt"
+                  delivery-root-or-raise
+                  git-root-marker?))
 
 (provide delivery-effect-result
          delivery-effect-result?
@@ -67,6 +71,7 @@
          parse-delivery-stop
          default-active-delivery-evidence-path
          default-artifact-provenance-root
+         resolve-coordinator-repo
          review-rejected-message)
 
 ;; Journal stage order excluding the typed stops
@@ -510,12 +515,22 @@
                                               excluded-evidence-prefixes)))
                                  (string-split dout "\n")))))))))
 
+;; R76 (BUG-0076): the ONE repository-identity selector shared by the
+;; artifact-provenance root and the delivery controller seams (previously two
+;; independent copies of the name-based base-dir-or-q selector). Layout-aware
+;; resolution: a decoy outer repository beside an independent nested q, and
+;; any broken .git marker, raise the typed git-root refusal (root+reason);
+;; every seam maps that to its own typed stop — never a silent selection.
+;; ONLY when no repository exists anywhere does the legacy naming survive
+;; (base-dir itself for plain synthetic source trees, otherwise the legacy
+;; child q/ root), preserving the marker-less fixture law: on Git
+;; enumeration failure such unscoped roots keep flowing to the callers.
+(define (resolve-coordinator-repo base-dir)
+  (or (delivery-root-or-raise base-dir)
+      (if (git-root-marker? base-dir) #f (build-path base-dir "q"))))
+
 (define (default-artifact-provenance-root base-dir plan wave #:run-git [run-git shell-git])
-  (define repo
-    (if (or (directory-exists? (build-path base-dir ".git"))
-            (file-exists? (build-path base-dir ".git")))
-        base-dir
-        (build-path base-dir "q")))
+  (define repo (resolve-coordinator-repo base-dir))
   (define-values (code listing) (run-git repo '("worktree" "list" "--porcelain")))
   (if (not (zero? code))
       (and (not (or (directory-exists? (build-path repo ".git"))
@@ -625,20 +640,19 @@
                   (redact-delivery-text (format "~a" (hash-ref data 'reason "delivery pending"))))))))
 
 (define (default-delivery-controller base-dir plan wave target-stage)
-  ;; The controller shell runs in the checkout identified by base-dir (or its
-  ;; q/ child), exactly like delivery-readback. Tokens are added for THIS
-  ;; process only; the reason is redacted on every failure path.
-  (define repo
-    (if (or (directory-exists? (build-path base-dir ".git"))
-            (file-exists? (build-path base-dir ".git")))
-        base-dir
-        (build-path base-dir "q")))
+  ;; The controller shell runs in the checkout identified by the shared
+  ;; layout-aware root resolution (R76) — exactly like delivery-readback.
+  ;; Tokens are added for THIS process only; the reason is redacted on every
+  ;; failure path. A git-root refusal (decoy outer repository, broken
+  ;; marker, ambiguous child q) is a typed blocked stop with the redacted
+  ;; root+reason — the controller never runs against an unauthenticated root.
   (define (run-controller . args)
     (with-handlers
         ([exn:fail? (lambda (e)
                       (delivery-effect-result
                        'blocked
                        (hasheq 'stage target-stage 'reason (redact-delivery-text (exn-message e)))))])
+      (define repo (resolve-coordinator-repo base-dir))
       (define result
         (run-subprocess "python3"
                         #:args (append (list (path->string default-delivery-controller-script))

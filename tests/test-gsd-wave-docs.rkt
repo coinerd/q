@@ -17,10 +17,12 @@
 
 (require rackunit
          racket/file
+         racket/list
          racket/string
          racket/path
          racket/port
-         "../extensions/gsd/wave-docs.rkt")
+         "../extensions/gsd/wave-docs.rkt"
+         "../extensions/gsd/prompts.rkt")
 
 ;; ============================================================
 ;; Test helpers
@@ -401,3 +403,168 @@ Some description without status header.")
   (check-not-false result)
   ;; Empty input -> status defaults to Inbox
   (check-equal? (hash-ref result 'status) "Inbox"))
+
+;; ============================================================
+;; BUG-0095 (#9854): prompt-authored wave docs on disk. planning-write
+;; stores content VERBATIM, so the exact mandatory template emitted by
+;; planning-prompt is written RAW (no writer header prepended) and must
+;; pass the file-backed campaign lint surfaces cleanly — for W0 and a
+;; substituted nonzero wave (W2).
+;; ============================================================
+
+(define (bug-0095-string-index-of s sub [from 0])
+  (define len (string-length sub))
+  (let loop ([i from])
+    (cond
+      [(> (+ i len) (string-length s)) #f]
+      [(string=? (substring s i (+ i len)) sub) i]
+      [else (loop (add1 i))])))
+
+;; The exact fenced mandatory template emitted by planning-prompt —
+;; byte-for-byte, NO test-added repairs.
+(define (bug-0095-template)
+  (define p (planning-prompt "test"))
+  (define m (regexp-match-positions #rx"### Wave Doc Format[^\n]*\n```\n" p))
+  (unless m
+    (error "wave-doc template fence missing from planning-prompt"))
+  (define body-start (cdr (car m)))
+  (define close (bug-0095-string-index-of p "\n```" body-start))
+  (unless close
+    (error "wave-doc template closing fence missing"))
+  (substring p body-start close))
+
+(define (bug-0095-count-lines s rx)
+  (count (lambda (line) (regexp-match? rx line)) (string-split s "\n")))
+
+;; Write one wave doc's exact bytes RAW (as planning-write would store
+;; them) plus a PLAN.md index row for it, in an isolated root.
+(define (bug-0095-author-doc! root idx slug raw)
+  (define waves-dir (build-path root ".planning" "waves"))
+  (unless (directory-exists? waves-dir)
+    (make-directory* waves-dir))
+  (call-with-output-file (build-path waves-dir (format "W~a-~a.md" idx slug))
+                         (lambda (out) (display raw out))
+                         #:exists 'truncate)
+  (call-with-output-file
+   (build-path root ".planning" "PLAN.md")
+   (lambda (out) (fprintf out "- [Inbox] W~a: Short title → waves/W~a-~a.md\n" idx idx slug))
+   #:exists 'append)
+  (build-path waves-dir (format "W~a-~a.md" idx slug)))
+
+(test-case "BUG-0095: verbatim W0 doc on disk passes campaign lint surfaces"
+  (define root (make-temporary-file "wave-docs-0095-~a" 'directory))
+  (define raw (bug-0095-template))
+  (define path (bug-0095-author-doc! root 0 "short-title" raw))
+  ;; Byte-exact storage: no writer header was prepended.
+  (define on-disk (call-with-input-file path port->string))
+  (check-equal? on-disk raw "doc bytes stored verbatim")
+  (check-equal? (bug-0095-count-lines on-disk #rx"^# Wave [0-9]+$") 1 "single H1 on disk")
+  (check-equal? (bug-0095-count-lines on-disk #px"^Status:") 1 "single Status line on disk")
+  ;; File-backed canonical lint: zero violations, zero warnings.
+  (check-equal? (lint-campaign-wave-docs root) '())
+  (check-equal? (wave-doc-lint-warning-lines root) '())
+  ;; Index row and doc header agree; no second body Status line.
+  (check-equal? (check-status-consistency root) '())
+  (delete-directory/files root))
+
+(test-case "BUG-0095: verbatim W2 (substituted) doc on disk passes campaign lint surfaces"
+  (define root (make-temporary-file "wave-docs-0095-~a" 'directory))
+  (define raw (string-replace (bug-0095-template) "# Wave 0" "# Wave 2"))
+  (define path (bug-0095-author-doc! root 2 "short-title" raw))
+  (define on-disk (call-with-input-file path port->string))
+  (check-equal? on-disk raw)
+  (check-equal? (bug-0095-count-lines on-disk #rx"^# Wave [0-9]+$") 1 "single H1 on disk")
+  (check-equal? (bug-0095-count-lines on-disk #px"^Status:") 1 "single Status line on disk")
+  (check-equal? (lint-campaign-wave-docs root) '())
+  (check-equal? (wave-doc-lint-warning-lines root) '())
+  (check-equal? (check-status-consistency root) '())
+  ;; And the read-back doc itself lints clean with a recognized Inbox header.
+  (define doc (read-wave-doc root 2 "short-title"))
+  (check-not-false doc)
+  (check-true (hash-ref doc 'status-header?))
+  (check-equal? (hash-ref doc 'status) "Inbox")
+  (check-equal? (map wave-doc-violation-section (lint-wave-doc doc)) '())
+  (delete-directory/files root))
+
+;; ============================================================
+;; BUG-0082: declared wave-path identity (status/consistency transitions)
+;; ============================================================
+
+(test-case "BUG-0082: mark-wave-status! writes the DECLARED doc, carrier header identity preserved"
+  (define root (make-temp-planning-dir))
+  (make-directory (build-path root ".planning" "waves"))
+  (call-with-output-file
+   (build-path root ".planning" "PLAN.md")
+   (lambda (out)
+     (display (string-append "# Plan\n\n## Waves\n"
+                             "- [Inbox] W2: Carrier wave → waves/W0-identity-carrier.md\n")
+              out))
+   #:exists 'truncate)
+  (call-with-output-file (build-path root ".planning" "waves" "W0-identity-carrier.md")
+                         (lambda (out) (display "# Wave 0\nStatus: Inbox\n\ncarrier body\n" out))
+                         #:exists 'truncate)
+  (check-true (mark-wave-status! root 2 "DONE"))
+  (define text
+    (call-with-input-file (build-path root ".planning" "waves" "W0-identity-carrier.md")
+                          port->string))
+  ;; carrier path preserved, carrier header identity preserved (never
+  ;; rewritten to the selected W-number), status dual-written
+  (check-true (string-contains? text "# Wave 0\nStatus: DONE"))
+  (check-false (string-contains? text "# Wave 2"))
+  (check-true (string-contains? (call-with-input-file (build-path root ".planning" "PLAN.md")
+                                                      port->string)
+                                "[DONE] W2:"))
+  ;; consistency reads the declared doc: row and header agree
+  (check-equal? (check-status-consistency root) '())
+  ;; effective status of the W2 row resolves through the carrier header
+  (define entries
+    (parse-plan-index (call-with-input-file (build-path root ".planning" "PLAN.md") port->string)))
+  (check-equal? (effective-wave-status root (car entries)) "DONE")
+  (delete-directory/files root #:must-exist? #f))
+
+(test-case "BUG-0082: shared multi-entry carrier mutation refuses with zero file changes"
+  (define root (make-temp-planning-dir))
+  (make-directory (build-path root ".planning" "waves"))
+  (call-with-output-file
+   (build-path root ".planning" "PLAN.md")
+   (lambda (out)
+     (display (string-append "# Plan\n\n## Waves\n"
+                             "- [Inbox] W0: carrier → waves/W0-shared-carrier.md\n"
+                             "- [Inbox] W2: twin → waves/W0-shared-carrier.md\n")
+              out))
+   #:exists 'truncate)
+  (call-with-output-file (build-path root ".planning" "waves" "W0-shared-carrier.md")
+                         (lambda (out) (display "# Wave 0\nStatus: Inbox\n\ncarrier body\n" out))
+                         #:exists 'truncate)
+  (define (snapshot)
+    (sort (for/list ([p (in-directory root)]
+                     #:when (file-exists? p))
+            (cons (path->string (find-relative-path root p)) (file->bytes p)))
+          string<?
+          #:key car))
+  (define before (snapshot))
+  (check-false (mark-wave-status! root 2 "DONE"))
+  (check-false (mark-wave-status! root 0 "DONE"))
+  (check-equal? (snapshot) before)
+  ;; selection refuses the same mapping by name
+  (check-exn (lambda (e)
+               (and (exn:fail? e)
+                    (string-contains? (exn-message e) ".planning/waves/W0-shared-carrier.md")))
+             (lambda () (next-inbox-wave root)))
+  (delete-directory/files root #:must-exist? #f))
+
+(test-case "BUG-0082: unsafe declared arrow refuses by name; never synthesizes"
+  (define root (make-temp-planning-dir))
+  (make-directory (build-path root ".planning" "waves"))
+  (call-with-output-file (build-path root ".planning" "PLAN.md")
+                         (lambda (out)
+                           (display (string-append "# Plan\n\n## Waves\n"
+                                                   "- [Inbox] W0: escape → waves/../../evil.md\n")
+                                    out))
+                         #:exists 'truncate)
+  (check-exn (lambda (e)
+               (and (exn:fail? e)
+                    (string-contains? (exn-message e) "waves/../../evil.md")
+                    (string-contains? (exn-message e) "escapes")))
+             (lambda () (read-declared-wave-doc root 0)))
+  (delete-directory/files root #:must-exist? #f))

@@ -507,3 +507,134 @@
   (parameterize ([current-conclusion-token-budget 1])
     (define result-minimal (conclusions-for-context mem '(implementation) '()))
     (check-true (list? result-minimal) "returns list even with budget=1")))
+
+;; ============================================================
+;; R99a (BUG-0099): recognized fallbacks render as UNVERIFIED
+;; provenance — never as [Conclusion]/learned insight.
+;; ============================================================
+
+(define r99a-fallback
+  (task-conclusion "auto-m1"
+                   "[Auto] Previously read file (origin: m1)"
+                   'fact
+                   'implementation
+                   '("m1")
+                   (current-seconds)
+                   '(auto-distilled)
+                   '()))
+(define r99a-prov
+  (task-conclusion "p1"
+                   "[Auto] provenance-category record"
+                   'provenance
+                   'implementation
+                   '("m1")
+                   (current-seconds)
+                   '(auto-distilled)
+                   '()))
+(define r99a-insight
+  (task-conclusion "i1"
+                   "Curated insight text"
+                   'fact
+                   'implementation
+                   '("m1")
+                   (current-seconds)
+                   '()
+                   '()))
+
+(test-case "R99a: preamble renders fallbacks as labeled provenance, not Top conclusions"
+  (define preamble (build-state-awareness-preamble 'implementation (list r99a-fallback)))
+  (define text (extract-text-from-messages (list preamble)))
+  ;; Provenance block with explicit label
+  (check-true (string-contains? text "[Source provenance]"))
+  (check-true (string-contains? text "(unverified)"))
+  (check-true (string-contains? text "Previously read file (origin: m1)"))
+  ;; NOT rendered as learned insight
+  (check-false (string-contains? text "Top conclusions (1 total"))
+  (check-true (string-contains? text "No conclusions in memory")))
+
+(test-case "R99a: preamble provenance-category records also labeled provenance"
+  (define preamble (build-state-awareness-preamble 'implementation (list r99a-prov)))
+  (define text (extract-text-from-messages (list preamble)))
+  (check-true (string-contains? text "[Source provenance]"))
+  (check-false (string-contains? text "Top conclusions (1 total")))
+
+(test-case "R99a: genuine insight sharing origin wins; provenance listed separately"
+  (define preamble
+    (build-state-awareness-preamble 'implementation (list r99a-fallback r99a-insight)))
+  (define text (extract-text-from-messages (list preamble)))
+  ;; Insight is the only Top conclusion
+  (check-true (string-contains? text "Top conclusions (1 total, 1 shown)"))
+  (check-true (string-contains? text "- Curated insight text"))
+  ;; Provenance still visible but labeled, in its own section after insights
+  (check-true (string-contains? text "[Source provenance]"))
+  (check-true (string-contains? text "(unverified)"))
+  ;; fallback never rendered as a plain insight line
+  (check-false (string-contains? text "  - [Auto] Previously read file")))
+
+(test-case "R99a: insight-only preamble unchanged (byte-exact section)"
+  (define preamble (build-state-awareness-preamble 'implementation (list r99a-insight)))
+  (define text (extract-text-from-messages (list preamble)))
+  (check-true (string-contains? text "Top conclusions (1 total, 1 shown):\n  - Curated insight text"))
+  (check-false (string-contains? text "Source provenance")))
+
+(test-case "R99a: conclusion entries render fallbacks with provenance label"
+  (define msgs (make-test-msgs 5))
+  (define tc
+    (build-tiered-context/state-aware msgs
+                                      #:task-state 'implementation
+                                      #:conclusions (list r99a-fallback r99a-insight)))
+  (define tier-a-text (extract-text-from-messages (tiered-context-tier-a tc)))
+  (check-true (string-contains? tier-a-text "[Source provenance] (unverified) [Auto] Previously read file (origin: m1)"))
+  (check-true (string-contains? tier-a-text "[Conclusion] Curated insight text"))
+  ;; the fallback is never rendered as a [Conclusion]
+  (check-false (string-contains? tier-a-text "[Conclusion] [Auto] Previously read file")))
+
+(test-case "R99a: provenance-category conclusion entries labeled; insights win ordering"
+  (define msgs (make-test-msgs 5))
+  (define tc
+    (build-tiered-context/state-aware msgs
+                                      #:task-state 'implementation
+                                      #:conclusions (list r99a-prov r99a-insight)))
+  (define tier-a-text (extract-text-from-messages (tiered-context-tier-a tc)))
+  (check-true (string-contains? tier-a-text "[Source provenance] (unverified) [Auto] provenance-category record"))
+  (define pos-insight (regexp-match-positions (regexp-quote "Curated insight text") tier-a-text))
+  (define pos-prov (regexp-match-positions (regexp-quote "[Source provenance] (unverified)") tier-a-text))
+  (check-true (< (caar pos-insight) (caar pos-prov)) "insight entries precede provenance entries"))
+
+;; ---------------------------------------------------------------------------
+;; R99b (BUG-0099): the ACTIVATED deterministic writer's provenance records
+;; render exactly like the R99a matrix — labeled [Source provenance] (unverified)
+;; in preamble and tier-A entries, never as Top conclusions / [Conclusion].
+;; ---------------------------------------------------------------------------
+(require (only-in "../runtime/context-assembly/auto-distillation.rkt"
+                  generate-fallback-conclusions))
+
+(define r99b-writer-record
+  (car (generate-fallback-conclusions (list "m1") 'implementation)))
+
+(test-case "R99b: preamble renders the writer's provenance record labeled, never as Top conclusions"
+  (define preamble
+    (build-state-awareness-preamble 'implementation (list r99b-writer-record)))
+  (define text (extract-text-from-messages (list preamble)))
+  (check-true (string-contains? text "[Source provenance]"))
+  (check-true (string-contains? text "(unverified)"))
+  (check-true (string-contains? text
+                                "Source message m1 retained as provenance; no distilled insight available."))
+  (check-false (string-contains? text "Top conclusions (1 total"))
+  (check-true (string-contains? text "No conclusions in memory")))
+
+(test-case "R99b: writer record conclusion entries labeled; insight still precedes it"
+  (define msgs (make-test-msgs 5))
+  (define tc
+    (build-tiered-context/state-aware msgs
+                                      #:task-state 'implementation
+                                      #:conclusions (list r99b-writer-record r99a-insight)))
+  (define tier-a-text (extract-text-from-messages (tiered-context-tier-a tc)))
+  (check-true (string-contains?
+               tier-a-text
+               "[Source provenance] (unverified) Source message m1 retained as provenance; no distilled insight available."))
+  (check-true (string-contains? tier-a-text "[Conclusion] Curated insight text"))
+  (check-false (string-contains? tier-a-text "[Conclusion] Source message m1"))
+  (define pos-insight (regexp-match-positions (regexp-quote "Curated insight text") tier-a-text))
+  (define pos-prov (regexp-match-positions (regexp-quote "[Source provenance] (unverified)") tier-a-text))
+  (check-true (< (caar pos-insight) (caar pos-prov)) "insight entries precede provenance entries"))

@@ -39,7 +39,8 @@
                   wave-index-entry-title
                   wave-index-entry-slug
                   wave-index-entry-status
-                  wave-index-entry-ref-path)
+                  wave-index-entry-ref-path
+                  unsafe-declared-path-refusal)
          (only-in "../../util/json/checksum.rkt" sha256-string)
          (only-in "plan-snapshot.rkt"
                   seed-and-bind-plan-snapshot!
@@ -705,18 +706,17 @@
       [(not attempt) (void)]
       [(usage-datum? usage)
        (define src (if (usage-datum-estimated? usage) 'provider-estimated 'provider))
-       (set-campaign-attempt-input-tokens!
-        attempt
-        (or (valid-token-value (usage-datum-input-tokens usage)) old-in))
-       (set-campaign-attempt-output-tokens!
-        attempt
-        (or (valid-token-value (usage-datum-output-tokens usage)) old-out))
-       (set-campaign-attempt-total-tokens!
-        attempt
-        (or (valid-token-value (usage-datum-total-tokens usage)) old-total))
-       (set-campaign-attempt-cost-usd!
-        attempt
-        (or (valid-cost-value (usage-datum-cost-usd usage)) old-cost))
+       (set-campaign-attempt-input-tokens! attempt
+                                           (or (valid-token-value (usage-datum-input-tokens usage))
+                                               old-in))
+       (set-campaign-attempt-output-tokens! attempt
+                                            (or (valid-token-value (usage-datum-output-tokens usage))
+                                                old-out))
+       (set-campaign-attempt-total-tokens! attempt
+                                           (or (valid-token-value (usage-datum-total-tokens usage))
+                                               old-total))
+       (set-campaign-attempt-cost-usd! attempt
+                                       (or (valid-cost-value (usage-datum-cost-usd usage)) old-cost))
        (set-campaign-attempt-usage-source! attempt src)
        ;; cumulative wave totals: #f (unset) + n = n; #f (unknown) + n = #f
        (when (eq? old-source 'usage-missing)
@@ -992,6 +992,14 @@
 ;; BUG-0052 fail-closed semantics: absence is a hard migration failure,
 ;; never the empty-content hash.
 (define (wave-doc-hash-at base-dir rel-path)
+  ;; BUG-0082: a declared path is validated BEFORE resolution — a
+  ;; traversal/absolute arrow must never hash bytes outside .planning
+  ;; (campaign migration can run without /go validation).
+  (define refusal (unsafe-declared-path-refusal rel-path))
+  (when refusal
+    (raise (exn:fail:campaign-migration
+            (format "declared wave document path refused: .planning/~a (~a)" rel-path refusal)
+            (current-continuation-marks))))
   (define p (build-path base-dir ".planning" rel-path))
   (if (file-exists? p)
       (sha256-string (normalize-wave-doc-content (call-with-input-file p port->string)))
@@ -1003,7 +1011,16 @@
         (current-continuation-marks)))))
 
 (define (wave-doc-content-hash base-dir idx slug)
-  (wave-doc-hash-at base-dir (format "waves/W~a-~a.md" idx slug)))
+  ;; BUG-0082: identity consistency — when the plan index row for <idx>
+  ;; declares an arrow path, that document is hashed, not the synthesized
+  ;; W<idx>-<slug>.md twin. Arrowless rows keep the synthesized path.
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define declared
+    (and (file-exists? plan-path)
+         (for/first ([e (in-list (parse-plan-index (call-with-input-file plan-path port->string)))]
+                     #:when (= (wave-index-entry-idx e) idx))
+           (wave-index-entry-ref-path e))))
+  (wave-doc-hash-at base-dir (or declared (format "waves/W~a-~a.md" idx slug))))
 
 ;; v0.99.90 W5 (#9236): plan identity must remain stable across mutable
 ;; status/failure projections. plan-snapshot.rkt owns the shared normalization

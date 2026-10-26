@@ -20,7 +20,9 @@
          (only-in "task-conclusion.rkt"
                   task-conclusion?
                   task-conclusion-text
-                  task-conclusion-origin-message-ids)
+                  task-conclusion-origin-message-ids
+                  ;; R99a: shared frozen recognizer + provenance classification
+                  provenance-kind?)
          (only-in "../../util/fsm/fsm.rkt" fsm-state? fsm-state-name)
          (only-in "rollback-actions.rkt"
                   warnings->actions
@@ -212,23 +214,46 @@
 ;; If a conclusion references this message's ID via origin-message-ids,
 ;; returns a compact replacement message with conclusion text.
 ;; Otherwise returns the original message unchanged.
+;;
+;; R99a: provenance-kind conclusions (recognized legacy deterministic
+;; fallbacks and future internal 'provenance records) are labeled UNVERIFIED
+;; provenance — never "[Conclusion]". When multiple conclusions cover the
+;; same origin, a genuine insight wins over a provenance-kind record;
+;; ties keep deterministic input order.
 (define (ws-entry->conclusion-or-self ws-msg conclusions)
   (define msg-id-val (message-id ws-msg))
   (define (origin-matches? c)
     (define oids (task-conclusion-origin-message-ids c))
     (and (pair? oids) (ormap (lambda (oid) (equal? msg-id-val oid)) oids)))
-  (define matching-conclusion
+  (define matching-insight
     (for/first ([c (in-list conclusions)]
-                #:when (and (task-conclusion? c) (origin-matches? c)))
+                #:when (and (task-conclusion? c)
+                            (origin-matches? c)
+                            (not (provenance-kind? c))))
+      c))
+  (define matching-provenance
+    (for/first ([c (in-list conclusions)]
+                #:when (and (task-conclusion? c)
+                            (origin-matches? c)
+                            (provenance-kind? c)))
       c))
   (cond
-    [matching-conclusion
+    [matching-insight
      (make-message (message-id ws-msg)
                    #f
                    'system
                    'system-instruction
                    (list (make-text-part (format "[Conclusion replaces context] ~a"
-                                                 (task-conclusion-text matching-conclusion))))
+                                                 (task-conclusion-text matching-insight))))
+                   (current-seconds)
+                   (hasheq))]
+    [matching-provenance
+     (make-message (message-id ws-msg)
+                   #f
+                   'system
+                   'system-instruction
+                   (list (make-text-part (format "[Source provenance replaces context] (unverified) ~a"
+                                                 (task-conclusion-text matching-provenance))))
                    (current-seconds)
                    (hasheq))]
     [else ws-msg]))

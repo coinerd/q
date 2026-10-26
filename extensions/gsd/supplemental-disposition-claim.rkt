@@ -9,7 +9,20 @@
          (submod "supplemental-disposition-policy.rkt" ancestry-support)
          "../../util/json/checksum.rkt"
          (only-in "evidence-repair-format.rkt" canonical-evidence-json)
-         (submod "supplemental-evidence-journal.rkt" disposition-store-support))
+         ;; Acyclic storage/validation core (BUG-0090): the immutable journal
+         ;; primitives this claim needs are provided by a shared leaf helper,
+         ;; never by the journal itself, so first use cannot re-enter a
+         ;; partially instantiated module through a lazy back-edge.
+         (only-in "supplemental-evidence-store-core.rkt"
+                  authenticate-supplemental-task!
+                  paths
+                  validate-record!
+                  inspect-supplemental-recovery-parent
+                  read-recovery-claim!
+                  read-pointer!
+                  canonical-pointer-path
+                  cut!
+                  [claim-path recovery-claim-path]))
 (provide inspect-supplemental-disposition-parent
          install-supplemental-disposition-claim!
          validate-disposition-claim!
@@ -38,7 +51,7 @@
 (define (inspect-parent grant a predecessor)
   (call-with-supplemental-authority-lock
    (lambda ()
-     (define-values (proposal task expiry) (authenticated-task! grant #t))
+     (define-values (proposal task expiry) (authenticate-supplemental-task! grant #t))
      (unless (and (equal? grant (hash-ref a 'parent-approval))
                   (equal? proposal (hash-ref a 'parent-proposal))
                   (equal?
@@ -208,7 +221,7 @@
 (define (install-supplemental-disposition-claim! path old target proposal grant)
   (call-with-supplemental-authority-lock
    (lambda ()
-     (define-values (p task expiry) (authenticated-task! grant #t))
+     (define-values (p task expiry) (authenticate-supplemental-task! grant #t))
      (unless (and (equal? p proposal)
                   (< (current-seconds) expiry)
                   (<= expiry (+ (current-seconds) (hash-ref (hash-ref task 'bounds) 'deadline-sec))))

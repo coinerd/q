@@ -55,7 +55,12 @@
 ;; symbol/predicate, not a real call (e.g. policy.rkt's 'write-file decision
 ;; symbol). path-ops for policy.rkt is REAL (string->path/path->string in
 ;; in-planning-dir?); fs-read for wave-executor.rkt is REAL (call-with-input-file).
-(define scanner-exclusions '(("policy.rkt" . (fs-write))))
+;; git for verify-command-format.rkt is a FALSE POSITIVE (R75): the token is the
+;; quoted "git" entry in the verify-accept-first-tokens vocabulary DATA — a
+;; pure canonicalization module (requires only racket/string) that never
+;; invokes git; declaring the effect would be the dishonest direction.
+(define scanner-exclusions '(("policy.rkt" . (fs-write))
+                             ("verify-command-format.rkt" . (git))))
 
 ;; Scan a source file's non-comment code for effect markers.
 (define (scan-effects file)
@@ -119,7 +124,14 @@
       ;; +1 BUG-0088 public promotion audit validator;
       ;; +1 BUG-0088 supplemental worker descriptor/projections.
       ;; +4 fixed disposition policy/claim/store/backend owners.
-      (check-equal? (length inventory) 104 "100 existing modules + four disposition owners"))
+      ;; +1 BUG-0090 storage/validation core extracted from the journal
+      ;; (supplemental-evidence-store-core);
+      ;; +1 R76 (BUG-0076) shared leaf delivery-root resolver
+      ;; (git-root-layout).
+      (check-equal?
+       (length inventory)
+       106
+       "105 existing modules + BUG-0090 journal store core + R76 git-root-layout"))
 
     (test-case "supplemental worker descriptor projects policy without dispatch authority"
       (define descriptor (hash-ref inventory-map "supplemental-author-contract.rkt"))

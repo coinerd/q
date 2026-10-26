@@ -106,7 +106,18 @@
          ;; cannot deliver a distinct Ctrl+O sequence.
          (only-in "../ui-core/disclosure-state.rkt" resolve-toggle-target disclosure-toggle)
          (only-in "../ui-core/conversation-artifact.rkt" conversation-artifact-id)
-         (only-in "../ui-core/conversation-reducer.rkt" reducer-thinking-artifact))
+         (only-in "../ui-core/conversation-reducer.rkt" reducer-thinking-artifact)
+         ;; R102: campaign terminal + session-restore verification lifecycle
+         ;; reads the trusted registry facts; cached UI elapsed is never
+         ;; restored across a reattach.
+         (only-in "../extensions/gsd/composition-root.rkt" current-gsd-verification-registry)
+         (only-in "../extensions/gsd/verification-job.rkt"
+                  verification-registry-incarnation
+                  verification-job-facts
+                  verification-job?
+                  verification-job-state
+                  verification-job-exit-code
+                  verification-job-log-path))
 
 ;; Re-export all public APIs
 (provide cmd-ctx
@@ -160,6 +171,65 @@
   (set-box! (cmd-ctx-state-box cctx)
             (set-busy-since (set-busy (add-transcript-entry st entry) #f) #f))
   (set-box! (cmd-ctx-needs-redraw-box cctx) #t))
+
+;; ============================================================
+;; R102: campaign terminal + session-restore verification lifecycle
+;; ============================================================
+
+;; A campaign TERMINAL outcome (complete / stop / error) clears the
+;; foreground verification status+progress. Clearing DISPLAY state is never
+;; evidence of cancellation/reaping/approval: attribution lives in the
+;; registry, and a still-running detached job stays attributable through the
+;; registry-backed reattach path below.
+(define (clear-foreground-verification! cctx)
+  (define st (unbox (cmd-ctx-state-box cctx)))
+  (when (ui-state-verification-progress st)
+    (set-box! (cmd-ctx-state-box cctx)
+              (set-status-message (set-verification-progress st #f) #f))
+    (set-box! (cmd-ctx-needs-redraw-box cctx) #t)))
+
+;; Session RESTORE is a reattach, not a resume of cached UI clocks. The
+;; cached progress hash (and its started-ms elapsed clock) is dropped; the
+;; still-truthful facts come from the trusted registry:
+;;   - a job still running stays attributable with an EXPLICIT detached
+;;     status (never falsely completed/cancelled, no cached elapsed);
+;;   - a job terminal in the registry gets a durable, truthful verdict entry;
+;;   - a foreign-incarnation or unknown job simply clears (registry
+;;     recreation loses the window by design; nothing is guessed).
+;; The foreground attachment generation is always bumped so queued events
+;; from the detached session can neither set nor clear the restored state.
+(define (reattach-verification-state state)
+  (define progress (ui-state-verification-progress state))
+  (define cleared
+    (bump-attachment-generation
+     (set-status-message (set-verification-progress state #f) #f)))
+  (define job-id (and (hash? progress) (hash-ref progress 'job-id #f)))
+  (define incarnation (and (hash? progress) (hash-ref progress 'registry-incarnation #f)))
+  (cond
+    [(not (and job-id incarnation)) cleared]
+    [else
+     (define reg (current-gsd-verification-registry))
+     (define facts
+       (and (equal? incarnation (verification-registry-incarnation reg))
+            (verification-job-facts reg job-id)))
+     (cond
+       [(not facts) cleared]
+       [(eq? (verification-job-state facts) 'running)
+        (set-status-message
+         cleared
+         (format "W~a verify running (detached) · log ~a"
+                 (hash-ref progress 'wave "?")
+                 (verification-job-log-path facts)))]
+       [else
+        (add-transcript-entry
+         cleared
+         (make-entry 'system
+                     (format "[Verification (detached): state ~a exit ~a · log ~a]"
+                             (verification-job-state facts)
+                             (verification-job-exit-code facts)
+                             (verification-job-log-path facts))
+                     (current-inexact-milliseconds)
+                     (hasheq 'verification #t 'detached #t)))])]))
 
 (define (execute-campaign-command cctx campaign-token display-text)
   (when display-text
@@ -216,14 +286,21 @@
                               #:new-bus (session-event-bus pre-campaign-sess)
                               #:new-extension-registry ext-reg
                               #:reason 'resume)))))
-      (set-box! (cmd-ctx-agent-session-box cctx) pre-campaign-sess)
-      (define cur-state (unbox (cmd-ctx-state-box cctx)))
-      (set-box! (cmd-ctx-state-box cctx)
-                (struct-copy ui-state
-                             cur-state
-                             [session-id pre-campaign-sid]
-                             [model-name (or pre-campaign-model (ui-state-model-name cur-state))]))
-      (set-box! (cmd-ctx-needs-redraw-box cctx) #t)))
+      (set-box! (cmd-ctx-agent-session-box cctx) pre-campaign-sess))
+    (define restored-sess
+      (and pre-campaign-sess (agent-session? pre-campaign-sess) pre-campaign-sess))
+    (define restored-sid (if restored-sess pre-campaign-sid (ui-state-session-id (unbox (cmd-ctx-state-box cctx)))))
+    (define cur-state (unbox (cmd-ctx-state-box cctx)))
+    ;; R102: the restore is a REATTACH — this runs even when no saved session
+    ;; exists (degenerate restore): cached verification elapsed is never
+    ;; restored; the trusted registry facts decide what remains attributable,
+    ;; and the foreground attachment generation advances.
+    (set-box! (cmd-ctx-state-box cctx)
+              (struct-copy ui-state
+                           (reattach-verification-state cur-state)
+                           [session-id restored-sid]
+                           [model-name (or pre-campaign-model (ui-state-model-name cur-state))]))
+    (set-box! (cmd-ctx-needs-redraw-box cctx) #t))
   (if factory
       (let ([campaign-owner (gensym 'gsd-campaign)])
         (thread
@@ -235,6 +312,10 @@
                void
                (lambda ()
                  (with-handlers ([exn:fail? (lambda (e)
+                                              ;; R102: the campaign terminal clears the
+                                              ;; foreground verification state before the
+                                              ;; error message lands.
+                                              (clear-foreground-verification! cctx)
                                               (append-campaign-message!
                                                cctx
                                                (format "[ERROR] /go campaign failed: ~a"
@@ -246,6 +327,11 @@
                                               ;; orchestrating TUI session.
                                               #:lease-owner
                                               (ui-state-session-id (unbox (cmd-ctx-state-box cctx)))))
+                   ;; R102: campaign terminal (complete OR stopped) — no
+                   ;; foreground verification outlives the campaign's own
+                   ;; terminal state; a still-running detached job stays
+                   ;; attributable via the registry-backed reattach path.
+                   (clear-foreground-verification! cctx)
                    (when (eq? (campaign-result-status result) 'campaign-complete)
                      (append-campaign-message! cctx "/go campaign complete."))
                    (unless (eq? (campaign-result-status result) 'campaign-complete)

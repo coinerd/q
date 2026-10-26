@@ -114,13 +114,32 @@ Plans are Markdown files in `.planning/PLAN.md`. The supported grammar is the
 - [Inbox] W1: Harden the retry path → waves/W1-harden-retry.md
 ```
 
-Each wave doc (`waves/W0-....md`) contains the wave body:
+Each wave doc (`waves/W0-....md`) is one full document stored VERBATIM by
+`planning-write` — the writer adds nothing. It MUST begin with the two-line
+machine-managed header: exactly one `# Wave <N>` H1 followed by exactly one
+`Status: Inbox` line (substitute the wave's own index in the H1: `# Wave 0`
+for W0, `# Wave 2` for W2). No second `Status:` line may appear anywhere in
+the document. The remainder is the wave body:
 
 ```markdown
-**Root cause:** The timeout handler uses milliseconds instead of seconds.
+# Wave 0
+Status: Inbox
 
-**Files:** `auth.rkt`, `auth-test.rkt`
-**Verify:** `raco test tests/test-auth.rkt`
+## Root Cause
+The timeout handler uses milliseconds instead of seconds.
+
+## Files
+- File: auth.rkt
+- File: tests/test-auth.rkt
+
+## Action
+Convert the timeout budget to seconds and update the unit test.
+
+## Verify
+raco test tests/test-auth.rkt
+
+## Done
+- Timeout budget expressed in seconds; unit test updated and passing
 ```
 
 ### Deprecation: inline plan format (BUG-0035)

@@ -12,7 +12,8 @@
          racket/string
          racket/system
          "effect-ports.rkt"
-         "wave-runner-port.rkt")
+         "wave-runner-port.rkt"
+         "git-root-layout.rkt")
 
 (provide make-system-filesystem-port
          make-system-git-port
@@ -66,22 +67,14 @@
                        system-acquire-lock
                        system-release-lock!))
 
+;; R76 (BUG-0076): the duplicated marker-sniffing copy is retired; this is
+;; the SAME layout-aware helper plan-context-builder uses (a leaf module, so
+;; no circular import through composition-root). Git's own rev-parse answers
+;; select a direct repository or a genuinely nested q repository; decoy
+;; outer repositories, broken .git markers and unrelated child q refuse with
+;; a typed exn:fail:git-root (root+reason); no repository still yields #f.
 (define (find-git-root start-dir)
-  (define start-path (path->complete-path start-dir))
-  (define (has-git? dir)
-    (define marker (build-path dir ".git"))
-    (or (directory-exists? marker) (file-exists? marker)))
-  (define q-sub (build-path start-path "q"))
-  (cond
-    [(has-git? start-path) start-path]
-    [(and (directory-exists? q-sub) (has-git? q-sub)) q-sub]
-    [else
-     (let loop ([dir start-path])
-       (cond
-         [(has-git? dir) dir]
-         [else
-          (define-values (parent _name _dir?) (split-path dir))
-          (and (path? parent) (not (equal? parent dir)) (loop parent))]))]))
+  (delivery-root-or-raise start-dir))
 
 (define (run-system-process program args cwd)
   (parameterize ([current-directory cwd])
@@ -114,6 +107,14 @@
      (if (null? files)
          ""
          (with-handlers ([exn:fail? (lambda (_) "")])
+           ;; R76 (BUG-0076): declared targets must live inside the selected
+           ;; delivery root; a target anchored elsewhere refuses (typed
+           ;; git-root refusal naming the root) instead of silently reading a
+           ;; foreign repository. The dual anchor mirrors the verifier's
+           ;; wave-file->git-relative conventions (root-relative or
+           ;; planning-base-relative "q/…" declarations).
+           (for ([f (in-list files)])
+             (require-delivery-target-in-root! root f #:what "git evidence target"))
            (define result
              ((gsd-process-port-run process-port) "git"
                                                   (append '("log" "-1" "--stat" "--oneline" "--")

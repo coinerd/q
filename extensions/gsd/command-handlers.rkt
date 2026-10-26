@@ -508,7 +508,11 @@
     (for/first ([candidate (in-list (parse-plan-index plan-content))]
                 #:when (= (wave-index-entry-idx candidate) wave-idx))
       candidate))
-  (define wave-doc (and entry (read-wave-doc base-dir wave-idx (wave-index-entry-slug entry))))
+  ;; BUG-0082: the ordinary prompt embeds the wave's DECLARED document
+  ;; (arrow path when the row carries one); the W<idx>-<slug>.md synthesis
+  ;; only for arrowless legacy rows. A stale synthesized twin can never
+  ;; steer the executor.
+  (define wave-doc (and entry (read-declared-wave-doc base-dir wave-idx)))
   (define wave-details
     (if wave-doc
         (hash-ref wave-doc 'content "")

@@ -450,6 +450,41 @@
                                        #:old-receipt-head old-head
                                        #:verify-mode 'bogus))))))
 
+  (test-case "BUG-0082: recovery binds the copied plan and candidate verify to the DECLARED identity"
+    ;; The plan declares W0 through a carrier doc; the original synthesized
+    ;; waves/W0-zero.md stays behind as a STALE twin with a different (weak)
+    ;; verify. Both travel into the byte-faithful verification copy. The
+    ;; candidate verify must execute the DECLARED carrier's gate (its
+    ;; distinctive failure names it) — never the stale twin's.
+    (with-fixture
+     (lambda (root bare repo base old-head head)
+       (define (put! rel text)
+         (define p (build-path root ".planning" rel))
+         (make-parent-directory* p)
+         (call-with-output-file p (lambda (out) (display text out)) #:exists 'truncate))
+       (put! "PLAN.md" "# Plan\n\n- [Inbox] W0: Recovery → waves/W0-recovery-carrier.md\n")
+       (put! "waves/W0-recovery-carrier.md"
+             (string-append
+              "# Wave 0\nStatus: Inbox\n\n"
+              "## Files\n- File: q/ui-core/preferences.rkt\n\n"
+              "## Verify\n- `bash -c 'test -f recovery-carrier-marker-8e2.txt'` green.\n\n"
+              "## Done\n- carrier done\n"))
+       (put! "waves/W0-zero.md"
+             (string-append "# Wave 0\nStatus: Inbox\n\n"
+                            "## Files\n- File: q/ui-core/preferences.rkt\n\n"
+                            "## Verify\n- `bash -c 'test -f stale-weak-2b1d.txt'` green.\n\n"
+                            "## Done\n- stale done\n"))
+       (define before (tree-bytes root))
+       (define result (call-recover root bare base old-head head))
+       (check-eq? (recovery-result-status result) 'refused (format "~s" result))
+       (check-eq? (recovery-result-reason result) 'verify-failed)
+       (define message (format "~a" (car (recovery-result-details result))))
+       (check-true (string-contains? message "recovery-carrier-marker-8e2")
+                   "the copied plan's DECLARED doc drove the candidate verify")
+       (check-false (string-contains? message "stale-weak-2b1d")
+                    "the stale synthesized twin never drives the verify")
+       (check-equal? (tree-bytes root) before "dry-run refusal leaves the root untouched"))))
+
   (test-case "CLI prints a successful dry-run as valid JSON with JSON-safe details"
     ;; RED (live dryrun5): the approved dry-run result carried the bare
     ;; symbol 'would-reconcile in its details and write-json crashed while

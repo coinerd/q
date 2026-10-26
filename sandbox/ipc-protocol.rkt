@@ -8,6 +8,7 @@
 
 (require racket/contract
          racket/match
+         racket/path
          (only-in racket/port with-output-to-string))
 
 ;; ── Protocol Constants ──────────────────────────────────────────
@@ -40,6 +41,12 @@
   #:transparent
   #:constructor-name construct-ipc-request)
 
+;; R91/BUG-0091 (frozen contract §2.2.4): JSON cannot encode path objects, so
+;; trusted producers normalize path values to JSON strings at construction.
+;; This is producer-side normalization only; it never widens trust.
+(define (normalize-wire-path v)
+  (if (path? v) (path->string v) v))
+
 ;; Backward-compatible constructor: historical call sites use 7 positional
 ;; args; the coordinator trust channel is an optional 8th argument. Bound to
 ;; the name `ipc-request` so every pre-existing positional call site keeps
@@ -56,10 +63,53 @@
                          tool-name
                          arguments
                          timeout-ms
-                         working-dir
+                         (normalize-wire-path working-dir)
                          capability
                          schema-version
-                         trusted-working-dir))
+                         (normalize-wire-path trusted-working-dir)))
+
+;; ── Trusted-working-dir validation (R91/BUG-0091) ───────────────
+
+;; Frozen contract §2.2.4: the decoder validates twd when present — string,
+;; absolute, no `up` component, no NUL, no symlink spelling. Invalid trust
+;; makes the WHOLE request malformed (parser #f → error response); it is
+;; never coerced to #f-and-continue and never widens roots.
+(define (valid-trusted-working-dir? twd)
+  (and (string? twd)
+       (not (regexp-match? #rx"\u0000" twd))
+       (absolute-path? twd)
+       ;; `..` may not appear as a path component (explode-path spells it 'up).
+       (not (member 'up (explode-path (string->path twd))))
+       (trusted-working-dir-spelling-safe? twd)))
+
+;; No symlink spelling: walk the longest existing prefix and require every
+;; existing component to resolve to its own lexical spelling. A symlinked
+;; ancestor with a non-existent tail would pass a final-component-only
+;; resolve-path check, so every existing component is resolved in turn.
+;; Broken links and resolution failures fail closed (#f).
+(define (trusted-working-dir-spelling-safe? twd-str)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (let loop ([remaining (explode-path (string->path twd-str))] [resolved-prefix #f])
+      (cond
+        [(null? remaining) #t]
+        [else
+         (define candidate
+           (if resolved-prefix
+               (build-path resolved-prefix (car remaining))
+               (car remaining)))
+         (cond
+           [(or (file-exists? candidate) (directory-exists? candidate) (link-exists? candidate))
+            (define resolved (resolve-path candidate))
+            (define complete-target
+              (if (complete-path? resolved)
+                  resolved
+                  (path->complete-path resolved
+                                       (or (path-only candidate) (current-directory)))))
+            (define simplified (simplify-path complete-target #f))
+            (and (equal? simplified (simplify-path candidate #f))
+                 (loop (cdr remaining) simplified))]
+           ;; Non-existent tail: nothing further can be a link spelling.
+           [else #t])]))))
 
 (struct ipc-response
         (request-id ; string?
@@ -110,6 +160,14 @@
                 (string? tool-name)
                 (hash? arguments)
                 (positive-timeout? timeout-ms)
+                ;; R91/BUG-0091 defect fix: the parsed `trusted-working-dir`
+                ;; is now validated and passed into the 8th constructor
+                ;; argument instead of being silently discarded. Legacy
+                ;; absence (#f / field omitted) keeps byte-identical
+                ;; behavior (§2.2.5); invalid trust fails closed and
+                ;; refuses the whole request (§2.2.4).
+                (or (not trusted-working-dir)
+                    (valid-trusted-working-dir? trusted-working-dir))
                 (make-ipc-request request-id
                                   tool-name
                                   arguments
@@ -122,7 +180,8 @@
                                       (string->symbol capability))
                                   (if (exact-nonnegative-integer? schema-version)
                                       schema-version
-                                      IPC-SCHEMA-VERSION)))))))
+                                      IPC-SCHEMA-VERSION)
+                                  trusted-working-dir))))))
 
 (define (positive-timeout? v)
   (and (real? v) (positive? v)))
@@ -181,7 +240,9 @@
                              #:error-class [error-class #f])
   ;; WP3.5 (BUG-0056): structured outcome classes. error-class is attached in
   ;; details so every execution-plane failure is distinguishable without
-  ;; parsing message strings. Detail values are jsexpr-safe (symbols allowed).
+  ;; parsing message strings. Detail values are jsexpr-safe (symbols allowed
+  ;; for in-process consumers; wire-serialized responses should use a string
+  ;; class because racket/json rejects symbols).
   (define base (if (and (hash? extra-details) (not (hash-empty? extra-details)))
                    extra-details
                    (hasheq)))
@@ -283,7 +344,8 @@
          ipc-request-working-dir
          ipc-request-capability
          ipc-request-schema-version
-         ipc-request-trusted-working-dir)
+         ipc-request-trusted-working-dir
+         valid-trusted-working-dir?)
 
 (provide ipc-response
          ipc-response?
@@ -302,7 +364,7 @@
                         (->* ((or/c string? #f))
                              (string?
                               #:details (or/c hash? #f)
-                              #:error-class (or/c symbol? #f))
+                              #:error-class (or/c symbol? string? #f))
                              ipc-response?)]
                        [make-timeout-response
                         (->* ((or/c string? #f)) (string? #:details (or/c hash? #f)) ipc-response?)]

@@ -121,7 +121,10 @@
           ;; Constructors
           [initial-ui-state
            (->* ()
-                (#:session-id (or/c string? #f) #:model-name (or/c string? #f) #:mode symbol?)
+                (#:session-id (or/c string? #f)
+                              #:model-name (or/c string? #f)
+                              #:mode symbol?
+                              #:attachment-generation exact-nonnegative-integer?)
                 ui-state?)]
           ;; Entry helpers
           [make-entry (-> symbol? string? number? hash? transcript-entry?)]
@@ -143,6 +146,14 @@
           [ui-state-busy? (-> ui-state? boolean?)]
           [ui-state-status-message (-> ui-state? (or/c string? #f))]
           [ui-state-verification-progress (-> ui-state? (or/c hash? #f))]
+          [ui-state-attachment-generation (-> ui-state? exact-nonnegative-integer?)]
+          [set-attachment-generation (-> ui-state? exact-nonnegative-integer? ui-state?)]
+          [bump-attachment-generation (-> ui-state? ui-state?)]
+          [next-attachment-generation! (-> exact-nonnegative-integer?)]
+          [ui-state-verification-terminal-ids (-> ui-state? (listof string?))]
+          [record-verification-terminal-id (-> ui-state? string? ui-state?)]
+          [verification-terminal-recorded? (-> ui-state? string? boolean?)]
+          [verification-terminal-id-limit exact-positive-integer?]
           [ui-state-pending-tool-name (-> ui-state? (or/c string? #f))]
           [ui-state-streaming-text (-> ui-state? (or/c string? #f))]
           [ui-state-streaming-thinking (-> ui-state? (or/c string? #f))]
@@ -226,8 +237,16 @@
          interrupt-request-id
          active-model-turn-id
          compact-request-id ; (or/c string? #f) — F-06: pending compact request ID
-         verification-progress) ; BUG-0058: (or/c hasheq? #f) — active coordinator
-  ; verification (wave, started-ms, log-path) for live elapsed rendering
+         verification-progress ; BUG-0058: (or/c hasheq? #f) — active coordinator
+         ; verification (wave, started-ms, log-path) for live elapsed rendering;
+         ; R102: the progress hash additionally carries identity+generation
+         ; (identity-key, job-id, registry-incarnation,
+         ; session-attachment-generation, session-id) so terminals and lifecycle
+         ; transitions can match it exactly
+         attachment-generation ; R102: monotone session-attachment generation of
+         ; the FOREGROUND session; lifecycle bumps it, stale events are refused
+         verification-terminal-ids) ; R102: bounded last-terminal identity keys
+  ; (dedupe tombstone — exactly-once UI transition; NO general event store)
   #:transparent)
 
 ;; The complete UI state (21 fields, grouped by domain)
@@ -407,13 +426,14 @@
 
 (define (initial-ui-state #:session-id [session-id #f]
                           #:model-name [model-name #f]
-                          #:mode [mode 'chat])
+                          #:mode [mode 'chat]
+                          #:attachment-generation [attachment-generation 0])
   (ui-state '() ; transcript
             0 ; scroll-offset
             session-id
             model-name
             mode
-            (streaming-state #f #f #f #f #f #f 'idle #f #f #f #f #f #f) ; streaming
+            (streaming-state #f #f #f #f #f #f 'idle #f #f #f #f #f #f attachment-generation '()) ; streaming
             #f ; current-branch
             '() ; visible-branches
             (selection-state #f #f)
@@ -452,6 +472,62 @@
 (define (set-verification-progress state progress)
   (update-streaming state
                     (lambda (s) (struct-copy streaming-state s [verification-progress progress]))))
+
+;; ============================================================
+;; R102: foreground attachment generation + terminal dedupe window
+;; ============================================================
+
+;; Monotone process-wide session-attachment generation. Minted ONCE per
+;; session attach/switch/restore by the owning lifecycle (tui-init
+;; on-created, commands.rkt restore); verification events carry the
+;; generation bound at their source attach, so a queued event from an older
+;; generation can never set or clear the newer foreground state.
+(define attachment-generation-counter (box 0))
+(define attachment-generation-lock (make-semaphore 1))
+
+(define (next-attachment-generation!)
+  (call-with-semaphore
+   attachment-generation-lock
+   (lambda ()
+     (set-box! attachment-generation-counter (add1 (unbox attachment-generation-counter)))
+     (unbox attachment-generation-counter))))
+
+(define (ui-state-attachment-generation state)
+  (streaming-state-attachment-generation (ui-state-streaming state)))
+
+(define (set-attachment-generation state generation)
+  (update-streaming
+   state
+   (lambda (s) (struct-copy streaming-state s [attachment-generation generation]))))
+
+(define (bump-attachment-generation state)
+  (set-attachment-generation state (next-attachment-generation!)))
+
+;; Bounded last-terminal window (per UI state): identity keys whose terminal
+;; was already reduced. Duplicate deliveries (duplicate subscriptions,
+;; re-queued events) dedupe against it for an exactly-once UI transition;
+;; late STARTS of a terminal job are refused (no timer resurrection).
+;; Explicit FIFO bound — no general event store, no durability claim.
+(define verification-terminal-id-limit 8)
+
+(define (ui-state-verification-terminal-ids state)
+  (streaming-state-verification-terminal-ids (ui-state-streaming state)))
+
+(define (record-verification-terminal-id state id-key)
+  (update-streaming
+   state
+   (lambda (s)
+     (define next (cons id-key (streaming-state-verification-terminal-ids s)))
+     (struct-copy
+      streaming-state
+      s
+      [verification-terminal-ids
+       (if (> (length next) verification-terminal-id-limit)
+           (take next verification-terminal-id-limit)
+           next)]))))
+
+(define (verification-terminal-recorded? state id-key)
+  (and (member id-key (ui-state-verification-terminal-ids state)) #t))
 
 (define (ui-state-pending-tool-name state)
   (streaming-state-pending-tool-name (ui-state-streaming state)))

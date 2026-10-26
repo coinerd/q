@@ -10,6 +10,7 @@
          "review-proof-format.rkt"
          "supplemental-evidence-proof.rkt"
          "delivery-verifier.rkt"
+         "verify-command-format.rkt"
          "verification-job.rkt"
          "composition-root.rkt"
          "plan-snapshot.rkt"
@@ -90,13 +91,24 @@
   (unless (= (length entries) 1)
     (refuse "ambiguous/missing frozen wave"))
   (define path (safe-path (build-path (snapshot-dir base plan) (snapshot-file-path (car entries)))))
-  (define declaration (hash-ref (parse-wave-content (file->string path)) 'verify #f))
+  (define content (file->string path))
+  (define parsed (parse-wave-content content))
+  (define structural-refusal (hash-ref parsed 'verify-refusal #f))
+  (when structural-refusal
+    (refuse (format "frozen Verify is malformed: ~a" structural-refusal)))
+  (define declaration (hash-ref parsed 'verify #f))
   (unless (and (string? declaration) (non-empty-string? declaration))
     (refuse "empty frozen Verify"))
+  ;; R75: the SAME normalization semantics as live execution (one shared
+  ;; pure extractor). The binding records the normalizer contract version so
+  ;; a historical-normalization change refuses rebinding loudly: retained
+  ;; authority is compared, never regenerated.
   (define normalized (normalize-declared-verify declaration))
   (unless (non-empty-string? normalized)
     (refuse "frozen Verify has no executable command"))
-  (hasheq 'snapshot-sha256 (snapshot-manifest-digest m) 'normalized-command normalized))
+  (hasheq 'snapshot-sha256 (snapshot-manifest-digest m)
+          'normalized-command normalized
+          'normalizer-version verify-normalizer-version))
 ;; Atomic create-only publication. Existing addressed files must match; chmod
 ;; discourages accidents, while validation always rechecks bytes and paths.
 (define (retain! root suffix writer)

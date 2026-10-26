@@ -36,8 +36,81 @@
 
 (struct cell-buffer (cols rows cells dirty?) #:mutable)
 
-;; Create a new cell buffer filled with default cells
+;; ============================================================
+;; Position contract (BUG-0100 / R100)
+;; ============================================================
+
+;; Raised when a cell position is outside the buffer on EITHER axis.
+;; Descends from exn:fail:contract so generic exn:fail? handlers still
+;; catch it; the payload carries the offending coordinates AND the actual
+;; buffer dimensions for the diagnostic.
+(struct exn:fail:cell-buffer-bounds exn:fail:contract (op col row cols rows) #:transparent)
+
+;; Validate BOTH axes independently against the ACTUAL buffer dimensions
+;; BEFORE any flattening. A flattened index alone cannot distinguish
+;; (cols, r) from (0, r+1): on a 5x3 buffer, (col=5,row=0) lands on flat
+;; index 5, which is cell (0,1); (col=-1,row=1) lands on index 4 == (4,0).
+;; Coordinates are therefore validated per-axis and an index is never
+;; computed from unvalidated values. Violations raise a descriptive
+;; contract error — never alias, never silently clamp.
+(define (check-cell-position who buf col row)
+  (define cols (cell-buffer-cols buf))
+  (define rows (cell-buffer-rows buf))
+  (unless (and (exact-integer? col)
+               (exact-integer? row)
+               (>= col 0)
+               (< col cols)
+               (>= row 0)
+               (< row rows))
+    (raise
+     (exn:fail:cell-buffer-bounds
+      (format "~a: position (col=~a, row=~a) is outside buffer dimensions (cols=~a, rows=~a); ~a"
+              who
+              col
+              row
+              cols
+              rows
+              (cond
+                [(not (exact-integer? col)) "col must be an exact integer"]
+                [(not (exact-integer? row)) "row must be an exact integer"]
+                [(or (< col 0) (>= col cols))
+                 (format "col must be in [0,~a); refusing flattened-index aliasing" cols)]
+                [else
+                 (format "row must be in [0,~a); refusing flattened-index aliasing" rows)]))
+      (current-continuation-marks)
+      who
+      col
+      row
+      cols
+      rows))))
+
+;; Both-axis bounds predicate against the ACTUAL buffer dimensions.
+;; Used by the render loop to guard save/paint/restore/blink and
+;; hardware/IME cursor positioning before any physical cell access.
+(define (cell-buffer-in-bounds? buf col row)
+  (and (exact-integer? col)
+       (exact-integer? row)
+       (>= col 0)
+       (< col (cell-buffer-cols buf))
+       (>= row 0)
+       (< row (cell-buffer-rows buf))))
+
+;; Create a new cell buffer filled with default cells.
+;; Zero-sized surfaces (0 cols or 0 rows) are valid and produce an empty
+;; cells vector; callers must treat them as "no visible cell" (deferred
+;; cursor/frame). Negative dimensions are a contract error.
 (define (make-cell-buffer cols rows)
+  (unless (exact-integer? cols)
+    (raise-argument-error 'make-cell-buffer "exact-integer? (>= 0)" cols))
+  (unless (exact-integer? rows)
+    (raise-argument-error 'make-cell-buffer "exact-integer? (>= 0)" rows))
+  (when (or (negative? cols) (negative? rows))
+    (raise
+     (exn:fail:contract
+      (format "make-cell-buffer: negative dimensions (cols=~a, rows=~a); zero-size is allowed, negative is not"
+              cols
+              rows)
+      (current-continuation-marks))))
   (define cells (make-vector (* cols rows)))
   (for ([i (in-range (vector-length cells))])
     (vector-set! cells i (make-default-cell)))
@@ -48,6 +121,7 @@
 ;; ============================================================
 
 (define (cell-buffer-ref buf col row)
+  (check-cell-position 'cell-buffer-ref buf col row)
   (define idx (+ (* row (cell-buffer-cols buf)) col))
   (vector-ref (cell-buffer-cells buf) idx))
 
@@ -61,6 +135,7 @@
                           #:underline [underline #f]
                           #:italic [italic #f]
                           #:blink [blink #f])
+  (check-cell-position 'cell-buffer-set! buf col row)
   (define idx (+ (* row (cell-buffer-cols buf)) col))
   (vector-set! (cell-buffer-cells buf) idx (vector ch fg bg bold underline italic blink))
   (set-cell-buffer-dirty?! buf #t))
@@ -269,7 +344,7 @@
        ;; Mark subsequent cells as continuation
        (for ([j (in-range 1 w)])
          (define cont-col (+ display-col j))
-         (when (and (< cont-col cols) (< row rows))
+         (when (and (< cont-col cols) (< row rows) (>= cont-col 0) (>= row 0))
            (cell-buffer-set! buf
                              cont-col
                              row
@@ -283,6 +358,57 @@
        (set! display-col (+ display-col w))])))
 
 ;; ============================================================
+;; Logical end-of-line insertion sentinel → physical cursor projection
+;; (BUG-0100 / R100)
+;; ============================================================
+;;
+;; The shared composer layout reports the END-OF-LINE INSERTION POINT as
+;; cursor-col == row-width (a logical sentinel): there is no CELL at
+;; column == width — insertion happens after the last visible column.
+;; That logical coordinate must never reach the cell buffer: flattened,
+;; it aliases into the next row (or overflows on the last row).
+;; Renderers project it onto the row's last REAL visible cell
+;; (end-of-line placement) before painting, blinking, or positioning any
+;; cursor. Logical offsets, grapheme navigation, and the composer
+;; boundary expectation (col == width stays logical) are unchanged — the
+;; projection lives only at the physical cell boundary and is shared by
+;; the painting and cursor paths.
+
+;; Is this logical column the end-of-line insertion sentinel for a row of
+;; the given display width?
+(define (logical-cursor-eol-sentinel? logical-col logical-row-width)
+  (and (exact-integer? logical-col)
+       (exact-integer? logical-row-width)
+       (= logical-col logical-row-width)))
+
+;; Project a logical cursor (col, row), computed for a visual row of
+;; display width `logical-row-width`, onto a physical cell of a
+;; cols x rows buffer. Returns (values col row) naming a REAL visible
+;; cell, or (values #f #f) when no physical cell exists: zero-size
+;; surface, cursor outside the buffer, or layout/buffer geometry so
+;; inconsistent that the logical position has no visible cell. Refuses —
+;; never clamps — so callers defer cursor drawing explicitly.
+(define (project-logical-cursor logical-col logical-row logical-row-width cols rows)
+  (cond
+    [(or (not (exact-integer? logical-col))
+         (not (exact-integer? logical-row))
+         (not (exact-integer? logical-row-width))
+         (< cols 1)
+         (< rows 1)
+         (< logical-row 0)
+         (>= logical-row rows)
+         (< logical-col 0)
+         (> logical-col logical-row-width))
+     (values #f #f)]
+    [(= logical-col logical-row-width)
+     ;; End-of-line insertion sentinel → the row's last visible cell,
+     ;; which must exist in the ACTUAL buffer (refuse otherwise).
+     (define last-col (sub1 logical-row-width))
+     (if (< last-col cols) (values last-col logical-row) (values #f #f))]
+    [else
+     (if (< logical-col cols) (values logical-col logical-row) (values #f #f))]))
+
+;; ============================================================
 ;; Contracts and exports
 ;; ============================================================
 
@@ -290,7 +416,14 @@
 (provide (struct-out cell-buffer)
          make-cell-buffer
 
-         ;; Cell access
+         ;; Position contract (R100)
+         (struct-out exn:fail:cell-buffer-bounds)
+         check-cell-position
+         cell-buffer-in-bounds?
+
+         ;; Logical EOL sentinel → physical cursor projection (R100)
+         logical-cursor-eol-sentinel?
+         project-logical-cursor
          cell-buffer-ref
          cell-buffer-set!
          cell-buffer-clear!

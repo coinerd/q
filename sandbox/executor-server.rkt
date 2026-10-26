@@ -126,16 +126,30 @@
       [(not request) (make-error-response #f "malformed request")]
       [else
        (define-values (valid? err-msg) (validate-request-capability request secret))
-       (if valid?
-           ;; F-10 fix: Strip capability token from arguments before dispatch
-           ;; so it's not passed to the worker tool.
-           (let ([cleaned-request (struct-copy ipc-request
-                                               request
-                                               [arguments
-                                                (hash-remove (ipc-request-arguments request)
-                                                             'capability-token)])])
-             (process-ipc-request cleaned-request))
-           (make-error-response (ipc-request-request-id request) err-msg))])))
+       (cond
+         [(not valid?) (make-error-response (ipc-request-request-id request) err-msg)]
+         ;; R91/BUG-0091 (frozen contract §2.2.7): the executor node refuses
+         ;; trusted-root extension SERVER-SIDE. A valid capability token or
+         ;; mTLS peer identity is not task-root authority; until a reviewed
+         ;; executor-local root mapping exists, any wire-supplied trusted
+         ;; working directory — including a forged top-level trust field on a
+         ;; validly authenticated request — is refused explicitly. There is
+         ;; no in-process or local fallback dispatch for such requests.
+         [(ipc-request-trusted-working-dir request)
+          (make-error-response
+           (ipc-request-request-id request)
+           "refused: remote requests may not carry a trusted working directory (no executor-local root mapping is authorized)"
+           ;; String class: this response crosses the JSON wire.
+           #:error-class "remote-trusted-root-refused")]
+         [else
+          ;; F-10 fix: Strip capability token from arguments before dispatch
+          ;; so it's not passed to the worker tool.
+          (let ([cleaned-request (struct-copy ipc-request
+                                              request
+                                              [arguments
+                                               (hash-remove (ipc-request-arguments request)
+                                                            'capability-token)])])
+            (process-ipc-request cleaned-request))])])))
 
 ;; ── Accept Loop ─────────────────────────────────────────────────
 

@@ -8,10 +8,14 @@
 
 ;; test-find-early-termination.rkt — BUG-1 regression tests
 ;; Validates that walk-dir stops recursing once max-results matches are found.
+;;
+;; R97 (BUG-0097) additions: early termination is unchanged in counting
+;; semantics under absolute-path emission; emitted paths remain absolute.
 
 (require rackunit
          rackunit/text-ui
          racket/file
+         racket/path
          "../tools/builtins/find.rkt"
          (only-in "../tools/tool.rkt" tool-result-content tool-result-details tool-result-is-error?)
          "helpers/fixtures.rkt")
@@ -79,6 +83,44 @@
          (define r
            (tool-find (hasheq 'path (path->string dir) 'name "*.txt" 'max-results 3 'max-depth 10)))
          (check-false (tool-result-is-error? r))
-         (check-equal? (length (result-content r)) 3))))))
+         (check-equal? (length (result-content r)) 3))))
+
+    (test-case "R97: early termination returns absolute match paths"
+      (with-temp-dir
+       (lambda (dir)
+         (for ([i (in-range 5)])
+           (create-file dir (format "d~a/match.txt" i)))
+         (define r
+           (tool-find
+            (hasheq 'path (path->string dir) 'name "match.txt" 'max-results 2 'max-depth 10)))
+         (check-false (tool-result-is-error? r))
+         (define c (result-content r))
+         (check-equal? (length c) 2)
+         (for ([s (in-list c)])
+           (check-true (absolute-path? s) (format "must be absolute: ~a" s))
+           (check-true (string-suffix? s "match.txt") (format "must be the match: ~a" s)))
+         (check-true (<= (result-total r) 5)
+                     (format "total-found ~a should be <= 5" (result-total r))))))
+
+    (test-case "R97: denial records do not trigger or break early termination"
+      (with-temp-dir
+       (lambda (dir)
+         (for ([i (in-range 4)])
+           (create-file dir (format "d~a/match.txt" i)))
+         (make-file-or-directory-link (build-path dir "no-such") (build-path dir "dangle"))
+         (define r
+           (tool-find
+            (hasheq 'path (path->string dir) 'name "match.txt" 'max-results 2 'max-depth 10)))
+         (check-false (tool-result-is-error? r))
+         (check-equal? (length (result-content r)) 2)
+         (check-true (<= (result-total r) 4))
+         ;; dangling link named "dangle" does not match the "match.txt" name
+         ;; filter, so nothing is denied for it
+         (check-equal? (hash-ref (tool-result-details r) 'denied #f)
+                      '()
+                      (format "no denial expected: ~a" (tool-result-details r))))))
+
+
+    ))
 
 (run-tests early-term-tests)

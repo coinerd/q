@@ -50,6 +50,7 @@
 (require racket/contract
          racket/file
          racket/format
+         racket/list
          racket/match
          racket/string
          (only-in "../../util/json/checksum.rkt" sha256-string))
@@ -106,7 +107,43 @@
 
 ;; jobs: hash identity-key -> job-handle; lock: registry semaphore making
 ;; check+spawn+insert (start!) atomic across threads.
-(struct verification-registry (jobs lock [closed? #:mutable]))
+;;
+;; R102 identity coordination (w0/security-contracts.md §3.2):
+;;   - `incarnation` is an opaque token minted at make-verification-registry;
+;;     it distinguishes A->(recreate)->A in emitted identity fields. It never
+;;     persists: registry recreation losing the index is by design.
+;;   - `tombstones` is a bounded, newest-first list of captured immutable
+;;     terminal records for REPLACED handles (see
+;;     verification-terminal-tombstone). It is a reconciliation window, not a
+;;     general event store: bounded capacity, explicit FIFO eviction, lost on
+;;     registry recreation.
+(struct verification-registry
+        (jobs
+         lock
+         [closed? #:mutable]
+         incarnation
+         [tombstones #:mutable]))
+
+;; Captured immutable terminal record retained for ONE replaced job, so late
+;; or duplicate events for the OLD job stay attributable (dedupe =>
+;; exactly-once UI transition) instead of failing as "unknown job". Bounded
+;; per incarnation (registry-tombstone-capacity, explicit FIFO eviction);
+;; registry recreation loses the index by design — identity fields carry the
+;; truth, never this window.
+(struct verification-terminal-tombstone
+        (job-id
+         identity-key
+         state ; terminal state of the REPLACED job
+         exit-code
+         reaped?
+         end-ms
+         log-path
+         replacement-id) ; job-id of the handle that took the slot
+  #:transparent)
+
+;; Fixed reconciliation-window capacity per registry. Eviction is explicit:
+;; inserting beyond the capacity drops the OLDEST captured record.
+(define registry-tombstone-capacity 32)
 
 ;; ------------------------------------------------------------ helpers
 
@@ -424,8 +461,48 @@
 
 ;; ------------------------------------------------------------ registry
 
+;; The incarnation token is minted once per registry lifetime and re-minted
+;; on every recreation (make-verification-registry); emitted identity fields
+;; derive from it so A->(recreate)->A is distinguishable from one A.
 (define (make-verification-registry)
-  (verification-registry (make-hash) (make-semaphore 1) #f))
+  (verification-registry (make-hash) (make-semaphore 1) #f (gensym 'vjreg) '()))
+
+;; Record the terminal record of a REPLACED handle into the bounded
+;; reconciliation window (caller holds the registry lock). Explicit FIFO
+;; eviction at the fixed capacity; never a general event store.
+(define (record-terminal-tombstone! reg prior-rec replacement-id)
+  (unless (eq? (verification-job-state prior-rec) 'running)
+    (set-verification-registry-tombstones!
+     reg
+     (let ([next
+            (cons (verification-terminal-tombstone
+                   (verification-job-id prior-rec)
+                   (verification-job-identity-key prior-rec)
+                   (verification-job-state prior-rec)
+                   (verification-job-exit-code prior-rec)
+                   (verification-job-reaped? prior-rec)
+                   (verification-job-end-ms prior-rec)
+                   (verification-job-log-path prior-rec)
+                   replacement-id)
+                  (verification-registry-tombstones reg))])
+       (if (> (length next) registry-tombstone-capacity)
+           (take next registry-tombstone-capacity)
+           next)))))
+
+;; Attribution lookup for identity coordination (R102): the CURRENT record
+;; for `job-id`, or the retained tombstone when the handle was replaced, or
+;; #f when this incarnation does not know the job. Never raises — a late or
+;; duplicate event for a replaced job must be attributable, not fatal.
+(define (verification-job-facts reg job-id)
+  (call-with-semaphore
+   (verification-registry-lock reg)
+   (lambda ()
+     (or (for/first ([h (in-hash-values (verification-registry-jobs reg))]
+                     #:when (eq? (verification-job-id (unbox (job-handle-rec-box h))) job-id))
+           (unbox (job-handle-rec-box h)))
+         (for/first ([t (in-list (verification-registry-tombstones reg))]
+                     #:when (eq? (verification-terminal-tombstone-job-id t) job-id))
+           t)))))
 
 ;; Never iterate the mutable registry hash while another thread may insert a
 ;; freshly spawned owner. Snapshot under the registry lock, then release it
@@ -496,10 +573,15 @@
        [(and existing
              (not (verification-job-reaped? (unbox (job-handle-rec-box existing)))))
         (start-result (verification-job-id (unbox (job-handle-rec-box existing))) #f #t)]
-       ;; 2. ownership slot free (no record, or confirmed reap): fresh launch
+       ;; 2. ownership slot free (no record, or confirmed reap): fresh launch.
+       ;;    R102: a REPLACED terminal handle's captured record enters the
+       ;;    bounded tombstone window before the slot is reused, so late or
+       ;;    duplicate events for the old job stay attributable.
        [else
         (define digest (sha256-string (string-join (cons executable args) "\u0")))
         (define job-id (allocate-job-id!))
+        (when existing
+          (record-terminal-tombstone! reg (unbox (job-handle-rec-box existing)) job-id))
         ;; Real log backing BEFORE spawn so every byte of output — including
         ;; output produced before any status read — has a durable home.
         (define-values (eff-log-path log-out) (open-verification-log job-id log-path))
@@ -784,8 +866,23 @@
                                 (end-ms (or/c real? #f))))
           [make-verification-registry (-> verification-registry?)]
           [verification-registry? (-> any/c boolean?)]
+          [verification-registry-incarnation (-> verification-registry? symbol?)]
           [registry-active-count (-> verification-registry? exact-nonnegative-integer?)]
           [verification-close-registry! (-> verification-registry? (listof verification-job?))]
+          ;; R102 identity coordination: bounded tombstone window + facts lookup
+          [registry-tombstone-capacity exact-positive-integer?]
+          (struct verification-terminal-tombstone
+                  ((job-id symbol?)
+                   (identity-key string?)
+                   (state symbol?)
+                   (exit-code (or/c exact-integer? #f))
+                   (reaped? boolean?)
+                   (end-ms (or/c real? #f))
+                   (log-path (or/c string? #f))
+                   (replacement-id symbol?)))
+          [verification-job-facts
+           (-> verification-registry? symbol?
+               (or/c verification-job? verification-terminal-tombstone? #f))]
           [verification-start!
            (->*
             (verification-registry? verification-identity? path-string? (listof (or/c string? path?)))
