@@ -53,9 +53,7 @@
          "helpers/supplemental-go-fixture.rkt"
          "../runtime/approval/broker.rkt"
          (only-in "../extensions/gsd/evidence-repair-format.rkt" canonical-evidence-json)
-         (only-in "../extensions/gsd/supplemental-evidence-store.rkt"
-                  bytes-for
-                  read-sealed)
+         (only-in "../extensions/gsd/supplemental-evidence-store.rkt" bytes-for read-sealed)
          (only-in "../util/json/checksum.rkt" sha256-string)
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
@@ -68,7 +66,8 @@
          "../extensions/gsd/supplemental-evidence-journal.rkt"
          "../extensions/gsd/supplemental-evidence-authority.rkt"
          (submod "../extensions/gsd/supplemental-evidence-authority.rkt" owner-frontend)
-         "../extensions/gsd/supplemental-evidence-controller.rkt")
+         "../extensions/gsd/supplemental-evidence-controller.rkt"
+         (only-in "../extensions/gsd/delivery-finalize.rkt" run-coordinator-checkpoint))
 
 ;; ------------------------------------------------------------------
 ;; Writer-level fixture: real retained approval, a reserved operation with
@@ -252,10 +251,7 @@
 
 ;; Amendment-3 terminalizer helpers: the exact lease-authenticated seal of a
 ;; spent non-terminal retained operation (mirrors observe! above).
-(define (terminalize! f
-                      plan
-                      #:sha [sha (retained-sha-of f)]
-                      #:lease [lease (lease-of f plan)])
+(define (terminalize! f plan #:sha [sha (retained-sha-of f)] #:lease [lease (lease-of f plan)])
   (terminalize-expired-supplemental-operation! (fixture-grant f)
                                                #:lease lease
                                                #:operation-sha256 sha
@@ -573,22 +569,22 @@
        (check-equal? (hash-ref (hash-ref recovered 'usage) 'total-tokens) 10))))
 
   (test-case "crash cut after accounting recovers without double-charge"
-    (with-obs-fixture (lambda (f plan)
-                        (define evidence (terminal-evidence-fixture))
-                        (check-exn exn:fail?
-                                   (lambda ()
-                                     (parameterize ([current-supplemental-journal-crash-cut
-                                                     (lambda (name)
-                                                       (when (eq? name
-                                                                  'observation-accounting-applied)
-                                                         (error 'crash-cut "simulated crash")))])
-                                       (observe! f plan #:terminal evidence #:usage (hasheq 'cost-usd 150)))))
-                        (define recovered (observe! f plan #:terminal evidence #:usage (hasheq 'cost-usd 150)))
-                        (check-equal? (length (observation-entries recovered)) 1)
-                        (check-equal? (length (hash-ref recovered 'accounting-keys)) 1)
-                        (check-equal? (hash-ref (hash-ref recovered 'usage) 'cost-usd)
-                                      150
-                                      "no double-charge after ack cut"))))
+    (with-obs-fixture
+     (lambda (f plan)
+       (define evidence (terminal-evidence-fixture))
+       (check-exn exn:fail?
+                  (lambda ()
+                    (parameterize ([current-supplemental-journal-crash-cut
+                                    (lambda (name)
+                                      (when (eq? name 'observation-accounting-applied)
+                                        (error 'crash-cut "simulated crash")))])
+                      (observe! f plan #:terminal evidence #:usage (hasheq 'cost-usd 150)))))
+       (define recovered (observe! f plan #:terminal evidence #:usage (hasheq 'cost-usd 150)))
+       (check-equal? (length (observation-entries recovered)) 1)
+       (check-equal? (length (hash-ref recovered 'accounting-keys)) 1)
+       (check-equal? (hash-ref (hash-ref recovered 'usage) 'cost-usd)
+                     150
+                     "no double-charge after ack cut"))))
 
   (test-case "concurrent writers serialize safely on the store lock"
     (with-obs-fixture
@@ -746,8 +742,7 @@
        (check-equal? (hash-ref sealed 'state) "blocked")
        (check-equal? (hash-ref sealed 'revision) 2 "reserved(1) + 1")
        (check-true (hash-ref sealed 'launch-consumed))
-       (check-equal? (hash-ref (hash-ref sealed 'facts) 'block-reason)
-                     "operator deadline expired")
+       (check-equal? (hash-ref (hash-ref sealed 'facts) 'block-reason) "operator deadline expired")
        (check-equal? (hash-ref (hash-ref sealed 'facts) 'allocation)
                      (hasheq 'attempt-id "fixture-new-attempt" 'attempt-fence 4 'coordinator-fence 8))
        (check-equal? (file->bytes (operation-path f)) (bytes-for sealed))
@@ -757,8 +752,7 @@
        (define body (hash-ref sealed 'sha256))
        (check-true (and (string? body) (regexp-match? #px"^[0-9a-f]{64}$" body)))
        (check-not-equal? body pre-seal-sha)
-       (define record-digest
-         (sha256-string (bytes->string/utf-8 (file->bytes (operation-path f)))))
+       (define record-digest (sha256-string (bytes->string/utf-8 (file->bytes (operation-path f)))))
        (check-equal? record-digest (sha256-string (canonical-evidence-json sealed)))
        ;; The sealed record is structurally valid historical storage.
        (check-equal? (op-record f) sealed)
@@ -801,71 +795,90 @@
        (check-false (file-exists? (operation-path f ".intent.json"))))))
 
   (test-case "an unexpired live operation refuses terminalization"
-    (with-obs-fixture
-     (lambda (f plan)
-       (define bytes (file->bytes (operation-path f)))
-       (check-exn #rx"operation is not expired or revoked; terminalization refused"
-                  (lambda () (terminalize! f plan)))
-       (check-equal? (file->bytes (operation-path f)) bytes)
-       (check-equal? (hash-ref (op-record f) 'state) "reserved"))))
+    (with-obs-fixture (lambda (f plan)
+                        (define bytes (file->bytes (operation-path f)))
+                        (check-exn #rx"operation is not expired or revoked; terminalization refused"
+                                   (lambda () (terminalize! f plan)))
+                        (check-equal? (file->bytes (operation-path f)) bytes)
+                        (check-equal? (hash-ref (op-record f) 'state) "reserved"))))
 
   (test-case "a revoked approval permits the seal on an unexpired deadline"
-    (with-obs-fixture
-     (lambda (f plan)
-       (revoke-approval! (fixture-grant f))
-       (define sealed (terminalize! f plan))
-       (check-equal? (hash-ref sealed 'state) "blocked")
-       (check-equal? (hash-ref sealed 'revision) 2)
-       (check-equal? (hash-ref (hash-ref sealed 'facts) 'block-reason)
-                     "operator approval revoked")
-       (check-false (file-exists? (operation-path f ".intent.json")))
-       (check-false (supplemental-terminal-observation (fixture-grant f)))))
+    (with-obs-fixture (lambda (f plan)
+                        (revoke-approval! (fixture-grant f))
+                        (define sealed (terminalize! f plan))
+                        (check-equal? (hash-ref sealed 'state) "blocked")
+                        (check-equal? (hash-ref sealed 'revision) 2)
+                        (check-equal? (hash-ref (hash-ref sealed 'facts) 'block-reason)
+                                      "operator approval revoked")
+                        (check-false (file-exists? (operation-path f ".intent.json")))
+                        (check-false (supplemental-terminal-observation (fixture-grant f)))))
 
-  (test-case "a plain entry on the expired retained operation seals it blocked"
-    (expired-obs-fixture
-     (lambda (f plan)
-       (define grant (fixture-grant f))
-       (write-fixture-pointer! f plan)
-       (sleep 6)
-       (define result (supplemental-entry-outcome (fixture-workspace f) plan 1))
-       (check-equal? (campaign-result-status result) 'wave-blocked)
-       (define message (campaign-result-message result))
-       ;; The typed denial is unchanged; the seal is a distinct secondary note.
-       (check-true (string-prefix? message
-                                   "retained supplemental task is not launchable;")
-                   message)
-       (check-true (string-contains? message "expired retained operation sealed blocked")
-                   message)
-       (define sealed (op-record f))
-       (check-equal? (hash-ref sealed 'state) "blocked")
-       (check-equal? (hash-ref sealed 'revision) 2)
-       (check-equal? (hash-ref (hash-ref sealed 'facts) 'block-reason)
-                     "operator deadline expired")
-       ;; No WAL and no observation; the AMENDMENT-3 digests are derivable.
-       (check-false (file-exists? (operation-path f ".intent.json")))
-       (check-false (supplemental-terminal-observation grant))
-       (check-equal? (sha256-string (bytes->string/utf-8 (file->bytes (operation-path f))))
-                     (sha256-string (canonical-evidence-json sealed)))
-       ;; Replay: a second plain entry is an idempotent no-op.
-       (define bytes (file->bytes (operation-path f)))
-       (define result2 (supplemental-entry-outcome (fixture-workspace f) plan 1))
-       (check-equal? (campaign-result-status result2) 'wave-blocked)
-       (check-equal? (file->bytes (operation-path f)) bytes))))
+    (test-case "a plain entry on the expired retained operation seals it blocked"
+      (expired-obs-fixture
+       (lambda (f plan)
+         (define grant (fixture-grant f))
+         (write-fixture-pointer! f plan)
+         (sleep 6)
+         (define result (supplemental-entry-outcome (fixture-workspace f) plan 1))
+         (check-equal? (campaign-result-status result) 'wave-blocked)
+         (define message (campaign-result-message result))
+         ;; The typed denial is unchanged; the seal is a distinct secondary note.
+         (check-true (string-prefix? message "retained supplemental task is not launchable;") message)
+         (check-true (string-contains? message "expired retained operation sealed blocked") message)
+         (define sealed (op-record f))
+         (check-equal? (hash-ref sealed 'state) "blocked")
+         (check-equal? (hash-ref sealed 'revision) 2)
+         (check-equal? (hash-ref (hash-ref sealed 'facts) 'block-reason) "operator deadline expired")
+         ;; No WAL and no observation; the AMENDMENT-3 digests are derivable.
+         (check-false (file-exists? (operation-path f ".intent.json")))
+         (check-false (supplemental-terminal-observation grant))
+         (check-equal? (sha256-string (bytes->string/utf-8 (file->bytes (operation-path f))))
+                       (sha256-string (canonical-evidence-json sealed)))
+         ;; Replay: a second plain entry is an idempotent no-op.
+         (define bytes (file->bytes (operation-path f)))
+         (define result2 (supplemental-entry-outcome (fixture-workspace f) plan 1))
+         (check-equal? (campaign-result-status result2) 'wave-blocked)
+         (check-equal? (file->bytes (operation-path f)) bytes))))
 
-  (test-case "without a current lease the seal stays explicitly pending, nothing written"
-    (with-obs-fixture
-     (lambda (f plan)
-       (write-fixture-pointer! f plan)
-       (sleep 6)
-       (define result (supplemental-entry-outcome (fixture-workspace f) plan 1))
-       (check-equal? (campaign-result-status result) 'wave-blocked)
-       (check-true (string-contains? (campaign-result-message result)
-                                     "expired operation seal pending")
-                   (campaign-result-message result))
-       (check-true (string-contains? (campaign-result-message result)
-                                     "current coordinator lease unavailable")
-                   (campaign-result-message result))
-       (check-equal? (hash-ref (op-record f) 'state) "reserved")
-       (check-false (file-exists? (operation-path f ".intent.json"))))
-     #:payload (hasheq 'task task 'expires-at (+ (current-seconds) 5))
-     #:campaign? #f))))
+    (test-case "the coordinator checkpoint's retained seam routes through the entry seal"
+      (expired-obs-fixture
+       (lambda (f plan)
+         (write-fixture-pointer! f plan)
+         (sleep 6)
+         (define wave (car (campaign-record-waves (load-campaign-record (fixture-workspace f) plan))))
+         (define advanced (box #f))
+         (define blocked (box #f))
+         (run-coordinator-checkpoint (fixture-workspace f)
+                                     plan
+                                     wave
+                                     "supplemental resume"
+                                     (lambda (_dir _id _w)
+                                       (error 'coordinator "ordinary fallback must never run"))
+                                     #:on-advance (lambda () (set-box! advanced #t))
+                                     #:on-blocked (lambda (why) (set-box! blocked why)))
+         (check-false (unbox advanced) "the seal must not launch anything")
+         (define result (unbox blocked))
+         (check-equal? (campaign-result-status result) 'wave-blocked)
+         (check-true (string-contains? (campaign-result-message result)
+                                       "expired retained operation sealed blocked")
+                     (campaign-result-message result))
+         (check-equal? (hash-ref (op-record f) 'state) "blocked")
+         (check-equal? (hash-ref (hash-ref (op-record f) 'facts) 'block-reason)
+                       "operator deadline expired"))))
+
+    (test-case "without a current lease the seal stays explicitly pending, nothing written"
+      (with-obs-fixture (lambda (f plan)
+                          (write-fixture-pointer! f plan)
+                          (sleep 6)
+                          (define result (supplemental-entry-outcome (fixture-workspace f) plan 1))
+                          (check-equal? (campaign-result-status result) 'wave-blocked)
+                          (check-true (string-contains? (campaign-result-message result)
+                                                        "expired operation seal pending")
+                                      (campaign-result-message result))
+                          (check-true (string-contains? (campaign-result-message result)
+                                                        "current coordinator lease unavailable")
+                                      (campaign-result-message result))
+                          (check-equal? (hash-ref (op-record f) 'state) "reserved")
+                          (check-false (file-exists? (operation-path f ".intent.json"))))
+                        #:payload (hasheq 'task task 'expires-at (+ (current-seconds) 5))
+                        #:campaign? #f))))
