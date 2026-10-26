@@ -39,7 +39,8 @@
                (hash-ref op 'launch-consumed))
     (error 'disposition-fixture "real no-edit launch did not produce blocked revision 3"))
   op)
-(define (call-with-disposition-fixture proc #:second? [second? #f])
+(define (call-with-disposition-fixture proc #:second? [second? #f] #:third? [third? #f])
+  (when third? (set! second? #t))
   (call-with-supplemental-fixture
    (lambda (fx)
      (define base (supplemental-fixture-root fx))
@@ -103,37 +104,91 @@
                                             (hash-ref (hash-ref parent-op 'facts) 'allocation)
                                             'snapshot-sha256
                                             (campaign-record-plan-snapshot-digest campaign))))
+     (define (build-second)
+       ;; Genuine amendment-2 fixture generation: install the disposition,
+       ;; consume the v3 child into a real spent blocked revision-3 terminal,
+       ;; and derive every digest from that sealed record.
+       (define-values (p t)
+         (propose-supplemental-disposition! base
+                                            plan
+                                            1
+                                            (hash-ref (hash-ref parent 'task-proposal) 'sha256)
+                                            (+ (current-seconds) 14400)))
+       (install-supplemental-disposition! base plan 1 p (fixture-approve! p))
+       (define v3 (load-supplemental-pointer base plan 1))
+       (consume! fx)
+       (define v3-op (terminal! (hash-ref v3 'task-approval)))
+       (values
+        v3
+        v3-op
+        (seal-supplemental-record
+         (hash-set* amendment
+                    'v2-proposal
+                    (hash-ref parent 'task-proposal)
+                    'v2-approval
+                    (hash-ref parent 'task-approval)
+                    'parent-proposal
+                    (hash-ref v3 'task-proposal)
+                    'parent-approval
+                    (hash-ref v3 'task-approval)
+                    'terminal-body-sha256
+                    (hash-ref v3-op 'sha256)
+                    'terminal-record-sha256
+                    (sha256-string (canonical-evidence-json v3-op))
+                    'allocation
+                    (hash-ref (hash-ref v3-op 'facts) 'allocation)))))
      ((dynamic-require `(submod ,policy test-support) 'call-with-test-disposition-amendment)
       amendment
       (lambda ()
         (cond
+          [(and second? third?)
+           ;; Third bounded generation: the amendment-2 disposition child (the
+           ;; production 15e68c8b/ccf20bc9 analogue) is installed, genuinely
+           ;; consumed into a spent blocked revision-3 terminal, and the
+           ;; immutable amendment-3 fixture binds that exact pair, both real
+           ;; terminal digest namespaces and its failed allocation — never
+           ;; fabricated digests and never a fourth successor grant. Each
+           ;; generation's disposition is proposed inside the PREVIOUS
+           ;; generation's binding: it disposes that binding's parent pair.
+           (define-values (v3 _v3-op second) (build-second))
+           ((dynamic-require `(submod ,policy test-support) 'call-with-test-disposition-amendment)
+            second
+            (lambda ()
+              (define-values (sref _stask)
+                (propose-supplemental-disposition!
+                 base
+                 plan
+                 1
+                 (hash-ref (hash-ref v3 'task-proposal) 'sha256)
+                 (+ (current-seconds) 14400)))
+              (install-supplemental-disposition! base plan 1 sref (fixture-approve! sref))
+              (define v4 (load-supplemental-pointer base plan 1))
+              (consume! fx)
+              (define v4-op (terminal! (hash-ref v4 'task-approval)))
+              (define third
+                (seal-supplemental-record
+                 (hash-set* second
+                            'prior-parent-proposal
+                            (hash-ref second 'parent-proposal)
+                            'prior-parent-approval
+                            (hash-ref second 'parent-approval)
+                            'parent-proposal
+                            (hash-ref v4 'task-proposal)
+                            'parent-approval
+                            (hash-ref v4 'task-approval)
+                            'terminal-body-sha256
+                            (hash-ref v4-op 'sha256)
+                            'terminal-record-sha256
+                            (sha256-string (canonical-evidence-json v4-op))
+                            'allocation
+                            (hash-ref (hash-ref v4-op 'facts) 'allocation))))
+              ((dynamic-require `(submod ,policy test-support) 'call-with-test-disposition-amendment)
+               third
+               (lambda () (proc (disposition-fixture fx root v4 root-op v4-op third)))
+               #:predecessor second))
+            #:predecessor amendment)]
           [second?
-           (define-values (p t)
-             (propose-supplemental-disposition! base
-                                                plan
-                                                1
-                                                (hash-ref (hash-ref parent 'task-proposal) 'sha256)
-                                                (+ (current-seconds) 14400)))
-           (install-supplemental-disposition! base plan 1 p (fixture-approve! p))
-           (define v3 (load-supplemental-pointer base plan 1))
-           (consume! fx)
-           (define v3-op (terminal! (hash-ref v3 'task-approval)))
-           (define second
-             (seal-supplemental-record (hash-set* amendment
-                                                  'v2-proposal
-                                                  (hash-ref parent 'task-proposal)
-                                                  'v2-approval
-                                                  (hash-ref parent 'task-approval)
-                                                  'parent-proposal
-                                                  (hash-ref v3 'task-proposal)
-                                                  'parent-approval
-                                                  (hash-ref v3 'task-approval)
-                                                  'terminal-body-sha256
-                                                  (hash-ref v3-op 'sha256)
-                                                  'terminal-record-sha256
-                                                  (sha256-string (canonical-evidence-json v3-op))
-                                                  'allocation
-                                                  (hash-ref (hash-ref v3-op 'facts) 'allocation))))
+           (define-values (v3 v3-op second) (build-second))
            ((dynamic-require `(submod ,policy test-support) 'call-with-test-disposition-amendment)
             second
             (lambda () (proc (disposition-fixture fx root v3 root-op v3-op second)))
