@@ -19,6 +19,7 @@
          "command-types.rkt"
          (only-in "shared.rkt" extract-plan-title)
          "wave-status.rkt"
+         (only-in "planning-paths.rkt" plan-file planning-root state-file)
          (only-in "session-state.rkt" current-gsd-ctx))
 
 (provide (contract-out [archive-completed-plan!
@@ -39,7 +40,7 @@
 ;; Check if all waves in PLAN.md are complete (DONE or DEFERRED).
 ;; Case-insensitive to handle LLM-written "Done" vs canonical "DONE".
 (define (all-waves-complete? base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) #f]
     [else
@@ -75,7 +76,7 @@
 ;; Moves: PLAN.md, STATE.md, HANDOFF.json, wave docs in waves/
 ;; Returns the archive directory path.
 (define (move-to-archive! base-dir archive-dir)
-  (define planning-dir (build-path base-dir ".planning"))
+  (define planning-dir (planning-root base-dir))
   (unless (directory-exists? archive-dir)
     (make-directory* archive-dir))
 
@@ -120,8 +121,8 @@
 ;; When force? is #f and waves are incomplete, returns gsd-err with incomplete count.
 ;; When force? is #t, archives regardless of wave completion status.
 (define (archive-completed-plan! base-dir [force? #f])
-  (define planning-dir (build-path base-dir ".planning"))
-  (define plan-path (build-path planning-dir "PLAN.md"))
+  (define planning-dir (planning-root base-dir))
+  (define plan-path (plan-file base-dir))
   (define current-mode (gsm-ctx-current (current-gsd-ctx)))
   (cond
     [(not (file-exists? plan-path)) (gsd-err #:mode current-mode #:message "No PLAN.md found")]
@@ -196,7 +197,7 @@
 ;; The LLM often writes [Done] instead of [DONE]. This rewrites
 ;; all recognized variants to their canonical form.
 (define (normalize-plan-status-markers! base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (when (file-exists? plan-path)
     (define text (call-with-input-file plan-path port->string))
     ;; Parse raw: regex-match directly to get RAW status strings
@@ -224,7 +225,7 @@
   (define mode (gsm-ctx-current (current-gsd-ctx)))
   (define completed (gsm-ctx-completed-waves (current-gsd-ctx)))
   (define exec (gsm-ctx-wave-executor (current-gsd-ctx)))
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) (void)]
     [else
@@ -244,7 +245,7 @@
 ;; Update all wave status markers in PLAN.md to [DONE] before archiving.
 ;; base-dir is the directory CONTAINING .planning/ (not .planning/ itself).
 (define (update-all-wave-statuses! base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (when (file-exists? plan-path)
     (define plan-text (call-with-input-file plan-path port->string))
     (define entries (parse-plan-index plan-text))
@@ -270,9 +271,9 @@
 ;; Auto-create minimal STATE.md if it doesn't exist (#2164).
 ;; Called from /plan initialization.
 (define (ensure-state-md! base-dir)
-  (define state-path (build-path base-dir ".planning" "STATE.md"))
+  (define state-path (state-file base-dir))
   (unless (file-exists? state-path)
-    (define planning-dir (build-path base-dir ".planning"))
+    (define planning-dir (planning-root base-dir))
     (unless (directory-exists? planning-dir)
       (make-directory* planning-dir))
     (call-with-output-file
@@ -285,9 +286,9 @@
 ;; Called when the agent writes PLAN.md via planning-write, so that
 ;; STATE.md never lags behind a new campaign. All waves start PENDING.
 (define (reset-state-md-from-plan! base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
-  (define state-path (build-path base-dir ".planning" "STATE.md"))
-  (define planning-dir (build-path base-dir ".planning"))
+  (define plan-path (plan-file base-dir))
+  (define state-path (state-file base-dir))
+  (define planning-dir (planning-root base-dir))
   (unless (directory-exists? planning-dir)
     (make-directory* planning-dir))
   (define plan-text (call-with-input-file plan-path port->string))

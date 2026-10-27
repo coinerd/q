@@ -22,6 +22,7 @@
          ;; R76 (BUG-0076): shared layout-aware delivery-root resolution.
          (only-in "git-root-layout.rkt" delivery-root-or-raise)
          (only-in "delivery-journal.rkt" load-delivery-journal)
+         (only-in "planning-paths.rkt" wave-evidence-report-rel-path)
          (only-in "delivery-receipt.rkt" delivery-receipt-blocker)
          "../../sandbox/subprocess.rkt")
 (provide verified-wave-merge-sha
@@ -309,12 +310,7 @@
      'delivery-head-sha
      (campaign-wave-delivery-head-sha wave)
      'binding
-     (format "docs/reports/gsd-wave-evidence/~a-w~a~a.rktd"
-             plan-id
-             idx
-             (if (zero? generation)
-                 ""
-                 (format "-r~a" generation)))
+     (wave-evidence-report-rel-path plan-id idx generation)
      'reason
      (redact-delivery-text reason)
      'next-steps

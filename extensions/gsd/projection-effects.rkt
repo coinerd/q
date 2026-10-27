@@ -23,7 +23,8 @@
          racket/format
          racket/string
          racket/port
-         "projection-kernel.rkt")
+         "projection-kernel.rkt"
+         (only-in "planning-paths.rkt" plan-file state-file wave-doc-file))
 
 ;; ============================================================
 ;; Atomic file primitives (temp write + commit rename)
@@ -75,14 +76,13 @@
 ;; Returns the concrete path for a projection entry, or #f when the entry
 ;; cannot be resolved (e.g. wave-doc without a slug).
 (define (resolve-projection-path base-dir kind entry slug-of)
-  (define planning (build-path base-dir ".planning"))
   (case kind
-    [(plan-index) (build-path planning "PLAN.md")]
-    [(state-table) (build-path planning "STATE.md")]
+    [(plan-index) (plan-file base-dir)]
+    [(state-table) (state-file base-dir)]
     [(wave-doc)
      (define idx (projection-entry-wave-idx entry))
      (define slug (and idx (slug-of idx)))
-     (and slug (build-path planning "waves" (format "W~a-~a.md" idx slug)))]
+     (and slug (wave-doc-file base-dir idx slug))]
     [else #f]))
 
 ;; ============================================================
@@ -121,12 +121,9 @@
 ;; Returns the list of written paths. status is a display string ("DONE",
 ;; "FAILED", "DEFERRED", ...).
 (define (apply-wave-status-projections! base-dir wave-idx status slug-of)
-  (define planning (build-path base-dir ".planning"))
-  (define plan-path (build-path planning "PLAN.md"))
-  (define state-path (build-path planning "STATE.md"))
-  (define doc-path
-    (and (slug-of wave-idx)
-         (build-path planning "waves" (format "W~a-~a.md" wave-idx (slug-of wave-idx)))))
+  (define plan-path (plan-file base-dir))
+  (define state-path (state-file base-dir))
+  (define doc-path (and (slug-of wave-idx) (wave-doc-file base-dir wave-idx (slug-of wave-idx))))
   (cond
     [(not (file-exists? plan-path)) '()]
     [else
@@ -148,20 +145,19 @@
 ;; Returns the list of repaired paths (empty when the projections already
 ;; match the durable record — the normal case).
 (define (reconcile-projections-from-waves! base-dir waves slug-map)
-  (define planning (build-path base-dir ".planning"))
-  (define plan-path (build-path planning "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) '()]
     [else
      (define plan-text (call-with-input-file plan-path port->string))
-     (define state-path (build-path planning "STATE.md"))
+     (define state-path (state-file base-dir))
      (define state-text
        (and (file-exists? state-path) (call-with-input-file state-path port->string)))
      (define doc-map
        (for/hash ([w waves])
          (define idx (car w))
          (define slug (hash-ref slug-map idx #f))
-         (define p (and slug (build-path planning "waves" (format "W~a-~a.md" idx slug))))
+         (define p (and slug (wave-doc-file base-dir idx slug)))
          (values idx (and p (file-exists? p) (call-with-input-file p port->string)))))
      (define set (project-reconciliation-set waves plan-text doc-map state-text))
      (apply-projection-set! base-dir set (lambda (idx) (hash-ref slug-map idx #f)))]))

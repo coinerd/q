@@ -35,12 +35,15 @@
          (only-in "../../util/version.rkt" q-version)
          (only-in "shared.rkt" slugify)
          (only-in (rename-in "planning-paths.rkt" [waves-dir planning-waves-dir])
-                  campaign-path
+                  campaign-lint-verdict-file
                   plan-file
                   planning-path
                   planning-root
                   planning-waves-dir
-                  wave-doc-file)
+                  unsafe-declared-path-refusal
+                  wave-doc-file
+                  wave-doc-reference-rx
+                  wave-doc-rel-path)
          (only-in "wave-status.rkt"
                   STATUS-INBOX
                   STATUS-DONE
@@ -154,7 +157,6 @@
 (define wave-header-full-rx #rx"^# Wave [0-9]+\nStatus: [^\n]+\n\n(.*)$")
 (define index-line-rx #rx"^[-*] +\\[([A-Za-z-]+)\\] +W([0-9]+): +(.+?)(?: +\u2192 +(.+))?$")
 (define relaxed-index-line-rx #rx"^[-*] +W([0-9]+): +(.+?)(?: +→ +(.+))?$")
-(define slug-from-target-rx #rx"waves/W[0-9]+-(.+?)\\.md")
 
 ;; BUG-0050 (W2): a line-anchored `Status:` at column 0 ANYWHERE in the
 ;; doc body is a second status marker (stale authored-template residue).
@@ -338,32 +340,8 @@
 ;; synthesized twin (waves/W2-….md) can never win, and a missing declared
 ;; target is refused BY NAME, never silently replaced.
 
-;; unsafe-declared-path-refusal : (or/c string? #f) -> (or/c string? #f)
-;; PURE syntactic validation of a declared doc path, run BEFORE any path
-;; resolution (the arrow target is whatever wave-ref-path-from-target
-;; extracted, so this re-checks the result instead of trusting it). #f when
-;; the path is safe; otherwise a refusal string naming the exact target.
-;; The path must be relative, anchored under waves/, and contain no
-;; traversal/empty/dot segments; every resolution stays inside
-;; .planning/waves.
-(define (unsafe-declared-path-refusal rel-path)
-  (cond
-    [(not rel-path) #f]
-    [(zero? (string-length rel-path)) "declared wave document path is empty"]
-    [(string-prefix? rel-path "/")
-     (format
-      "declared wave document path ~a is absolute; declare it relative to .planning (waves/….md)"
-      rel-path)]
-    [(not (string-prefix? rel-path "waves/"))
-     (format "declared wave document path ~a is not under waves/" rel-path)]
-    [else
-     (define segs (string-split rel-path "/"))
-     (cond
-       [(ormap (lambda (seg) (string=? seg "..")) segs)
-        (format "declared wave document path ~a escapes .planning/waves (.. segment)" rel-path)]
-       [(ormap (lambda (seg) (or (string=? seg "") (string=? seg "."))) segs)
-        (format "declared wave document path ~a contains an empty or `.` segment" rel-path)]
-       [else #f])]))
+;; unsafe-declared-path-refusal is re-exported from planning-paths.rkt; the
+;; resolver below adds the filesystem/no-follow half of the boundary.
 
 ;; wave-entry-effective-doc-rel-path : wave-index-entry? -> (values rel refusal)
 ;; PURE. The .planning-relative document path for one index entry and its
@@ -377,7 +355,7 @@
         (if refusal
             (values #f refusal)
             (values declared #f)))
-      (values (format "waves/W~a-~a.md" (wave-index-entry-idx e) (wave-index-entry-slug e)) #f)))
+      (values (wave-doc-rel-path (wave-index-entry-idx e) (wave-index-entry-slug e)) #f)))
 
 ;; declared-mapping-refusals : (listof wave-index-entry?) -> (listof string?)
 ;; PURE. Every AMBIGUOUS-mapping refusal for a whole index: duplicate wave
@@ -545,8 +523,8 @@
 ;; Previously this returned (slugify target), producing nonsense expected
 ;; paths like W0-wavesnotesmd.md in strict-validation errors.
 (define (extract-slug-from-target target)
-  (define m (regexp-match slug-from-target-rx target))
-  (and m (cadr m)))
+  (define m (regexp-match wave-doc-reference-rx target))
+  (and m (caddr m)))
 
 ;; BUG-0082: an arrow target that the LENIENT wave-ref-path-from-target
 ;; extraction cannot turn into a conforming waves/….md path is still a
@@ -1008,7 +986,7 @@
                                           plan-id
                                           (exn-message e))
                                #f)])
-    (define dest (campaign-path base-dir plan-id "lint-verdict.rktd"))
+    (define dest (campaign-lint-verdict-file base-dir plan-id))
     (cond
       [(file-exists? dest) #f]
       [else

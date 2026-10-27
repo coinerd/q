@@ -24,6 +24,7 @@
          ;; GSD tracking files — update PLAN.md + wave docs on completion
          (only-in "wave-docs.rkt" wave-slug)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
+         (only-in "planning-paths.rkt" state-file wave-doc-file)
          (only-in "delivery-handoff.rkt"
                   delivery-handoff-path
                   delivery-handoff-status
@@ -50,7 +51,7 @@
 
 ;; Update STATE.md table row for a wave (e.g. "| W1 | ... | PENDING |" → "| W1 | ... | DONE |")
 (define (update-state-table! base-dir wave-idx new-status)
-  (define state-path (build-path base-dir ".planning" "STATE.md"))
+  (define state-path (state-file base-dir))
   (when (file-exists? state-path)
     (define content (call-with-input-file state-path port->string))
     (define lines (string-split content "\n"))
@@ -327,8 +328,7 @@
 ;; wave doc is left untouched (the FAILED status projection already ran).
 (define (record-wave-failure! base-dir wave-idx slug-of reason)
   (define slug (and slug-of (slug-of wave-idx)))
-  (define doc-path
-    (and slug (build-path base-dir ".planning" "waves" (format "W~a-~a.md" wave-idx slug))))
+  (define doc-path (and slug (wave-doc-file base-dir wave-idx slug)))
   (cond
     [(or (not doc-path) (not (file-exists? doc-path))) (void)]
     [(or (not (string? reason)) (string=? (string-trim reason) "")) (void)]

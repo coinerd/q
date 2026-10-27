@@ -4,16 +4,10 @@
 ;;
 ;; Pure functions for GSD command parsing and artifact name validation.
 ;;
-;; W1 (GSD-SIMPLIFICATION-PLAN): the `waves/...` branch delegates to the ONE
-;; wave-document path grammar in
-;; extensions/gsd/planning-artifact-validation.rkt (wave-artifact-name-refusal),
-;; so planning-read/planning-write normalization, preflight and campaign
-;; loading cannot disagree about what a wave document path is. The grammar
-;; accepts waves/W<idx>-<slug>.md and waves/WAVE-<idx>-<slug>.md with safe
-;; dotted slugs (racket-9.3) and keeps refusing `.`/`..` segments, extra
-;; separators, absolute paths, NUL bytes and traversal. Guards are not
-;; weakened: non-wave names keep their historical acceptance, wave-prefixed
-;; names must satisfy the canonical grammar.
+;; W1: planning-read/planning-write share the preflight module's historical
+;; artifact-name gate. A waves/ name remains one direct .md filename; unsafe
+;; traversal, NUL, absolute and nested paths are refused. Canonical
+;; W<n>/WAVE-<n> recognition is advisory and does not narrow legacy names.
 
 (require racket/string
          (only-in "../gsd/planning-artifact-validation.rkt" wave-artifact-name-refusal))
@@ -48,13 +42,13 @@
 
 (define (valid-artifact-name? name)
   (and (string? name)
-       (not (string-contains? name ".."))
        (not (string-contains? name "\x00"))
        (cond
-         ;; W1: one shared wave-document path grammar (see the module header).
+         ;; Wave paths use exactly the shared gate, including safe dotted slugs.
          [(string-prefix? name "waves/") (not (wave-artifact-name-refusal name))]
          [else
-          (and (not (string-contains? name "/"))
+          (and (not (string-contains? name ".."))
+               (not (string-contains? name "/"))
                (or (assoc name artifact-extensions)
                    (string-suffix? name ".md")
                    (string-suffix? name ".json")))])

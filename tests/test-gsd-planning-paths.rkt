@@ -88,6 +88,9 @@
                 "/tmp/q-planning-paths-fixture/docs/reports/gsd-wave-reviews")
   (check-equal? (p->s (wave-validation-report-dir base))
                 "/tmp/q-planning-paths-fixture/docs/reports/gsd-wave-validation")
+  (check-equal? (wave-evidence-report-rel-prefix) "docs/reports/gsd-wave-evidence/")
+  (check-equal? (wave-review-report-rel-prefix) "docs/reports/gsd-wave-reviews/")
+  (check-equal? (wave-validation-report-rel-prefix) "docs/reports/gsd-wave-validation/")
   (check-equal? (wave-evidence-report-rel-path plan 1)
                 (format "docs/reports/gsd-wave-evidence/~a-w1.rktd" plan)
                 "generation 0 keeps the unsuffixed legacy layout")
@@ -99,6 +102,10 @@
   (check-equal? (p->s (wave-evidence-report-file base plan 1 2))
                 (format "/tmp/q-planning-paths-fixture/docs/reports/gsd-wave-evidence/~a-w1-r2.rktd"
                         plan)))
+
+(test-case "canonical wave grammar permits safe dots but rejects parent segments"
+  (check-true (wave-doc-rel-path? "waves/W0-racket..9.3.md"))
+  (check-false (wave-doc-rel-path? "waves/../W0-racket-9.3.md")))
 
 (test-case "builders are pure: they create nothing on disk"
   (define root (make-temporary-file "planning-paths-purity-~a" 'directory))

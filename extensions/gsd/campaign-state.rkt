@@ -42,7 +42,7 @@
                   wave-index-entry-ref-path
                   unsafe-declared-path-refusal)
          (prefix-in wave: "wave-status.rkt")
-         (only-in "planning-paths.rkt" plan-file planning-path state-file)
+         (only-in "planning-paths.rkt" plan-file planning-path state-file wave-doc-rel-path)
          (only-in "../../util/json/checksum.rkt" sha256-string)
          (only-in "plan-snapshot.rkt"
                   seed-and-bind-plan-snapshot!
@@ -1006,7 +1006,7 @@
          (for/first ([e (in-list (parse-plan-index (call-with-input-file plan-path port->string)))]
                      #:when (= (wave-index-entry-idx e) idx))
            (wave-index-entry-ref-path e))))
-  (wave-doc-hash-at base-dir (or declared (format "waves/W~a-~a.md" idx slug))))
+  (wave-doc-hash-at base-dir (or declared (wave-doc-rel-path idx slug))))
 
 ;; v0.99.90 W5 (#9236): plan identity must remain stable across mutable
 ;; status/failure projections. plan-snapshot.rkt owns the shared normalization
@@ -1021,7 +1021,7 @@
       ;; is the fallback. The content hash covers that same file.
       (define doc-path
         (or (wave-index-entry-ref-path e)
-            (format "waves/W~a-~a.md" (wave-index-entry-idx e) (wave-index-entry-slug e))))
+            (wave-doc-rel-path (wave-index-entry-idx e) (wave-index-entry-slug e))))
       (make-campaign-wave-descriptor (wave-index-entry-idx e)
                                      (wave-index-entry-title e)
                                      doc-path

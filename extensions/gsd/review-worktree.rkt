@@ -9,14 +9,20 @@
          "delivery-journal.rkt"
          "review-rejection.rkt"
          "delivery-handoff.rkt"
+         (only-in "planning-paths.rkt"
+                  wave-evidence-report-rel-prefix
+                  wave-review-report-rel-prefix
+                  wave-validation-report-rel-prefix)
          (only-in "wave-executor.rkt" wave-worktree)
          "../../sandbox/subprocess.rkt")
 (provide review-retry-pending?
          resolve-review-checkout
          retained-review-retry-worktree)
 (define excludes
-  '(":(exclude)docs/reports/gsd-wave-evidence/**" ":(exclude)docs/reports/gsd-wave-reviews/**"
-                                                  ":(exclude)docs/reports/gsd-wave-validation/**"))
+  (map (lambda (prefix) (format ":(exclude)~a**" prefix))
+       (list (wave-evidence-report-rel-prefix)
+             (wave-review-report-rel-prefix)
+             (wave-validation-report-rel-prefix))))
 (define (git-output cwd . args)
   (define r
     (run-subprocess "git"

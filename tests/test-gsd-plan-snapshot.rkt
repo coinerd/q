@@ -37,6 +37,38 @@
                                                                     "duplicate waves/W0-alpha.md\n"))
                     '("waves/W0-alpha.md" "waves/W1-beta.md")))
 
+    (test-case "extracts canonical dotted and WAVE-prefixed wave references"
+      (check-equal?
+       (plan-references->wave-doc-paths "waves/W0-racket-9.3.md and waves/WAVE-2-long-form.md")
+       '("waves/W0-racket-9.3.md" "waves/WAVE-2-long-form.md")))
+
+    (test-case "seed captures canonical dotted and WAVE-prefixed wave documents"
+      (define dir (make-temporary-file "plan-snapshot-dotted-~a" 'directory))
+      (write-text! (build-path dir ".planning" "PLAN.md")
+                   (string-append "waves/W0-racket-9.3.md\n"
+                                  "waves/WAVE-1-long-form.md\n"
+                                  "waves/W2-Fix_Bug.md\n"))
+      (write-text! (build-path dir ".planning" "waves" "W0-racket-9.3.md") "dotted\n")
+      (write-text! (build-path dir ".planning" "waves" "WAVE-1-long-form.md") "long\n")
+      (write-text! (build-path dir ".planning" "waves" "W2-Fix_Bug.md") "upper\n")
+      (define-values (_bound-path _digest) (seed-and-bind-plan-snapshot! dir campaign-id))
+      (define manifest (load-snapshot-manifest dir campaign-id))
+      (check-equal?
+       (map snapshot-file-path (plan-snapshot-manifest-files manifest))
+       '("PLAN.md" "waves/W0-racket-9.3.md" "waves/WAVE-1-long-form.md" "waves/W2-Fix_Bug.md"))
+      (delete-directory/files dir))
+
+    (test-case "read-only snapshot loading neither sweeps nor invents drift"
+      (define dir (make-plan-tree))
+      (define stale (build-path dir ".planning" "campaigns" campaign-id "plan-snapshot.tmp-stale"))
+      (make-directory* stale)
+      (check-false (load-snapshot-manifest dir campaign-id #:sweep-stale? #f))
+      (check-true (directory-exists? stale))
+      (check-equal? (classify-snapshot-drift dir campaign-id #:sweep-stale? #f) '())
+      (check-false (load-snapshot-manifest dir campaign-id))
+      (check-false (directory-exists? stale) "the legacy explicit load retains its cleanup behavior")
+      (delete-directory/files dir))
+
     (test-case "seed binds and verifies PLAN plus every referenced wave"
       (define dir (make-plan-tree))
       (define-values (bound-path digest) (seed-and-bind-plan-snapshot! dir campaign-id))

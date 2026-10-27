@@ -9,8 +9,8 @@
 ;;     identity preserved — moved here from wave-executor.rkt);
 ;;   * the shared `validate-plan-artifacts` kernel /go's validate-plan-for-go
 ;;     and scripts/validate-plan.rkt both call;
-;;   * the ONE wave-document path grammar (used by planning-artifact
-;;     normalization and by preflight; bound paths are never renamed);
+;;   * the ONE preflight composition kernel (pure declared-path syntax and
+;;     canonical paths live in planning-paths.rkt; readers own link safety);
 ;;   * structured findings: stable machine `code`, operator `message`,
 ;;     `next-action` recovery text, and machine-checkable `artifacts`
 ;;     references — the same envelope vocabulary W0 pinned for campaign
@@ -34,11 +34,12 @@
 ;;   * wave-executor.rkt re-provides every moved name, so legacy importers
 ;;     keep working unchanged.
 ;;
-;; DELIBERATE NON-BLOCKING FINDINGS: newly surfaced issues (wave-doc lint
-;; details, slug mismatches, Verify span rejections, orphan wave docs,
-;; snapshot-reference bindability, snapshot drift) are advisory (`warning`
-;; kind) unless an existing guard already refuses the plan. Preflight adds
-;; named early diagnostics; it does not quietly tighten acceptance.
+;; DELIBERATE NON-BLOCKING FINDINGS: newly surfaced wave-doc lint,
+;; status-identity, attribution, and snapshot-reference bindability issues
+;; are advisory for /go compatibility. Snapshot drift is different: every
+;; actual drift class under an explicitly inspected campaign is an error,
+;; matching load-or-migrate-campaign!; absent/unknown campaign state stays
+;; advisory.
 
 (require racket/file
          racket/list
@@ -88,12 +89,16 @@
                   snapshot-file-size
                   snapshot-manifest-digest
                   classify-snapshot-drift)
-         ;; W1 canonical path vocabulary: the layout literals built below are
-         ;; the SAME values as planning-paths.rkt (sibling W1 lane). They are
-         ;; kept as four local helpers so this module stays independently
-         ;; loadable inside a parallel-worktree lane; the merge can alias them
-         ;; to planning-paths.rkt without changing a single behaviour.
-         ;; The one Verify declaration grammar (no second parser here).
+         ;; W1 canonical path vocabulary and Verify declaration grammar.
+         (only-in "planning-paths.rkt"
+                  plan-file
+                  planning-path
+                  waves-dir
+                  campaigns-root
+                  parse-wave-doc-rel-path
+                  wave-doc-rel-path?
+                  wave-doc-rel-path-refusal
+                  wave-doc-rel-path-index)
          (only-in "verify-command-format.rkt" verify-declaration-extraction)
          ;; Read-only campaign inspection (--explain): durable record identity.
          (only-in "campaign-state.rkt"
@@ -109,25 +114,6 @@
                   campaign-wave-index
                   campaign-wave-status)
          (only-in "campaign-repository.rkt" load-campaign-record))
-
-;; ============================================================
-;; Layout helpers (same values as the canonical planning-paths.rkt)
-;; ============================================================
-;; Four literals only, kept local so this module loads independently in a
-;; parallel-worktree lane. Nothing here is a second path GRAMMAR: the
-;; wave-document grammar lives below and refuses unsafe spellings.
-
-(define (plan-file base-dir)
-  (build-path base-dir ".planning" "PLAN.md"))
-
-(define (planning-path base-dir rel-path)
-  (build-path base-dir ".planning" rel-path))
-
-(define (waves-dir base-dir)
-  (build-path base-dir ".planning" "waves"))
-
-(define (campaigns-root base-dir)
-  (build-path base-dir ".planning" "campaigns"))
 
 ;; ============================================================
 ;; Structured findings
@@ -244,97 +230,24 @@
 
 ;; ============================================================
 ;; One wave-document path grammar
-;; ============================================================
-;; A wave document is declared `.planning`-relative as
-;;   waves/W<idx>-<slug>.md      (the canonical authoring form)
-;;   waves/WAVE-<idx>-<slug>.md  (the long spelling some campaigns use)
-;; where <slug> may contain safe dots (e.g. racket-9.3), letters, digits,
-;; `_` and `-`. Everything else is refused with a named reason:
-;; absolute paths, parent-directory or empty or `.` segments, NUL bytes,
-;; extra separators, a missing waves/ prefix, a missing .md suffix, an empty
-;; slug, and any filesystem separator.
-;;
-;; The traversal/absolute/segment half is OWNED by
-;; `unsafe-declared-path-refusal` (wave-docs.rkt, BUG-0082) and is called
-;; first; this module owns only the filename half. Bound paths are NEVER
-;; renamed: the grammar validates input.
-
-;; Filename shape of a wave document below waves/.
-(define wave-doc-filename-rx #px"^(?:W|WAVE-)([0-9]+)-([A-Za-z0-9][A-Za-z0-9._-]*)\\.md$")
-;; Prefix that marks a filename as a WAVE document (vs. another waves/ doc).
-(define wave-doc-prefix-rx #px"^(?:W|WAVE-)[0-9]+-")
 ;; A plan-id / hash: 64 lowercase hex characters.
 (define sha256-hex-rx #px"^[0-9a-f]{64}$")
 
-;; parse-wave-doc-rel-path : any/c -> (values idx refusal)
-;; PURE. idx is the declared wave number when the path is a valid wave
-;; document path; refusal is #f then, and a named string otherwise.
-(define (parse-wave-doc-rel-path rel-path)
-  (cond
-    [(not (string? rel-path)) (values #f "wave document path must be a string")]
-    [(zero? (string-length rel-path)) (values #f "wave document path is empty")]
-    [(string-contains? rel-path "\x00")
-     (values #f (format "wave document path ~a contains a NUL byte" rel-path))]
-    [else
-     ;; Existing helper first: absolute/traversal/`.`/empty-segment refusals
-     ;; stay owned by wave-docs.rkt (BUG-0082) and are never re-implemented.
-     (define unsafe (unsafe-declared-path-refusal rel-path))
-     (cond
-       [unsafe (values #f unsafe)]
-       [else
-        (define segs (string-split rel-path "/"))
-        (cond
-          [(and (= (length segs) 2) (string=? (car segs) "waves"))
-           (define m (regexp-match wave-doc-filename-rx (cadr segs)))
-           (cond
-             [m (values (string->number (cadr m)) #f)]
-             [else
-              (values #f
-                      (format (string-append
-                               "wave document path ~a does not follow the wave-document grammar "
-                               "waves/W<idx>-<slug>.md or waves/WAVE-<idx>-<slug>.md")
-                              rel-path))])]
-          [else
-           (values #f
-                   (format "wave document path ~a is not exactly one document under waves/"
-                           rel-path))])])]))
-
-;; wave-doc-rel-path-refusal : any/c -> (or/c string? #f)
-(define (wave-doc-rel-path-refusal rel-path)
-  (let-values ([(idx refusal) (parse-wave-doc-rel-path rel-path)])
-    (void idx)
-    refusal))
-
-;; wave-doc-rel-path? : any/c -> boolean?
-(define (wave-doc-rel-path? rel-path)
-  (not (wave-doc-rel-path-refusal rel-path)))
-
-;; wave-doc-rel-path-index : any/c -> (or/c exact-nonnegative-integer? #f)
-(define (wave-doc-rel-path-index rel-path)
-  (let-values ([(idx refusal) (parse-wave-doc-rel-path rel-path)])
-    (and (not refusal) idx)))
-
-;; wave-artifact-name-refusal : any/c -> (or/c string? #f)
-;; PURE. The planning-artifact-name face of the SAME grammar: the waves/
-;; branch of plan artifact names (waves/W0-slug.md as used by planning-read
-;; and planning-write). Non-wave documents below waves/ keep their
-;; historical acceptance (any single <name>.md segment); only wave-prefixed
-;; names must satisfy the wave-document grammar. #f means valid.
+;; wave-artifact-name-refusal preserves the historical planning-tool gate:
+;; one real .md filename directly below waves/, with traversal/NUL refused.
+;; Canonical W<n>/WAVE-<n> recognition is advisory, not a new write refusal.
 (define (wave-artifact-name-refusal name)
   (cond
     [(not (string? name)) "artifact name must be a string"]
     [(not (string-prefix? name "waves/"))
      (format "artifact name ~a is not a wave document path (expected waves/W<idx>-<slug>.md)" name)]
     [(string-contains? name "\x00") (format "artifact name ~a contains a NUL byte" name)]
-    [(string-contains? name "..")
-     (format "artifact name ~a contains a parent-directory reference" name)]
     [else
      (define rest (substring name (string-length "waves/")))
      (cond
        [(string=? rest "") "artifact name waves/ names no document"]
        [(string-contains? rest "/") (format "artifact name ~a nests below waves/" name)]
        [(not (string-suffix? rest ".md")) (format "artifact name ~a is not a .md document" name)]
-       [(regexp-match? wave-doc-prefix-rx rest) (wave-doc-rel-path-refusal name)]
        [else #f])]))
 
 ;; ============================================================
@@ -498,7 +411,7 @@
   (cond
     [(pair? arrow-issues) (values #f arrow-issues (issue-message arrow-issues))]
     [(pair? link-issues) (values #f link-issues (issue-message link-issues))]
-    [(pair? missing-issues)
+    [(pair? missing-displays)
      (values #f missing-issues (missing-wave-docs-error-text entries missing-displays))]
     [else
      (void text)
@@ -640,9 +553,9 @@
          (and rel (path->string (planning-path base-dir rel)))))
      (for/list ([f (in-list (sort (directory-list waves-root #:build? #t) path<?))]
                 #:do [(define filename (path->string (file-name-from-path f)))
-                      (define m (regexp-match wave-doc-filename-rx filename))]
-                #:when (and m (file-exists? f) (not (member (path->string f) claimed))))
-       (define idx (string->number (cadr m)))
+                      (define-values (idx refusal)
+                        (parse-wave-doc-rel-path (string-append "waves/" filename)))]
+                #:when (and (not refusal) (file-exists? f) (not (member (path->string f) claimed))))
        (plan-validation-finding
         idx
         'warning
@@ -687,16 +600,19 @@
      #:artifacts (list (format ".planning/~a" rel)))))
 
 ;; Snapshot drift of an EXPLICIT campaign: the existing classify-snapshot-drift
-;; classes are surfaced with stable codes. Symlinks are errors (fail-closed
-;; everywhere); missing/content drift stay advisory here because recovery is
-;; an operator decision, never a preflight rewrite.
+;; classes are surfaced with stable codes. Every actual drift or unreadable
+;; snapshot is an error; only an explicitly absent/unknown campaign is
+;; advisory. No inspection path rewrites or rebinds the snapshot.
 (define (snapshot-drift-class-code kind)
   (case kind
     [(symlink) 'snapshot-drift-symlink]
     [(missing) 'snapshot-drift-missing]
     [(content-drift) 'snapshot-drift-content-drift]
     [(frozen-contract-stale) 'snapshot-drift-frozen-contract-stale]
-    [else 'snapshot-unreadable]))
+    [(snapshot-absent) 'snapshot-absent]
+    [(campaign-unknown) 'campaign-unknown]
+    [(unreadable) 'snapshot-unreadable]
+    [else 'snapshot-drift-unknown]))
 
 (define (snapshot-drift-next-action kind rel campaign-id)
   (case kind
@@ -709,29 +625,44 @@
     [(frozen-contract-stale)
      (string-append "the authored plan body changed after the snapshot froze: re-freeze under a "
                     "new campaign identity or restore the frozen content")]
+    [(snapshot-absent)
+     "inspect the durable campaign identity; no snapshot drift is claimed without a manifest"]
+    [(campaign-unknown)
+     "pass a 64-hex durable campaign id or omit --campaign to inspect the newest record"]
     [else (format "inspect the campaign snapshot for ~a" campaign-id)]))
 
 (define (snapshot-drift-findings base-dir campaign-id)
   (define classified
-    (with-handlers ([exn:fail? (lambda (e) (list (list "PLAN.md" 'unreadable (exn-message e))))])
-      (for/list ([item (in-list (classify-snapshot-drift base-dir campaign-id))])
-        (list (car item) (cadr item) #f))))
+    (cond
+      [(not (and (string? campaign-id) (regexp-match? sha256-hex-rx campaign-id)))
+       (list (list "PLAN.md" 'campaign-unknown #f))]
+      [else
+       (with-handlers ([exn:fail? (lambda (e) (list (list "PLAN.md" 'unreadable (exn-message e))))])
+         (define manifest (load-snapshot-manifest base-dir campaign-id #:sweep-stale? #f))
+         (if (not manifest)
+             (list (list "PLAN.md" 'snapshot-absent #f))
+             (for/list ([item (in-list
+                               (classify-snapshot-drift base-dir campaign-id #:sweep-stale? #f))])
+               (list (car item) (cadr item) #f))))]))
   (for/list ([item (in-list classified)])
     (define rel (car item))
     (define kind (cadr item))
     (define detail (caddr item))
-    (plan-validation-finding #f
-                             (if (memq kind '(symlink unreadable)) 'error 'warning)
-                             (format "campaign ~a snapshot drift: .planning/~a — class ~a~a"
-                                     campaign-id
-                                     rel
-                                     kind
-                                     (if detail
-                                         (format " (~a)" detail)
-                                         ""))
-                             #:code (snapshot-drift-class-code kind)
-                             #:next-action (snapshot-drift-next-action kind rel campaign-id)
-                             #:artifacts (list (format ".planning/~a" rel)))))
+    (plan-validation-finding
+     #f
+     (if (memq kind '(symlink missing content-drift frozen-contract-stale unreadable))
+         'error
+         'warning)
+     (format "campaign ~a snapshot drift: .planning/~a — class ~a~a"
+             campaign-id
+             rel
+             kind
+             (if detail
+                 (format " (~a)" detail)
+                 ""))
+     #:code (snapshot-drift-class-code kind)
+     #:next-action (snapshot-drift-next-action kind rel campaign-id)
+     #:artifacts (list (format ".planning/~a" rel)))))
 
 ;; ============================================================
 ;; The shared preflight kernel
@@ -784,7 +715,8 @@
 ;; attribution, and snapshot drift when #:campaign-id names a campaign).
 (define (validate-plan-artifacts base-dir
                                  [plan-path (plan-file base-dir)]
-                                 #:campaign-id [campaign-id #f])
+                                 #:campaign-id [campaign-id #f]
+                                 #:explanation [explanation #f])
   (cond
     [(not (file-exists? plan-path))
      (define msg "No PLAN found in .planning/. Use /plan <task> to create one.")
@@ -866,19 +798,32 @@
           [else
            (define strict (validate-plan-strict plan))
            (define mapping-refusals (declared-mapping-refusals entries))
+           (define advisory-findings
+             (with-handlers
+                 ([exn:fail?
+                   (lambda (e)
+                     (list (plan-validation-finding
+                            #f
+                            'warning
+                            (format "advisory plan inspection failed: ~a" (exn-message e))
+                            #:code 'plan-advisory-unreadable
+                            #:next-action
+                            "inspect the named planning artifacts; no authority was changed")))])
+               (append (wave-doc-lint-findings base-dir)
+                       (slug-mismatch-findings base-dir)
+                       (verify-findings plan)
+                       (orphan-wave-doc-findings base-dir entries)
+                       (bindability-findings text entries)
+                       (file-attribution-findings base-dir plan)
+                       (if campaign-id
+                           (snapshot-drift-findings base-dir campaign-id)
+                           '()))))
            (define findings
              (append (strict-error-findings strict)
                      (strict-warning-findings strict)
                      (mapping-refusal-findings mapping-refusals)
-                     (wave-doc-lint-findings base-dir)
-                     (slug-mismatch-findings base-dir)
-                     (verify-findings plan)
-                     (orphan-wave-doc-findings base-dir entries)
-                     (bindability-findings text entries)
-                     (file-attribution-findings base-dir plan)
-                     (if campaign-id
-                         (snapshot-drift-findings base-dir campaign-id)
-                         '())))
+                     (inspection-error-findings (and explanation (hash-ref explanation 'errors '())))
+                     advisory-findings))
            (define errors (plan-validation-error-findings findings))
            (make-plan-validation-result
             plan-path
@@ -888,6 +833,15 @@
             (and (pair? errors) (string-join (map plan-validation-finding-message errors) "\n"))
             plan
             findings)])])]))
+
+(define (inspection-error-findings errors)
+  (for/list ([error (in-list (or errors '()))])
+    (plan-validation-finding
+     #f
+     'error
+     (hash-ref error 'message)
+     #:code (hash-ref error 'code 'inspection-unreadable)
+     #:next-action "inspect or repair the named durable state; --explain never repairs it")))
 
 (define (strict-error-findings strict)
   (for/list ([e (in-list (validation-errors strict))])
@@ -963,52 +917,86 @@
 ;; normalized plan-body hash. Nothing is compared for authority here and
 ;; nothing is repaired; the CLI prints what is true.
 
-;; newest-campaign-id : path-string? -> (or/c string? #f)
-;; Most recently modified durable campaign record id under
-;; .planning/campaigns/ (read-only). Corrupt records are skipped.
-(define (newest-campaign-id base-dir)
+;; Return the newest readable id plus any unreadable candidates. A corrupt
+;; newer record is never silently presented as absence or as the newest record.
+(define (newest-campaign-for-inspection base-dir)
   (define dir (campaigns-root base-dir))
-  (cond
-    [(not (directory-exists? dir)) #f]
-    [else
-     (define candidates
-       (for/list ([p (in-list (directory-list dir #:build? #t))]
-                  #:do [(define name (path->string (file-name-from-path p)))
-                        (define id
-                          (and (string-suffix? name ".rktd")
-                               (substring name 0 (- (string-length name) 5))))]
-                  #:when (and id (regexp-match? sha256-hex-rx id) (file-exists? p)))
-         (cons id
-               (with-handlers ([exn:fail? (lambda (_) 0)])
-                 (file-or-directory-modify-seconds p)))))
-     (for/first ([c (in-list (sort candidates (lambda (a b) (> (cdr a) (cdr b)))))]
-                 #:do [(define rec
-                         (with-handlers ([exn:fail? (lambda (_) #f)])
-                           (load-campaign-record base-dir (car c))))]
-                 #:when rec)
-       (car c))]))
+  (if (not (directory-exists? dir))
+      (values #f '() "none")
+      (let ()
+        (define candidates
+          (for/list ([p (in-list (directory-list dir #:build? #t))]
+                     #:do [(define name (path->string (file-name-from-path p)))
+                           (define id
+                             (and (string-suffix? name ".rktd")
+                                  (substring name 0 (- (string-length name) 5))))]
+                     #:when (and id (regexp-match? sha256-hex-rx id) (file-exists? p)))
+            (cons id
+                  (with-handlers ([exn:fail? (lambda (_) 0)])
+                    (file-or-directory-modify-seconds p)))))
+        (let loop ([remaining (sort candidates (lambda (a b) (> (cdr a) (cdr b))))]
+                   [errors '()]
+                   [skipped? #f])
+          (cond
+            [(null? remaining) (values #f (reverse errors) (if (pair? errors) "unreadable" "none"))]
+            [else
+             (define id (caar remaining))
+             (define-values (rec read-error)
+               (with-handlers ([exn:fail? (lambda (e) (values #f e))])
+                 (values (load-campaign-record base-dir id #:sweep-stale? #f) #f)))
+             (cond
+               [rec (values id (reverse errors) (if skipped? "newest-readable" "newest-record"))]
+               [else
+                (loop (cdr remaining)
+                      (cons (hasheq 'code
+                                    'campaign-candidate-unreadable
+                                    'message
+                                    (format "~a: ~a"
+                                            id
+                                            (if read-error
+                                                (exn-message read-error)
+                                                "record disappeared during inspection")))
+                            errors)
+                      #t)])])))))
 
 ;; plan-artifact-explanation : path-string? [#:campaign-id string?] -> hash?
 ;; Read-only structured inspection: declared wave paths, identity namespaces,
-;; bound/live hashes, and per-wave status projections. Never writes, never
-;; rebinds, never touches a campaign record.
+;; bound/live hashes, and per-wave status projections. Never writes, rebinds,
+;; repairs, or sweeps campaign/snapshot state.
 (define (plan-artifact-explanation base-dir #:campaign-id [campaign-id #f])
   (define plan-path (plan-file base-dir))
-  (define text (and (file-exists? plan-path) (call-with-input-file plan-path port->string)))
+  (define (inspection-error code error)
+    (hasheq 'code code 'message (exn-message error)))
+  (define-values (text plan-read-error)
+    (if (file-exists? plan-path)
+        (with-handlers ([exn:fail? (lambda (e) (values #f (inspection-error 'plan-unreadable e)))])
+          (values (call-with-input-file plan-path port->string) #f))
+        (values #f #f)))
   (define entries
     (if text
         (parse-plan-index text)
         '()))
-  (define selected-campaign-id (or campaign-id (newest-campaign-id base-dir)))
-  (define rec
-    (and selected-campaign-id
-         (with-handlers ([exn:fail? (lambda (_) #f)])
-           (load-campaign-record base-dir selected-campaign-id))))
+  (define-values (selected-campaign-id candidate-errors selected-campaign-source)
+    (if campaign-id
+        (values campaign-id '() 'requested)
+        (newest-campaign-for-inspection base-dir)))
+  (define-values (rec campaign-error)
+    (cond
+      [(not selected-campaign-id) (values #f #f)]
+      [(not (regexp-match? sha256-hex-rx selected-campaign-id))
+       (values
+        #f
+        (hasheq 'code 'campaign-unknown 'message "campaign id must be 64 lowercase hex characters"))]
+      [else
+       (with-handlers ([exn:fail? (lambda (e) (values #f (inspection-error 'campaign-unreadable e)))])
+         (values (load-campaign-record base-dir selected-campaign-id #:sweep-stale? #f) #f))]))
   (define manifest (and rec (campaign-record-manifest rec)))
-  (define snapshot
-    (and selected-campaign-id
-         (with-handlers ([exn:fail? (lambda (_) #f)])
-           (load-snapshot-manifest base-dir selected-campaign-id))))
+  (define-values (snapshot snapshot-error)
+    (if (and selected-campaign-id (not campaign-error))
+        (with-handlers ([exn:fail? (lambda (e)
+                                     (values #f (inspection-error 'snapshot-unreadable e)))])
+          (values (load-snapshot-manifest base-dir selected-campaign-id #:sweep-stale? #f) #f))
+        (values #f #f)))
   (define bound-plan-entry
     (and snapshot
          (for/first ([f (in-list (plan-snapshot-manifest-files snapshot))]
@@ -1059,6 +1047,16 @@
               durable
               'resolvable?
               (and doc (not refusal) #t))))
+  (define-values (drift drift-error)
+    (if (and selected-campaign-id snapshot)
+        (with-handlers ([exn:fail? (lambda (e)
+                                     (values '() (inspection-error 'snapshot-drift-unreadable e)))])
+          (values (for/list ([item (in-list (classify-snapshot-drift base-dir
+                                                                     selected-campaign-id
+                                                                     #:sweep-stale? #f))])
+                    (hasheq 'path (car item) 'class (cadr item)))
+                  #f))
+        (values '() #f)))
   (hasheq
    'plan-path
    (path->string plan-path)
@@ -1071,8 +1069,8 @@
    'campaign-source
    (cond
      [campaign-id 'requested]
-     [selected-campaign-id 'newest-record]
-     [else #f])
+     [selected-campaign-id (string->symbol selected-campaign-source)]
+     [else (and (pair? candidate-errors) 'unreadable)])
    'stored-plan-id
    (and rec (campaign-plan-id rec))
    'recomputed-manifest-hash
@@ -1107,11 +1105,11 @@
                  (snapshot-file-size f)))
        '())
    'drift
-   (if (and selected-campaign-id snapshot)
-       (with-handlers ([exn:fail? (lambda (_) '())])
-         (for/list ([item (in-list (classify-snapshot-drift base-dir selected-campaign-id))])
-           (hasheq 'path (car item) 'class (cadr item))))
-       '())
+   drift
+   'errors
+   (append (filter values (list plan-read-error))
+           candidate-errors
+           (filter values (list campaign-error snapshot-error drift-error)))
    'declared-wave-paths
    declared-wave-paths
    'bound-wave-paths
@@ -1123,28 +1121,51 @@
 (define (format-plan-artifact-explanation explanation)
   (define (line label value)
     (format "~a: ~a\n" label (if value value "(none)")))
+  (define (inspection-error? codes)
+    (for/or ([error (in-list (hash-ref explanation 'errors))])
+      (memq (hash-ref error 'code) codes)))
+  (define record-inspection-blocked?
+    (or (inspection-error? '(campaign-unreadable campaign-unknown))
+        (and (not (hash-ref explanation 'campaign-id))
+             (inspection-error? '(campaign-candidate-unreadable)))))
+  (define snapshot-unreadable? (inspection-error? '(snapshot-unreadable)))
+  (define (snapshot-value key)
+    (cond
+      [record-inspection-blocked? "(not inspected: campaign record unreadable)"]
+      [snapshot-unreadable? "(unreadable)"]
+      [else (hash-ref explanation key)]))
   (string-append
    "== plan inspection (read-only) ==\n"
    (line "plan" (hash-ref explanation 'plan-path))
    (line "base" (hash-ref explanation 'base-dir))
-   (line "campaign" (hash-ref explanation 'campaign-id))
+   (line "campaign"
+         (or (hash-ref explanation 'campaign-id)
+             (and (eq? (hash-ref explanation 'campaign-source) 'unreadable) "(unreadable)")))
    (line "campaign source" (hash-ref explanation 'campaign-source))
    (line "stored plan-id" (hash-ref explanation 'stored-plan-id))
    (line "recomputed manifest hash" (hash-ref explanation 'recomputed-manifest-hash))
    (line "identity matches"
          (cond
-           [(not (hash-ref explanation 'campaign-id)) "n/a (no bound campaign)"]
+           [(not (hash-ref explanation 'stored-plan-id)) "n/a (no durable record)"]
            [(hash-ref explanation 'identity-matches?) "yes"]
            [else "NO (stored plan-id differs from the recomputed manifest hash)"]))
    (line "bound plan-body hash" (hash-ref explanation 'bound-plan-body-hash))
    (line "live plan-body hash" (hash-ref explanation 'live-plan-body-hash))
    (line "bound body matches live"
          (cond
-           [(hash-ref explanation 'campaign-id)
-            (if (hash-ref explanation 'bound-body-matches-live?) "yes" "NO (drift)")]
-           [else "n/a (no bound campaign)"]))
-   (line "snapshot manifest digest" (hash-ref explanation 'snapshot-manifest-digest))
-   (line "snapshot PLAN.md sha256" (hash-ref explanation 'snapshot-plan-sha256))
+           [(not (hash-ref explanation 'stored-plan-id)) "n/a (no durable record)"]
+           [(not (hash-ref explanation 'bound-plan-body-hash)) "n/a (no bound plan-body hash)"]
+           [(hash-ref explanation 'bound-body-matches-live?) "yes"]
+           [else "NO (drift)"]))
+   (line "snapshot manifest digest" (snapshot-value 'snapshot-manifest-digest))
+   (line "snapshot PLAN.md sha256" (snapshot-value 'snapshot-plan-sha256))
+   (if (null? (hash-ref explanation 'errors))
+       ""
+       (string-append
+        "inspection errors:\n"
+        (string-join (for/list ([error (in-list (hash-ref explanation 'errors))])
+                       (format "  [~a] ~a\n" (hash-ref error 'code) (hash-ref error 'message)))
+                     "")))
    (format "declared wave paths (~a):\n" (length (hash-ref explanation 'declared-wave-paths)))
    (string-join (for/list ([row (in-list (hash-ref explanation 'declared-wave-paths))])
                   (format "  W~a  ~a~a~a\n"

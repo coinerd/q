@@ -209,14 +209,17 @@
       (check-true (pair? imports) (format "~a must have require forms (extraction broken?)" mod)))
     (define violations
       (for/list ([i (in-list imports)]
-                 #:when (member i forbidden-io-imports))
+                 ;; planning-paths uses only pure build-path/path-string
+                 ;; construction; keep the I/O ban for every other module.
+                 #:when (and (member i forbidden-io-imports)
+                             (not (and (string=? mod "planning-paths.rkt") (string=? i "path")))))
         i))
     (check-equal? violations '() (format "~a imports I/O modules: ~a" mod violations))))
 
 (test-case "purity: pure kernel dependency whitelists"
   (define whitelists
     '(("transition-kernel.rkt" "base" "match" "set")
-      ("projection-kernel.rkt" "base" "string")
+      ("projection-kernel.rkt" "base" "string" "wave-status")
       ("command-parser.rkt" "base" "match" "string" "command-helpers" "command-types")))
   (for ([entry (in-list whitelists)])
     (match-define (list mod allowed ...) entry)

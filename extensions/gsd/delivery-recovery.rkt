@@ -17,6 +17,7 @@
          racket/system
          (only-in "attempt-artifacts.rkt" record-wave-delivery!)
          (only-in "campaign-repository.rkt" load-campaign-record)
+         (only-in "planning-paths.rkt" campaign-record-file)
          (only-in "campaign-state.rkt"
                   campaign-attempt-fence-token
                   campaign-attempt-id
@@ -346,7 +347,7 @@
 ;; digest still validates the manifest content; the LIVE record is never
 ;; touched. Records carrying no original-root references are untouched.
 (define (translate-record-root-references! root tmp plan)
-  (define record-path (build-path tmp ".planning" "campaigns" (string-append plan ".rktd")))
+  (define record-path (campaign-record-file tmp plan))
   (when (file-exists? record-path)
     (define text (file->string record-path))
     (define orig (path->string (simplify-path (path->complete-path root))))

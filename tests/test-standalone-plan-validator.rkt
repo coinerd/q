@@ -120,8 +120,8 @@
                  "attribution finding is labelled as a warning, not an error")
 
 ;; --- Pin 5: shared kernel — the CLI and /go cannot diverge. The
-;; kernel validate-plan-artifacts lives in wave-executor.rkt and is
-;; the SAME entry /go's validate-plan-for-go delegates to.
+;; kernel validate-plan-artifacts lives in planning-artifact-validation.rkt,
+;; is re-exported by wave-executor.rkt, and is the SAME entry /go delegates to.
 (check-not-false
  (regexp-match? #rx"validate-plan-artifacts"
                 (file->string (build-path repo-root "extensions" "gsd" "command-handlers.rkt")))

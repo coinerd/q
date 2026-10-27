@@ -43,6 +43,7 @@
          "../gsd/prompts.rkt"
          "../gsd/context-bundle.rkt"
          "../gsd/wave-docs.rkt"
+         (only-in "../gsd/planning-paths.rkt" [waves-dir planning-waves-dir])
          "tool-handlers.rkt"
          (only-in "../gsd/archive.rkt" ensure-state-md!)
          (only-in "../gsd/events.rkt"
@@ -931,7 +932,7 @@
   ;; BUG-0032 fix: a bare delete here wiped ACTIVE campaign wave docs whenever
   ;; /plan <text> ran mid-campaign (observed twice live, 2026-08-25). Back up
   ;; the previous waves dir instead of destroying it; the backup is rotated.
-  (define waves-dir (build-path base-dir ".planning" "waves"))
+  (define waves-dir (planning-waves-dir base-dir))
   (define waves-backup-dir (build-path base-dir ".planning" "waves-pre-plan-backup"))
   (with-handlers ([exn:fail? (lambda (e)
                                (log-debug "gsd: wave dir cleanup failed: ~a" (exn-message e)))])

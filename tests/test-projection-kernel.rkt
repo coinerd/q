@@ -369,7 +369,7 @@
 ;; Kernel purity fitness
 ;; ============================================================
 
-(define allowed-kernel-imports '("racket/base" "racket/string"))
+(define allowed-kernel-imports '("racket/base" "racket/string" "wave-status.rkt"))
 
 (define (spec-module-path spec)
   (cond
@@ -384,7 +384,7 @@
        [else #f])]
     [else #f]))
 
-(test-case "kernel purity: projection-kernel.rkt imports only base + string"
+(test-case "kernel purity: projection-kernel.rkt imports only pure vocabulary modules"
   (define kernel-path (build-path q-dir "extensions" "gsd" "projection-kernel.rkt"))
   (check-true (file-exists? kernel-path) "kernel file exists on disk")
   (define reqs (extract-requires (path->string kernel-path)))

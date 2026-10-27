@@ -9,9 +9,9 @@
 ;; "One planning, path, Verify, and preflight contract."
 ;;
 ;; Pins the consolidation this wave performed:
-;;   1. ONE wave-document path grammar (W<n>/WAVE-<n> prefixes, safe dotted
-;;      slugs, unchanged traversal/absolute/NUL refusals), consumed by
-;;      planning-artifact normalization and by preflight;
+;;   1. ONE canonical wave-document recognizer (W<n>/WAVE-<n>, safe dotted
+;;      slugs, unchanged traversal/absolute/NUL refusals) used by preflight;
+;;      planning-artifact normalization retains its legacy single-file gate;
 ;;   2. the shared validate-plan-artifacts kernel re-homed into
 ;;      planning-artifact-validation.rkt and still re-provided by
 ;;      wave-executor.rkt (same constructors/accessors, same error text,
@@ -104,11 +104,12 @@
     (check-false (wave-doc-rel-path? bad) bad))
   (check-true (string? (wave-doc-rel-path-refusal "waves/../etc.md"))))
 
-(test-case "planning-artifact names share the same grammar"
-  ;; Wave-prefixed names must satisfy the canonical grammar.
+(test-case "planning-artifact names preserve the historical single-file gate"
   (check-false (wave-artifact-name-refusal "waves/W0-racket-9.3.md"))
   (check-false (wave-artifact-name-refusal "waves/WAVE-3-long-form.md"))
-  (check-true (string? (wave-artifact-name-refusal "waves/W0-.md")))
+  (check-false (wave-artifact-name-refusal "waves/W0-.md"))
+  (check-false (wave-artifact-name-refusal "waves/W0-Fix Bug.md"))
+  (check-false (wave-artifact-name-refusal "waves/W0-修正.md"))
   (check-true (string? (wave-artifact-name-refusal "waves/../etc.md")))
   (check-true (string? (wave-artifact-name-refusal "waves/W0-a\x00b.md")))
   ;; Non-wave documents below waves/ keep their historical acceptance.
@@ -268,20 +269,16 @@
                                                 "unsupported-command")))
                 (lambda () (drop-fixture dir))))
 
-(test-case "kernel: a dotted declared wave path loads but names its bindability gap"
+(test-case "kernel: a dotted declared wave path loads and is snapshot-bindable"
   (define dir (make-fixture))
   (dynamic-wind void
                 (lambda ()
                   (put-plan! dir '("- [Inbox] W0: Racket upgrade → waves/W0-racket-9.3.md"))
                   (put-wave-doc! dir 0 "racket-9.3")
                   (define result (validate-plan-artifacts dir))
-                  ;; The grammar accepts it (no path-invalid error) and the document loads.
                   (check-true (hash-ref result 'ok?) (hash-ref result 'error-message))
                   (check-equal? (codes result) '())
-                  (define bind (finding-with-code result 'wave-doc-path-not-bindable))
-                  (check-not-false bind "the frozen-snapshot reference grammar gap is named")
-                  (check-true (string-contains? (plan-validation-finding-message bind)
-                                                ".planning/waves/W0-racket-9.3.md")))
+                  (check-false (finding-with-code result 'wave-doc-path-not-bindable)))
                 (lambda () (drop-fixture dir))))
 
 ;; ------------------------------------------------------------

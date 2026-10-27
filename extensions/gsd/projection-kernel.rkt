@@ -27,7 +27,8 @@
 ;; rebuild, wave-completion.rkt update-state-table! row replace) — the W0
 ;; golden-trace oracle proves the equivalence.
 
-(require racket/string)
+(require racket/string
+         (only-in "wave-status.rkt" WAVE-STATUS-MARKERS wave-status-marker))
 
 ;; ============================================================
 ;; Neutral status display data
@@ -58,21 +59,10 @@
 ;; ============================================================
 
 (define PROJECTION-STATUS-MARKERS
-  (list (cons "Inbox" "[Inbox]")
-        (cons "In-Progress" "[In-Progress]")
-        (cons "DONE" "[DONE]")
-        (cons "DEFERRED" "[DEFERRED]")
-        (cons "FAILED" "[FAILED]")))
+  (filter (lambda (entry) (member (car entry) '("Inbox" "In-Progress" "DONE" "DEFERRED" "FAILED")))
+          WAVE-STATUS-MARKERS))
 
-(define (status->marker status)
-  (cond
-    [(string? status)
-     (define entry (assoc status PROJECTION-STATUS-MARKERS))
-     (if entry
-         (cdr entry)
-         (format "[~a]" status))]
-    [(symbol? status) (status->marker (symbol->string status))]
-    [else "[Inbox]"]))
+(define status->marker wave-status-marker)
 
 ;; ============================================================
 ;; Pure projection transforms (text → text)

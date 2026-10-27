@@ -283,7 +283,7 @@
                         "scripts/gsd-evidence-probe-runner"))
    ;; pure planning
    (make-entry "shared.rkt" 'pure-planning '() '() '("racket/string" "racket/list"))
-   (make-entry "wave-status.rkt" 'pure-planning '() '() '())
+   (make-entry "wave-status.rkt" 'pure-planning '() '() '("racket/string"))
    ;; Campaign terminal values, structured diagnostics, and pure stop text.
    (make-entry "campaign-result.rkt" 'pure-planning '() '() '("racket/string"))
    (make-entry "stall-policy.rkt"
@@ -310,6 +310,23 @@
                '()
                '()
                '("racket/string" "racket/list" "racket/format"))
+   (make-entry "planning-paths.rkt" 'pure-planning '() '() '("racket/path" "racket/string"))
+   (make-entry "planning-artifact-validation.rkt"
+               'command-parsing
+               '(fs-read dir-list path-ops)
+               '()
+               '("racket/file" "racket/list"
+                               "racket/path"
+                               "racket/port"
+                               "racket/string"
+                               "plan-types"
+                               "plan-validator"
+                               "wave-docs"
+                               "plan-snapshot"
+                               "planning-paths"
+                               "verify-command-format"
+                               "campaign-state"
+                               "campaign-repository"))
    (make-entry "plan-validator.rkt"
                'pure-planning
                '()
@@ -364,6 +381,7 @@
                                "racket/format"
                                "racket/contract"
                                "wave-docs"
+                               "planning-paths"
                                "util/json/checksum"))
    ;; v0.99.90 W1: .rktd storage boundary owns persistence effects
    (make-entry "campaign-repository.rkt"
@@ -376,6 +394,7 @@
                                "racket/string"
                                "racket/contract"
                                "campaign-state"
+                               "planning-paths"
                                "plan-snapshot"))
    (make-entry "go-orchestrator.rkt"
                'campaign-state
@@ -424,6 +443,7 @@
                         "racket/string"
                         "campaign-state"
                         "campaign-repository"
+                        "planning-paths"
                         "sandbox/subprocess"))
    ;; JSON journal writes atomically; fs-write/fs-rename/mkdir are not visible
    ;; to the legacy effect marker scanner, as with delivery-handoff above.
@@ -463,7 +483,12 @@
                '(sha256)
                '()
                '("racket/list" "racket/string" "util/json/checksum"))
-   (make-entry "verify-command-format.rkt" 'transition-logic '() '() '("racket/list" "racket/string"))
+   (make-entry "verify-command-grammar.rkt" 'pure-planning '() '() '("racket/list" "racket/string"))
+   (make-entry "verify-command-format.rkt"
+               'transition-logic
+               '()
+               '()
+               '("racket/string" "verify-command-grammar"))
    ;; Public promotion audit validation delegates to pure format modules.
    (make-entry "review-audit-promotion.rkt"
                'transition-logic
@@ -513,6 +538,7 @@
                                "delivery-journal"
                                "review-rejection"
                                "delivery-handoff"
+                               "planning-paths"
                                "wave-executor"
                                "sandbox/subprocess"))
    ;; Creates isolated runtime sessions; the extension owns runtime/tools
@@ -550,7 +576,8 @@
                         "runtime/provider/model-registry"
                         "runtime/auth/auth-store"
                         "util/hash-helpers"
-                        "review-worktree"))
+                        "review-worktree"
+                        "planning-paths"))
    (make-entry "review-usage.rkt"
                'campaign-state
                '()
@@ -611,6 +638,7 @@
                                  "delivery-receipt"
                                  "delivery-journal"
                                  "delivery-handoff"
+                                 "planning-paths"
                                  "sandbox/subprocess"))
    ;; v1.00.33 recovery continuation: supported same-attempt repair-tail
    ;; recovery entry. Strict precheck + journal restore + independent clone
@@ -630,6 +658,7 @@
                                "delivery-journal"
                                "delivery-verifier"
                                "delivery-handoff"
+                               "planning-paths"
                                "attempt-artifacts"))
    ;; BUG-0077: honest-completion state machine extracted from
    ;; go-orchestrator (attempt delivery provenance, park/finalize
@@ -731,6 +760,7 @@
                                "campaign-state"
                                "wave-docs"
                                "wave-status"
+                               "planning-paths"
                                "projection-effects"))
    (make-entry "delivery-verifier.rkt"
                'campaign-state
@@ -747,6 +777,7 @@
                                  "plan-types"
                                  "verification-job"
                                  "wave-docs"
+                                 "planning-paths"
                                  "plan-context-builder"
                                  "sandbox/subprocess"))
    ;; BUG-0040 W6: terminal-transition notification sink adapter
@@ -769,13 +800,21 @@
                '()
                '("racket/match" "racket/string" "racket/path"))
    (make-entry "transition-kernel.rkt" 'transition-logic '() '() '("racket/match" "racket/set"))
-   (make-entry "projection-kernel.rkt" 'event-projection '() '() '("racket/base" "racket/string"))
-   (make-entry
-    "projection-effects.rkt"
-    'event-projection
-    '(fs-read fs-write fs-rename mkdir path-ops)
-    '()
-    '("racket/file" "racket/path" "racket/format" "racket/string" "racket/port" "projection-kernel"))
+   (make-entry "projection-kernel.rkt"
+               'event-projection
+               '()
+               '()
+               '("racket/base" "racket/string" "wave-status"))
+   (make-entry "projection-effects.rkt"
+               'event-projection
+               '(fs-read fs-write fs-rename mkdir path-ops)
+               '()
+               '("racket/file" "racket/path"
+                               "racket/format"
+                               "racket/string"
+                               "racket/port"
+                               "projection-kernel"
+                               "planning-paths"))
    (make-entry "transition-logic.rkt"
                'transition-logic
                '()
@@ -795,14 +834,14 @@
                'campaign-state
                ;; W8/v1.00.17: worktree isolation (W1-W5) added git + fs-delete
                ;; + parameter/make-parameter + path ops to this module.
-               '(fs-read fs-delete git make-param parameterize path-ops)
+               '(fs-delete git make-param parameterize path-ops)
                '()
                '("racket/format" "racket/string"
                                  "racket/file"
                                  "racket/port"
                                  "plan-types"
                                  "wave-docs"
-                                 "shared"
+                                 "planning-artifact-validation"
                                  "state-machine"
                                  "campaign-state"))
    ;; UI/extension glue (3)
@@ -820,6 +859,7 @@
                                    "archive"
                                    "command-types"
                                    "wave-docs"
+                                   "planning-paths"
                                    "session-state"
                                    "runtime-state-types"
                                    "events"
@@ -869,6 +909,7 @@
                                    "prompts"
                                    "context-bundle"
                                    "wave-docs"
+                                   "planning-paths"
                                    "tool-handlers"
                                    "archive"
                                    "events"
@@ -898,6 +939,7 @@
                                    "command-types"
                                    "shared"
                                    "wave-status"
+                                   "planning-paths"
                                    "session-state"))
    (make-entry "wave-docs.rkt"
                'persistence
@@ -908,6 +950,7 @@
                                "racket/string"
                                "racket/match"
                                "shared"
+                               "planning-paths"
                                "wave-status"))
    ;; BUG-0060: bounded same-wave verification repair policy + durable
    ;; retry transition (classification, no-progress guard, ledger/persist).
@@ -952,6 +995,7 @@
                                "racket/path"
                                "racket/port"
                                "racket/string"
+                               "planning-paths"
                                "../../util/json/checksum"))
    ;; v1.00.24 W3 (BUG-0053): owned singleton verification jobs
    (make-entry "verification-job.rkt"

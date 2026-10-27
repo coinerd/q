@@ -48,6 +48,7 @@
          "verify-command-format.rkt"
          "supplemental-evidence-proof.rkt"
          "wave-docs.rkt"
+         (only-in "planning-paths.rkt" plan-file state-file)
          (only-in "review-proof-format.rkt" apply-verify-jobs)
          (only-in "plan-context-builder.rkt" find-git-root-dir)
          ;; R76 (BUG-0076): shared layout-aware root resolution + validation.
@@ -376,8 +377,8 @@
   ;; only the arrowless fallback. An UNSAFE declared arrow yields no issue
   ;; mapping here — the verify check independently refuses the unresolvable
   ;; declared document by name, so delivery still fails loudly.
-  (define state-path (build-path base-dir ".planning" "STATE.md"))
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define state-path (state-file base-dir))
+  (define plan-path (plan-file base-dir))
   (define expected-doc
     (and (file-exists? plan-path)
          (let ([entry (for/first ([e (in-list (parse-plan-index (call-with-input-file plan-path

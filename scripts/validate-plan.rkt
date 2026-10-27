@@ -26,8 +26,9 @@
 ;; never repairs, and never resnapshots anything. Without `--campaign` the
 ;; newest durable campaign record under .planning/campaigns/ is inspected.
 ;; `--campaign <plan-id>` additionally feeds that campaign's snapshot drift
-;; to the validator (symlink drift is an error; missing/content drift stays
-;; advisory).
+;; to the validator. Under an explicit campaign, every actual drift class
+;; (including missing/content/frozen-contract/symlink) and unreadable state
+;; is an error; absent snapshots and unknown campaigns remain advisory.
 ;;
 ;; Exit codes: 0 = plan is /go-ready (warnings may still print),
 ;;             1 = plan rejected (errors named per wave),
@@ -98,22 +99,29 @@
 
 (printf "== validate-plan (BUG-0048) ==\nplan: ~a\nbase: ~a\n\n" plan-path base-dir)
 
-(when explain?
-  (define explanation
-    (if campaign-arg
-        (plan-artifact-explanation base-dir #:campaign-id campaign-arg)
-        (plan-artifact-explanation base-dir)))
+(define explanation
+  (and explain?
+       (if campaign-arg
+           (plan-artifact-explanation base-dir #:campaign-id campaign-arg)
+           (plan-artifact-explanation base-dir))))
+
+(when explanation
   (displayln (format-plan-artifact-explanation explanation))
   (newline))
 
 ;; The same kernel /go runs. #:campaign-id is passed only for an explicitly
 ;; requested campaign, so the ordinary authoring path keeps its historical
 ;; acceptance while an operator inspecting a bound campaign sees its drift
-;; findings (and its symlink drift blocks).
+;; findings (every actual drift class blocks).
 (define result
-  (if (and explain? campaign-arg)
-      (validate-plan-artifacts base-dir plan-path #:campaign-id campaign-arg)
-      (validate-plan-artifacts base-dir plan-path)))
+  (cond
+    [(and explain? campaign-arg)
+     (validate-plan-artifacts base-dir
+                              plan-path
+                              #:campaign-id campaign-arg
+                              #:explanation explanation)]
+    [explain? (validate-plan-artifacts base-dir plan-path #:explanation explanation)]
+    [else (validate-plan-artifacts base-dir plan-path)]))
 
 (displayln (format-plan-validation-findings result))
 

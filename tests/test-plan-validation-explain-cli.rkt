@@ -26,10 +26,24 @@
          racket/system
          (only-in "../extensions/gsd/campaign-state.rkt"
                   campaign-plan-id
+                  campaign-record-manifest
                   campaign-record-waves
+                  campaign-manifest-hash
+                  campaign-manifest-schema-version
+                  campaign-manifest-title
+                  campaign-manifest-dependencies
+                  campaign-manifest-waves
+                  campaign-manifest-constraints-hash
+                  campaign-wave-descriptor-index
+                  campaign-wave-descriptor-title
+                  campaign-wave-descriptor-doc-path
+                  campaign-wave-descriptor-content-hash
                   campaign-wave-index
                   campaign-wave-status
-                  migrate-campaign!)
+                  make-campaign-manifest
+                  migrate-campaign!
+                  set-campaign-record-plan-snapshot-path!
+                  set-campaign-record-plan-snapshot-digest!)
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign!))
 
 (define repo-root
@@ -95,7 +109,7 @@
                   (check-true (string-contains? out "doc=Inbox"))
                   (check-true (string-contains? out "durable=(no campaign)"))
                   (check-true (string-contains? out "campaign: (none)"))
-                  (check-true (string-contains? out "identity matches: n/a (no bound campaign)"))
+                  (check-true (string-contains? out "identity matches: n/a (no durable record)"))
                   ;; read-only: nothing was created
                   (check-false (directory-exists? (build-path dir ".planning" "campaigns"))))
                 (lambda () (drop-fixture dir))))
@@ -151,12 +165,163 @@
      (define-values (code out) (run-cli dir "--explain" "--campaign" plan-id))
      ;; Snapshot drift is surfaced by class: an amended PLAN.md body is the
      ;; frozen-contract-stale class (named, with a recovery action).
-     (check-equal? code 0 out)
+     (check-equal? code 1 out)
+     (check-true (string-contains? out "FAILED"))
      (check-true (string-contains? out "bound body matches live: NO (drift)"))
      (check-true (string-contains? out "snapshot drift (1)"))
      (check-true (string-contains? out "frozen-contract-stale"))
      (check-true (string-contains? out "(snapshot-drift-frozen-contract-stale)"))
      (check-true (string-contains? out "-> next:")))
+   (lambda () (drop-fixture dir))))
+
+;; --- absent and corrupt identities stay named and advisory ---------------
+
+(test-case "explain: invalid and absent campaigns never become internal contract failures"
+  (define dir (make-fixture))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define-values (invalid-code invalid-out) (run-cli dir "--explain" "--campaign" "not-an-id"))
+     (check-equal? invalid-code 1 invalid-out)
+     (check-true (string-contains? invalid-out "campaign-unknown"))
+     (check-false (string-contains? invalid-out "contract violation"))
+     (define missing-id (make-string 64 (integer->char 98)))
+     (define-values (missing-code missing-out) (run-cli dir "--explain" "--campaign" missing-id))
+     (check-equal? missing-code 0 missing-out)
+     (check-true (string-contains? missing-out "snapshot-absent"))
+     (check-true (string-contains? missing-out "identity matches: n/a (no durable record)"))
+     (check-true (string-contains? missing-out "bound body matches live: n/a (no durable record)"))
+     (check-false (string-contains? missing-out "FAILED")))
+   (lambda () (drop-fixture dir))))
+
+(test-case "explain: implicit newest selection names a corrupt candidate"
+  (define dir (make-fixture))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define rec (migrate-campaign! dir))
+     (persist-campaign! dir rec)
+     (define plan-id (campaign-plan-id rec))
+     (display-to-file "not-a-campaign-record"
+                      (build-path dir ".planning" "campaigns" (string-append plan-id ".rktd"))
+                      #:exists 'replace)
+     (define-values (code out) (run-cli dir "--explain"))
+     (check-equal? code 1 out)
+     (check-true (string-contains? out "campaign: (unreadable)"))
+     (check-true (string-contains? out "campaign source: unreadable"))
+     (check-true (string-contains? out "campaign-candidate-unreadable"))
+     (check-true (string-contains? out "not inspected: campaign record unreadable"))
+     (check-false (string-contains? out "campaign: (none)")))
+   (lambda () (drop-fixture dir))))
+
+(test-case "explain: corrupt durable record and snapshot are named, not rendered as absent"
+  (define dir (make-fixture))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define rec (migrate-campaign! dir))
+     (persist-campaign! dir rec)
+     (define plan-id (campaign-plan-id rec))
+     (define record-path (build-path dir ".planning" "campaigns" (string-append plan-id ".rktd")))
+     (display-to-file "not-a-campaign-record" record-path #:exists 'replace)
+     (define-values (record-code record-out) (run-cli dir "--explain" "--campaign" plan-id))
+     (check-equal? record-code 1 record-out)
+     (check-true (string-contains? record-out "campaign-unreadable"))
+     (check-true (string-contains? record-out "not inspected: campaign record unreadable"))
+     (check-false (string-contains? record-out "campaign: (none)"))
+     ;; Restore a readable record and UNBIND its snapshot. A bound record would
+     ;; fail closed during record verification (campaign-unreadable), never
+     ;; reaching the independent snapshot renderer under test.
+     (set-campaign-record-plan-snapshot-path! rec #f)
+     (set-campaign-record-plan-snapshot-digest! rec #f)
+     (persist-campaign! dir rec)
+     (define snapshot-path
+       (build-path dir ".planning" "campaigns" plan-id "plan-snapshot" "snapshot-manifest.rktd"))
+     (display-to-file "not-a-snapshot" snapshot-path #:exists 'replace)
+     (define stale (build-path dir ".planning" "campaigns" plan-id "plan-snapshot.tmp-stale"))
+     (make-directory* stale)
+     (define-values (snapshot-code snapshot-out) (run-cli dir "--explain" "--campaign" plan-id))
+     (check-equal? snapshot-code 1 snapshot-out)
+     (check-true (string-contains? snapshot-out "snapshot-unreadable"))
+     (check-true (string-contains? snapshot-out "snapshot manifest digest: (unreadable)"))
+     (check-true (string-contains? snapshot-out "FAILED"))
+     (check-true (directory-exists? stale)
+                 "read-only record loading must not sweep staging evidence"))
+   (lambda () (drop-fixture dir))))
+
+(test-case "explain: legacy unbound body hash is unknown, not drift"
+  (define dir (make-fixture))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define rec (migrate-campaign! dir))
+     ;; Unbind the snapshot so the legacy record identity is verified on its
+     ;; own; the legacy plan-id below has no matching snapshot directory.
+     (set-campaign-record-plan-snapshot-path! rec #f)
+     (set-campaign-record-plan-snapshot-digest! rec #f)
+     (persist-campaign! dir rec)
+     (define plan-id (campaign-plan-id rec))
+     (define record-path (build-path dir ".planning" "campaigns" (string-append plan-id ".rktd")))
+     (define m (campaign-record-manifest rec))
+     ;; A valid legacy manifest carries NO plan-body hash; identity must be
+     ;; recomputed from that manifest rather than reusing the bound plan-id.
+     (define legacy-manifest
+       (make-campaign-manifest (campaign-manifest-schema-version m)
+                               (campaign-manifest-title m)
+                               (campaign-manifest-dependencies m)
+                               (campaign-manifest-waves m)
+                               (campaign-manifest-constraints-hash m)))
+     (define legacy-plan-id (campaign-manifest-hash legacy-manifest))
+     (define legacy-manifest-datum
+       (list 'manifest
+             (campaign-manifest-schema-version legacy-manifest)
+             (campaign-manifest-title legacy-manifest)
+             (campaign-manifest-dependencies legacy-manifest)
+             (for/list ([w (in-list (campaign-manifest-waves legacy-manifest))])
+               (list (campaign-wave-descriptor-index w)
+                     (campaign-wave-descriptor-title w)
+                     (campaign-wave-descriptor-doc-path w)
+                     (campaign-wave-descriptor-content-hash w)))
+             (campaign-manifest-constraints-hash legacy-manifest)))
+     (define datum (file->value record-path))
+     (define legacy-datum
+       (list* (car datum) legacy-plan-id (cons legacy-manifest-datum (cdddr datum))))
+     (define legacy-record-path
+       (build-path dir ".planning" "campaigns" (string-append legacy-plan-id ".rktd")))
+     (call-with-output-file legacy-record-path
+       (lambda (out) (write legacy-datum out))
+       #:exists 'replace)
+     (delete-file record-path)
+     (define-values (code out) (run-cli dir "--explain" "--campaign" legacy-plan-id))
+     (check-equal? code 0 out)
+     (check-true (string-contains? out "bound plan-body hash: (none)"))
+     (check-true (string-contains? out "bound body matches live: n/a (no bound plan-body hash)"))
+     (check-false (string-contains? out "bound body matches live: NO (drift)")))
+   (lambda () (drop-fixture dir))))
+
+(test-case "explain: absent snapshot inspection preserves interrupted staging"
+  (define dir (make-fixture))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define rec (migrate-campaign! dir))
+     (set-campaign-record-plan-snapshot-path! rec #f)
+     (set-campaign-record-plan-snapshot-digest! rec #f)
+     (persist-campaign! dir rec)
+     (define plan-id (campaign-plan-id rec))
+     (define stale (build-path dir ".planning" "campaigns" plan-id "plan-snapshot.tmp-stale"))
+     (define snapshot-dir (build-path dir ".planning" "campaigns" plan-id "plan-snapshot"))
+     (when (directory-exists? snapshot-dir)
+       (delete-directory/files snapshot-dir))
+     (make-directory* stale)
+     (check-false
+      (file-exists?
+       (build-path dir ".planning" "campaigns" plan-id "plan-snapshot" "snapshot-manifest.rktd")))
+     (define-values (code out) (run-cli dir "--explain" "--campaign" plan-id))
+     (check-equal? code 0 out)
+     (check-true (string-contains? out "snapshot-absent"))
+     (check-true (directory-exists? stale)
+                 "read-only record loading must not sweep absent-manifest staging evidence"))
    (lambda () (drop-fixture dir))))
 
 ;; --- exit codes and ordinary validation are unchanged ------------------

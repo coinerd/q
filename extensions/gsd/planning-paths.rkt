@@ -4,8 +4,8 @@
 ;;
 ;; GSD-SIMPLIFICATION W1 (canonical path ownership): every path this module
 ;; builds is a pure function of a repository base directory plus the artifact
-;; identity. No I/O, no existence probes, no symlink policy, no normalization —
-;; link safety remains owned by the readers that already enforce it
+;; identity. No I/O, no existence probes, or normalization — pure declared-
+;; path syntax lives here too; filesystem/link safety stays in the readers
 ;; (wave-docs.rkt's declared-path resolver, plan-snapshot.rkt's snapshot
 ;; boundary checks). Persisted layouts are byte-for-byte unchanged:
 ;;
@@ -19,11 +19,11 @@
 ;;   <base>/docs/reports/gsd-wave-reviews/
 ;;   <base>/docs/reports/gsd-wave-validation/
 ;;
-;; The wave-path GRAMMAR (which declared `waves/…` spellings are safe) is NOT
-;; defined here: it stays in wave-docs.rkt so this module cannot silently
-;; widen what an existing bound campaign may resolve.
+;; The pure declared-path safety and canonical wave-path grammars also live
+;; here. Filesystem resolution and no-follow checks remain in their readers.
 
-(require racket/path)
+(require racket/path
+         racket/string)
 
 (provide planning-dir-name
          waves-dir-name
@@ -44,6 +44,12 @@
          waves-dir
          wave-doc-rel-path
          wave-doc-file
+         unsafe-declared-path-refusal
+         wave-doc-reference-rx
+         parse-wave-doc-rel-path
+         wave-doc-rel-path?
+         wave-doc-rel-path-refusal
+         wave-doc-rel-path-index
          campaigns-root
          campaign-dir
          campaign-path
@@ -59,6 +65,9 @@
          wave-evidence-report-dir
          wave-review-report-dir
          wave-validation-report-dir
+         wave-evidence-report-rel-prefix
+         wave-review-report-rel-prefix
+         wave-validation-report-rel-prefix
          wave-evidence-report-rel-path
          wave-evidence-report-file)
 
@@ -110,6 +119,63 @@
 
 (define (wave-doc-file base-dir idx slug)
   (planning-path base-dir (wave-doc-rel-path idx slug)))
+
+;; Pure syntactic safety for a declared path. This does not resolve or probe
+;; the filesystem; readers retain their no-follow and containment checks.
+(define (unsafe-declared-path-refusal rel-path)
+  (cond
+    [(not rel-path) #f]
+    [(zero? (string-length rel-path)) "declared wave document path is empty"]
+    [(string-prefix? rel-path "/")
+     (format
+      "declared wave document path ~a is absolute; declare it relative to .planning (waves/….md)"
+      rel-path)]
+    [(not (string-prefix? rel-path "waves/"))
+     (format "declared wave document path ~a is not under waves/" rel-path)]
+    [else
+     (define segs (string-split rel-path "/"))
+     (cond
+       [(ormap (lambda (seg) (string=? seg "..")) segs)
+        (format "declared wave document path ~a escapes .planning/waves (.. segment)" rel-path)]
+       [(ormap (lambda (seg) (or (string=? seg "") (string=? seg "."))) segs)
+        (format "declared wave document path ~a contains an empty or `.` segment" rel-path)]
+       [else #f])]))
+
+;; One canonical grammar for parsing, orphan diagnostics and snapshot capture.
+;; Safe dots, uppercase, underscores, W<n> and WAVE-<n> are all bindable.
+(define wave-doc-reference-rx #px"waves/(?:W|WAVE-)([0-9]+)-([A-Za-z0-9][A-Za-z0-9._-]*)\\.md")
+(define canonical-wave-doc-rx #px"^waves/(?:W|WAVE-)([0-9]+)-([A-Za-z0-9][A-Za-z0-9._-]*)\\.md$")
+
+(define (parse-wave-doc-rel-path rel-path)
+  (cond
+    [(not (string? rel-path)) (values #f "wave document path must be a string")]
+    [(zero? (string-length rel-path)) (values #f "wave document path is empty")]
+    [(string-contains? rel-path "\x00")
+     (values #f (format "wave document path ~a contains a NUL byte" rel-path))]
+    [else
+     (define unsafe (unsafe-declared-path-refusal rel-path))
+     (cond
+       [unsafe (values #f unsafe)]
+       [else
+        (define match (regexp-match canonical-wave-doc-rx rel-path))
+        (if match
+            (values (string->number (cadr match)) #f)
+            (values
+             #f
+             (format (string-append "wave document path ~a does not follow the wave-document grammar "
+                                    "waves/W<idx>-<slug>.md or waves/WAVE-<idx>-<slug>.md")
+                     rel-path)))])]))
+
+(define (wave-doc-rel-path-refusal rel-path)
+  (define-values (_idx refusal) (parse-wave-doc-rel-path rel-path))
+  refusal)
+
+(define (wave-doc-rel-path? rel-path)
+  (not (wave-doc-rel-path-refusal rel-path)))
+
+(define (wave-doc-rel-path-index rel-path)
+  (define-values (idx refusal) (parse-wave-doc-rel-path rel-path))
+  (and (not refusal) idx))
 
 ;; ============================================================
 ;; Campaigns
@@ -169,6 +235,15 @@
 
 (define (wave-validation-report-dir base-dir)
   (build-path (reports-root base-dir) wave-validation-report-dir-name))
+
+(define (wave-evidence-report-rel-prefix)
+  (format "docs/~a/~a/" reports-dir-name wave-evidence-report-dir-name))
+
+(define (wave-review-report-rel-prefix)
+  (format "docs/~a/~a/" reports-dir-name wave-review-report-dir-name))
+
+(define (wave-validation-report-rel-prefix)
+  (format "docs/~a/~a/" reports-dir-name wave-validation-report-dir-name))
 
 ;; wave-evidence-report-rel-path : string? exact-nonnegative-integer?
 ;;                                 [exact-nonnegative-integer?] -> string?

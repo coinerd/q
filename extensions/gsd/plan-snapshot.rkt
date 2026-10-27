@@ -22,7 +22,6 @@
          racket/path
          racket/port
          racket/string
-         (only-in racket/list first)
          (only-in "../../util/json/checksum.rkt" sha256-string sha256-file)
          (only-in "planning-paths.rkt"
                   campaign-dir
@@ -31,7 +30,9 @@
                   plan-file
                   planning-path
                   planning-root
-                  snapshot-manifest-filename))
+                  snapshot-manifest-filename
+                  wave-doc-reference-rx
+                  wave-doc-rel-path?))
 
 (provide plan-snapshot-manifest?
          plan-snapshot-manifest-schema-version
@@ -80,7 +81,6 @@
 (struct plan-snapshot-manifest (schema-version campaign created-at plan-id files) #:transparent)
 
 (define lowercase-hex "0123456789abcdef")
-(define canonical-wave-path-rx #rx"^waves/W[0-9]+-[a-z0-9][a-z0-9-]*\\.md$")
 
 (define (sha256-hex? value)
   (and (string? value)
@@ -89,7 +89,7 @@
          (string-contains? lowercase-hex (string ch)))))
 
 (define (canonical-snapshot-path? value)
-  (and (string? value) (or (equal? value "PLAN.md") (regexp-match? canonical-wave-path-rx value))))
+  (and (string? value) (or (equal? value "PLAN.md") (wave-doc-rel-path? value))))
 
 (define (snapshot-fail fmt . args)
   (raise (make-exn:fail (apply format fmt args) (current-continuation-marks))))
@@ -103,19 +103,15 @@
 ;; a require cycle; campaign-state requires this module).
 ;; ---------------------------------------------------------------------------
 
-(define plan-wave-ref-rx #rx"waves/W([0-9]+)-([a-z0-9][a-z0-9-]*)\\.md")
-
-;; Extract canonical relative wave doc paths ("waves/W<idx>-<slug>.md")
-;; referenced by a plan text, in first-reference order, deduplicated.
+;; Extract canonical relative wave doc paths in first-reference order,
+;; deduplicated, using the shared planning-paths grammar.
 (define (plan-references->wave-doc-paths plan-text)
   (for/fold ([seen (hash)]
              [acc '()]
              #:result (reverse acc))
-            ([m (in-list (regexp-match* plan-wave-ref-rx plan-text #:match-select values))])
-    (define rel (first (regexp-match plan-wave-ref-rx (first m))))
-    (if (hash-has-key? seen rel)
-        (values seen acc)
-        (values (hash-set seen rel #t) (cons rel acc)))))
+            ([rel (in-list (regexp-match* wave-doc-reference-rx plan-text))]
+             #:when (and (wave-doc-rel-path? rel) (not (hash-has-key? seen rel))))
+    (values (hash-set seen rel #t) (cons rel acc))))
 
 ;; ---------------------------------------------------------------------------
 ;; Snapshot creation — atomic via tmp sibling + rename
@@ -337,9 +333,10 @@
 
 ;; Load and fully verify the on-disk manifest: the manifest must exist and
 ;; every listed file must be present with the exact recorded size and hash.
-;; Returns #f when no snapshot exists (and sweeps stale tmp directories);
-;; raises on a corrupt/partial snapshot, which is never accepted.
-(define (load-snapshot-manifest base-dir campaign-id)
+;; Returns #f when no snapshot exists. Legacy callers sweep stale tmp
+;; directories; read-only inspection passes #:sweep-stale? #f.
+;; Corrupt/partial snapshots always raise and are never accepted.
+(define (load-snapshot-manifest base-dir campaign-id #:sweep-stale? [sweep-stale? #t])
   (unless (sha256-hex? campaign-id)
     (snapshot-fail "plan-snapshot: invalid campaign id ~s" campaign-id))
   (define snapshot-root (snapshot-dir base-dir campaign-id))
@@ -348,7 +345,7 @@
     (snapshot-fail "plan-snapshot: refusing symlinked snapshot boundary"))
   (unless (file-exists? mp)
     (define snapshot-parent (campaign-dir base-dir campaign-id))
-    (when (directory-exists? snapshot-parent)
+    (when (and sweep-stale? (directory-exists? snapshot-parent))
       (sweep-stale-tmp-dirs! snapshot-parent)))
   (and (file-exists? mp)
        (let* ([m (datum->manifest (call-with-input-file mp read) campaign-id)])
@@ -389,9 +386,12 @@
 ;;   'missing       — live file absent (recoverable from the snapshot)
 ;;   'content-drift — live content differs beyond normalized projection state
 ;; Ordered: symlink first (fail-closed), then missing, then content drift.
-(define (classify-snapshot-drift base-dir campaign-id)
-  (define m (load-snapshot-manifest base-dir campaign-id))
-  (reverse (for/fold ([acc '()]) ([f (in-list (plan-snapshot-manifest-files m))])
+(define (classify-snapshot-drift base-dir campaign-id #:sweep-stale? [sweep-stale? #t])
+  (define m (load-snapshot-manifest base-dir campaign-id #:sweep-stale? sweep-stale?))
+  (reverse (for/fold ([acc '()])
+                     ([f (in-list (if m
+                                      (plan-snapshot-manifest-files m)
+                                      '()))])
              (define rel (snapshot-file-path f))
              (define live (planning-path base-dir rel))
              (define kind

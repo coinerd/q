@@ -53,6 +53,10 @@
     (test-case "valid-artifact-name?: waves/W0-test.md"
       (check-true (valid-artifact-name? "waves/W0-test.md")))
 
+    (test-case "valid-artifact-name?: wave paths share safe-dot and traversal grammar"
+      (check-true (valid-artifact-name? "waves/W0-x..y.md"))
+      (check-false (valid-artifact-name? "waves/../W0-x.md")))
+
     (test-case "valid-artifact-name?: rejects path traversal"
       (check-false (valid-artifact-name? "../etc/passwd")))
 

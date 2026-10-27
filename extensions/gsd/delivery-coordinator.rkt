@@ -29,6 +29,11 @@
          "delivery-receipt.rkt"
          "evidence-repair-controller.rkt"
          "evidence-author-repair.rkt"
+         (only-in "planning-paths.rkt"
+                  wave-evidence-report-rel-path
+                  wave-evidence-report-rel-prefix
+                  wave-review-report-rel-prefix
+                  wave-validation-report-rel-prefix)
          (only-in "delivery-publication.rkt" replay-approved-publication! load-approved-publication)
          (only-in "delivery-journal.rkt"
                   delivery-stages
@@ -48,9 +53,7 @@
                   review-runner-installed?
                   auto-review-dispatch!)
          ;; R76 (BUG-0076): shared layout-aware delivery-root resolution.
-         (only-in "git-root-layout.rkt"
-                  delivery-root-or-raise
-                  git-root-marker?))
+         (only-in "git-root-layout.rkt" delivery-root-or-raise git-root-marker?))
 
 (provide delivery-effect-result
          delivery-effect-result?
@@ -491,9 +494,9 @@
 ;; root on Git enumeration failure. A Git marker with an unavailable or
 ;; corrupt repository MUST fail closed rather than inspecting idle main.
 (define excluded-evidence-prefixes
-  (list "docs/reports/gsd-wave-evidence/"
-        "docs/reports/gsd-wave-reviews/"
-        "docs/reports/gsd-wave-validation/"))
+  (list (wave-evidence-report-rel-prefix)
+        (wave-review-report-rel-prefix)
+        (wave-validation-report-rel-prefix)))
 
 ;; The receipt-tip law for a checkout HEAD: exactly the receipt head, or a
 ;; descendant over a strictly evidence-only tail (same ancestry +
@@ -527,7 +530,9 @@
 ;; enumeration failure such unscoped roots keep flowing to the callers.
 (define (resolve-coordinator-repo base-dir)
   (or (delivery-root-or-raise base-dir)
-      (if (git-root-marker? base-dir) #f (build-path base-dir "q"))))
+      (if (git-root-marker? base-dir)
+          #f
+          (build-path base-dir "q"))))
 
 (define (default-artifact-provenance-root base-dir plan wave #:run-git [run-git shell-git])
   (define repo (resolve-coordinator-repo base-dir))
@@ -1034,12 +1039,7 @@
     (if base-dir
         (binding-generation base-dir plan wave)
         0))
-  (format "docs/reports/gsd-wave-evidence/~a-w~a~a.rktd"
-          plan
-          wave
-          (if (zero? generation)
-              ""
-              (format "-r~a" generation))))
+  (wave-evidence-report-rel-path plan wave generation))
 
 (define (q-prefixed-path->repo-relative base-dir path)
   (if (and (string? path)

@@ -54,13 +54,11 @@
 ;; Scanner false-positive exclusions: (file . (effect ...)) where the token is a
 ;; symbol/predicate, not a real call (e.g. policy.rkt's 'write-file decision
 ;; symbol). path-ops for policy.rkt is REAL (string->path/path->string in
-;; in-planning-dir?); fs-read for wave-executor.rkt is REAL (call-with-input-file).
-;; git for verify-command-format.rkt is a FALSE POSITIVE (R75): the token is the
-;; quoted "git" entry in the verify-accept-first-tokens vocabulary DATA — a
-;; pure canonicalization module (requires only racket/string) that never
-;; invokes git; declaring the effect would be the dishonest direction.
-(define scanner-exclusions '(("policy.rkt" . (fs-write))
-                             ("verify-command-format.rkt" . (git))))
+;; in-planning-dir?); fs-read for wave-executor.rkt is REAL when present.
+;; git for verify-command-grammar.rkt is a FALSE POSITIVE (R75): the token is
+;; the quoted "git" entry in the accepted-command vocabulary DATA, not an
+;; invocation. policy.rkt's fs-write match is likewise documentation text.
+(define scanner-exclusions '(("policy.rkt" . (fs-write)) ("verify-command-grammar.rkt" . (git))))
 
 ;; Scan a source file's non-comment code for effect markers.
 (define (scan-effects file)
@@ -128,10 +126,10 @@
       ;; (supplemental-evidence-store-core);
       ;; +1 R76 (BUG-0076) shared leaf delivery-root resolver
       ;; (git-root-layout).
-      (check-equal?
-       (length inventory)
-       106
-       "105 existing modules + BUG-0090 journal store core + R76 git-root-layout"))
+      ;; +3 GSD simplification W1 planning paths/preflight/Verify grammar.
+      (check-equal? (length inventory)
+                    109
+                    "every on-disk GSD module has exactly one inventory entry"))
 
     (test-case "supplemental worker descriptor projects policy without dispatch authority"
       (define descriptor (hash-ref inventory-map "supplemental-author-contract.rkt"))
