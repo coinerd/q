@@ -30,16 +30,19 @@
 ;;     `#:code`, `#:next-action`, `#:artifacts` plus matching accessors;
 ;;   * `load-plan-from-index` keeps its #f-on-no-plan / #f-on-empty-index
 ;;     contract and raises the SAME messages in the SAME priority order
-;;     (unsafe arrow, then symlinked declared doc, then aggregated missing);
+;;     (unsafe arrow, then symlinked declared doc, then aggregated missing,
+;;     then an unknown row status);
 ;;   * wave-executor.rkt re-provides every moved name, so legacy importers
 ;;     keep working unchanged.
 ;;
 ;; DELIBERATE NON-BLOCKING FINDINGS: newly surfaced wave-doc lint,
-;; status-identity, attribution, and snapshot-reference bindability issues
-;; are advisory for /go compatibility. Snapshot drift is different: every
-;; actual drift class under an explicitly inspected campaign is an error,
-;; matching load-or-migrate-campaign!; absent/unknown campaign state stays
-;; advisory.
+;; attribution, and snapshot-reference bindability issues are advisory for /go
+;; compatibility. Unknown PLAN.md row statuses are different: they are
+;; blocking findings with the stable code `wave-status-unknown` (W5, R-019),
+;; because the historical `pending` fallback made a typo dispatchable.
+;; Snapshot drift is different again: every actual drift class under an
+;; explicitly inspected campaign is an error, matching
+;; load-or-migrate-campaign!; absent/unknown campaign state stays advisory.
 
 (require racket/file
          racket/list
@@ -47,6 +50,10 @@
          racket/port
          racket/string
          "plan-types.rkt"
+         ;; W5 (R-019): the ONE typed unknown-status rejection. Preflight turns
+         ;; it into a stable finding; it is never allowed to escape as a crash
+         ;; or degrade into a `pending` row.
+         (only-in "wave-status.rkt" exn:fail:wave-status?)
          ;; The shared strict lint /go and the CLI both run. Kept as the one
          ;; implementation: the kernel composes it, it does not re-implement.
          (only-in "plan-validator.rkt"
@@ -88,13 +95,23 @@
                   snapshot-file-sha256
                   snapshot-file-size
                   snapshot-manifest-digest
-                  classify-snapshot-drift)
+                  classify-snapshot-drift
+                  snapshot-dir
+                  snapshot-drift-class-description)
+         ;; W4 read-only doctor facts: ONE lease path, and the durable attempt
+         ;; records. Inspection never acquires, releases, or rewrites any of them.
+         (only-in "planning-paths.rkt" campaign-lock-file campaign-record-file)
+         ;; W4: ownership is the ONE shared predicate (never a local mirror).
+         (only-in "planning-artifact-ownership.rkt"
+                  owned-planning-artifact-dir?)
          ;; W1 canonical path vocabulary and Verify declaration grammar.
          (only-in "planning-paths.rkt"
                   plan-file
+                  planning-root
                   planning-path
                   waves-dir
                   campaigns-root
+                  campaign-dir
                   parse-wave-doc-rel-path
                   wave-doc-rel-path?
                   wave-doc-rel-path-refusal
@@ -112,7 +129,12 @@
                   campaign-wave-descriptor-doc-path
                   campaign-plan-id
                   campaign-wave-index
-                  campaign-wave-status)
+                  campaign-wave-status
+                  campaign-wave-attempt-count
+                  campaign-wave-current-attempt
+                  campaign-attempt-id
+                  campaign-attempt-fence-token
+                  campaign-fence-token)
          (only-in "campaign-repository.rkt" load-campaign-record))
 
 ;; ============================================================
@@ -308,14 +330,48 @@
           (if (= (length missing) 1) " is" "s are")
           (string-join missing ", ")))
 
+;; string->wave-status-from-entry : wave-index-entry? -> plan-types WaveStatus
+;; W5: delegate the spelling vocabulary to the shared status owner (via
+;; plan-types). No local table and no `pending` fallback: an unknown spelling
+;; raises the typed `exn:fail:wave-status` and entry-status-issue below turns
+;; it into a stable blocking finding.
 (define (string->wave-status-from-entry e)
-  (define s (wave-index-entry-status e))
-  (cond
-    [(string=? s "DONE") 'completed]
-    [(string=? s "FAILED") 'failed]
-    [(string=? s "DEFERRED") 'skipped]
-    [(string=? s "In-Progress") 'in-progress]
-    [else 'pending]))
+  (string->wave-status (wave-index-entry-status e)))
+
+;; entry-status-issue : wave-index-entry? -> (or/c hash? #f)
+;; PURE. The stable row issue for an unknown PLAN.md bracket spelling, or #f
+;; when the row's status is accepted. The message names the wave, declares
+;; the offending spelling and lists the accepted spellings (from the shared
+;; owner's typed exception); the code is stable for machine consumers.
+(define (entry-status-issue e)
+  (define (issue-for reason)
+    (define idx (wave-index-entry-idx e))
+    (hasheq 'idx
+            idx
+            'kind
+            'status
+            'code
+            'wave-status-unknown
+            'message
+            (format "W~a: ~a" idx reason)
+            'next-action
+            (format
+             (string-append
+              "correct W~a's bracket status in .planning/PLAN.md to one "
+              "accepted spelling (or fix the wave doc header); no wave is "
+              "dispatched")
+             idx)
+            'artifacts
+            (list (entry-doc-display-path e))))
+  (with-handlers ([exn:fail:wave-status?
+                   (lambda (ex) (issue-for (exn-message ex)))]
+                  ;; A status the shared owner recognizes but the plan-row
+                  ;; vocabulary cannot represent is refused the same stable
+                  ;; way, never as an unreadable plan.
+                  [exn:fail?
+                   (lambda (ex) (issue-for (exn-message ex)))])
+    (string->wave-status-from-entry e)
+    #f))
 
 (define (extract-files-from-content content)
   (hash-ref (parse-wave-content content) 'files '()))
@@ -415,30 +471,43 @@
      (values #f missing-issues (missing-wave-docs-error-text entries missing-displays))]
     [else
      (void text)
-     (define waves
-       (for/list ([e (in-list entries)])
-         (define idx (wave-index-entry-idx e))
-         ;; BUG-0082: the wave's content is the DECLARED document's content
-         ;; — a stale synthesized twin never loads.
-         (define wave-data (read-declared-wave-doc base-dir idx))
-         (define wave-content
-           (if wave-data
-               (hash-ref wave-data 'content)
-               ""))
-         (gsd-wave idx
-                   (wave-index-entry-title e)
-                   (string->wave-status-from-entry e)
-                   wave-content
-                   (extract-files-from-content wave-content)
-                   '()
-                   (extract-verify-from-content wave-content)
-                   '())))
-     (values (gsd-plan waves #f '() '()) '() #f)]))
+     ;; W5: an unknown bracket status is a stable row refusal (never a
+     ;; `pending` wave and never an uncaught typed exception). Path refusals
+     ;; keep their historical priority above this check.
+     (define status-issues
+       (for/list ([e (in-list entries)]
+                  #:do [(define issue (entry-status-issue e))]
+                  #:when issue)
+         issue))
+     (cond
+       [(pair? status-issues)
+        (values #f status-issues (issue-message status-issues))]
+       [else
+        (define waves
+          (for/list ([e (in-list entries)])
+            (define idx (wave-index-entry-idx e))
+            ;; BUG-0082: the wave's content is the DECLARED document's content
+            ;; — a stale synthesized twin never loads.
+            (define wave-data (read-declared-wave-doc base-dir idx))
+            (define wave-content
+              (if wave-data
+                  (hash-ref wave-data 'content)
+                  ""))
+            (gsd-wave idx
+                      (wave-index-entry-title e)
+                      (string->wave-status-from-entry e)
+                      wave-content
+                      (extract-files-from-content wave-content)
+                      '()
+                      (extract-verify-from-content wave-content)
+                      '())))
+        (values (gsd-plan waves #f '() '()) '() #f)])]))
 
 ;; load-plan-from-index : path-string? -> (or/c gsd-plan? #f)
 ;; The legacy loader contract: #f when PLAN.md is absent or the index is
 ;; empty; otherwise the declared documents load, or an exn names the first
-;; refusal in the historical priority order.
+;; refusal in the historical priority order (unsafe arrow, symlinked declared
+;; doc, missing document, then an unknown row status).
 (define (load-plan-from-index base-dir)
   (define plan-path (plan-file base-dir))
   (cond
@@ -709,10 +778,11 @@
 ;;   'plan-path / 'base-dir / 'campaign-id — inspection context
 ;; Decision order matches /go: no PLAN, then inline-only rejection
 ;; (BUG-0023 residual), then the zero-waves diagnostic, then per-row
-;; declared-doc refusals (BUG-0023 strict / BUG-0082 identity), then strict
-;; lint, then mapping ambiguity, then the advisory classes (wave-doc lint,
-;; slug mismatch, Verify span, orphan row, snapshot bindability, file
-;; attribution, and snapshot drift when #:campaign-id names a campaign).
+;; declared-doc refusals (BUG-0023 strict / BUG-0082 identity), then the
+;; per-row status refusal (W5 `wave-status-unknown`), then strict lint, then
+;; mapping ambiguity, then the advisory classes (wave-doc lint, slug mismatch,
+;; Verify span, orphan row, snapshot bindability, file attribution, and
+;; snapshot drift when #:campaign-id names a campaign).
 (define (validate-plan-artifacts base-dir
                                  [plan-path (plan-file base-dir)]
                                  #:campaign-id [campaign-id #f]
@@ -961,10 +1031,145 @@
 
 ;; plan-artifact-explanation : path-string? [#:campaign-id string?] -> hash?
 ;; Read-only structured inspection: declared wave paths, identity namespaces,
-;; bound/live hashes, and per-wave status projections. Never writes, rebinds,
-;; repairs, or sweeps campaign/snapshot state.
+;; bound/live hashes, per-wave status projections, the authoritative record,
+;; active attempt/fence, the lease facts, and the exact LEGAL operator actions.
+;; Never writes, rebinds, repairs, sweeps, acquires, or releases campaign
+;; state; it cannot bless drift and it offers no force release.
+
+;; Read-only lease facts. Inspection NEVER probes the OS advisory lock (a probe
+;; could momentarily deny a real /go acquire), so it reports the recorded
+;; holder and states honestly that held-vs-stale is undetermined.
+(define (campaign-lease-inspection base-dir plan-id)
+  (define lock-path (campaign-lock-file base-dir plan-id))
+  (define recorded
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (and (file-exists? lock-path)
+           (call-with-input-file lock-path
+             (lambda (in)
+               (define datum (read in))
+               (and (hash? datum) datum))))))
+  (define present? (file-exists? lock-path))
+  (hasheq 'path
+          (path->string lock-path)
+          'file-exists?
+          present?
+          'recorded-owner
+          (and recorded (hash-ref recorded 'owner #f))
+          'recorded-pid
+          (and recorded (hash-ref recorded 'pid #f))
+          'recorded-acquired
+          (and recorded (hash-ref recorded 'acquired #f))
+          'assessment
+          (if present?
+              'undetermined-read-only
+              'no-lock-file)
+          'note
+          (string-append "a lock FILE is not proof of a held lease: only a live OS advisory "
+                         "lock makes /go refuse lease-busy, and no force-release command exists")))
+
+;; Per-wave durable attempt/fence facts (what recovery would resume).
+(define (campaign-attempt-inspection rec)
+  (if (not rec)
+      '()
+      (for/list ([w (in-list (campaign-record-waves rec))])
+        (define attempt (campaign-wave-current-attempt w))
+        (hasheq 'wave
+                (campaign-wave-index w)
+                'status
+                (campaign-wave-status w)
+                'attempt-count
+                (campaign-wave-attempt-count w)
+                'current-attempt-id
+                (and attempt (campaign-attempt-id attempt))
+                'current-attempt-fence
+                (and attempt (campaign-attempt-fence-token attempt))))))
+
+;; Read-only inventory of user temp/backup/editor artifacts in the planning
+;; root, the campaigns root, and the selected campaign directory. It is
+;; additive and NON-FAILING: the doctor reports what it saw and nothing is
+;; deleted, moved, renamed, or "cleaned up". A candidate is labeled `unowned`
+;; UNLESS it carries an AUTHENTIC ownership marker (the ONE predicate in
+;; planning-artifact-ownership.rkt: real nofollow marker file, hash datum,
+;; schema-version 1, matching kind) — the same predicate the snapshot sweep,
+;; supersede rotation and archive cleanup use to authorize a delete. A
+;; directory carrying a marker q itself writes (plan-snapshot staging,
+;; plan-supersede wave backup) is KNOWN OURS and is listed separately (never as
+;; an unknown artifact). Lock files are skipped entirely: inspection never
+;; opens or probes a lease lock.
+(define unknown-planning-artifact-name-rx
+  #px"(?i:(?:\\.bak|\\.backup|\\.tmp|\\.temp|\\.orig|\\.rej|\\.swp|\\.save)(?:[._-]|$)|~$|^#.*#$|^\\.#|(?:^|[-_.])backup(?:[._-]|$))")
+
+(define (unknown-planning-artifact-name? name)
+  (and (string? name)
+       (not (regexp-match? #rx"\\.lock$" name))
+       (regexp-match? unknown-planning-artifact-name-rx name)))
+
+(define (planning-artifact-kind p)
+  (cond
+    [(link-exists? p) 'symlink]
+    [(directory-exists? p) 'directory]
+    [(file-exists? p) 'file]
+    [else 'other]))
+
+;; Ownership is NOT decided here: the authentic-marker predicate is owned by
+;; planning-artifact-ownership.rkt and shared with the destructive consumers
+;; (snapshot sweep, supersede rotation, archive cleanup), so the doctor can
+;; never bless an artifact those paths would refuse to delete.
+(define (planning-artifact-display-path base-complete p)
+  (with-handlers ([exn:fail? (lambda (_) (path->string p))])
+    (path->string (find-relative-path base-complete p))))
+
+(define (scan-planning-artifacts dir location base-complete)
+  (if (not (directory-exists? dir))
+      '()
+      (with-handlers ([exn:fail? (lambda (_) '())])
+        (for/list ([p (in-list (sort (directory-list dir #:build? #t) path<?))]
+                   #:do [(define name (path->string (file-name-from-path p)))]
+                   #:when (unknown-planning-artifact-name? name))
+          (define kind (planning-artifact-kind p))
+          (hasheq 'path
+                  (planning-artifact-display-path base-complete p)
+                  'location
+                  location
+                  'kind
+                  kind
+                  'ownership
+                  (if (and (eq? kind 'directory) (owned-planning-artifact-dir? p))
+                      'owned
+                      'unowned))))))
+
+;; The exact legal operator actions for the inspected state, in priority order.
+;; Nothing here resets, resnapshots, deletes state, or force-releases a lease.
+(define (plan-inspection-legal-actions rec snapshot drift
+                                       #:record-unreadable? [record-unreadable? #f])
+  (append
+   (cond
+     [record-unreadable?
+      (list (string-append "the durable record could not be read: inspect the named path and its "
+                           "error; do not delete or regenerate it"))]
+     [(not rec)
+      (list (string-append "no durable campaign is bound yet: finish the plan edits, then run "
+                           "/go once to bind ONE immutable snapshot"))]
+     [else '()])
+   (for/list ([row (in-list drift)])
+     (format "resolve ~a for .planning/~a — ~a"
+             (hash-ref row 'class)
+             (hash-ref row 'path)
+             (snapshot-drift-class-description (hash-ref row 'class))))
+   (if (and rec (not snapshot))
+       (list (string-append "this durable record has no verified snapshot: inspect the record "
+                            "itself; no drift class is claimed without a manifest"))
+       '())
+   (if (and rec snapshot (null? drift))
+       (list "resume with /go: status-only projection edits are informational, not drift")
+       '())
+   (list (string-append "never delete campaign state, a `.bak` file, or a backup directory "
+                        "to repair drift: restore from the snapshot, re-freeze under a new "
+                        "campaign identity, or stop and correct the authored input"))))
+
 (define (plan-artifact-explanation base-dir #:campaign-id [campaign-id #f])
   (define plan-path (plan-file base-dir))
+  (define base-complete (simplify-path (path->complete-path base-dir)))
   (define (inspection-error code error)
     (hasheq 'code code 'message (exn-message error)))
   (define-values (text plan-read-error)
@@ -1047,6 +1252,26 @@
               durable
               'resolvable?
               (and doc (not refusal) #t))))
+  ;; Additive, non-failing artifact inventory (see scan-planning-artifacts).
+  ;; Only the selected campaign directory is inspected, never another
+  ;; campaign's state.
+  (define inspected-planning-artifacts
+    (append
+     (scan-planning-artifacts (planning-root base-dir) 'planning-root base-complete)
+     (scan-planning-artifacts (campaigns-root base-dir) 'campaigns-root base-complete)
+     (if (and selected-campaign-id (regexp-match? sha256-hex-rx selected-campaign-id))
+         (scan-planning-artifacts (campaign-dir base-dir selected-campaign-id)
+                                  'campaign-dir
+                                  base-complete)
+         '())))
+  (define unknown-artifacts
+    (for/list ([row (in-list inspected-planning-artifacts)]
+               #:when (eq? (hash-ref row 'ownership) 'unowned))
+      row))
+  (define owned-planning-artifacts
+    (for/list ([row (in-list inspected-planning-artifacts)]
+               #:when (eq? (hash-ref row 'ownership) 'owned))
+      row))
   (define-values (drift drift-error)
     (if (and selected-campaign-id snapshot)
         (with-handlers ([exn:fail? (lambda (e)
@@ -1066,6 +1291,36 @@
    (and text #t)
    'campaign-id
    selected-campaign-id
+   'campaign-record-path
+   (and selected-campaign-id
+        (regexp-match? sha256-hex-rx selected-campaign-id)
+        (path->string (campaign-record-file base-dir selected-campaign-id)))
+   'snapshot-path
+   (and selected-campaign-id
+        (regexp-match? sha256-hex-rx selected-campaign-id)
+        (path->string (snapshot-dir base-dir selected-campaign-id)))
+   'authoritative
+   (if rec 'durable-campaign-record 'live-plan-unbound)
+   'campaign-fence-token
+   (and rec (campaign-fence-token rec))
+   'attempts
+   (campaign-attempt-inspection rec)
+   'lease
+   (and selected-campaign-id
+        (regexp-match? sha256-hex-rx selected-campaign-id)
+        (campaign-lease-inspection base-dir selected-campaign-id))
+   'unknown-artifacts
+   unknown-artifacts
+   'owned-planning-artifacts
+   owned-planning-artifacts
+   'legal-actions
+   (plan-inspection-legal-actions rec
+                                   snapshot
+                                   drift
+                                   #:record-unreadable?
+                                   (or (and campaign-error #t)
+                                       (and (not campaign-id)
+                                            (pair? candidate-errors))))
    'campaign-source
    (cond
      [campaign-id 'requested]
@@ -1157,6 +1412,43 @@
            [(not (hash-ref explanation 'bound-plan-body-hash)) "n/a (no bound plan-body hash)"]
            [(hash-ref explanation 'bound-body-matches-live?) "yes"]
            [else "NO (drift)"]))
+   ;; W4 doctor: what is authoritative, what recovery would resume, and what
+   ;; the lease facts are — all read-only, with no force release offered.
+   "what is authoritative:\n"
+   (line "  durable record"
+         (or (hash-ref explanation 'campaign-record-path) "(none)"))
+   (line "  bound snapshot" (or (hash-ref explanation 'snapshot-path) "(none)"))
+   (line "  live plan (authored input)" (hash-ref explanation 'plan-path))
+   (line "  authority used by /go" (format "~a" (hash-ref explanation 'authoritative)))
+   (line "campaign fence token" (hash-ref explanation 'campaign-fence-token))
+   (format "attempts (~a waves):\n" (length (hash-ref explanation 'attempts)))
+   (string-join (for/list ([row (in-list (hash-ref explanation 'attempts))])
+                  (format "  W~a  status=~a  attempt-count=~a  current-attempt=~a  fence=~a\n"
+                          (hash-ref row 'wave)
+                          (hash-ref row 'status)
+                          (hash-ref row 'attempt-count)
+                          (or (hash-ref row 'current-attempt-id) "(none)")
+                          (or (hash-ref row 'current-attempt-fence) "(none)")))
+                "")
+   (let ([lease (hash-ref explanation 'lease)])
+     (if (not lease)
+         "lease: (none: no campaign inspected)\n"
+         (string-append
+          (line "lease lock file" (hash-ref lease 'path))
+          (line "lease file exists" (if (hash-ref lease 'file-exists?) "yes" "no"))
+          (line "lease recorded holder"
+                (if (hash-ref lease 'file-exists?)
+                    (format "~a (pid ~a, acquired ~a)"
+                            (or (hash-ref lease 'recorded-owner) "unrecorded")
+                            (or (hash-ref lease 'recorded-pid) "unrecorded")
+                            (or (hash-ref lease 'recorded-acquired) "unrecorded"))
+                    "(no lock file)"))
+          (line "lease assessment" (hash-ref lease 'assessment))
+          (line "lease note" (hash-ref lease 'note)))))
+   (format "legal operator action(s) (~a):\n" (length (hash-ref explanation 'legal-actions)))
+   (string-join (for/list ([action (in-list (hash-ref explanation 'legal-actions))])
+                  (format "  - ~a\n" action))
+                "")
    (line "snapshot manifest digest" (snapshot-value 'snapshot-manifest-digest))
    (line "snapshot PLAN.md sha256" (snapshot-value 'snapshot-plan-sha256))
    (if (null? (hash-ref explanation 'errors))
@@ -1198,7 +1490,30 @@
        (string-append (format "snapshot drift (~a):\n" (length (hash-ref explanation 'drift)))
                       (string-join (for/list ([row (in-list (hash-ref explanation 'drift))])
                                      (format "  ~a  ~a\n" (hash-ref row 'class) (hash-ref row 'path)))
-                                   "")))))
+                                   "")))
+   ;; Additive artifacts section: informational only. Nothing here is an
+   ;; error, and nothing is deleted or cleaned up.
+   (format "unknown planning artifacts (~a, informational; nothing is removed):\n"
+           (length (hash-ref explanation 'unknown-artifacts)))
+   (if (null? (hash-ref explanation 'unknown-artifacts))
+       "  (none)\n"
+       (string-join (for/list ([row (in-list (hash-ref explanation 'unknown-artifacts))])
+                      (format "  [unowned] ~a  (~a ~a)\n"
+                              (hash-ref row 'path)
+                              (hash-ref row 'location)
+                              (hash-ref row 'kind)))
+                    ""))
+   (if (null? (hash-ref explanation 'owned-planning-artifacts))
+       ""
+       (string-append
+        (format "known owned planning artifacts (~a, excluded from unknown):\n"
+                (length (hash-ref explanation 'owned-planning-artifacts)))
+        (string-join (for/list ([row (in-list (hash-ref explanation 'owned-planning-artifacts))])
+                       (format "  [owned] ~a  (~a ~a)\n"
+                               (hash-ref row 'path)
+                               (hash-ref row 'location)
+                               (hash-ref row 'kind)))
+                     "")))))
 
 ;; ============================================================
 ;; Provide

@@ -25,6 +25,12 @@
          racket/system
          (only-in "../../util/version.rkt" q-version)
          "campaign-state.rkt"
+         ;; W3: the ONE process-safe campaign lease (OS advisory lock, owner
+         ;; diagnostics, busy-stop explanation). Re-provided below.
+         "campaign-lease.rkt"
+         ;; W3: the interface-safe request VALUE (struct, constructor, token
+         ;; registry). Execution stays in this module; names re-provided.
+         "campaign-request.rkt"
          (only-in "campaign-result.rkt"
                   campaign-result
                   campaign-result-status
@@ -50,8 +56,33 @@
                   delivery-journal-advanced?
                   delivery-journal-snapshot
                   run-delivery-finalization
-                  wave-blocked-checkpoint-result!
-                  park-approved-attempt-result!)
+                  gather-campaign-views
+                  run-campaign-resume!
+                  run-campaign-block!
+                  campaign-outcome
+                  campaign-outcome?
+                  campaign-outcome-kind
+                  campaign-outcome-reason
+                  campaign-outcome-typed)
+         ;; W3: the ONE pure campaign decision. The loop below is its only
+         ;; interpreter; nothing else reconstructs a route.
+         (only-in "campaign-decision.rkt"
+                  decide-campaign-action
+                  campaign-views
+                  campaign-views?
+                  campaign-views-record
+                  campaign-views-lane
+                  campaign-views-coordinator-available?
+                  campaign-decision
+                  campaign-decision?
+                  campaign-decision-kind
+                  campaign-decision-wave-index
+                  campaign-decision-route
+                  campaign-decision-message
+                  campaign-decision-code
+                  campaign-decision-merge-sha
+                  campaign-decision-next-action)
+         (only-in "delivery-finalize.rkt" park-approved-attempt-result!)
          (only-in "delivery-coordinator.rkt"
                   delivery-outcome
                   delivery-outcome?
@@ -82,11 +113,10 @@
                   current-gsd-campaign-infra-wait-chunk-secs
                   current-gsd-release-check)
          (only-in "prompts.rkt"
-                  wave-failure-context-block
                   wave-attempt-context-block
                   wave-retry-context
                   executor-reanchor-prompt)
-         (only-in "verification-repair.rkt" resolve-verification-rejection!)
+         (only-in "verification-repair.rkt" resolve-verification-rejection! start-no-change-retry!)
          (only-in "wave-outcome-reporting.rkt" emit-wave-outcome-error! runner-outcome-failure-reason)
          ;; v1.00.22 W6 (BUG-0040): terminal-transition notification
          ;; surface (tmux/desktop/webhook sinks; best-effort, never
@@ -139,6 +169,7 @@
                   delivery-verification?
                   delivery-verification-approved?
                   delivery-verification-message
+                  delivery-verification-no-change?
                   ;; v1.00.17 W7 (#9512b): branch-based delivery
                   current-gsd-delivery-branch-context
                   make-branch-delivery-context
@@ -167,48 +198,11 @@
 
 ;; ============================================================
 ;; Lease (D5: process-safe OS advisory lock)
+;; W3: extracted to campaign-lease.rkt (acquire/release/path/busy
+;; diagnostics) so the interpreter stays under its size pin. The
+;; dynamic-wind below still owns release on every exit path; the names are
+;; re-provided for existing importers.
 ;; ============================================================
-
-(struct campaign-lease (path port owner-pid owner-session) #:mutable)
-
-(define (lease-path base-dir plan-id)
-  (build-path base-dir ".planning" "campaigns" (string-append plan-id ".lock")))
-
-(define (acquire-lease base-dir plan-id #:session-id [session-id "unknown"])
-  (define p (lease-path base-dir plan-id))
-  (define-values (dir _ __) (split-path p))
-  (make-directory* dir)
-  (with-handlers ([exn:fail:filesystem? (lambda (_) #f)])
-    ;; The lock file may survive a crash, but the OS advisory lock cannot.
-    ;; Reopening the stable path therefore recovers safely after process exit.
-    (define port (open-output-file p #:exists 'can-update))
-    (if (port-try-file-lock? port 'exclusive)
-        (begin
-          ;; S2a (#9358): the file may hold a LONGER lease from a previous
-          ;; owner (e.g. "01M0645J64E772Q0ZFNVGGEKK0"). open-output-file
-          ;; 'can-update does NOT truncate, so file-position 0 + write left
-          ;; a stale tail after a shorter write — corrupting the lease
-          ;; (observed: `…VGGEKK0") (pid …)`). Truncate to zero before write.
-          ;; D4 (#9351): record the owning session id AND pid so a stale
-          ;; lock file names its holder (incident 81f9be4b: "unknown").
-          ;; S2a (#9358): never write an empty owner — a re-dispatch path
-          ;; passed "" (observed in attempt-5), defeating D4 diagnostics.
-          (let ([owner
-                 (if (and (string? session-id) (not (string=? session-id ""))) session-id "unknown")])
-            (file-truncate port 0)
-            (file-position port 0)
-            (write (hasheq 'owner owner 'pid (getpid) 'acquired (current-seconds)) port)
-            (flush-output port)
-            (campaign-lease p port (current-seconds) owner)))
-        (begin
-          (close-output-port port)
-          #f))))
-
-(define (release-lease! lease)
-  (when (and lease (campaign-lease? lease))
-    (with-handlers ([exn:fail? void])
-      (port-file-unlock (campaign-lease-port lease))
-      (close-output-port (campaign-lease-port lease)))))
 
 ;; ============================================================
 ;; Coordinator result
@@ -236,46 +230,10 @@
     [(gsd-wave-runner-port? runner) runner]
     [else (make-wave-runner-port (lambda (idx) (coerce-run-result (runner idx))))]))
 
-;; A campaign request is the interface-safe execution boundary for /go.  It
-;; carries durable campaign identity plus callbacks that build one wave prompt
-;; and verify one completed attempt; interfaces supply only the prompt runner.
-;; delivery-reader: authenticated delivered-proof reader (default
-;; delivery-readback) — the DI seam so tests inject proofs without network.
-;; timeout-sec: per-campaign override for the wave budget (current-gsd-wave-
-;; timeout-seconds), resolved at /go time from the --wave-timeout=SECONDS flag,
-;; then ~/.q/config.json wave-timeout-seconds, then the parameter default.
-;; #f → use the current parameter value at execution time. Carried on the
-;; request (not the parameter) because the campaign runs in a separate thread.
-(struct campaign-request
-        (base-dir record
-                  prompt-for-wave
-                  verifier
-                  timeout-sec
-                  allow-stale?
-                  delivery-reader
-                  delivery-coordinator
-                  auto-review-runner)
-  #:transparent
-  #:constructor-name make-campaign-request/internal)
-
-(define (make-campaign-request base-dir
-                               record
-                               prompt-for-wave
-                               verifier
-                               #:timeout-sec [timeout-sec #f]
-                               #:allow-stale? [allow-stale? #f]
-                               #:delivery-reader [delivery-reader delivery-readback]
-                               #:delivery-coordinator [delivery-coordinator #f]
-                               #:auto-review-runner [auto-review-runner #f])
-  (make-campaign-request/internal base-dir
-                                  record
-                                  prompt-for-wave
-                                  verifier
-                                  timeout-sec
-                                  allow-stale?
-                                  delivery-reader
-                                  delivery-coordinator
-                                  auto-review-runner))
+;; A campaign request is the interface-safe execution boundary for /go. W3
+;; extracted the VALUE (struct, constructor, token registry) to
+;; campaign-request.rkt; the execution entry points stay here and re-provide
+;; the names for existing importers.
 
 (define (execute-campaign-request! request
                                    run-prompt
@@ -370,23 +328,19 @@
                (lambda (wave-idx)
                  ;; BUG-0037 W1: a stall kill is retryable infrastructure —
                  ;; distinct clause BEFORE the generic exn:fail? fallback.
-                 (with-handlers ([gsd-stall-exn?
-                                  (lambda (e)
-                                    (log-error "campaign runner stall-killed: ~a" (exn-message e))
-                                    (wave-execution-outcome 'infra-failed (exn-message e)))]
+                 (with-handlers ([gsd-stall-exn? (lambda (e)
+                                                   (log-error "campaign runner stall-killed: ~a"
+                                                              (exn-message e))
+                                                   (wave-execution-outcome/typed 'infra-failed
+                                                                                 (exn-message e)
+                                                                                 STALL-CAUSE-CODE))]
                                  [exn:fail? (lambda (e)
                                               (log-error "campaign runner failed: ~a" (exn-message e))
                                               (wave-execution-outcome 'failed (exn-message e)))])
-                   (define returned-values
-                     (call-with-values
-                      (lambda () (run-prompt ((campaign-request-prompt-for-wave request) wave-idx)))
-                      list))
-                   ;; Runtime/session runners return either a single
-                   ;; loop-result or (values updated-session result).
-                   (define run-result
-                     (if (= (length returned-values) 2)
-                         (cadr returned-values)
-                         (and (pair? returned-values) (car returned-values))))
+                   ;; W2: ONE trusted scratch root per executor attempt,
+                   ;; advertised in this attempt's prompt and adopted single-shot
+                   ;; around the runner (campaign-request.rkt owns the wrapper).
+                   (define run-result (call-with-request-scratch-prompt request wave-idx run-prompt))
                    ;; v1.00.22 W5 (BUG-0039): observe the raw loop-result's
                    ;; usage BEFORE prompt-run-result->outcome strips it.
                    (record-usage-observation! wave-idx run-result)
@@ -400,33 +354,16 @@
 
 ;; Hook payloads cross a Typed Racket Any boundary that intentionally rejects
 ;; higher-order values. Keep callbacks process-local and send only an opaque
-;; token through TUI/GUI/SDK hook payloads.
-(define campaign-request-registry (make-hash))
-(define campaign-request-registry-lock (make-semaphore 1))
-
-(define (register-campaign-request! request)
-  (define token
-    (format "~a-~a-~a"
-            (campaign-plan-id (campaign-request-record request))
-            (current-inexact-milliseconds)
-            (random 1000000000)))
-  (call-with-semaphore campaign-request-registry-lock
-                       (lambda () (hash-set! campaign-request-registry token request)))
-  token)
-
-(define (lookup-campaign-request token)
-  (call-with-semaphore campaign-request-registry-lock
-                       (lambda () (hash-ref campaign-request-registry token #f))))
+;; token through TUI/GUI/SDK hook payloads. W3 moved the registry itself into
+;; campaign-request.rkt; this module keeps only the token-driven execution.
 
 (define (execute-campaign-token! token run-prompt #:lease-owner [lease-owner "unknown"])
   (define request (lookup-campaign-request token))
   (if request
-      (dynamic-wind
-       void
-       (lambda () (execute-campaign-request! request run-prompt #:lease-owner lease-owner))
-       (lambda ()
-         (call-with-semaphore campaign-request-registry-lock
-                              (lambda () (hash-remove! campaign-request-registry token)))))
+      (dynamic-wind void
+                    (lambda ()
+                      (execute-campaign-request! request run-prompt #:lease-owner lease-owner))
+                    (lambda () (unregister-campaign-request! token)))
       (campaign-result 'error '() "campaign request token is missing or expired")))
 
 ;; ============================================================
@@ -946,51 +883,38 @@
                             (cond
                               [(and (not owned-phases?)
                                     (> no-change-retries-left 0)
-                                    (no-change-rejection? verifier-message))
-                               ;; #9515: exactly-once-bounded failure-context
-                               ;; retry. Reset the durable status to pending
-                               ;; so the re-run begins cleanly and a crash
-                               ;; leaves the wave re-attemptable
-                               ;; (at-least-once). W7: release the rejected
-                               ;; attempt's worktree AND branch before the
-                               ;; retry — the re-run builds a fresh branch
-                               ;; off origin/main (the rejected attempt's
-                               ;; diff was empty by definition of the
-                               ;; verdict).
-                               (log-info
-                                "wave ~a made zero target edits; retrying with failure context (~a retries left)"
-                                wave-idx
-                                (sub1 no-change-retries-left))
-                               (when (and wt (not (unbox keep-branch-box)))
-                                 (cleanup-wave-worktree! wt))
-                               ;; v1.00.21 W5 (BUG-0029): the rejected
-                               ;; attempt is terminal; its branch was just
-                               ;; deleted by cleanup-wave-worktree!.
-                               (mark-attempt-artifact-terminal! base-dir
-                                                                (campaign-plan-id active)
-                                                                wave-idx
-                                                                expected-id
-                                                                'failure
-                                                                #:merge-status 'deleted)
-                               (set-box! wt-box #f)
-                               (define retry-rec (observe))
-                               (define retry-wave
-                                 (current-wave-for-attempt retry-rec wave-idx fence expected-id))
-                               (if (not retry-wave)
-                                   (campaign-result 'wave-cancelled '() "stale completion ignored")
-                                   (begin
-                                     (set-campaign-wave-status! retry-wave 'pending)
-                                     (persist-campaign! base-dir retry-rec)
-                                     (mirror-status! 'pending)
-                                     (parameterize ([current-gsd-wave-failure-context
-                                                     (wave-failure-context-block
-                                                      verifier-message
-                                                      (no-change-target-files verifier-message))])
-                                       (run-once* (sub1 no-change-retries-left)
-                                                  repair-retries-left
-                                                  wt-box
-                                                  keep-branch-box
-                                                  attempt-id-box))))]
+                                    ;; W5: TYPED verdict, not message text.
+                                    (delivery-verification-no-change? verifier-result))
+                               ;; #9515 exactly-once failure-context retry: the
+                               ;; durable transition lives beside the other
+                               ;; verification-repair transitions and is keyed on
+                               ;; the TYPED 'no-change verdict, never on text.
+                               (start-no-change-retry!
+                                #:base-dir base-dir
+                                #:active active
+                                #:wave-index wave-idx
+                                #:fence fence
+                                #:attempt-id expected-id
+                                #:verifier-result verifier-result
+                                #:verifier-message verifier-message
+                                #:retries-left no-change-retries-left
+                                #:worktree wt
+                                #:keep-branch? (unbox keep-branch-box)
+                                #:clear-worktree! (lambda () (set-box! wt-box #f))
+                                #:observe observe
+                                #:stale-result
+                                (lambda ()
+                                  (campaign-result 'wave-cancelled '() "stale completion ignored"))
+                                #:retry (lambda (context)
+                                          ;; In-memory mirror of the persisted 'pending
+                                          ;; status for the re-entry, as before.
+                                          (mirror-status! 'pending)
+                                          (parameterize ([current-gsd-wave-failure-context context])
+                                            (run-once* (sub1 no-change-retries-left)
+                                                       repair-retries-left
+                                                       wt-box
+                                                       keep-branch-box
+                                                       attempt-id-box))))]
                               [else
                                (resolve-verification-rejection!
                                 #:base-dir base-dir
@@ -1050,11 +974,10 @@
                                                    wave-idx
                                                    STATUS-FAILED
                                                    (lambda (idx) (wave-slug base-dir idx)))
-                   (notify-terminal-transition*!
-                    (campaign-plan-id active)
-                    wave-idx
-                    (wave-failure-notification-kind (wave-execution-outcome-message run-result))
-                    #:reason failure-reason)
+                   (notify-terminal-transition*! (campaign-plan-id active)
+                                                 wave-idx
+                                                 (wave-failure-notification-kind run-result)
+                                                 #:reason failure-reason)
                    (campaign-result 'wave-failed '() failure-reason))
                  (campaign-result 'wave-cancelled '() "stale runner result ignored"))]
             ;; D8 (#9357) + BUG-0024 W3: transient provider/network/SSE
@@ -1308,11 +1231,10 @@
                                                    wave-idx
                                                    STATUS-FAILED
                                                    (lambda (idx) (wave-slug base-dir idx)))
-                   (notify-terminal-transition*!
-                    (campaign-plan-id active)
-                    wave-idx
-                    (wave-failure-notification-kind (wave-execution-outcome-message run-result))
-                    #:reason failure-reason)
+                   (notify-terminal-transition*! (campaign-plan-id active)
+                                                 wave-idx
+                                                 (wave-failure-notification-kind run-result)
+                                                 #:reason failure-reason)
                    (campaign-result 'wave-failed '() failure-reason))
                  (campaign-result 'wave-cancelled '() "stale runner result ignored"))])]))
      ;; W7 (#9512b): run-once* receives fresh boxes; the worktree outlives
@@ -1419,10 +1341,7 @@
   (if (not lease)
       (campaign-result-with-diagnostics
        (campaign-result 'busy '() "campaign lease held by another process")
-       (campaign-diagnostics
-        'lease-busy
-        #:next-action
-        "inspect the lock holder; wait for release or stop that process, then re-run /go"))
+       (lease-busy-diagnostics base-dir plan-id))
       (dynamic-wind
        void
        (lambda ()
@@ -1463,66 +1382,136 @@
          ;; loop iteration revalidates publication AND synchronized bytes;
          ;; ledger reconciliation is idempotent.
          (define verified-delivered (make-hash))
+         ;; W3: this loop is the ONE interpreter of the pure campaign decision.
+         ;; Every iteration reloads durable state, gathers the explicit views
+         ;; (authenticated delivery facts + lane facts + runtime capability)
+         ;; through the adapters, obtains exactly ONE decided action, performs
+         ;; that action's effect through the existing guarded adapters, and
+         ;; continues only when the decision says to continue.
+         (define (decided-result result decision)
+           ;; Additive structured diagnostics: the stable machine code and the
+           ;; decided route. Status, message and completed waves are exactly
+           ;; what the effect produced (no routing consumer reads the text);
+           ;; the decision's own text rides `detail` only when the effect added
+           ;; a more specific reason, so the operator sees both.
+           (define message (campaign-result-message result))
+           (define decided-message (campaign-decision-message decision))
+           (campaign-result-with-diagnostics
+            result
+            (campaign-diagnostics (campaign-decision-code decision)
+                                  #:summary message
+                                  #:detail (and (string? message)
+                                                (string? decided-message)
+                                                (not (equal? message decided-message))
+                                                decided-message)
+                                  #:next-action (campaign-decision-next-action decision)
+                                  #:extra (hasheq 'route
+                                                  (campaign-decision-route decision)
+                                                  'wave
+                                                  (campaign-decision-wave-index decision)))))
+         (define (blocked-result outcome decision completed)
+           (define typed (campaign-outcome-typed outcome))
+           (decided-result
+            (if typed
+                (campaign-result-with-completed typed (reverse completed))
+                (campaign-result 'wave-blocked (reverse completed) (campaign-outcome-reason outcome)))
+            decision))
          (define final-result
            (let loop ([current authoritative]
                       [completed '()])
-             ;; Implementation DONE is durable and never rerun to repair
-             ;; delivery; the full-loop checkpoint runs BEFORE the next
-             ;; launch / final completion against the authenticated
-             ;; delivery-reader (default delivery-readback).
-             (define-values (decision live extra message)
-               (ready-for-run-checkpoint base-dir
-                                         plan-id
-                                         current
-                                         completed
-                                         delivery-reader
-                                         verified-delivered))
-             (case decision
-               [(campaign-complete)
+             ;; Implementation DONE is durable and never rerun to repair delivery;
+             ;; the decision runs BEFORE the next launch / final completion
+             ;; against the authenticated delivery-reader.
+             (define views
+               (gather-campaign-views base-dir
+                                      plan-id
+                                      current
+                                      completed
+                                      delivery-reader
+                                      verified-delivered
+                                      delivery-coordinator))
+             (define decision (decide-campaign-action views))
+             (define live (campaign-views-record views))
+             (case (campaign-decision-kind decision)
+               [(complete)
                 (notify-terminal-transition*! (campaign-plan-id live)
                                               #f
                                               'campaign-complete
                                               #:reason "all waves done or deferred")
-                (campaign-result 'campaign-complete (reverse completed) message)]
-               [(wave-blocked)
-                (wave-blocked-checkpoint-result!
-                 base-dir
-                 plan-id
-                 extra
-                 completed
-                 message
-                 delivery-coordinator
-                 (lambda () (loop (load-campaign-record base-dir plan-id) completed)))]
-               [(finalize-wave)
-                ;; Authenticated delivered proof commits DONE (BUG-0077).
-                (run-delivery-finalization
-                 base-dir
-                 plan-id
-                 live
-                 (campaign-wave-index extra)
-                 (hash-ref verified-delivered (campaign-wave-index extra) #f)
-                 completed
-                 #:release-check
-                 (and (current-gsd-release-check)
-                      (lambda () ((current-gsd-release-check) (campaign-wave-index extra))))
-                 #:on-delivered
-                 (lambda ()
-                   (mirror-durable-statuses! rec (load-campaign-record base-dir plan-id))
-                   (notify-terminal-transition*! plan-id
-                                                 (campaign-wave-index extra)
-                                                 'wave-done
-                                                 #:reason "wave delivered")
-                   (loop (load-campaign-record base-dir plan-id)
-                         (cons (campaign-wave-index extra) completed))))]
-               [(wave-cancelled)
+                (campaign-result 'campaign-complete
+                                 (reverse completed)
+                                 (campaign-decision-message decision))]
+               [(cancel)
                 (when (campaign-record-cancellation live)
                   (notify-terminal-transition*! (campaign-plan-id live)
                                                 #f
                                                 'campaign-cancelled
                                                 #:reason "campaign cancellation requested"))
-                (campaign-result 'wave-cancelled (reverse completed) message)]
-               [else
-                (define next-idx extra)
+                (decided-result (campaign-result 'wave-cancelled
+                                                 (reverse completed)
+                                                 (campaign-decision-message decision))
+                                decision)]
+               [(block)
+                ;; A block may carry ONE secondary/idempotent sealing effect
+                ;; (retained supplemental ownership) that must run BEFORE the
+                ;; typed denial. It never dispatches ordinary work, and a
+                ;; secondary failure never erases the primary cause.
+                (blocked-result (run-campaign-block! base-dir plan-id decision) decision completed)]
+               [(resume)
+                ;; The lane effect advances, cancels, or returns the typed
+                ;; denial for this decided route. Ownership contract: the loop
+                ;; is single-threaded and resumes strictly BETWEEN wave passes;
+                ;; the owned registry reaps its jobs on termination, so a
+                ;; "running" author marker here is a proven lost session.
+                (define outcome
+                  (run-campaign-resume! base-dir
+                                        plan-id
+                                        decision
+                                        (campaign-decision-message decision)
+                                        delivery-coordinator
+                                        #:author-session-live? (lambda () #f)))
+                (case (campaign-outcome-kind outcome)
+                  [(advance)
+                   (define refreshed (load-campaign-record base-dir plan-id))
+                   (if refreshed
+                       (loop refreshed completed)
+                       (campaign-result 'error (reverse completed) "campaign record disappeared"))]
+                  [(cancelled)
+                   (decided-result (campaign-result 'wave-cancelled
+                                                    (reverse completed)
+                                                    (campaign-outcome-reason outcome))
+                                   decision)]
+                  [else (blocked-result outcome decision completed)])]
+               [(finalize)
+                ;; Authenticated delivered proof commits DONE (BUG-0077).
+                (run-delivery-finalization
+                 base-dir
+                 plan-id
+                 live
+                 (campaign-decision-wave-index decision)
+                 (campaign-decision-merge-sha decision)
+                 completed
+                 #:release-check
+                 (and (current-gsd-release-check)
+                      (lambda ()
+                        ((current-gsd-release-check) (campaign-decision-wave-index decision))))
+                 #:on-delivered
+                 (lambda ()
+                   ;; W3 review fix: a reload can observe no durable record (the
+                   ;; campaign was moved/removed between the DONE commit and this
+                   ;; checkpoint). Mirror the launch/resume reload guard so the
+                   ;; loop never re-enters on #f and the stop stays typed.
+                   (define refreshed (load-campaign-record base-dir plan-id))
+                   (mirror-durable-statuses! rec refreshed)
+                   (notify-terminal-transition*! plan-id
+                                                 (campaign-decision-wave-index decision)
+                                                 'wave-done
+                                                 #:reason "wave delivered")
+                   (if refreshed
+                       (loop refreshed (cons (campaign-decision-wave-index decision) completed))
+                       (campaign-result 'error (reverse completed) "campaign record disappeared"))))]
+               [(launch)
+                (define next-idx (campaign-decision-wave-index decision))
                 (define result
                   ;; v1.00.22 W6 (BUG-0040): wave-level terminal sites
                   ;; (done/failed/stall/budget-pause) inside
@@ -1539,7 +1528,7 @@
                                        #:timeout-retries (current-gsd-wave-timeout-retries)
                                        #:isolate? isolate?
                                        ;; v1.00.30: the wave-advance gate uses the same
-                                       ;; authenticated proof source as the checkpoint —
+                                       ;; authenticated proof source as the decision —
                                        ;; a resolver derived from delivery-reader (memoized
                                        ;; + ledger-reconciled), never a local regex fixture.
                                        #:predecessor-merge-sha
@@ -1620,6 +1609,7 @@
          campaign-request-delivery-reader
          campaign-request-delivery-coordinator
          campaign-request-auto-review-runner
+         campaign-request-scratch-token
          campaign-request-timeout-sec
          execute-campaign-request!
          current-gsd-wave-cancel!

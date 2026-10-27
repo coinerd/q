@@ -451,13 +451,11 @@
        (check-true (string-contains? (campaign-result-message result)
                                      "token-path coordinator saw the checkpoint")))))
   (test-case "cancelled campaign exits wave-cancelled without coordinator delivery"
-    ;; A pre-cancelled record makes ready-for-run-checkpoint return
-    ;; wave-cancelled (delivery-handoff) before any checkpoint reaches the
-    ;; coordinator. The race-guard inside coordinator-checkpoint-result
-    ;; (go-orchestrator) is inspected rather than exercised deterministically:
-    ;; it reloads and re-checks cancellation BEFORE the coordinator call, so
-    ;; an injected seam that returns ok after cancel can never fabricate
-    ;; delivery. This test pins the top-level early-exit + no-coordinator-run.
+    ;; W3: the pure campaign decision returns `cancel` for a pre-cancelled
+    ;; record before any authenticated readback or lane effect, so the
+    ;; coordinator is never reached and cannot fabricate delivery. The
+    ;; cancellation fact is re-read from durable state, never inferred from
+    ;; message text. This test pins the top-level early-exit + no-coordinator-run.
     (call-with-campaign 1
                         (lambda (dir rec)
                           (define done (done-record dir))

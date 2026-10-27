@@ -425,6 +425,11 @@
                            (emit-session-event! bus session-id event-type payload))
        #:runtime-settings settings
        #:call-id tool-call-id
+       ;; W2: a subagent is a DIFFERENT session, so it never inherits the
+       ;; parent's trusted scratch root; failing closed (no scratch channel) is
+       ;; the honest default because no scratch path is advertised to the child
+       ;; prompt either. Nothing falls back to the scratch base directory.
+       #:scratch-root #f
        #:session-metadata (hasheq 'session-id
                                   session-id
                                   'child-id

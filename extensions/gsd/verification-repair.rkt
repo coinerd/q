@@ -6,6 +6,7 @@
          "attempt-artifacts.rkt"
          "campaign-repository.rkt"
          "campaign-state.rkt"
+         "delivery-receipt.rkt"
          "delivery-verifier.rkt"
          "events.rkt"
          "policy.rkt"
@@ -14,6 +15,8 @@
 
 (provide repairable-verification-rejection?
          verification-repair-no-progress?
+         start-no-change-retry!
+         verification-repair-no-change-context?
          start-verification-repair!
          emit-verification-repair-exhausted!
          resolve-verification-rejection!)
@@ -50,6 +53,64 @@
    'failure
    #:merge-status
    (and wt (artifact-merge-status/local (wave-worktree-repo-root wt) (wave-worktree-branch wt)))))
+
+;; ============================================================
+;; Bounded zero-EDIT retry (W5: typed authorization)
+;; ============================================================
+
+;; The #9515 zero-edit retry is authorized by the verification VALUE's typed
+;; 'no-change verdict (delivery-verifier.rkt), never by the operator message.
+;; Returns the failure-context block for the successor attempt, or #f when the
+;; typed verdict does not authorize a retry.
+(define (verification-repair-no-change-context? verifier-result verifier-message)
+  (and (delivery-verification-no-change? verifier-result)
+       (wave-failure-context-block verifier-message
+                                   (delivery-verification-target-files verifier-result))))
+
+;; The durable transition for the bounded zero-edit retry: release the rejected
+;; attempt's worktree/branch, mark the attempt terminal, reset the wave to
+;; pending and persist BEFORE the re-run (at-least-once: a crash leaves the
+;; wave re-attemptable), then invoke `retry` with the failure context block.
+;; `stale-result` is the orchestrator's stale-attempt result constructor.
+(define (start-no-change-retry! #:base-dir base-dir
+                                #:active active
+                                #:wave-index wave-idx
+                                #:fence fence
+                                #:attempt-id attempt-id
+                                #:verifier-result verifier-result
+                                #:verifier-message verifier-message
+                                #:retries-left retries-left
+                                #:worktree wt
+                                #:keep-branch? keep-branch?
+                                #:clear-worktree! clear-worktree!
+                                #:observe observe
+                                #:stale-result stale-result
+                                #:retry retry)
+  (log-info "wave ~a made zero target edits; retrying with failure context (~a retries left)"
+            wave-idx
+            (sub1 retries-left))
+  ;; W7: release the rejected attempt's worktree AND branch before the retry —
+  ;; the re-run builds a fresh branch off origin/main (the rejected attempt's
+  ;; diff was empty by definition of the verdict).
+  (when (and wt (not keep-branch?))
+    (cleanup-wave-worktree! wt))
+  ;; v1.00.21 W5 (BUG-0029): the rejected attempt is terminal; its branch was
+  ;; just deleted by cleanup-wave-worktree!.
+  (mark-attempt-artifact-terminal! base-dir
+                                   (campaign-plan-id active)
+                                   wave-idx
+                                   attempt-id
+                                   'failure
+                                   #:merge-status 'deleted)
+  (clear-worktree!)
+  (define retry-rec (observe))
+  (define retry-wave (and retry-rec (current-wave-for-attempt retry-rec wave-idx fence attempt-id)))
+  (if (not retry-wave)
+      (stale-result)
+      (begin
+        (set-campaign-wave-status! retry-wave 'pending)
+        (persist-campaign! base-dir retry-rec)
+        (retry (verification-repair-no-change-context? verifier-result verifier-message)))))
 
 ;; Consume one truthful attempt and preserve its worktree/branch for `retry`.
 ;; `stale-result` is a thunk producing the orchestrator's stale-completion

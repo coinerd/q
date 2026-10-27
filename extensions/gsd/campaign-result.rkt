@@ -69,11 +69,45 @@
 ;; Attach/replace a whole diagnostics envelope (the lean backward-compatible
 ;; diagnostics constructor). Pure: a NEW result value is returned; the
 ;; original (and its envelope) is never mutated.
+;;
+;; GSD simplification W5: TYPED FINDINGS survive envelope replacement. A
+;; runtime re-render of the envelope (e.g. the coordinator attaching its
+;; decision code) must not drop the review-rejection findings that travelled
+;; with the result — they are the machine-readable half of the rejection, and
+;; no consumer should have to re-parse the operator message to recover them.
 (define (campaign-result-with-diagnostics result diagnostics)
+  (define previous (campaign-result-diagnostics result))
+  (define findings (and (hash? previous) (hash-ref previous 'findings #f)))
+  (define merged
+    (if (and findings (not (hash-ref diagnostics 'findings #f)))
+        (hash-set diagnostics 'findings findings)
+        diagnostics))
   (build-result (campaign-result-status result)
                 (campaign-result-completed-waves result)
                 (campaign-result-message result)
-                diagnostics))
+                merged))
+
+;; Typed, machine-readable findings carried by a terminal result ('() when
+;; none). This is the ONE accessor for the review-rejection findings; they are
+;; never recovered by parsing the human message.
+(define (campaign-result-findings result)
+  (define diagnostics (campaign-result-diagnostics result))
+  (define findings (and (hash? diagnostics) (hash-ref diagnostics 'findings '())))
+  (if (list? findings)
+      findings
+      '()))
+
+;; Attach typed findings to a result without touching status/message and
+;; without re-parsing any operator text. Non-string/empty lists are dropped (a
+;; blank finding can never claim a rejection).
+(define (campaign-result-with-findings result findings)
+  (define normalized
+    (if (and (list? findings)
+             (pair? findings)
+             (andmap (lambda (f) (and (string? f) (positive? (string-length f)))) findings))
+        findings
+        '()))
+  (campaign-result-with-diagnostic result 'findings normalized))
 
 ;; Attach/replace ONE diagnostic key by merging into the existing envelope.
 (define (campaign-result-with-diagnostic result key value)
@@ -130,8 +164,10 @@
          campaign-result-message
          campaign-result-diagnostics
          campaign-result-code
+         campaign-result-findings
          campaign-diagnostics
          campaign-result-with-diagnostics
          campaign-result-with-diagnostic
+         campaign-result-with-findings
          campaign-result-with-completed
          render-campaign-stop-text)

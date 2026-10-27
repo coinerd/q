@@ -29,39 +29,61 @@ compilation. `raco make <file>` remains mandatory.
 
 ## Shell scratch output
 
-The bash safety guard permits file redirection only below the dedicated
-`/tmp/q-agent-scratch/` root (or the equivalent `q-agent-scratch` directory
-under the platform temporary directory). Create that directory explicitly,
-then capture disposable formatter, test, or hook output there. Arbitrary
-`/tmp` paths, repository paths, and system paths remain blocked. Rejections
-identify the classifier reason, target, and triggering command segment.
+The trusted session scratch root is
+`<platform-temp>/q-agent-scratch/<session-token>/`
+(`/tmp/q-agent-scratch/<session-token>/` on POSIX). That session directory is
+created owner-only by the runtime (`tools/scratch.rkt`) and is the same root
+the structured `write`/`edit` tools and the executor prompt use, so the
+absolute path the prompt advertises is the path you may redirect to. The
+allocation container itself, sibling sessions, arbitrary `/tmp` paths,
+repository paths and system paths are outside the sanctioned root.
+
+The direct (in-process) bash tool treats a redirect outside that root as a
+destructive command: the default `warn` policy reports a warning in the tool
+result but still runs the command, while destructive blocking (the `block`
+execution policy or safe mode) refuses it. The sandbox worker has no approval
+channel and always refuses. Refusals identify the classifier reason, the
+target and the triggering command segment, and name the sanctioned root.
 
 ```bash
-mkdir -p /tmp/q-agent-scratch
-racket scripts/pre-commit.rkt >/tmp/q-agent-scratch/pre-commit.log 2>&1
-tail -20 /tmp/q-agent-scratch/pre-commit.log
+racket scripts/pre-commit.rkt >/tmp/q-agent-scratch/<session-token>/pre-commit.log 2>&1
+tail -20 /tmp/q-agent-scratch/<session-token>/pre-commit.log
 ```
 
-Do not use the scratch exception for source edits or release evidence; move
-reviewed results through the relevant structured file tool.
+Substitute the session token the prompt reported; do not invent a different
+directory, and do not clean up other sessions' scratch. Do not use the scratch
+exception for source edits or release evidence; move reviewed results through
+the relevant structured file tool.
+
+This exception never applies in safe mode. Safe mode is read-only: `bash`,
+`edit`, `write` and `delete-lines` are blocked by its allowlist, and
+`read`/`write`/`edit`/`delete-lines` all refuse the scratch root there
+(project-root-bounded access only). There is no "writable scratch" in a
+`--safe` run.
+
+Remote executor requests carry no trusted scratch root (the transport does not
+include it), so a remote worker has no sanctioned scratch destination at all.
+That is unavailable by omission, not a fallback to the allocation container,
+`/tmp`, or a coordinator-local root.
 
 ## Executor scratch source files (GSD /go)
 
-Structured source-file probes during a /go campaign wave do not use the shell
-scratch exception. The /go prompt designates a session-owned scratch
-directory — `.planning/scratch/<opaque-session-token>/` under the executor's
-current working directory — and executors create diagnostic scripts there
-with the structured write tool (missing parents are created automatically
-after authorization). The token is allocated once per /go request: retries
-within one session reuse the destination, fresh sessions get their own.
+Structured source-file probes during a /go campaign wave use that same single
+trusted session root, not the repository. The prompt reports one absolute
+path; executors create diagnostic scripts there with the structured `write`
+tool (missing parents are created automatically after authorization) and may
+run them with read-only bash. The token is allocated once per session:
+retries and worker requests reuse the same root, fresh sessions get their own.
 
-Scratch files are disposable: never reference them as a wave deliverable,
-approval, or verification receipt, and never commit them. Untracked files
-under `.planning/scratch/` are explicitly exempt from delivery-evidence
-collection and do not block delivery synchronization; any other dirty state
-still refuses. Arbitrary `/tmp` source writes and destructive cleanup remain
-blocked, and bash output redirection stays restricted to the shell scratch
-root above.
+The root lives outside the checkout, so scratch never appears in delivery
+evidence. A leftover `.planning/scratch/<token>/` directory from an older
+session is no longer advertised or evidence-exempt by the executor;
+q never deletes another session's scratch. Arbitrary `/tmp` source writes and
+destructive cleanup remain blocked, and bash output redirection stays
+restricted to the session scratch root described above.
+
+The structured tools refuse this root under safe mode (see the safe-mode note
+above); scratch source probes require a normal, non-safe-mode session.
 
 ## Whole-form and structural edits
 

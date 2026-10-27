@@ -42,7 +42,13 @@
          (only-in "../util/event/event-types.rkt" injection-event-topic)
          "compaction/compactor.rkt"
          (only-in "../util/extension/extensions.rkt" extension-name)
-         (only-in "layer-adapters.rkt" list-extensions)
+         (only-in "layer-adapters.rkt"
+                  list-extensions
+                  ;; W2: per-session trusted scratch allocation
+                  allocate-session-scratch-root!
+                  bind-session-scratch-root!
+                  release-session-scratch-root!
+                  take-adopted-session-scratch-root!)
          ;; TR BOUNDARY: event-payloads.rkt is #lang typed/racket.
          (only-in "../util/event/event-payloads.rkt"
                   session-start-payload
@@ -270,6 +276,29 @@
     (resolve-session-path base-dir session-id artifact)))
 
 ;; ============================================================
+;; W2: per-session trusted scratch allocation
+;; ============================================================
+;;
+;; The session owner (this module) allocates exactly ONE trusted scratch root
+;; per agent session, keyed by the real session id, BEFORE the session can run
+;; any tool. Consequences that matter:
+;;   - two sessions in the same q process own two distinct roots; neither is
+;;     reachable from the other (tools/scratch.rkt registry);
+;;   - there is no process-wide root and no base-directory fallback, so a
+;;     session that has no allocation has no scratch at all (fail closed);
+;;   - an allocation failure (symlinked container/session directory, or a mode
+;;     that cannot be enforced) aborts session creation: a scratch boundary
+;;     that cannot be enforced is never silently downgraded.
+;;   - a root that a trusted producer allocated and advertised BEFORE the
+;;     session existed (the /go executor prompt) is adopted explicitly for
+;;     exactly one session creation and bound to this session id.
+(define (allocate-scratch-root-for-session! sid)
+  (define adopted (take-adopted-session-scratch-root!))
+  (if adopted
+      (bind-session-scratch-root! sid adopted)
+      (allocate-session-scratch-root! sid)))
+
+;; ============================================================
 ;; make-agent-session
 ;; ============================================================
 
@@ -281,6 +310,8 @@
         (hash->session-config config)))
   (define sid (generate-id))
   (define base-dir (config-session-dir cfg))
+  ;; W2: one trusted scratch root for THIS session, before any tool can run.
+  (allocate-scratch-root-for-session! sid)
   (define dir (resolve-agent-session-path 'make-agent-session base-dir sid))
 
   ;; M4 W0: Rollout gate — deterministically assign task-state-aware? based on session-id hash
@@ -356,6 +387,9 @@
         config
         (hash->session-config config)))
   (define base-dir (config-session-dir cfg))
+  ;; W2: a resumed session is a NEW agent session (new id, new process): it
+  ;; gets its own trusted scratch root, never a stale or global one.
+  (allocate-scratch-root-for-session! session-id)
   ;; Resolve the complete session and artifact paths before any existence probe,
   ;; version-header rewrite, index write, hook, or event.
   (define dir (resolve-agent-session-path 'resume-agent-session base-dir session-id))
@@ -463,6 +497,8 @@
 
 (define (fork-session-internal sess parent-entry-id)
   (define new-id (generate-id))
+  ;; W2: a fork is a distinct agent session and gets its own scratch root.
+  (allocate-scratch-root-for-session! new-id)
   (define base-dir (path-only (simple-form-path (agent-session-session-dir sess))))
   (define current-id (agent-session-session-id sess))
   (define log-path (resolve-agent-session-path 'fork-session base-dir current-id "session.jsonl"))
@@ -656,7 +692,16 @@
                                 (exn-message e)))])
     (define repo (agent-session-repository sess))
     (when repo
-      (close-session-repository! repo))))
+      (close-session-repository! repo)))
+
+  ;; Step 7: forget this session's scratch binding (idempotent; never deletes
+  ;; files and never touches another session's allocation).
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning
+                                "session-lifecycle: cleanup step 7 (scratch) failed for ~a: ~a"
+                                sid
+                                (exn-message e)))])
+    (release-session-scratch-root! sid)))
 
 ;; ============================================================
 ;; Re-exported from extracted sub-modules

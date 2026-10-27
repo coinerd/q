@@ -18,6 +18,11 @@
          racket/runtime-path
          (only-in racket/string string-contains?)
          (only-in "../extensions/gsd/prompts.rkt" planning-implement-prompt executor-reanchor-prompt)
+         (only-in "../extensions/gsd/delivery-verifier.rkt"
+                  delivery-verification
+                  delivery-verification/typed
+                  delivery-verification-no-change?
+                  delivery-verification-target-files)
          (prefix-in eb: "../util/event/event-bus.rkt")
          "../runtime/auto-retry.rkt"
          "../runtime/provider-retry.rkt"
@@ -239,6 +244,28 @@
       (check-equal? (no-change-target-files "no wave target files changed: a.rkt, b.rkt")
                     '("a.rkt" "b.rkt")))
 
+    (test-case "BEHAVIORAL (W5): the zero-edit retry authority is the TYPED verdict"
+      ;; Red-first wording mutation: the decision is unchanged when the human
+      ;; message is replaced with unrelated text...
+      (check-true (delivery-verification-no-change?
+                   (delivery-verification/typed #f '() "MUTATED WORDING" (hasheq 'code 'no-change))))
+      ;; ...and the historic message text alone is NEVER an authority.
+      (check-false (delivery-verification-no-change?
+                    (delivery-verification #f '() "no wave target files changed: a.rkt")))
+      (check-false (delivery-verification-no-change?
+                    (delivery-verification/typed #f
+                                                 '()
+                                                 "no wave target files changed: a.rkt"
+                                                 (hasheq 'code 'rejected))))
+      ;; Target files come from the typed fact, not from re-parsing the text.
+      (check-equal?
+       (delivery-verification-target-files
+        (delivery-verification/typed #f
+                                     '()
+                                     "unrelated"
+                                     (hasheq 'code 'no-change 'target-files '("a.rkt" "b.rkt"))))
+       '("a.rkt" "b.rkt")))
+
     (test-case "W3 structural pins: exactly-once no-change retry"
       ;; run-campaign-wave takes the bounded retry budget (default 1 from the
       ;; current-gsd-wave-no-change-retries parameter). raco fmt may wrap
@@ -247,14 +274,19 @@
       (contains? orchestrator-src "#:no-change-retries")
       (contains? orchestrator-src "[no-change-retries (current-gsd-wave-no-change-retries)]")
       (contains? orchestrator-src "(> no-change-retries-left 0)")
+      ;; W5: the arm reads the TYPED verdict, never the verifier message.
+      (contains? orchestrator-src "(delivery-verification-no-change? verifier-result)")
       ;; Exactly-once: the retry consumes the budget.
       ;; W7 campaign: run-once was renamed run-once* (worktree boxes added);
       ;; the exactly-once decremented re-entry invariant is unchanged.
       (contains? orchestrator-src "(run-once* (sub1 no-change-retries-left)")
       ;; At-least-once semantics preserved: the wave is reset to pending and
       ;; persisted BEFORE the re-run, so a crash leaves it re-attemptable.
-      (contains? orchestrator-src "(set-campaign-wave-status! retry-wave 'pending)")
-      (contains? orchestrator-src "(persist-campaign! base-dir retry-rec)")
+      ;; W5: the durable transition lives in verification-repair.rkt beside the
+      ;; other bounded verification-failure transitions.
+      (contains? repair-src "(set-campaign-wave-status! retry-wave 'pending)")
+      (contains? repair-src "(persist-campaign! base-dir retry-rec)")
+      (contains? repair-src "(define (start-no-change-retry!")
       ;; The retry carries the failure context block into the executor prompt.
       (contains? orchestrator-src "current-gsd-wave-failure-context")
       ;; Other verifier rejection messages fall through to permanent failure

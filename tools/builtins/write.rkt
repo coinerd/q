@@ -18,13 +18,14 @@
                   make-success-result
                   make-error-result
                   exec-context?
+                  exec-context-working-directory
                   exec-context-bytes-written)
          (only-in "../../util/path/path-helpers.rkt" path-only expand-home-path)
          (only-in "../../util/error/errors.rkt" raise-tool-error tool-error?)
          (only-in "../../util/error/error-sanitizer.rkt" sanitize-error-message)
          ;; v0.21.10: planning path resolution hardening (F7)
          (only-in "../../extensions/gsd/session-state.rkt" current-pinned-dir)
-         (only-in "builtin-helpers.rkt" require-safe-path!))
+         (only-in "builtin-helpers.rkt" require-safe-path! canonical-tool-path))
 
 (provide tool-write
          current-max-write-bytes
@@ -62,16 +63,15 @@
   ;; v0.21.10 (F7): Rewrite .planning/ paths to pinned project root FIRST
   ;; (before canonicalization, so prefix detection works on original path)
   (define resolved (and expanded (resolve-planning-path expanded)))
-  ;; SEC-02 (v0.22.0): Canonicalize path to prevent traversal attacks
+  ;; SEC-02 (v0.22.0): Canonicalize path to prevent traversal attacks.
+  ;; W2: shared canonical resolution (absolute + symlink-resolved), also used
+  ;; by find/read/edit, so the details 'path round-trips between tools. The
+  ;; execution working directory (path OR string, BUG-0089) is the base for
+  ;; relative inputs exactly as it is for read/edit.
   (define path-str
     (and resolved
-         (let ([p (if (string? resolved)
-                      resolved
-                      (path->string resolved))])
-           (with-handlers ([exn:fail? (lambda (e)
-                                        (log-warning "write: path canonicalization failed for ~a: ~a" p (exn-message e))
-                                        p)])
-             (path->string (simplify-path (resolve-path p)))))))
+         (path->string
+          (canonical-tool-path resolved (and exec-ctx (exec-context-working-directory exec-ctx))))))
   (cond
     [(not path-str) (make-error-result "Missing required argument: path")]
     [(require-safe-path! path-str "write")

@@ -39,18 +39,46 @@ by default. Review does not replace operator merge authorization. See the
 /go 2        # Start from wave 2
 ```
 
-**Executor scratch directory (sandbox-write-scratch-parity W1).** Each /go
-request allocates an opaque session token and the executor prompt designates
-`.planning/scratch/<token>/` (relative to the executor's current working
-directory; worktree-isolated executors resolve it inside their retained wave
-worktree) as the place for diagnostic scripts and probes. Create probe files
-with the structured write tool — missing parents are created automatically —
-not with shell redirection, which stays restricted to its own sanctioned
-scratch root, and never under `/tmp`, which stays denied. Scratch content is
-disposable: never reference it as a deliverable or verification receipt, and
-never commit it. Untracked files under `.planning/scratch/` are excluded from
-delivery evidence and do not block delivery synchronization; every other
-dirty state still refuses synchronization.
+**Executor scratch directory (one trusted per-session root).** The runtime
+allocates exactly ONE owner-only scratch root per session,
+`<platform-temp>/q-agent-scratch/<session-token>/` (`/tmp/q-agent-scratch/...`
+on POSIX), and the executor prompt advertises that exact absolute path. The
+same root is the one non-project location usable by the structured `write` and
+`edit` tools (missing parents are created after authorization), by the trusted
+worker's allowed roots, and by the bash redirection policy. The allocation
+container itself, sibling sessions, repository paths, and arbitrary `/tmp`
+paths are outside the sanctioned root; `mkdir` is unnecessary. Direct bash
+treats a redirect there as a destructive command: the default `warn` policy
+warns and still executes, while destructive blocking (the `block` policy or
+safe mode) and the sandbox worker refuse it with the sanctioned path in the
+message. Do not rely on warn mode as a write barrier. The token is opaque
+(crypto-random hex, or the runtime's per-request token) and never a model
+value; retries and worker requests within one session reuse the same root.
+
+Scratch is unavailable in safe mode. Safe mode is read-only: its allowlist
+blocks `bash`, `edit`, `write` and `delete-lines`, and a session scratch root
+is deliberately not a safe-mode write exception — `read`, `write`, `edit` and
+`delete-lines` all refuse it and stay bounded by the project root. Do not plan
+scratch work for a `--safe` run.
+
+The trusted scratch root travels only to the local worker. A remote executor
+request is built without a trusted scratch root, so remote execution has no
+sanctioned scratch destination by omission; there is no fallback to the
+allocation container, `/tmp`, or a coordinator-local path.
+
+The /go anchor prompt submitted for a fresh session deliberately names no
+scratch path: it is a display/legacy fallback for an unbound session, and the
+campaign interpreter advertises the exact per-attempt root in each wave prompt
+it actually runs (see [architecture](gsd-architecture.md#scratch)).
+
+Scratch is disposable: never reference it as a deliverable, approval, or
+verification receipt, never commit it, and never delete another session's
+scratch directory. Because it lives outside the checkout it never appears in
+delivery evidence. A leftover `.planning/scratch/<token>/` directory from an
+older session is no longer created, advertised or evidence-exempt by the
+executor, and the delivery tooling no longer grants it any tolerance: an
+untracked in-tree path is ordinary working-tree dirt and blocks
+synchronization until it is moved or removed by its owner.
 
 **Per-wave budget (v1.00.03).** Each wave runs with a bounded runtime budget
 (default **3600 s** = 1 hour). Override per campaign, in precedence order:
@@ -141,6 +169,101 @@ raco test tests/test-auth.rkt
 ## Done
 - Timeout budget expressed in seconds; unit test updated and passing
 ```
+
+### Required wave-doc contract (one source)
+
+The machine header and the required sections are ONE contract owned by
+`extensions/gsd/wave-docs.rkt` (`WAVE-DOC-*` constants); the planning prompt
+template is generated from those constants and `/go`'s wave-doc lint validates
+against the same values. A planning prompt and the validator therefore cannot
+disagree about the format.
+
+| Part | Requirement | Violation |
+|------|-------------|-----------|
+| Header | exactly one `# Wave <N>` H1, then exactly one `Status: <status>` line | `status-header` |
+| Second status | no second `Status:` line anywhere in the body | `duplicate-status` |
+| `## Files` | at least one `- File: <path>` bullet (singular, no prose) | `files` |
+| `## Verify` | non-empty (see the grammar below) | `verify` |
+| `## Done` | non-empty | `done` |
+
+Header statuses are the canonical vocabulary (plus documented legacy aliases
+`COMPLETED`, `PENDING`, `NOT STARTED`, `IN PROGRESS`). An unknown status is a
+typed rejection (`exn:fail:wave-status`) naming the value and the accepted
+spellings; it is never silently treated as `pending`. Writers emit canonical
+spellings only.
+
+### Verify grammar (`## Verify`)
+
+`## Verify` is read by ONE grammar (`verify-command-grammar.rkt`, re-exported
+by `verify-command-format.rkt`) shared by live execution, the frozen offline
+binding and the review-proof retention layer. It is deliberately not a shell
+parser, and `set -e` does not validate a pipeline: an ambiguous declaration
+refuses instead of guessing.
+
+Accepted declaration shapes:
+
+- **Backticked bullets** (`- ` / `* ` / `+ ` lines). Only backticked spans are
+  gates; any prose outside them is ignored. One rejected span voids the whole
+  declaration — there is no partial green.
+- **Single-line shell contract** (no newline). The text is passed through
+  byte-for-byte as one stage (legacy behavior), including `&&` chains that the
+  conservative splitter can parse.
+- **Fenced or unfenced multiline.** Stages are split on newlines and `&&` in
+  document order and executed as one fail-fast `&&` chain (`a && b && c`), so a
+  terminal zero exit cannot mask an earlier failing stage. A non-command line
+  in an unfenced section is a named rejection, never a launch through `/bin/sh`.
+
+A span is executable only when its first token names an accepted tool
+(`racket`, `raco`, `bash`, `sh`, `python`/`python3`/`pytest`, `npm`/`pnpm`/`yarn`,
+`make`, `git`, `cd`, `env`, `test`, `printf`), or it starts with `./` or
+`<project-base>`, or it uses the POSIX `[ ... ]` test form. Inside an accepted
+span the payload is not reinterpreted, so `bash -c '...'` is the supported way
+to express a compound check.
+
+Named rejections and refusals (each carries the offending span or the
+structural reason, and a safe next action):
+
+| Reason | Kind | Meaning |
+|--------|------|---------|
+| `unsupported-command` | rejection | first token is outside the accepted vocabulary (`ls`, `sed`, `cat`, `echo`, `node`, ...) |
+| `grep-exit-semantics` | rejection | bare `grep`/`egrep`/`fgrep`/`rg` (exit 0/1/2 cannot distinguish no-match from error) |
+| `inverted-command` | rejection | `! cmd` inverts an arbitrary exit status |
+| `bash-only-construct` | rejection | `[[ ... ]]` under `/bin/sh` semantics |
+| `ambiguous-shell-span` | rejection | semicolon, pipe, `&`, `$`, `<`, `>` inside a span the grammar cannot verify |
+| `prose-in-unfenced-multiline` | rejection | an English line in an unfenced multiline section |
+| `empty-declaration` | refusal | nothing declared |
+| `no-executable-command` | refusal | only prose / no backticked gate |
+| `ambiguous-grammar` | refusal | dangling `&&`, unbalanced or quoted delimiters, continuations, subshells, keywords |
+
+The examples below are the contract's own regression set: the docs-contract
+test (`tests/test-gsd-docs-contracts.rkt`) parses this block and checks every
+line against the shared parser. Format: `<ACCEPT|REJECT reason> | <declaration>`
+where the declaration uses the two characters `\n` for a line break.
+
+<!-- verify-grammar-examples:start -->
+```text
+ACCEPT | raco test tests/test-auth.rkt
+ACCEPT | raco make a.rkt && raco test tests/a.rkt
+ACCEPT | ./scripts/check.sh
+ACCEPT | bash -c 'test "$(grep -c TOKEN file)" -eq 0'
+ACCEPT | - `raco make a.rkt` compiles cleanly
+ACCEPT | - `racket tests/a.rkt` passes
+REJECT unsupported-command | - `ls -l` lists the directory
+REJECT grep-exit-semantics | - `grep TOKEN file` finds the token
+REJECT inverted-command | - `! grep -q TOKEN file` proves absence
+REJECT bash-only-construct | - `[[ -f a.rkt ]]` exists
+REJECT ambiguous-shell-span | - `for f in tests/*.rkt; do racket $f; done` green
+REJECT prose-in-unfenced-multiline | racket tests/a.rkt\nbad line here
+REJECT empty-declaration |
+REJECT no-executable-command | - all focused tests pass
+REJECT ambiguous-grammar | raco make a.rkt &&
+```
+<!-- verify-grammar-examples:end -->
+
+Never rely on `sed -i`, `echo >`, or shell pipelines inside `## Verify`: they
+are named rejections, and the coordinator runs the declaration through the
+owned verification lane, not your interactive shell.
+
 
 ### Deprecation: inline plan format (BUG-0035)
 
@@ -298,16 +421,68 @@ Old amendment proposals refuse; K and S remain separate decisions, with full
 C1/G1, baseline RED/candidate GREEN R1 and P/registration/readiness mandatory.
 BUG-0089 must be merged and installed before any live author attempt.
 
-## State Machine
+## Campaign lifecycle
+
+This is the ONE campaign-lifecycle diagram. `/go` evaluates it once per pass:
+one decision, one effect, one fenced commit. ADR-0011 and
+`gsd-architecture.md` link here instead of repeating it.
 
 ```
-idle → exploring → plan-written → executing → verifying → idle
-         ↑              ↑             ↑
-         └──────────────┴─────────────┘  (/replan)
+          .planning/PLAN.md + wave docs
+                     │  bound once: manifest + snapshot digest
+                     ▼
+            durable campaign record ────► decide-campaign-action  (pure, one action)
+                     ▲                                 │
+                     │                                 ├─ complete  all waves done/deferred, delivery proven
+                     │                                 ├─ launch    next actionable wave (lease + attempt fence)
+                     │                                 ├─ resume    one named lane effect, same attempt/fence
+                     │                                 ├─ finalize  authenticated merge proof ⇒ wave DONE
+                     │                                 ├─ block     typed denial (no fallback dispatch)
+                     │                                 └─ cancel    durable cancellation
+                     │                                 ▼
+                     └──── fenced commit + projections (PLAN.md row / wave header / STATE.md)
 ```
 
-| State | Write Guard | Tool Guard |
-|-------|-------------|------------|
+The campaign record is authoritative; `PLAN.md`, wave headers and `STATE.md`
+are projections. One pass yields exactly one of `complete`, `launch`,
+`resume`, `finalize`, `block` or `cancel`. Decisions choose behaviour from
+typed kinds, statuses, wave indices and one route symbol — never from a
+human-readable message.
+
+### Recovery table
+
+| Condition | What q does | What you may safely do |
+|-----------|-------------|------------------------|
+| Status-only edit to a live wave/PLAN row | Non-semantic: normalization excludes status markers, generated headers/prefixes and the `## Last Failure` span (its heading through the line before the next `#`/`##` heading); the SAME bound campaign resumes | Nothing. Run `/go` again. |
+| Structural edit (wave rows, titles, declared paths, plan body, `FILES`, constraints) | Refuses closed with the stored/recomputed/bound/live hashes and paths; never rebuilds or re-binds the snapshot | Stop editing, then create a corrected plan/scope as a NEW campaign. Never hand-edit durable campaign state to make it match. |
+| Missing/malformed frozen scope or `FILES` list | Refuses with the missing or non-literal scope class | Create a corrected new scope (new campaign) or use the existing explicit drift procedure. Deleting campaign state is not a repair. |
+| Malformed `## Verify` in a frozen wave | Named reason with the offending span, identical for live and frozen consumers | Correct the wave doc in a NEW scope; frozen evidence is never rewritten. |
+| Lease held by another live session | No launch. The OS advisory lock is authoritative; a lock FILE on disk alone proves nothing | Wait for the owner, or stop that session. There is no force-release command, by design. |
+| Interrupted attempt (crash, kill, timeout) | Replay from the durable journal/fences; an in-flight author, review, verification or supplemental attempt is never duplicated | Run `/go` again. Do not delete journal, receipt or fence files. |
+| Retained supplemental evidence blocks the wave | The secondary/idempotent seal runs first, then a typed denial; no ordinary author/coordinator fallback | Complete the owner T/K/S decisions (`/evidence-replan …`) or leave it retained. Never invent approvals. |
+| Review rejection | One durable retry with the findings by default; the new attempt gets a fresh session, attempt and fence | Let the retry run, or `/replan`. Do not rewrite review evidence. |
+| Delivery/merge proof missing or stale | `block`/`cancel` with the concrete reason; the wave is never marked DONE | Complete external delivery (merge authorization is operator-owned), then `/go`. |
+| Cancelled campaign | `cancel`: terminal, nothing is dispatched | Start a new campaign. `/reset` only changes planning mode; it does not rewrite durable state. |
+| Interrupted `/done` archive | Archiving only renames: files already moved are complete under `.planning/archive/<slug>/`, the rest are still complete in `.planning/`, no temporary or owned staging artifact is created, and unknown directories are untouched | Re-run `/done` (or `/done --force`) once the obstruction is cleared; do not hand-recreate or delete moved files. |
+| Unknown empty `.planning/<dir>` after `/done` | Preserved, never deleted: only the known `waves` directory or a directory an authentic ownership marker proves q created may be cleaned, and only when nothing else is left in it | Keep it if you want it. Only q-created leftovers are ever removed, so an unknown directory is yours. |
+
+The `## Last Failure` exclusion is span-exact: it starts at the `## Last
+Failure` heading and ends immediately before the next `#` or `##` heading (the
+hashes followed by a space or tab), or end of file. A `###` subheading does not
+end it. Everything inside that span — including `###` lines — is generated
+failure context, not authored input, so it is invisible to drift detection. Do
+not put authored content you need compared inside the span, and do not rely on
+a `###` heading to cut the exclusion short.
+
+## Mode machine
+
+The planning/execution mode guards are a separate machine from the campaign
+lifecycle above (see the diagram there for campaign routing):
+`idle → exploring → plan-written → executing → verifying → idle`, with
+`/replan` returning to `exploring`.
+
+| Mode | Write Guard | Tool Guard |
+|------|-------------|------------|
 | idle | None | None |
 | exploring | None | None |
 | plan-written | Blocks edit/write/bash | None |

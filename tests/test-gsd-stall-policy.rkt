@@ -19,6 +19,10 @@
          (only-in "../runtime/settings-core.rkt" q-settings)
          "../extensions/gsd/stall-policy.rkt"
          "../extensions/gsd/go-orchestrator.rkt"
+         (only-in "../extensions/gsd/wave-runner-port.rkt"
+                  wave-execution-outcome
+                  wave-execution-outcome/typed)
+         (only-in "../extensions/gsd/delivery-verifier.rkt" VERIFICATION-CODE-NO-CHANGE)
          (prefix-in s: "../extensions/gsd/stall-policy.rkt")
          (prefix-in g: "../extensions/gsd/go-orchestrator.rkt"))
 
@@ -128,6 +132,32 @@ prior context preserved — resume implementation from recorded state."))
                  'stall-terminal)
       (check-eq? (wave-failure-notification-kind "runner error") 'wave-failed)
       (check-eq? (wave-failure-notification-kind "") 'wave-failed))
+
+    (test-case "wave-failure-notification-kind is TYPED-first (wording mutation proof)"
+      ;; GSD simplification W5: the typed cause on the outcome decides. Every
+      ;; word of the message is mutated and the classification is unchanged...
+      (check-eq? (wave-failure-notification-kind
+                  (wave-execution-outcome/typed 'failed "MUTATED WORDING: nothing here" 'stall))
+                 'stall-terminal)
+      ;; ...and the same stall wording WITHOUT the typed cause still classifies
+      ;; through the dated reader (legacy producers keep working).
+      (check-eq? (wave-failure-notification-kind
+                  (wave-execution-outcome 'failed (stall-hard-failure-message 4 8 '("f.rkt"))))
+                 'stall-terminal)
+      ;; A typed outcome with ANY other cause is not a stall even if the text
+      ;; contains the historic prefix.
+      (check-eq?
+       (wave-failure-notification-kind
+        (wave-execution-outcome/typed 'failed (stall-hard-failure-message 4 8 '("f.rkt")) 'provider))
+       'wave-failed))
+
+    (test-case "the no-change verdict vocabulary agrees with the verifier owner"
+      ;; stall-policy's dated reader must map onto the SAME symbol
+      ;; delivery-verifier produces; the two modules stay dependency-free, so
+      ;; this assertion is the drift guard.
+      (check-eq? verification-cause-no-change VERIFICATION-CODE-NO-CHANGE)
+      (check-eq? (no-change-rejection? "no wave target files changed: q/a.rkt")
+                 (eq? verification-cause-no-change VERIFICATION-CODE-NO-CHANGE)))
 
     ;; ---- 6. gsd-stall-exn protocol -----------------------------------------
 

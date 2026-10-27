@@ -1,10 +1,10 @@
 #lang racket/base
 
 ;; Generic same-attempt repair-tail recovery entry.  This module is deliberately
-;; independent from go-orchestrator.rkt but repeats its advisory lock protocol
-;; byte-for-byte at the filesystem boundary: stable .lock path, can-update open,
-;; exclusive port lock, truncate+owner diagnostics, dynamic-wind release, and no
-;; fence mutation.
+;; independent from go-orchestrator.rkt but uses the ONE campaign lease module
+;; (campaign-lease.rkt) for the filesystem boundary: the same stable .lock path,
+;; can-update open, exclusive OS lock, truncate+owner diagnostics, and
+;; dynamic-wind release, with no fence mutation.
 
 (require json
          racket/file
@@ -16,6 +16,9 @@
          racket/string
          racket/system
          (only-in "attempt-artifacts.rkt" record-wave-delivery!)
+         (only-in "campaign-lease.rkt"
+                  acquire-lease
+                  release-lease!)
          (only-in "campaign-repository.rkt" load-campaign-record)
          (only-in "planning-paths.rkt" campaign-record-file)
          (only-in "campaign-state.rkt"
@@ -53,6 +56,8 @@
 
 (struct recovery-result (status reason actions details) #:transparent)
 
+(define gsd-recovery-lease-owner "gsd-recover-delivery")
+
 (define sha-rx #px"^[0-9a-f]{40}$")
 (define plan-rx #px"^[0-9a-f]{64}$")
 
@@ -83,44 +88,17 @@
        (raise-argument-error 'current-gsd-recovery-github-origin? "(procedure-arity-includes/c 1)" v))
      v)))
 
-(struct campaign-lease (path port owner-pid owner-session) #:mutable)
-
-(define (lease-path base-dir plan-id)
-  (build-path base-dir ".planning" "campaigns" (string-append plan-id ".lock")))
-
-(define (acquire-lease base-dir plan-id #:session-id [session-id "gsd-recover-delivery"])
-  (define p (lease-path base-dir plan-id))
-  (define-values (dir _ __) (split-path p))
-  (make-directory* dir)
-  (with-handlers ([exn:fail:filesystem? (lambda (_) #f)])
-    (define port (open-output-file p #:exists 'can-update))
-    (if (port-try-file-lock? port 'exclusive)
-        (begin
-          (let ([owner
-                 (if (and (string? session-id) (not (string=? session-id ""))) session-id "unknown")])
-            (file-truncate port 0)
-            (file-position port 0)
-            (write (hasheq 'owner owner 'pid (getpid) 'acquired (current-seconds)) port)
-            (flush-output port)
-            (campaign-lease p port (current-seconds) owner)))
-        (begin
-          (close-output-port port)
-          #f))))
-
-(define (release-lease! lease)
-  (when (and lease (campaign-lease? lease))
-    (with-handlers ([exn:fail? void])
-      (port-file-unlock (campaign-lease-port lease))
-      (close-output-port (campaign-lease-port lease)))))
-
 (define (with-recovery-lease root plan apply? thunk)
   ;; Dry-runs are advisory and intentionally side-effect free: they do not
   ;; acquire the campaign OS lock because acquiring it truncates/writes owner
   ;; diagnostics.  The full lock serialization guarantee applies to --apply.
+  ;; The lease itself is campaign-lease.rkt's ONE implementation; only the
+  ;; recorded owner string is recovery-specific (unchanged from the pre-W3
+  ;; duplicate, so existing lock diagnostics stay readable).
   (cond
     [(not apply?) (thunk)]
     [else
-     (define lease (acquire-lease root plan))
+     (define lease (acquire-lease root plan #:session-id gsd-recovery-lease-owner))
      (cond
        [(not lease) (refused 'lock-busy)]
        [else (dynamic-wind void (lambda () (thunk)) (lambda () (release-lease! lease)))])]))

@@ -30,9 +30,11 @@
                   campaign-result-message
                   campaign-result-diagnostics
                   campaign-result-code
+                  campaign-result-findings
                   campaign-diagnostics
                   campaign-result-with-diagnostics
                   campaign-result-with-diagnostic
+                  campaign-result-with-findings
                   campaign-result-with-completed
                   render-campaign-stop-text))
 
@@ -243,4 +245,27 @@
     (check-eq? (campaign-result-status blocked-propagated) 'wave-blocked)
     (check-eq? (campaign-result-code blocked-propagated) 'wave-predecessor-unproven)
     (check-true (string-contains? (render-campaign-stop-text blocked-propagated)
-                                  "Next action: bind the merge SHA"))))
+                                  "Next action: bind the merge SHA")))
+
+  ;; ── 8. Typed findings survive envelope replacement (W5) ──────────────────
+  (test-case "typed findings survive a decision-envelope replacement"
+    (define findings '("fix the quoted delimiter" "second finding"))
+    (define rejected
+      (campaign-result-with-findings (campaign-result 'wave-blocked '() "blocked by review rejection")
+                                     findings))
+    (check-equal? (campaign-result-findings rejected) findings)
+    ;; The coordinator attaches its own decision envelope afterwards; the
+    ;; findings must not be dropped (no message re-parse is possible later).
+    (define decided
+      (campaign-result-with-diagnostics rejected (campaign-diagnostics 'coordinator-step)))
+    (check-eq? (campaign-result-code decided) 'coordinator-step)
+    (check-equal? (campaign-result-findings decided) findings)
+    (check-equal? (campaign-result-status decided) 'wave-blocked)
+    (check-equal? (campaign-result-message decided) "blocked by review rejection"))
+
+  (test-case "findings only carry real strings and default to empty"
+    (check-equal? (campaign-result-findings (campaign-result 'wave-failed '() "x")) '())
+    (check-equal?
+     (campaign-result-findings (campaign-result-with-findings (campaign-result 'wave-failed '() "x")
+                                                              '("" #f "kept")))
+     '())))

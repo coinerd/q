@@ -14,14 +14,18 @@
 (require racket/string
          racket/control
          "../../util/loop-result.rkt"
-         (only-in "wave-runner-port.rkt" wave-execution-outcome)
+         (only-in "wave-runner-port.rkt"
+                  wave-execution-outcome
+                  wave-execution-outcome/typed
+                  OUTCOME-CAUSE-PROVIDER
+                  OUTCOME-CAUSE-EMPTY-RESPONSE)
          (only-in "wave-executor.rkt"
                   default-run-git
                   git-result-code
                   git-result-stdout
                   wave-worktree-path)
          (only-in "events.rkt" emit-gsd-event!)
-         (only-in "stall-policy.rkt" stall-cause-message?)
+         (only-in "stall-policy.rkt" stall-cause-message? STALL-CAUSE-CODE)
          (only-in "policy.rkt"
                   current-gsd-campaign-infra-retries
                   current-gsd-campaign-infra-retry-delay
@@ -90,20 +94,26 @@
         ;; BUG-0059: exhausting the loop-local output nudge is a transient
         ;; provider/infrastructure outcome, not evidence that implementation
         ;; failed. The campaign-level infra budget remains the hard bound.
-        (wave-execution-outcome
+        (wave-execution-outcome/typed
          'infra-failed
-         "model returned an empty response — wave preserved (attempt not consumed)")]
+         "model returned an empty response — wave preserved (attempt not consumed)"
+         OUTCOME-CAUSE-EMPTY-RESPONSE)]
        [(let ([e (hash-ref metadata 'error #f)]) (stall-cause-message? e))
         ;; BUG-0037 W1: watchdog kill → retryable infrastructure, bounded
         ;; auto-resume with prior-attempt context (never a manual /retry).
-        (wave-execution-outcome 'infra-failed
-                                (format "~a attempt preserved for automatic re-attempt"
-                                        (hash-ref metadata 'error "")))]
+        ;; The loop-result metadata string is the runtime boundary this
+        ;; DATED reader exists for; the OUTCOME carries the typed cause.
+        (wave-execution-outcome/typed 'infra-failed
+                                      (format "~a attempt preserved for automatic re-attempt"
+                                              (hash-ref metadata 'error ""))
+                                      STALL-CAUSE-CODE)]
        [(infra-failure? result)
         ;; D8 (#9357): transient provider/network/SSE failure — distinct
         ;; outcome so run-campaign-wave can preserve the attempt.
-        (wave-execution-outcome 'infra-failed
-                                "provider/network failure — wave preserved (attempt not consumed)")]
+        (wave-execution-outcome/typed
+         'infra-failed
+         "provider/network failure — wave preserved (attempt not consumed)"
+         OUTCOME-CAUSE-PROVIDER)]
        [else (wave-execution-outcome 'failed (format "termination reason: ~a" termination))])]
     [(eq? result 'completed) (wave-execution-outcome 'done "")]
     [(eq? result 'ok) (wave-execution-outcome 'done "")]

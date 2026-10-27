@@ -10,6 +10,7 @@
 ;; v0.32.5 W0: Test scaffolding
 
 (require rackunit
+         racket/string
          "../extensions/gsd/wave-status.rkt")
 
 (test-case "STATUS constants are correct"
@@ -89,11 +90,44 @@
   (check-false (wave-status-recognized? "CANCELLED"))
   (check-false (wave-status-recognized? "unknown")))
 
-(test-case "unknown input keeps the pre-W1 pending fallback (no silent new meaning)"
-  (check-eq? (wave-status-symbol "CANCELLED") 'pending)
-  (check-eq? (wave-status-symbol "REWORK") 'pending)
-  (check-eq? (wave-status-symbol "") 'pending)
-  (check-false (wave-status-canonical "CANCELLED")))
+(test-case "unknown input is a TYPED rejection, never a pending fallback (W5, R-019)"
+  (for ([bad (in-list '("CANCELLED" "REWORK" "" "nonsense"))])
+    (define ex
+      (with-handlers ([exn:fail:wave-status? values])
+        (wave-status-symbol bad)
+        #f))
+    (check-not-false ex (format "~s must be rejected, not coerced" bad))
+    (when ex
+      (check-equal? (exn:fail:wave-status-value ex) bad)
+      (check-true (list? (exn:fail:wave-status-accepted ex)))
+      (check-not-false (member "PENDING" (exn:fail:wave-status-accepted ex)))
+      (check-not-false (member "COMPLETED" (exn:fail:wave-status-accepted ex)))
+      (check-not-false (member "IN PROGRESS" (exn:fail:wave-status-accepted ex)))
+      (check-false (exn:fail:wave-status-context ex))
+      (check-true (string-contains? (exn-message ex) "unknown wave status"))
+      (check-true (string-contains? (exn-message ex) "defaulting to `pending`"))))
+  ;; ...also for symbol input outside the vocabulary.
+  (check-true (with-handlers ([exn:fail:wave-status? (lambda (e) #t)])
+                (wave-status-symbol 'rework)
+                #f))
+  ;; The pure lookup still answers "not recognized" without raising.
+  (check-false (wave-status-canonical "CANCELLED"))
+  (check-false (wave-status-canonical "rework")))
+
+(test-case "comparison keys describe an unknown status explicitly (never as pending)"
+  (for ([bad (in-list '("CANCELLED" "REWORK" ""))])
+    (define key (wave-status-comparison-key bad))
+    (check-not-eq? key 'pending)
+    (check-equal? (car key) 'unknown)
+    (check-equal? (cadr key) (string-upcase (string-trim bad))))
+  ;; Same claim compares equal; a different claim does not.
+  (check-equal? (wave-status-comparison-key "CANCELLED")
+                (wave-status-comparison-key "cancelled"))
+  (check-not-equal? (wave-status-comparison-key "CANCELLED")
+                    (wave-status-comparison-key "PENDING"))
+  ;; Known spellings compare by canonical symbol, exactly as before.
+  (check-eq? (wave-status-comparison-key "COMPLETED") 'done)
+  (check-eq? (wave-status-comparison-key "Inbox") 'pending))
 
 (test-case "DEFERRED is disjoint from DONE/CANCELLED status semantics"
   ;; Deferred is its own status: never completed, actionable, or retryable.

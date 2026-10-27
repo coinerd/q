@@ -11,7 +11,7 @@
          racket/string
          racket/format
          racket/set
-         (only-in racket/random crypto-random-bytes)
+         racket/os
          json
          "../define-extension.rkt"
          "../ext-commands.rkt"
@@ -39,11 +39,21 @@
                   reset-all-gsd-state!)
          "../gsd/plan-types.rkt"
          "../gsd/plan-validator.rkt"
+         ;; W5 (R-019): the shared typed unknown-status rejection. /go catches
+         ;; it and returns an ordinary error result; it is never uncaught.
+         (only-in "../gsd/wave-status.rkt" exn:fail:wave-status?)
          (except-in "../gsd/wave-executor.rkt" next-pending-wave)
          "../gsd/prompts.rkt"
          "../gsd/context-bundle.rkt"
          "../gsd/wave-docs.rkt"
          (only-in "../gsd/planning-paths.rkt" [waves-dir planning-waves-dir])
+         ;; W4: the ONE authentic ownership-marker predicate (real nofollow
+         ;; marker, hash datum, schema-version 1, matching kind). Rotation of the
+         ;; pre-plan wave backup is allowed only for a PROVEN owned backup.
+         (only-in "../gsd/planning-artifact-ownership.rkt"
+                  authentic-planning-artifact-marker?
+                  planning-artifact-marker-filename)
+         (only-in "../../tools/scratch.rkt" fresh-scratch-token)
          "tool-handlers.rkt"
          (only-in "../gsd/archive.rkt" ensure-state-md!)
          (only-in "../gsd/events.rkt"
@@ -95,7 +105,7 @@
           [handle-go-command (-> (or/c path-string? #f) string? hook-result?)]
           [build-single-wave-prompt
            (->* (path-string? gsd-plan? exact-nonnegative-integer?)
-                (#:scratch-token (or/c string? #f) #:scratch-root-abs (or/c string? #f))
+                (#:scratch-token (or/c string? #f) #:scratch-root-abs (or/c path-string? #f))
                 string?)]
           [handle-gsd-status (-> hook-result?)]
           [handle-artifact-command (-> string? string? (or/c path-string? #f) hash? hook-result?)]
@@ -110,7 +120,8 @@
          extract-task-summary
          extract-last-failure
          fresh-executor-scratch-token
-         executor-scratch-root-abs)
+         supersede-waves-dir!
+         waves-backup-marker-filename)
 
 ;; ============================================================
 ;; Command registration
@@ -294,8 +305,16 @@
   (match plan-content
     [#f (list 'error "No PLAN found in .planning/. Use /plan <task> to create one.")]
     [_
-     (define kernel (validate-plan-artifacts base-dir))
+     ;; W5: a typed unknown-status diagnostic that escapes the preflight
+     ;; kernel is still a normal /go rejection, never an uncaught exception.
+     (define kernel
+       (with-handlers ([exn:fail:wave-status? (lambda (ex) ex)])
+         (validate-plan-artifacts base-dir)))
      (cond
+       [(exn:fail:wave-status? kernel)
+        (list 'error
+              (format "Plan validation failed:\n~a\n\nFix the plan before using /go."
+                      (exn-message kernel)))]
        [(not (hash-ref kernel 'ok?)) (list 'error (hash-ref kernel 'error-message))]
        [else
         (define plan (hash-ref kernel 'plan))
@@ -384,36 +403,20 @@
        "\n## Task Summary (DO NOT FORGET)\nYou are implementing: ~a\nStay focused on this task.\n"
        (string-join wave-titles ", "))))
 
-;; ── Executor scratch guidance (sandbox-write-scratch-parity W1) ──────
+;; ── Executor scratch guidance (W2 trusted allocation; W4 cleanup) ────
 
 ;; Runtime-owned opaque token. Allocated ONCE per /go request — not per
 ;; prompt-formatting call — so same-session retries and re-anchors reuse one
 ;; scratch destination while fresh /go sessions get distinct ownership.
+;;
+;; W4: the token is the session component of the ONE trusted allocation
+;; (tools/scratch.rkt). The old `.planning/scratch/<token>` root prediction is
+;; gone: prompts allocate/advertise the single trusted root themselves and
+;; explicitly refuse a legacy `.planning/scratch` value, so computing one here
+;; was dead plumbing that could only mislead a caller. No second writable
+;; scratch location is advertised for new sessions.
 (define (fresh-executor-scratch-token)
-  (define b (crypto-random-bytes 8))
-  (apply string-append
-         (for/list ([v (in-bytes b)])
-           (define s (number->string v 16))
-           (if (= (string-length s) 1)
-               (string-append "0" s)
-               s))))
-
-;; Runtime-owned root resolution: the executor worker's writable root is its
-;; session cwd — the retained wave worktree when worktree isolation resolves
-;; ON (deterministic naming; created by go-orchestrator's run-isolated), else
-;; the project base dir. Pure prediction that matches both the initial /go
-;; prompt extent and the retry extent. If isolation later falls back to the
-;; shared checkout (worktree creation failure), the cwd-relative contract in
-;; the guidance text stays authoritative; a stale absolute path is either
-;; denied with self-diagnosing roots or unused — roots are never widened.
-(define (executor-scratch-root-abs base-dir campaign-id wave-idx scratch-token)
-  (path->string (simplify-path (build-path (if (worktree-isolation-enabled?)
-                                               (wave-worktree-dir base-dir campaign-id wave-idx)
-                                               (path->complete-path base-dir))
-                                           ".planning"
-                                           "scratch"
-                                           scratch-token)
-                               #f)))
+  (fresh-scratch-token))
 
 ;; build-go-prompt : path? string? (or/c gsd-plan? #f) any/c string? gsd-plan? -> (values string? string?)
 ;; Assemble augmented prompt text and display text for /go.
@@ -738,19 +741,11 @@
                            #:when (eq? (campaign-wave-status w) 'done))
                   (campaign-wave-index w))
                 0))
-          ;; sandbox-write-scratch-parity W1: allocate the executor scratch
-          ;; token ONCE per /go request (same-session retries reuse it; fresh
-          ;; sessions get distinct ownership). The absolute root is resolved
-          ;; PER WAVE inside the prompt closure: it runs in the campaign
-          ;; thread after apply-worktree-isolation-setting! has reconciled
-          ;; the flag, and each wave resolves its own worktree root, so the
-          ;; advertised absolute path tracks the executor's actual worker
-          ;; root. The initial 'new-session prompt resolves for the anchor
-          ;; wave in this extent.
+          ;; W2: ONE opaque scratch token per /go request. The campaign
+          ;; interpreter allocates a distinct trusted root per executor session
+          ;; from it (tools/scratch.rkt) and advertises exactly that root; no
+          ;; per-wave `.planning/scratch` path is predicted here anymore.
           (define scratch-token (fresh-executor-scratch-token))
-          (define scratch-root-for
-            (lambda (wave-idx)
-              (executor-scratch-root-abs base-dir (campaign-plan-id rec) wave-idx scratch-token)))
           ;; v1.00.17 W3 (#9514): role-anchor the wave-executor session. If a
           ;; turn ends reasoning-only, the runtime's empty-response retry
           ;; re-sends THIS re-anchor prompt (verbatim executor role + order to
@@ -766,18 +761,25 @@
                  (format "W~a: ~a" (gsd-wave-index reanchor-wave) (gsd-wave-title reanchor-wave))
                  "delivery-only: all implementation waves complete")
              "(session start — no tool has run yet in this session)"))
+          ;; W2: per-executor-session scratch ownership. The prompt builder
+          ;; takes the exact root the campaign interpreter allocated for the
+          ;; session it is about to create; forwarding only the root the
+          ;; allocator handed us keeps the advertised path and the session's
+          ;; real allowance identical. When no root is supplied (legacy
+          ;; one-argument callers/tests) no scratch path is advertised at all.
+          (define (wave-prompt wave-idx [scratch-root #f])
+            (gsm-ctx-transition-to! gsd-ctx 'executing)
+            (build-single-wave-prompt base-dir
+                                      plan
+                                      wave-idx
+                                      #:scratch-token (and scratch-root scratch-token)
+                                      #:scratch-root-abs scratch-root))
           (parameterize ([current-empty-response-nudge reanchor])
             (define request
               (make-campaign-request
                base-dir
                rec
-               (lambda (wave-idx)
-                 (gsm-ctx-transition-to! gsd-ctx 'executing)
-                 (build-single-wave-prompt base-dir
-                                           plan
-                                           wave-idx
-                                           #:scratch-token scratch-token
-                                           #:scratch-root-abs (scratch-root-for wave-idx)))
+               wave-prompt
                (make-delivery-verifier base-dir plan (campaign-record-created-at rec))
                #:timeout-sec effective-timeout
                ;; B2b/C: the /go request carries the production delivery
@@ -793,16 +795,21 @@
                ;; parsed out of /go <args> by command-parser.rkt flows onto
                ;; the request; execute-campaign-request! then bypasses the
                ;; version-freshness refusal and records stale-override: true.
-               #:allow-stale? (command-allow-stale? input-text)))
+               #:allow-stale? (command-allow-stale? input-text)
+               ;; W2: the opaque scratch token travels with the request because
+               ;; the wave runner (a separate thread) allocates the executor
+               ;; session's root from it. It is never model input and never a
+               ;; path.
+               #:scratch-token scratch-token))
             (hook-amend (hasheq 'campaign-token
                                 (register-campaign-request! request)
                                 'new-session
-                                (build-single-wave-prompt base-dir
-                                                          plan
-                                                          anchor-wave-idx
-                                                          #:scratch-token scratch-token
-                                                          #:scratch-root-abs
-                                                          (scratch-root-for anchor-wave-idx))
+                                ;; W2: this anchor text is a display/legacy
+                                ;; fallback, not a bound executor session, so it
+                                ;; deliberately advertises NO scratch path: the
+                                ;; campaign interpreter advertises the exact
+                                ;; per-session root in each wave prompt it runs.
+                                (build-single-wave-prompt base-dir plan anchor-wave-idx)
                                 'text
                                 (append-divergence-warnings
                                  (if delivery-pending
@@ -923,6 +930,67 @@
 ;; Artifact display and /plan <text> handler
 ;; ============================================================
 
+;; `/plan <text>` must never destroy wave documents from an earlier campaign
+;; (BUG-0032). It moves the previous waves directory aside and keeps ONE owned
+;; backup (rotation — R-007 churn stays bounded).
+;;
+;; W4: rotation is allowed ONLY when the existing backup is PROVEN ours. A
+;; directory that merely carries the historical name (an operator's manual
+;; backup, a `.bak` copy, another tool's backup) is preserved verbatim: it is
+;; neither deleted nor moved, and this operation supersedes under a fresh
+;; numbered sibling instead. No unknown file is ever guessed away. Ownership is
+;; decided by planning-artifact-ownership.rkt, the ONE predicate the snapshot
+;; sweep, the doctor and archive cleanup also consume.
+(define waves-backup-marker-filename
+  (planning-artifact-marker-filename 'waves-pre-plan-backup))
+
+(define (owned-waves-backup-dir? dir)
+  (and (not (link-exists? dir))
+       (directory-exists? dir)
+       (authentic-planning-artifact-marker? dir 'waves-pre-plan-backup)))
+
+(define (write-waves-backup-marker! dir)
+  (call-with-output-file (build-path dir waves-backup-marker-filename)
+                         (lambda (out)
+                           (write (hasheq 'schema-version
+                                          1
+                                          'kind
+                                          'waves-pre-plan-backup
+                                          'pid
+                                          (getpid)
+                                          'created-at
+                                          (current-seconds))
+                                  out))
+                         #:exists 'truncate))
+
+;; supersede-waves-dir! : path-string? -> (or/c path? #f)
+;; Move the current .planning/waves aside and return the backup path, or #f
+;; when there was nothing to preserve. The caller recreates an empty waves dir.
+(define (supersede-waves-dir! base-dir)
+  (define waves-dir (planning-waves-dir base-dir))
+  (cond
+    [(not (directory-exists? waves-dir)) #f]
+    [else
+     (define planning-dir (build-path base-dir ".planning"))
+     (define canonical (build-path planning-dir "waves-pre-plan-backup"))
+     (define target
+       (cond
+         [(or (not (directory-exists? canonical))
+              (owned-waves-backup-dir? canonical))
+          canonical]
+         [else
+          ;; Unknown backup present: preserve it and pick a fresh sibling.
+          (let loop ([n 1])
+            (define candidate (build-path planning-dir (format "waves-pre-plan-backup-~a" n)))
+            (if (directory-exists? candidate)
+                (loop (add1 n))
+                candidate))]))
+     (when (directory-exists? target)
+       (delete-directory/files target))
+     (rename-file-or-directory waves-dir target)
+     (write-waves-backup-marker! target)
+     target]))
+
 ;; R-04/R-16: Focused handler for /plan <text> submit
 (define (handle-plan-submit plan-text base-dir input-text parsed)
   (define saved-bus (current-gsd-event-bus)) ;; Preserve event bus across reset
@@ -931,15 +999,13 @@
   ;; Clean old wave files to prevent stale state (fast: delete+recreate dir).
   ;; BUG-0032 fix: a bare delete here wiped ACTIVE campaign wave docs whenever
   ;; /plan <text> ran mid-campaign (observed twice live, 2026-08-25). Back up
-  ;; the previous waves dir instead of destroying it; the backup is rotated.
+  ;; the previous waves dir instead of destroying it; the backup is rotated
+  ;; only when it is PROVEN ours (supersede-waves-dir!), so an unknown
+  ;; operator backup/`.bak` is preserved instead of deleted.
   (define waves-dir (planning-waves-dir base-dir))
-  (define waves-backup-dir (build-path base-dir ".planning" "waves-pre-plan-backup"))
   (with-handlers ([exn:fail? (lambda (e)
                                (log-debug "gsd: wave dir cleanup failed: ~a" (exn-message e)))])
-    (when (directory-exists? waves-dir)
-      (when (directory-exists? waves-backup-dir)
-        (delete-directory/files waves-backup-dir))
-      (rename-file-or-directory waves-dir waves-backup-dir)))
+    (void (supersede-waves-dir! base-dir)))
   (make-directory* waves-dir)
   (when saved-bus
     (set-gsd-event-bus! saved-bus))

@@ -62,8 +62,7 @@
                   delivery-verification-approved?
                   delivery-verification-evidence
                   delivery-verification-message
-                  changed-files-set
-                  scratch-probe-path?)
+                  changed-files-set)
          (only-in "../extensions/gsd/composition-root.rkt" current-gsd-verification-registry)
          (only-in "../extensions/gsd/verification-job.rkt" make-verification-registry))
 
@@ -130,7 +129,10 @@
       (check-true (pair? (delivery-verification-evidence result)))
       (cleanup-tmp base))
 
-    (test-case "W1 scratch: untracked executor probes under .planning/scratch/ are not delivery evidence"
+    (test-case "W2: retired .planning scratch is ordinary delivery evidence again"
+      ;; Executor scratch moved to one trusted session root below the platform
+      ;; temporary directory in W2; no in-tree scratch exemption may remain, or
+      ;; a probe could silently dirty a delivery verdict.
       (define base (make-tmp-git-repo))
       (define repo (build-path base "q"))
       (make-directory* (build-path repo ".planning" "scratch" "tok1234567890ab"))
@@ -139,12 +141,8 @@
       (call-with-output-file (build-path repo "probe-real.txt") (lambda (out) (display "real\n" out)))
       (define evidence (changed-files-set base repo))
       (check-true (set-member? evidence "probe-real.txt"))
-      (check-false (for/or ([p (in-set evidence)])
-                     (scratch-probe-path? p))
-                   "scratch probes must not enter delivery evidence")
-      (check-true (scratch-probe-path? ".planning/scratch/tok1234567890ab/probe.rkt"))
-      (check-false (scratch-probe-path? ".planning/scratch-elsewhere/x")
-                   "prefix must end at the scratch directory boundary")
+      (check-true (set-member? evidence ".planning/scratch/tok1234567890ab/probe.rkt")
+                  "an untracked in-tree scratch probe is evidence again")
       (cleanup-tmp base))
 
     (test-case "rejects when git not available"

@@ -24,7 +24,7 @@
 
 (require racket/list
          racket/string
-         (only-in "review-checkpoint.rkt" resolve-review-checkpoint! pending-review-rejection-message)
+         (only-in "review-checkpoint.rkt" resolve-review-checkpoint! pending-review-rejection-data)
          (only-in "author-checkpoint.rkt"
                   resolve-author-checkpoint!
                   resolve-supplemental-author-checkpoint!
@@ -67,11 +67,25 @@
                   mark-attempt-artifact-terminal!)
          (only-in "delivery-verifier.rkt" branch-delivery-context-ref)
          (only-in "delivery-coordinator.rkt"
+                  delivery-outcome
                   delivery-outcome?
                   delivery-outcome-kind
-                  delivery-outcome-message)
-         (only-in "campaign-result.rkt" campaign-result)
-         (only-in "delivery-handoff.rkt" delivery-readback)
+                  delivery-outcome-message
+                  delivery-outcome-data
+                  review-rejected-message)
+         (only-in "campaign-result.rkt"
+                  campaign-result
+                  campaign-result?
+                  campaign-result-status
+                  campaign-result-message
+                  campaign-result-with-findings)
+         ;; W3: the ONE pure campaign decision + the authenticated delivery
+         ;; readback adapter that feeds it.
+         "campaign-decision.rkt"
+         (only-in "delivery-handoff.rkt"
+                  delivery-readback
+                  campaign-delivery-view-for-pass
+                  pending-delivery-message)
          (only-in "reconciliation-checkpoint.rkt"
                   run-tracker-reconciliation!
                   reconciliation-checkpoint-result-status
@@ -93,8 +107,11 @@
          journal-review-infra-count
          run-delivery-finalization
          run-coordinator-checkpoint
-         coordinator-checkpoint-result
-         wave-blocked-checkpoint-result!
+         (struct-out campaign-outcome)
+         campaign-lane-view-for-wave
+         gather-campaign-views
+         run-campaign-resume!
+         run-campaign-block!
          park-approved-attempt-result!)
 
 ;; ============================================================
@@ -324,25 +341,276 @@
                       (reverse completed)
                       "delivery provenance changed during finalization")]))
 
+;; ============================================================
+;; W3: lane facts, the resume effect interpreter, and the block
+;; effect (secondary/idempotent) that precedes a typed denial
+;; ============================================================
+
+;; Durable lane facts for ONE wave. Reads only: the pure decision
+;; (campaign-decision.rkt) chooses the route from these facts. Probe failures
+;; are fail-closed to "no such lane" — every probe below already treats a
+;; malformed/absent artifact as absent, so an exception here is an unexpected
+;; read failure, never permission.
+(define (campaign-lane-view-for-wave dir plan-id wave-index)
+  (define (safe thunk)
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (thunk)))
+  (define journal (and wave-index (delivery-journal-snapshot dir plan-id wave-index)))
+  (campaign-lane-view
+   wave-index
+   journal
+   (and wave-index (safe (lambda () (supplemental-author-pending? dir plan-id wave-index))))
+   (and wave-index (safe (lambda () (supplemental-resumable? dir plan-id wave-index))))
+   (and wave-index (safe (lambda () (supplemental-pointer-retained? dir plan-id wave-index))))
+   (and wave-index (safe (lambda () (author-repair-pending? dir plan-id wave-index))))
+   (and journal
+        (let ([marker (journal-evidence-author-repair journal)])
+          (and marker (equal? (hash-ref marker 'state #f) "running"))))
+   (and journal (pending-review-rejection-data journal))))
+
+;; The outcome of performing ONE decided resume/block route.
+;; kind ∈ advance cancelled blocked. `typed` carries a decision-shaped denial
+;; unchanged (the retained-supplemental entry seam returns the protected
+;; operation's own campaign result); the campaign loop promotes it so a
+;; secondary seal never erases the primary cause.
+(struct campaign-outcome (kind reason typed) #:transparent)
+
 ;; BUG-0088 C1: an authenticated active supplemental operation past its launch
 ;; boundary resumes HERE, between wave passes, under the held campaign lease —
 ;; WITHOUT beginning a new attempt (never re-reserves). One advance per
 ;; checkpoint visit; the private CAS journal is the durable progress proof,
 ;; so the existing no-spin law stays intact through 'advance only when the
 ;; protected operation actually moved.
-(define (supplemental-checkpoint-visit! dir plan-id idx on-cancel on-advance on-blocked)
+(define (supplemental-checkpoint-visit! dir plan-id idx)
   (define record (load-campaign-record dir plan-id))
   (if (and record (campaign-record-cancellation record))
-      (on-cancel "campaign cancellation requested")
+      (campaign-outcome 'cancelled "campaign cancellation requested" #f)
       (let-values ([(verdict detail) (supplemental-checkpoint-step! dir plan-id idx)])
         (case verdict
-          [(advance) (on-advance)]
-          [else (on-blocked detail)]))))
+          [(advance) (campaign-outcome 'advance #f #f)]
+          [else (campaign-outcome 'blocked detail #f)]))))
 
-;; Run one delivery-coordinator step and classify it. A typed 'ok re-enters the
-;; loop ONLY when the durable delivery journal actually moved; a coordinator
-;; that claims progress without a durable transition is a clean, resumable
-;; block (never an infinite spin, never a false DONE).
+;; Typed terminal payload for a BLOCKED review rejection: the wave-blocked
+;; result carries the reviewer's findings as structured diagnostics, so no
+;; consumer ever re-parses the operator message to recover them. #f when the
+;; outcome carried no typed payload (legacy coordinator) or no findings.
+(define (review-rejection-blocked-result reason outcome*)
+  (define data (and (delivery-outcome? outcome*) (delivery-outcome-data outcome*)))
+  (define findings (and (hash? data) (hash-ref data 'findings #f)))
+  (and findings
+       (campaign-result-with-findings
+        (campaign-result 'wave-blocked '() (honest-blocked-reason reason))
+        findings)))
+
+;; Classify a lane step after its effect: the durable journal must actually
+;; have moved; a coordinator that claims progress without a durable transition
+;; must not spin, and the author/review checkpoints keep their existing
+;; resolution attempts. Identical classification to the pre-W3 code, now
+;; reached from every route instead of one else-branch.
+(define (classify-lane-effect! dir
+                               plan-id
+                               idx
+                               before
+                               after
+                               outcome*
+                               cancelled?
+                               message
+                               author-session-live?)
+  (define kind (and outcome* (delivery-outcome-kind outcome*)))
+  (case (coordinator-checkpoint-decision kind before after cancelled?)
+    [(cancelled) (campaign-outcome 'cancelled "campaign cancellation requested" #f)]
+    [(advance)
+     ;; BUG-0084: any genuine advance ends the current review round — its infra
+     ;; budget is refreshed for the next round.
+     (unless (eq? kind 'review-infra-retry)
+       (clear-review-infra-count! dir plan-id idx))
+     (campaign-outcome 'advance #f #f)]
+    [else
+     (define resolved
+       (cond
+         [(and idx (author-repair-pending? dir plan-id idx))
+          ;; BUG-0086: a dead running author may retain an unchanged snapshot or
+          ;; finish its committed scoped successor through real owned
+          ;; Verify/publication. A refusal is actionable and must NOT be
+          ;; swallowed by the unlaunched-permission resolver.
+          (or (recover-lost-author-session! dir plan-id idx #:session-live? author-session-live?)
+              (resolve-author-checkpoint! dir plan-id idx))]
+         [(and (eq? kind 'review-rejected) idx)
+          ;; GSD simplification W5: the typed rejection payload authorizes the
+          ;; checkpoint (legacy coordinators that only produced the historic
+          ;; message still work through the dated reader inside it).
+          (resolve-review-checkpoint! dir
+                                      plan-id
+                                      idx
+                                      (or (delivery-outcome-data outcome*)
+                                          (delivery-outcome-message outcome*)))]
+         [else #f]))
+     (if (eq? resolved #t)
+         (campaign-outcome 'advance #f #f)
+         (let ([blocked-reason
+                (cond
+                  [(eq? kind 'delivered)
+                   "terminal stage lacks authenticated readback; no delivery proof advanced"]
+                  [resolved (honest-blocked-reason resolved)]
+                  [(and outcome* (delivery-outcome? outcome*))
+                   (honest-blocked-reason (delivery-outcome-message outcome*))]
+                  [(and before (not after))
+                   "coordinator reported progress without a durable delivery transition"]
+                  [else message])])
+           ;; The typed payload (when present) carries the SAME reason plus the
+           ;; reviewer's findings, so no consumer re-parses the message.
+           (campaign-outcome 'blocked
+                             blocked-reason
+                             (review-rejection-blocked-result blocked-reason outcome*))))]))
+
+;; Perform ONE decided coordinator/author/review route. The route itself was
+;; chosen by decide-campaign-action / decide-lane-action; this function only
+;; executes the effect and classifies its durable result.
+(define (run-lane-effect! dir plan-id idx route message delivery-coordinator author-session-live?)
+  (define before (and idx (delivery-journal-snapshot dir plan-id idx)))
+  ;; Durable cancellation wins before any lane effect (pre-W3 contract, which
+  ;; reported the caller's message rather than a generic one).
+  (define rec (load-campaign-record dir plan-id))
+  (cond
+    [(and rec (campaign-record-cancellation rec)) (campaign-outcome 'cancelled message #f)]
+    [else
+     (define author-replay (and idx (author-repair-pending? dir plan-id idx)))
+     (define recovery
+       (and (eq? route 'author-publication-recovery)
+            idx
+            author-replay
+            (author-publication-recovery dir plan-id idx)))
+     (define replay (and idx (pending-review-rejection-data before)))
+     (define outcome
+       (cond
+         [(eq? route 'author-permission)
+          (cons 'evidence-author-repair "durable author permission pending")]
+         [(eq? route 'author-publication-recovery)
+          (cond
+            [(not recovery) (cons 'evidence-author-repair "durable author permission pending")]
+            [else
+             ;; Publication-only crash recovery: the confirmed successor
+             ;; publication and its owned proof replay supersession; no author
+             ;; phase, reviewer or ladder effect is redispatched.
+             (with-handlers ([exn:fail? (lambda (e)
+                                          (cons 'evidence-author-repair
+                                                (format "author publication recovery refused: ~a"
+                                                        (exn-message e))))])
+               (cons 'ok (hash-ref (recovery) 'message)))])]
+         [(eq? route 'review-replay)
+          (delivery-outcome 'review-rejected
+                            (or (and replay (review-rejected-message replay)) "")
+                            replay)]
+         [(procedure? delivery-coordinator) (delivery-coordinator dir plan-id idx)]
+         [else (cons 'blocked "no delivery coordinator is wired for this campaign")]))
+     ;; BUG-0084: a typed review-infra outcome consumes one unit of the SEPARATE
+     ;; durable relaunch budget before the decision. The counter bump IS a
+     ;; durable journal transition, so advancing on it never violates the
+     ;; no-spin guard; past the limit the honest bounded reason stops the wave.
+     (define outcome*
+       (if (and idx (delivery-outcome? outcome) (eq? (delivery-outcome-kind outcome) 'review-infra))
+           (let ([count (bump-review-infra-count! dir plan-id idx)]
+                 [limit (current-gsd-review-infra-retry-limit)])
+             (cond
+               [(and count (<= count limit))
+                (cons 'review-infra-retry (delivery-outcome-message outcome))]
+               [count
+                (cons 'blocked
+                      (format "review lane failed ~a times (limit ~a); operator review required: ~a"
+                              count
+                              limit
+                              (delivery-outcome-message outcome)))]
+               [else outcome]))
+           outcome))
+     (define after (and idx (delivery-journal-snapshot dir plan-id idx)))
+     (classify-lane-effect! dir
+                            plan-id
+                            idx
+                            before
+                            after
+                            outcome*
+                            (and rec
+                                 (campaign-record-cancellation (load-campaign-record dir plan-id)))
+                            message
+                            author-session-live?)]))
+
+;; Execute the ONE decided resume route. Returns a campaign-outcome; the caller
+;; owns the loop continuation and the campaign result. The route was chosen from
+;; lane facts by the pure decision; the effect re-reads the durable facts it must
+;; classify (author marker, journal snapshot), exactly as the pre-W3 checkpoint
+;; did after its effect.
+(define (run-campaign-resume! dir
+                              plan-id
+                              decision
+                              message
+                              delivery-coordinator
+                              #:author-session-live? [author-session-live? (lambda () #t)])
+  (define idx (campaign-decision-wave-index decision))
+  (case (campaign-decision-route decision)
+    [(supplemental-author)
+     (define resolved (resolve-supplemental-author-checkpoint! dir plan-id idx))
+     (if (eq? resolved #t)
+         (campaign-outcome 'advance #f #f)
+         (campaign-outcome 'blocked resolved #f))]
+    [(supplemental-checkpoint) (supplemental-checkpoint-visit! dir plan-id idx)]
+    [(coordinator-step author-publication-recovery author-permission review-replay)
+     (run-lane-effect! dir
+                       plan-id
+                       idx
+                       (campaign-decision-route decision)
+                       message
+                       delivery-coordinator
+                       author-session-live?)]
+    [else (campaign-outcome 'blocked message #f)]))
+
+;; Execute the ONE decided BLOCK. A retained supplemental pointer is a block
+;; whose secondary, best-effort, idempotent entry seal must run BEFORE the typed
+;; denial; the seal can never launch ordinary work and its failure never erases
+;; the primary cause.
+(define (run-campaign-block! dir plan-id decision)
+  (define primary (campaign-decision-message decision))
+  (case (campaign-decision-route decision)
+    [(supplemental-retained)
+     (define denial
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (log-warning "supplemental retained seal refused: ~a"
+                                                 (exn-message e))
+                                    #f)])
+         (supplemental-entry-outcome dir plan-id (campaign-decision-wave-index decision))))
+     (cond
+       [(and denial (campaign-result? denial))
+        (campaign-outcome 'blocked (campaign-result-message denial) denial)]
+       [else (campaign-outcome 'blocked primary #f)])]
+    [else (campaign-outcome 'blocked primary #f)]))
+
+;; Build the ONE decision input for a campaign pass: authenticated delivery
+;; facts, the live durable record, lane facts for the delivery-blocked wave, and
+;; the runtime capability. The pending message is built here (this adapter owns
+;; the handoff ledger write) so a block decision always carries its operator
+;; text. The pure decision then chooses exactly one action.
+(define (gather-campaign-views base-dir
+                               plan-id
+                               current
+                               completed
+                               delivery-reader
+                               verified
+                               delivery-coordinator)
+  (define-values (delivery stale? live pending-message)
+    (campaign-delivery-view-for-pass base-dir plan-id current completed delivery-reader verified))
+  (define pending (campaign-delivery-view-pending delivery))
+  (define lane (and pending (campaign-lane-view-for-wave base-dir plan-id (car pending))))
+  (campaign-views live
+                  completed
+                  stale?
+                  delivery
+                  lane
+                  pending-message
+                  (procedure? delivery-coordinator)))
+
+;; Perform one decided resume route and classify its durable outcome. The route
+;; was chosen by the pure decision; this wrapper exists for the focused
+;; checkpoints that call one lane step directly, and keeps their historic
+;; on-cancel / on-advance / on-blocked continuation contract.
 (define (run-coordinator-checkpoint dir
                                     plan-id
                                     extra
@@ -361,172 +629,34 @@
                                     ;; and termination, so #f is a proven dead
                                     ;; session, never an assumption.
                                     #:author-session-live? [author-session-live? (lambda () #t)])
+  (define idx (and (campaign-wave? extra) (campaign-wave-index extra)))
+  (define rec (load-campaign-record dir plan-id))
   (cond
-    ;; Approved/unlaunched T must reach the owned author lane BEFORE the
-    ;; ordinary coordinator can report the historical allowance exhausted.
-    ;; Retained terminal/revoked pointers remain owned, never ordinary routing.
-    [(and (campaign-wave? extra)
-          (supplemental-author-pending? dir plan-id (campaign-wave-index extra)))
-     (define resolved
-       (resolve-supplemental-author-checkpoint! dir plan-id (campaign-wave-index extra)))
-     (if (eq? resolved #t)
-         (on-advance)
-         (on-blocked resolved))]
-    [(and (campaign-wave? extra) (supplemental-resumable? dir plan-id (campaign-wave-index extra)))
-     (supplemental-checkpoint-visit! dir
-                                     plan-id
-                                     (campaign-wave-index extra)
-                                     on-cancel
-                                     on-advance
-                                     on-blocked)]
-    [(and (campaign-wave? extra)
-          (supplemental-pointer-retained? dir plan-id (campaign-wave-index extra)))
-     ;; A spent non-terminal retained operation must reach the entry seam
-     ;; (which seals it blocked, secondary and idempotent) BEFORE the typed
-     ;; denial; the denial itself is unchanged.
-     (on-blocked (supplemental-entry-outcome dir plan-id (campaign-wave-index extra)))]
+    ;; Durable cancellation wins before any lane effect.
+    [(and (campaign-wave? extra) (campaign-record-cancellation rec)) (on-cancel message)]
     [else
-     (if (and extra (campaign-record-cancellation (load-campaign-record dir plan-id)))
-         (on-cancel message)
-         (let* ([idx (and (campaign-wave? extra) (campaign-wave-index extra))]
-                [before (and idx (delivery-journal-snapshot dir plan-id idx))]
-                [author-replay (and idx (author-repair-pending? dir plan-id idx))]
-                [author-recovery (and author-replay
-                                      (equal? (hash-ref (journal-evidence-author-repair
-                                                         (load-delivery-journal dir plan-id idx))
-                                                        'state
-                                                        #f)
-                                              "running")
-                                      (author-publication-recovery dir plan-id idx))]
-                [replay (pending-review-rejection-message before)]
-                [outcome (cond
-                           [(and author-replay (not author-recovery))
-                            (cons 'evidence-author-repair "durable author permission pending")]
-                           [author-recovery
-                            ;; Publication-only crash recovery: the confirmed successor
-                            ;; publication and its owned proof replay supersession; no
-                            ;; author phase, reviewer or ladder effect is redispatched.
-                            (with-handlers ([exn:fail?
-                                             (lambda (e)
-                                               (cons 'evidence-author-repair
-                                                     (format "author publication recovery refused: ~a"
-                                                             (exn-message e))))])
-                              (cons 'ok (hash-ref (author-recovery) 'message)))]
-                           [replay (cons 'review-rejected replay)]
-                           [else (delivery-coordinator dir plan-id idx)])]
-                ;; BUG-0084: a typed review-infra outcome consumes one unit of
-                ;; the SEPARATE durable relaunch budget before the decision. The
-                ;; counter bump IS a durable journal transition, so advancing on
-                ;; it never violates the no-spin guard; past the limit the
-                ;; honest bounded reason stops the wave instead.
-                [outcome*
-                 (if (and idx
-                          (delivery-outcome? outcome)
-                          (eq? (delivery-outcome-kind outcome) 'review-infra))
-                     (let ([count (bump-review-infra-count! dir plan-id idx)]
-                           [limit (current-gsd-review-infra-retry-limit)])
-                       (cond
-                         [(and count (<= count limit))
-                          (cons 'review-infra-retry (delivery-outcome-message outcome))]
-                         [count
-                          (cons
-                           'blocked
-                           (format
-                            "review lane failed ~a times (limit ~a); operator review required: ~a"
-                            count
-                            limit
-                            (delivery-outcome-message outcome)))]
-                         [else outcome]))
-                     outcome)]
-                [after (and idx (delivery-journal-snapshot dir plan-id idx))]
-                [kind (and outcome* (delivery-outcome-kind outcome*))]
-                [decision (coordinator-checkpoint-decision
-                           kind
-                           before
-                           after
-                           (and extra
-                                (campaign-record-cancellation (load-campaign-record dir plan-id))))])
-           (case decision
-             [(cancelled) (on-cancel "campaign cancellation requested")]
-             [(advance)
-              ;; BUG-0084: any genuine advance ends the current review round —
-              ;; its infra budget is refreshed for the next round.
-              (unless (eq? kind 'review-infra-retry)
-                (clear-review-infra-count! dir plan-id idx))
-              (on-advance)]
-             [else
-              (define resolved
-                (cond
-                  [(and idx (author-repair-pending? dir plan-id idx))
-                   ;; BUG-0086: a dead running author may retain an unchanged
-                   ;; snapshot or finish its committed scoped successor through
-                   ;; real owned Verify/publication. A refusal is actionable and
-                   ;; must NOT be swallowed by the unlaunched-permission resolver.
-                   (or (recover-lost-author-session! dir
-                                                     plan-id
-                                                     idx
-                                                     #:session-live? author-session-live?)
-                       (resolve-author-checkpoint! dir plan-id idx))]
-                  [(and (eq? kind 'review-rejected) idx)
-                   (resolve-review-checkpoint! dir plan-id idx (delivery-outcome-message outcome*))]
-                  [else #f]))
-              (if (eq? resolved #t)
-                  (on-advance)
-                  (on-blocked
-                   (cond
-                     [(eq? kind 'delivered)
-                      "terminal stage lacks authenticated readback; no delivery proof advanced"]
-                     [resolved (honest-blocked-reason resolved)]
-                     [(and outcome* (delivery-outcome? outcome*))
-                      (honest-blocked-reason (delivery-outcome-message outcome*))]
-                     [(and before (not after))
-                      "coordinator reported progress without a durable delivery transition"]
-                     [else message])))])))]))
+     (define lane (campaign-lane-view-for-wave dir plan-id idx))
+     (define decision (decide-lane-action lane idx message (procedure? delivery-coordinator)))
+     (define outcome
+       (case (campaign-decision-kind decision)
+         [(resume)
+          (run-campaign-resume! dir
+                                plan-id
+                                decision
+                                message
+                                delivery-coordinator
+                                #:author-session-live? author-session-live?)]
+         [else (run-campaign-block! dir plan-id decision)]))
+     (case (campaign-outcome-kind outcome)
+       [(advance) (on-advance)]
+       [(cancelled) (on-cancel (campaign-outcome-reason outcome))]
+       [else (on-blocked (or (campaign-outcome-typed outcome) (campaign-outcome-reason outcome)))])]))
 
-;; Campaign-facing result wrapper; continuation remains owned by the caller.
-(define (coordinator-checkpoint-result dir
-                                       plan-id
-                                       extra
-                                       completed
-                                       message
-                                       delivery-coordinator
-                                       loop-again
-                                       #:author-session-live? [author-session-live? (lambda () #t)])
-  (run-coordinator-checkpoint
-   dir
-   plan-id
-   extra
-   message
-   delivery-coordinator
-   #:author-session-live? author-session-live?
-   #:on-cancel (lambda (reason) (campaign-result 'wave-cancelled (reverse completed) reason))
-   #:on-advance loop-again
-   #:on-blocked (lambda (reason) (campaign-result 'wave-blocked (reverse completed) reason))))
-
-;; Extracted from go-orchestrator (BUG-0042 module-size law): the loop's
-;; wave-blocked case. The liveness verdict encodes the ownership contract —
-;; the campaign loop is single-threaded and this checkpoint runs strictly
-;; BETWEEN wave passes; the owned registry closes at pass end and reaps its
-;; jobs on termination, so no evidence-author dispatch is live here. A
-;; "running" marker seen now is a proven lost session, reclaimable through
-;; the durable journal transition — never an ambiguous live launch.
-(define (wave-blocked-checkpoint-result! base-dir
-                                         plan-id
-                                         extra
-                                         completed
-                                         message
-                                         delivery-coordinator
-                                         loop-again)
-  (if (procedure? delivery-coordinator)
-      (coordinator-checkpoint-result base-dir
-                                     plan-id
-                                     extra
-                                     completed
-                                     message
-                                     delivery-coordinator
-                                     loop-again
-                                     #:author-session-live? (lambda () #f))
-      (campaign-result 'wave-blocked (reverse completed) message)))
+;; W3 removed the pre-W3 `coordinator-checkpoint-result` and
+;; `wave-blocked-checkpoint-result!` route functions. They each reconstructed
+;; the next action from a status symbol; the campaign loop (go-orchestrator.rkt)
+;; is now the ONE interpreter of decide-campaign-action, and the focused
+;; checkpoints call run-coordinator-checkpoint directly.
 
 ;; Park a verifier-approved attempt whose protected delivery is still pending
 ;; (BUG-0077). Verify approval is durable, but it is NOT delivery: the SAME

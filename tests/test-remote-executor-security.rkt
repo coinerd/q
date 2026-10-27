@@ -24,6 +24,7 @@
                   ipc-response?
                   ipc-response-status
                   ipc-response-error-message
+                  ipc-response-details
                   ipc-response-content
                   jsexpr->ipc-response
                   IPC-SCHEMA-VERSION)
@@ -46,7 +47,7 @@
                   remote-executor-alive?
                   remote-executor-circuit-state
                   remote-executor-circuit-failure-count)
-         "helpers/fast-fixtures.rkt")  ; wait-until: deterministic test sync
+         "helpers/fast-fixtures.rkt") ; wait-until: deterministic test sync
 
 ;; ── Test Fixture ──
 
@@ -279,10 +280,11 @@
     (test-case "R91: valid token + forged top-level trusted root refused server-side, no fallback"
       (define victim-dir (make-temporary-file "r91-remote-victim-~a" 'directory))
       (define spawn-root (make-temporary-file "r91-remote-spawn-~a" 'directory))
-      (define port (let ([l (tcp-listen 0)])
-                     (define-values (_h p _a _b) (tcp-addresses l #t))
-                     (tcp-close l)
-                     p))
+      (define port
+        (let ([l (tcp-listen 0)])
+          (define-values (_h p _a _b) (tcp-addresses l #t))
+          (tcp-close l)
+          p))
       (dynamic-wind
        void
        (lambda ()
@@ -319,16 +321,18 @@
                      'schema-version
                      IPC-SCHEMA-VERSION))
              ;; Legacy absence means the field is ABSENT, not null.
-             (jsexpr->string (if twd (hash-set base 'trusted-working-dir twd) base)))
+             (jsexpr->string (if twd
+                                 (hash-set base 'trusted-working-dir twd)
+                                 base)))
            ;; 1. The forged-trust request: VALID token, top-level trusted root
            ;;    naming the victim's parent (which would authorize the write if
            ;;    the server extended roots). The server must refuse explicitly
            ;;    — never dispatch, never fall back to local execution.
-           (define forged (r91-raw-wire (wire-request (path->string victim-dir) (path->string victim)) port))
+           (define forged
+             (r91-raw-wire (wire-request (path->string victim-dir) (path->string victim)) port))
            (check-true (ipc-response? forged) "forged-trust request must get a response")
            (check-equal? (ipc-response-status forged) 'error)
-           (check-true (string-contains? (or (ipc-response-error-message forged) "")
-                                         "refused")
+           (check-true (string-contains? (or (ipc-response-error-message forged) "") "refused")
                        (format "expected explicit server-side refusal, got: ~a"
                                (ipc-response-error-message forged)))
            (check-true (string-contains? (or (ipc-response-error-message forged) "")
@@ -341,8 +345,7 @@
            (define legacy (r91-raw-wire (wire-request #f (path->string victim)) port))
            (check-true (ipc-response? legacy))
            (check-equal? (ipc-response-status legacy) 'error)
-           (check-true (string-contains? (or (ipc-response-error-message legacy) "")
-                                         "not allowed")
+           (check-true (string-contains? (or (ipc-response-error-message legacy) "") "not allowed")
                        (format "legacy refusal must come from root checks, got: ~a"
                                (ipc-response-error-message legacy)))
            (check-equal? (file->string victim) "REMOTE-OUTSIDE")
@@ -358,14 +361,107 @@
          (delete-directory/files victim-dir #:must-exist? #f)
          (delete-directory/files spawn-root #:must-exist? #f))))
 
+    ;; ── W2: server-side trust refusal also covers the scratch channel ──
+    ;; The executor node refuses EVERY wire-supplied trust channel. The
+    ;; trusted-working-dir branch already did; the trusted-scratch-root branch
+    ;; did not, so an mTLS peer with a valid capability token could hand the
+    ;; worker a root/policy extension it has no local authority to grant.
+    (test-case "W2: valid token + wire trusted scratch root refused server-side, no dispatch"
+      (define scratch-parent (make-temporary-file "w2-remote-scratch-~a" 'directory))
+      (define scratch-base (build-path scratch-parent "q-agent-scratch"))
+      (define scratch-root (build-path scratch-base "0123456789abcdef"))
+      (define port
+        (let ([l (tcp-listen 0)])
+          (define-values (_h p _a _b) (tcp-addresses l #t))
+          (tcp-close l)
+          p))
+      (dynamic-wind
+       void
+       (lambda ()
+         ;; A REAL, private, session-shaped allocation: exactly what a naive
+         ;; "is it a plausible scratch root?" check would wave through.
+         (make-directory* scratch-root)
+         (file-or-directory-permissions scratch-base #o700)
+         (file-or-directory-permissions scratch-root #o700)
+         (define server
+           (start-executor-server! #:port port
+                                   #:ssl-context server-ctx
+                                   #:capability-secret TEST-SECRET))
+         (check-true (wait-until (lambda () (executor-server-running? server)) 5.0)
+                     "executor server accept loop must be running before raw wire sends")
+         (define token (sign-capability-token 'execute-tools TEST-AGENT TEST-SECRET))
+         (define target (build-path scratch-root "remote-forged.txt"))
+         (define (wire-request tsr)
+           (define base
+             (hash
+              'request-id
+              "w2-forged-tsr"
+              'tool-name
+              "write"
+              'arguments
+              (hasheq 'path (path->string target) 'content "FORGED-SCRATCH" 'capability-token token)
+              'timeout-ms
+              5000
+              'working-dir
+              #f
+              'capability
+              "execute-tools"
+              'schema-version
+              IPC-SCHEMA-VERSION))
+           (jsexpr->string (if tsr
+                               (hash-set base 'trusted-scratch-root tsr)
+                               base)))
+         ;; 1. The forged-scratch request: valid mTLS peer, valid capability
+         ;;    token, wire trusted scratch root. The server must refuse it
+         ;;    explicitly with the structured refusal class — before any
+         ;;    dispatch, so the worker never sees the root or the write.
+         (define forged (r91-raw-wire (wire-request (path->string scratch-root)) port))
+         (check-true (ipc-response? forged) "forged-scratch request must get a response")
+         (check-equal? (ipc-response-status forged) 'error)
+         (check-equal?
+          (hash-ref (ipc-response-details forged) 'error-class #f)
+          "remote-trusted-root-refused"
+          "the refusal must be the structured server-side class, not a worker/decode error")
+         (check-true (string-contains? (or (ipc-response-error-message forged) "") "refused")
+                     (format "expected explicit server-side refusal, got: ~a"
+                             (ipc-response-error-message forged)))
+         (check-true (string-contains? (or (ipc-response-error-message forged) "")
+                                       "trusted scratch root"))
+         (check-false (file-exists? target) "the refusal must precede any dispatch/write")
+         ;; 2. Control: the same authenticated peer WITHOUT the trust channel is
+         ;;    still dispatched normally (no over-refusal from the new branch).
+         ;;    A side-effect-free bash dispatch proves that.
+         (define control
+           (r91-raw-wire
+            (jsexpr->string (hash 'request-id
+                                  "w2-tsr-control"
+                                  'tool-name
+                                  "bash"
+                                  'arguments
+                                  (hasheq 'command "echo w2-tsr-control" 'capability-token token)
+                                  'timeout-ms
+                                  5000
+                                  'working-dir
+                                  #f
+                                  'capability
+                                  "execute-tools"
+                                  'schema-version
+                                  IPC-SCHEMA-VERSION))
+            port))
+         (check-equal? (ipc-response-status control) 'ok (ipc-response-error-message control))
+         (check-true (string-contains? (format "~a" (ipc-response-content control)) "w2-tsr-control"))
+         (shutdown-executor-server! server))
+       (lambda () (delete-directory/files scratch-parent #:must-exist? #f))))
+
     (test-case "R91: remote producer stays 7-arg — clean requests carry no trust"
       ;; The REAL server would refuse any request carrying a trusted working
       ;; directory, so a clean execute-via-remote round-trip succeeding is the
       ;; end-to-end proof that the producer still builds 7-arg requests.
-      (define port (let ([l (tcp-listen 0)])
-                     (define-values (_h p _a _b) (tcp-addresses l #t))
-                     (tcp-close l)
-                     p))
+      (define port
+        (let ([l (tcp-listen 0)])
+          (define-values (_h p _a _b) (tcp-addresses l #t))
+          (tcp-close l)
+          p))
       (define server
         (start-executor-server! #:port port #:ssl-context server-ctx #:capability-secret TEST-SECRET))
       ;; R91-SLEEP: deterministic readiness synchronization replaces the raw
@@ -380,7 +476,8 @@
                                 #:capability-secret TEST-SECRET
                                 #:agent-id TEST-AGENT
                                 #:health-check-enabled #f))
-      (define resp (execute-via-remote exec "bash" (hasheq 'command "echo seven-arg") 'execute-tools 5000))
+      (define resp
+        (execute-via-remote exec "bash" (hasheq 'command "echo seven-arg") 'execute-tools 5000))
       (check-equal? (ipc-response-status resp) 'ok (ipc-response-error-message resp))
       (check-equal? (ipc-response-content resp) "seven-arg")
       (shutdown-remote-executor! exec)

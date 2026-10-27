@@ -7,9 +7,26 @@
 
 (require "supplemental-author-contract.rkt"
          racket/format
+         racket/path
          racket/string
          "plan-types.rkt"
-         "wave-executor.rkt")
+         "wave-executor.rkt"
+         ;; W5: the ONE required wave-doc header/section contract. The authoring
+         ;; template below is GENERATED from these constants, and
+         ;; `lint-wave-doc` validates against the same values, so the template
+         ;; and the validator cannot drift apart (R-003/R-015).
+         (only-in "wave-docs.rkt"
+                  WAVE-DOC-HEADING-PREFIX
+                  WAVE-DOC-STATUS-PREFIX
+                  WAVE-DOC-FILE-LINE-PREFIX
+                  WAVE-DOC-FILES-SECTION
+                  WAVE-DOC-VERIFY-SECTION
+                  WAVE-DOC-DONE-SECTION
+                  WAVE-DOC-INITIAL-STATUS)
+         ;; W2: the ONE trusted per-session scratch allocation.
+         "../../tools/scratch.rkt"
+         ;; W2 review: safe mode is read-only, so scratch guidance must say so.
+         (only-in "../../util/safe-mode/safe-mode-predicates.rkt" safe-mode?))
 
 (provide planning-prompt
          planning-implement-prompt
@@ -26,32 +43,64 @@
          scratch-guidance-section)
 
 ;; ============================================================
-;; Executor scratch guidance (sandbox-write-scratch-parity W1)
+;; Executor scratch guidance (W2 single trusted allocation)
 ;; ============================================================
 
 ;; Pure render of the executor-owned scratch-directory contract. The runtime
-;; (command-handlers) allocates the opaque session token ONCE per /go request
-;; and resolves the absolute root from the executor's actual worker roots
-;; (retained wave worktree under worktree isolation, else the project base
-;; dir). The path is writable through the structured write tool — the worker
-;; creates missing parents after authorization (W0) — so no manual mkdir and
-;; no shell redirection is needed. absolute-root may be #f when the runtime
-;; cannot resolve one; the cwd-relative contract stays authoritative.
+;; allocates ONE opaque root per agent session (tools/scratch.rkt) below the
+;; platform temporary directory; the same root is used by direct and sandboxed
+;; write/edit and by the bash redirection policy for EXACTLY that session.
+;;
+;; Safe mode renders the path with an explicit read-only disclaimer and no
+;; write/redirection instructions, because safe mode blocks bash/edit/write and
+;; the structured tools refuse the scratch root there.
+;;
+;; `absolute-root` is the already-allocated root the caller is about to bind to
+;; the executor session (the only value advertised when it is a trusted scratch
+;; path). `scratch-token` is the opaque per-/go token and is used only to
+;; resolve (or, on first use, allocate) the root keyed by that token, so an
+;; already allocated root is preserved instead of moved. Nothing here falls
+;; back to the scratch base directory: without a trusted root or token there is
+;; no scratch section at all.
+;;
+;; A legacy `.planning/scratch/...` value is never advertised.
 (define (scratch-guidance-section scratch-token absolute-root)
-  (string-append
-   "\nSession scratch directory (executor-owned, disposable):\n"
-   (format "- Path: `.planning/scratch/~a/` under your current working directory\n" scratch-token)
-   (if absolute-root
-       (format "- Resolved for this context: ~a\n" absolute-root)
-       "")
-   "- Create diagnostic scripts and probes ONLY here, with the structured write tool;\n"
-   "  missing parent directories are created automatically\n"
-   "- Run probes with read-only bash (`racket file`, no output redirection); bash output\n"
-   "  redirection stays restricted to its sanctioned scratch root and arbitrary /tmp writes\n"
-   "  stay denied — do not improvise other write locations\n"
-   "- Scratch is disposable: NEVER reference it as a wave deliverable, approval, release or\n"
-   "  verification receipt, and never commit it\n"
-   "- No cleanup obligation; do not delete other sessions' scratch directories\n"))
+  (define root
+    (cond
+      [(trusted-session-scratch-path? absolute-root)
+       (ensure-scratch-root! (simplify-path (path->complete-path absolute-root) #f))]
+      [(and (string? scratch-token) (positive? (string-length scratch-token)))
+       (or (allocated-session-scratch-root scratch-token)
+           (allocate-session-scratch-root! scratch-token))]
+      [else #f]))
+  (if (not root)
+      ""
+      (let ([root-str (path->string root)])
+        ;; W2 review: safe mode is READ-ONLY (bash/edit/write are blocked and the
+        ;; structured tools refuse this root). Render the path plus an explicit
+        ;; read-only disclaimer and NO write/redirection instructions, instead of
+        ;; telling a safe-mode executor to write where it cannot. Normal sessions
+        ;; render the section exactly as before.
+        (if (safe-mode?)
+            (string-append
+             "\nSession scratch directory (single trusted allocation, disposable):\n"
+             (format "- Path: `~a`\n" root-str)
+             "- Safe mode is read-only: this path is NOT writable here (write/edit are\n"
+             "  blocked and read/write/edit refuse it); do not plan scratch work in this run\n"
+             "- Scratch is disposable: never reference it as a wave deliverable, approval, release or\n"
+             "  verification receipt, and never commit it\n")
+            (string-append
+             "\nSession scratch directory (single trusted allocation, disposable):\n"
+             (format "- Path: `~a`\n" root-str)
+             "- Create diagnostic scripts and probes ONLY here, with the structured write or\n"
+             "  edit tool; missing parent directories are created automatically\n"
+             "- Run probes with read-only bash (`racket file`); the SAME root is the only\n"
+             (format "  sanctioned output-redirection target (e.g. `> ~a/probe.log`)\n" root-str)
+             "- Do not create scratch under `.planning/`, inside the repository, or under any\n"
+             "  other /tmp path: those writes stay denied or pollute delivery evidence\n"
+             "- Scratch is disposable: NEVER reference it as a wave deliverable, approval, release or\n"
+             "  verification receipt, and never commit it\n"
+             "- No cleanup obligation; do not delete other sessions' scratch directories\n")))))
 
 ;; ============================================================
 ;; Executor re-anchor prompt (v1.00.17 W3 — #9514)
@@ -207,6 +256,43 @@
 ;; Exploring prompt
 ;; ============================================================
 
+;; ============================================================
+;; Wave-doc authoring template (generated from the ONE contract)
+;; ============================================================
+
+;; The fenced wave-doc template emitted by planning-prompt. Every part the
+;; wave-doc lint enforces (machine header, `- File:` bullet shape, required
+;; section names) is taken from `wave-docs.rkt`, never re-typed here. The
+;; narrative bodies stay literal because they are instructions, not contract.
+(define (wave-doc-authoring-template)
+  (string-append "```\n"
+                 WAVE-DOC-HEADING-PREFIX
+                 "0\n"
+                 WAVE-DOC-STATUS-PREFIX
+                 WAVE-DOC-INITIAL-STATUS
+                 "\n"
+                 "\n"
+                 "## Root Cause\n"
+                 "<what causes the bug or what needs to change>\n\n"
+                 "## "
+                 WAVE-DOC-FILES-SECTION
+                 "\n"
+                 WAVE-DOC-FILE-LINE-PREFIX
+                 "path/to/file (relative to project root)\n"
+                 WAVE-DOC-FILE-LINE-PREFIX
+                 "path/to/other\n\n"
+                 "## Action\n"
+                 "<what to do, include old-text/new-text for edits>\n\n"
+                 "## "
+                 WAVE-DOC-VERIFY-SECTION
+                 "\n"
+                 "<appropriate test command>\n\n"
+                 "## "
+                 WAVE-DOC-DONE-SECTION
+                 "\n"
+                 "- <completion criteria>\n"
+                 "```\n\n"))
+
 (define (planning-prompt user-request)
   (string-append
    "# GSD Planning Phase — Write-Immediately Workflow\n\n"
@@ -244,28 +330,23 @@
    "  planning-write artifact=\"waves/W1-short-title.md\" content=\"...\"\n"
    "If you have 3 waves, you MUST make 3 SEPARATE planning-write calls.\n\n"
    "### Wave Doc Format (use EXACTLY this syntax):\n"
-   "```\n"
-   "# Wave 0\n"
-   "Status: Inbox\n"
-   "\n"
-   "## Root Cause\n"
-   "<what causes the bug or what needs to change>\n\n"
-   "## Files\n"
-   "- File: path/to/file (relative to project root)\n"
-   "- File: path/to/other\n\n"
-   "## Action\n"
-   "<what to do, include old-text/new-text for edits>\n\n"
-   "## Verify\n"
-   "<appropriate test command>\n\n"
-   "## Done\n"
-   "- <completion criteria>\n"
-   "```\n\n"
+   (wave-doc-authoring-template)
    "MANDATORY HEADER: every wave doc MUST begin with the two header lines shown above:\n"
-   "exactly ONE `# Wave <N>` H1 followed by exactly ONE `Status: Inbox` line. `Wave 0` is\n"
+   (format "exactly ONE `~a<N>` H1 followed by exactly ONE `~a~a` line. `Wave 0` is\n"
+           WAVE-DOC-HEADING-PREFIX
+           WAVE-DOC-STATUS-PREFIX
+           WAVE-DOC-INITIAL-STATUS)
    "shown for W0 — for every other wave SUBSTITUTE the wave index in the H1 (`# Wave 2`\n"
    "for W2, `# Wave 3` for W3, ...). planning-write stores the content VERBATIM: it does\n"
    "NOT add this header for you, and NO second `Status:` line may appear anywhere in the\n"
    "document.\n\n"
+   "REQUIRED SECTIONS: every wave doc needs ALL of "
+   (string-join (for/list ([name (in-list (list WAVE-DOC-FILES-SECTION
+                                                WAVE-DOC-VERIFY-SECTION
+                                                WAVE-DOC-DONE-SECTION))])
+                  (format "`## ~a`" name))
+                ", ")
+   " (the same list /go lints); a missing section refuses the wave.\n\n"
    "IMPORTANT: Use `- File: <path>` (singular, one per line) for file references.\n"
    "NOT 'Files:', not prose, not a heading without the dash prefix.\n\n"
    "FINALIZATION: Do NOT write `gh-wave-start` / `gh-wave-finish` / `gh-board` Action\n"

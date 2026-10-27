@@ -22,9 +22,17 @@
 ;;   deferred
 ;;   Readers accept the documented legacy spellings verbatim ("COMPLETED" →
 ;;   done, "PENDING"/"NOT STARTED" → pending, "IN PROGRESS" → in-progress).
-;;   Writers emit one canonical symbol. Unknown input keeps the historical
-;;   `pending` fallback (unchanged compatibility; a typed-error flip is a
-;;   separate change).
+;;   Writers emit one canonical symbol.
+;;
+;;   W5 (R-019): unknown input is a TYPED REJECTION, never the historical
+;;   `pending` fallback. `wave-status-symbol` raises `exn:fail:wave-status`
+;;   naming the offending value, the accepted spellings and (when a caller
+;;   supplies one) the plan/wave context. Comparison-only call sites that must
+;;   DESCRIBE an unknown status instead of rejecting it use
+;;   `wave-status-comparison-key`, which gives the value an explicit unknown
+;;   identity — it never pretends the value means `pending`.
+;;   The durable record schema is unchanged: this is a reader contract, not a
+;;   format change.
 ;;
 ;; Layer 3 — index-marker vocabulary (PLAN.md `[MARKER]` spells):
 ;;   "[Inbox]" "[In-Progress]" "[DONE]" "[DEFERRED]" "[FAILED]", plus the
@@ -36,11 +44,41 @@
 ;; `terminal-status?`/`done-or-deferred?` remain the *display/archive grouping*
 ;; of DONE+DEFERRED and must not be read as "deferred == done".
 ;;
-;; Note: plan-types.rkt keeps its own Typed Racket spellings ('pending,
-;; 'completed, 'skipped) for its legacy consumers; that copy is not this
-;; module's vocabulary and is out of scope here.
+;; Note: plan-types.rkt keeps its own Typed Racket row vocabulary ('pending,
+;; 'completed, 'skipped) for its legacy consumers, but it DELEGATES the
+;; accepted spellings to this module (W5); it no longer owns a second table
+;; or a `pending` fallback.
 
 (require racket/string)
+
+;; ============================================================
+;; Typed rejection (W5, R-019)
+;; ============================================================
+
+;; One unknown status spelling. `value` is the offending value exactly as it
+;; was read (string or symbol), `accepted` is the closed list of accepted
+;; spellings, and `context` is an optional caller-supplied location (for
+;; example "W2 declared in .planning/PLAN.md").
+(struct exn:fail:wave-status exn:fail (value accepted context) #:transparent)
+
+(define (accepted-wave-status-spellings)
+  (sort (apply append (for/list ([group (in-list wave-status-spelling-groups)])
+                        (cdr group)))
+        string<?))
+
+(define (wave-status-value->display v)
+  (if (or (string? v) (symbol? v))
+      (format "~s" v)
+      (format "~a" v)))
+
+(define (unknown-wave-status-message value accepted context)
+  (string-append
+   (format "unknown wave status ~a" (wave-status-value->display value))
+   (if context (format " (~a)" context) "")
+   ": accepted spellings are "
+   (string-join accepted ", ")
+   ". Unknown statuses are rejected instead of defaulting to `pending`; "
+   "correct the plan/wave document (writers emit one canonical status)."))
 
 ;; ============================================================
 ;; Status strings (canonical display constants)
@@ -129,10 +167,25 @@
   (and (wave-status-canonical s) #t))
 
 ;; wave-status-symbol : (or/c string? symbol?) -> symbol?
-;; Canonical comparison key for every reader. Unknown input keeps the
-;; historical `pending` fallback so no existing plan changes meaning.
+;; Canonical durable symbol for every reader. Unknown input raises the typed
+;; `exn:fail:wave-status` rejection (W5, R-019): a typo must never turn a wave
+;; into an actionable `pending` row.
 (define (wave-status-symbol s)
-  (or (wave-status-canonical s) 'pending))
+  (or (wave-status-canonical s)
+      (let ([accepted (accepted-wave-status-spellings)])
+        (raise (exn:fail:wave-status (unknown-wave-status-message s accepted #f)
+                                     (current-continuation-marks)
+                                     s
+                                     accepted
+                                     #f)))))
+
+;; wave-status-comparison-key : (or/c string? symbol?) -> any/c
+;; Comparison ONLY. Known spellings compare by canonical symbol; an unknown
+;; spelling compares by its own explicit identity `(unknown <SPELLING>)`, so
+;; two unknown values are equal only when they are literally the same claim
+;; (never two different typos collapsing into one status).
+(define (wave-status-comparison-key s)
+  (or (wave-status-canonical s) (list 'unknown (wave-status-spelling s))))
 
 ;; ============================================================
 ;; Durable status predicates (disjoint statuses, no overwrite)
@@ -189,10 +242,44 @@
     [else "[Inbox]"]))
 
 ;; ============================================================
+;; Projection display spellings
+;; ============================================================
+;; The projection kernel writes these strings into PLAN.md markers, wave-doc
+;; status headers and STATE.md table rows. The spellings are OWNED here (the
+;; kernel holds no local table) and preserve the historical output exactly:
+;; only done/deferred/failed have a terminal spelling of their own; every
+;; other durable status keeps the initial row/header text, because the
+;; projection shell must stay byte-identical to the legacy writers.
+
+;; wave-status-display-spelling : any/c -> string?
+(define (wave-status-display-spelling s)
+  (cond
+    [(eq? s 'done) STATUS-DONE]
+    [(eq? s 'deferred) STATUS-DEFERRED]
+    [(eq? s 'failed) STATUS-FAILED]
+    [else STATUS-INBOX]))
+
+;; wave-status-state-table-spelling : any/c -> string?
+;; The legacy STATE.md row writer uses "PENDING" (not the "Inbox" display
+;; spelling) for the initial state; that historical spelling is preserved.
+(define (wave-status-state-table-spelling s)
+  (cond
+    [(eq? s 'done) STATUS-DONE]
+    [(eq? s 'deferred) STATUS-DEFERRED]
+    [(eq? s 'failed) STATUS-FAILED]
+    [else "PENDING"]))
+
+;; ============================================================
 ;; Provide
 ;; ============================================================
 
-(provide STATUS-INBOX
+(provide exn:fail:wave-status
+         exn:fail:wave-status?
+         exn:fail:wave-status-value
+         exn:fail:wave-status-accepted
+         exn:fail:wave-status-context
+         accepted-wave-status-spellings
+         STATUS-INBOX
          STATUS-IN-PROGRESS
          STATUS-DONE
          STATUS-DEFERRED
@@ -210,6 +297,7 @@
          wave-status-canonical
          wave-status-recognized?
          wave-status-symbol
+         wave-status-comparison-key
          done-status?
          deferred-status?
          completed-status?
@@ -217,4 +305,6 @@
          actionable-status?
          terminal-wave-status?
          WAVE-STATUS-MARKERS
-         wave-status-marker)
+         wave-status-marker
+         wave-status-display-spelling
+         wave-status-state-table-spelling)

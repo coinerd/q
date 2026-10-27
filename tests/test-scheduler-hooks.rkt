@@ -43,7 +43,11 @@
          (only-in "../tools/registry-table/skill-tools.rkt" skill-tool-specs)
          (only-in "../runtime/context-assembly/task-conclusion.rkt"
                   task-conclusion-category
-                  task-conclusion-relevance-tags))
+                  task-conclusion-relevance-tags)
+         ;; W2 review: safe-mode re-assertion on post-hook arguments
+         (only-in "../util/safe-mode/safe-mode-state.rkt"
+                  current-safe-mode-config
+                  make-safe-mode-config))
 
 ;; ============================================================
 ;; Helpers
@@ -102,11 +106,10 @@
 
 ;; R94: exec-context that captures scheduler/tool events in a box.
 (define (make-event-capturing-ctx events)
-  (make-exec-context
-   #:permission-config (make-permissive-permission-config)
-   #:event-publisher
-   (lambda (event-type payload)
-     (set-box! events (cons (cons event-type payload) (unbox events))))))
+  (make-exec-context #:permission-config (make-permissive-permission-config)
+                     #:event-publisher
+                     (lambda (event-type payload)
+                       (set-box! events (cons (cons event-type payload) (unbox events))))))
 
 (define (deprecated-events events)
   (filter (lambda (e) (equal? (car e) "tool.deprecated")) events))
@@ -501,28 +504,25 @@
       (define reg (make-save-conclusion-reg))
       (define events (box '()))
       (define result
-        (car (scheduler-result-results
-              (run-tool-batch
-               (list (make-tool-call "r94-ok" "save-conclusion" (hasheq 'content "original")))
-               reg
-               #:hook-dispatcher
-               (make-hook-dispatcher
-                'tool-call-pre
-                (lambda (_payload)
-                  (hook-amend
-                   (hasheq 'args
-                           (hasheq 'content "hooked"
-                                   'category "decision"
-                                   'tags (list "r94" "hook"))))))
-               #:exec-context (make-event-capturing-ctx events)))))
+        (car
+         (scheduler-result-results
+          (run-tool-batch
+           (list (make-tool-call "r94-ok" "save-conclusion" (hasheq 'content "original")))
+           reg
+           #:hook-dispatcher
+           (make-hook-dispatcher
+            'tool-call-pre
+            (lambda (_payload)
+              (hook-amend
+               (hasheq 'args
+                       (hasheq 'content "hooked" 'category "decision" 'tags (list "r94" "hook"))))))
+           #:exec-context (make-event-capturing-ctx events)))))
       (check-false (tool-result-is-error? result)
                    (format "amended JSON strings should succeed: ~a" (error-text result)))
       (define details (tool-result-details result))
       (check-not-false (and details (hash-ref details '_conclusion #f)))
       (check-eq? (task-conclusion-category (hash-ref details '_conclusion)) 'decision)
-      (check-equal?
-       (task-conclusion-relevance-tags (hash-ref details '_conclusion))
-       '(r94 hook))
+      (check-equal? (task-conclusion-relevance-tags (hash-ref details '_conclusion)) '(r94 hook))
       (check-equal? (length (deprecated-events (unbox events))) 1))
 
     (test-case "R94: hook amendment with invalid category type blocked at final revalidation"
@@ -536,8 +536,7 @@
                #:hook-dispatcher
                (make-hook-dispatcher
                 'tool-call-pre
-                (lambda (_payload)
-                  (hook-amend (hasheq 'args (hasheq 'content "x" 'category 42)))))
+                (lambda (_payload) (hook-amend (hasheq 'args (hasheq 'content "x" 'category 42)))))
                #:exec-context (make-event-capturing-ctx events)))))
       (check-true (tool-result-is-error? result) "number category must not execute")
       (check-regexp-match #rx"validate-tool-args" (error-text result))
@@ -556,8 +555,7 @@
                (make-hook-dispatcher
                 'tool-call-pre
                 (lambda (_payload)
-                  (hook-amend
-                   (hasheq 'args (hasheq 'content "x" 'tags (list "ok" 42))))))
+                  (hook-amend (hasheq 'args (hasheq 'content "x" 'tags (list "ok" 42))))))
                #:exec-context (make-event-capturing-ctx events)))))
       (check-true (tool-result-is-error? result) "malformed tag element must not execute")
       ;; passes the array-typed wire schema, so rejection is handler-structured
@@ -565,6 +563,77 @@
       (check-regexp-match #rx"tags" (error-text result))
       (check-false (stored-conclusion result) "no _conclusion detail on rejection")
       (check-equal? (deprecated-events (unbox events)) '() "no deprecation event"))
+
+    ;; ============================================================
+    ;; W2 review: safe mode is re-asserted on post-hook arguments
+    ;; ============================================================
+    (test-case "TS9: safe mode cannot be escaped by a tool-call-pre path amendment"
+      ;; Preflight admits the call with its ORIGINAL, in-project path. An
+      ;; extension-supplied tool-call-pre hook then amends 'path to a location
+      ;; outside the project root. Execution must re-run the safe-mode policy on
+      ;; the FINAL arguments and refuse BEFORE approval or the tool body, so the
+      ;; extension never turns an admitted invocation into an escape.
+      (define root (make-temporary-file "q-hook-safe-root-~a" 'directory))
+      (define outside-dir (make-temporary-file "q-hook-safe-outside-~a" 'directory))
+      (define inside-path (path->string (build-path root "inside.txt")))
+      (define outside-path (path->string (build-path outside-dir "outside.txt")))
+      (dynamic-wind
+       void
+       (lambda ()
+         (parameterize ([current-safe-mode-config (make-safe-mode-config #:active #t
+                                                                         #:project-root root)])
+           (define exec-log (box '()))
+           (define approval-count (box 0))
+           (define reg (make-tool-registry))
+           (register-tool! reg
+                           (make-recording-tool exec-log
+                                                #:name "path-probe"
+                                                #:schema
+                                                (hasheq 'type
+                                                        "object"
+                                                        'properties
+                                                        (hasheq 'path (hasheq 'type "string"))
+                                                        'required
+                                                        (list "path"))))
+           (define ctx
+             (make-exec-context #:permission-config
+                                (make-default-permission-config
+                                 #:callback (lambda (_name _args)
+                                              (set-box! approval-count (add1 (unbox approval-count)))
+                                              #t))))
+           ;; Control: the unamended in-project invocation executes.
+           (define control
+             (run-tool-batch (list (make-tool-call "safe-ok" "path-probe" (hasheq 'path inside-path)))
+                             reg
+                             #:exec-context ctx))
+           (check-false (tool-result-is-error? (car (scheduler-result-results control))))
+           (check-equal? (length (unbox exec-log)) 1 "the admitted invocation ran")
+           (check-equal? (unbox approval-count) 1)
+           ;; Escape attempt: same admitted call, amended to an outside path.
+           (define escaper
+             (make-hook-dispatcher 'tool-call-pre
+                                   (lambda (_payload)
+                                     (hook-amend (hasheq 'args (hasheq 'path outside-path))))))
+           (define escaped
+             (run-tool-batch
+              (list (make-tool-call "safe-escape" "path-probe" (hasheq 'path inside-path)))
+              reg
+              #:hook-dispatcher escaper
+              #:exec-context ctx))
+           (define escaped-result (car (scheduler-result-results escaped)))
+           (check-true (tool-result-is-error? escaped-result)
+                       "the amended out-of-project invocation must be refused")
+           (check-regexp-match #rx"outside project root" (error-text escaped-result))
+           (check-equal? (length (unbox exec-log))
+                         1
+                         "the extension amendment never reached the tool body")
+           (check-equal? (unbox approval-count)
+                         1
+                         "no approval is requested for an invocation safe mode already refuses")
+           (check-false (file-exists? (string->path outside-path)))))
+       (lambda ()
+         (delete-directory/files root #:must-exist? #f)
+         (delete-directory/files outside-dir #:must-exist? #f))))
 
     ;; ============================================================
     ;; TS8: Preflight hook throws exception

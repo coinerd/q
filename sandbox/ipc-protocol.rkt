@@ -29,6 +29,10 @@
 ;; Backward compatibility: the constructor below accepts the historical 7-arg
 ;; positional form (trusted-working-dir defaults #f); serialization omits the
 ;; key when #f and the parser defaults it to #f, so old↔new mixes work.
+;; W2: `trusted-scratch-root` carries the single trusted session scratch
+;; allocation (tools/scratch.rkt) on the same trusted producer channel. The
+;; worker extends its request-scoped allowed roots and its bash redirection
+;; policy from this field only; absence (#f) leaves behavior unchanged.
 (struct ipc-request
         (request-id ; string?
          tool-name ; string?
@@ -37,7 +41,8 @@
          working-dir ; (or/c path-string? #f)
          capability ; symbol?
          schema-version ; exact-nonnegative-integer?
-         trusted-working-dir) ; (or/c path-string? #f)
+         trusted-working-dir ; (or/c path-string? #f)
+         trusted-scratch-root) ; (or/c path-string? #f)
   #:transparent
   #:constructor-name construct-ipc-request)
 
@@ -45,7 +50,9 @@
 ;; trusted producers normalize path values to JSON strings at construction.
 ;; This is producer-side normalization only; it never widens trust.
 (define (normalize-wire-path v)
-  (if (path? v) (path->string v) v))
+  (if (path? v)
+      (path->string v)
+      v))
 
 ;; Backward-compatible constructor: historical call sites use 7 positional
 ;; args; the coordinator trust channel is an optional 8th argument. Bound to
@@ -58,7 +65,8 @@
                           working-dir
                           capability
                           schema-version
-                          [trusted-working-dir #f])
+                          [trusted-working-dir #f]
+                          [trusted-scratch-root #f])
   (construct-ipc-request request-id
                          tool-name
                          arguments
@@ -66,7 +74,8 @@
                          (normalize-wire-path working-dir)
                          capability
                          schema-version
-                         (normalize-wire-path trusted-working-dir)))
+                         (normalize-wire-path trusted-working-dir)
+                         (normalize-wire-path trusted-scratch-root)))
 
 ;; ── Trusted-working-dir validation (R91/BUG-0091) ───────────────
 
@@ -82,6 +91,40 @@
        (not (member 'up (explode-path (string->path twd))))
        (trusted-working-dir-spelling-safe? twd)))
 
+;; W2: the trusted scratch root shares the structural checks of the wire
+;; (string, absolute, no NUL, no `up` component) but NOT the working-dir
+;; symlink-spelling rule. The scratch producer (tools/scratch.rkt) hands over
+;; the allocation below ITS OWN base spelling, and that spelling can legally
+;; reach the directory through a symlinked temporary ancestor (a TMPDIR alias
+;; such as /tmp -> /private/tmp, a test-scoped link). Applying the stricter
+;; working-dir rule here voided those legitimate requests at decode time, so
+;; the worker never saw the sanctioned root it was given.
+;;
+;; The trust boundary is enforced where it can be: the FINAL component of the
+;; scratch root may not be a symbolic link (a link there would redirect every
+;; write into the allocation), and the worker additionally demands an EXISTING
+;; real, owner-only, canonically-contained allocation
+;; (tools/scratch.rkt existing-trusted-session-scratch-root?), so an alias
+;; spelling that does not resolve to the worker's own base is still refused.
+;; Existence is deliberately NOT a decoder condition: an allocation may be
+;; named here before it is created.
+(define (valid-trusted-scratch-root? tsr)
+  (and (string? tsr)
+       (not (regexp-match? #rx"\u0000" tsr))
+       (absolute-path? tsr)
+       ;; `..` may not appear as a path component.
+       (not (member 'up (explode-path (string->path tsr))))
+       (trusted-scratch-root-spelling-safe? tsr)))
+
+;; #t iff the final component of TSR-STR is not a symbolic link. `link-exists?`
+;; examines the named entry itself (no final-component following), so symlinked
+;; ANCESTORS — the platform aliases this check deliberately accepts — do not
+;; affect the verdict, while a link at the allocation or a dangling link there
+;; fails closed. Resolution errors fail closed too.
+(define (trusted-scratch-root-spelling-safe? tsr-str)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (not (link-exists? (simplify-path (string->path tsr-str) #f)))))
+
 ;; No symlink spelling: walk the longest existing prefix and require every
 ;; existing component to resolve to its own lexical spelling. A symlinked
 ;; ancestor with a non-existent tail would pass a final-component-only
@@ -89,7 +132,8 @@
 ;; Broken links and resolution failures fail closed (#f).
 (define (trusted-working-dir-spelling-safe? twd-str)
   (with-handlers ([exn:fail? (lambda (_) #f)])
-    (let loop ([remaining (explode-path (string->path twd-str))] [resolved-prefix #f])
+    (let loop ([remaining (explode-path (string->path twd-str))]
+               [resolved-prefix #f])
       (cond
         [(null? remaining) #t]
         [else
@@ -103,11 +147,9 @@
             (define complete-target
               (if (complete-path? resolved)
                   resolved
-                  (path->complete-path resolved
-                                       (or (path-only candidate) (current-directory)))))
+                  (path->complete-path resolved (or (path-only candidate) (current-directory)))))
             (define simplified (simplify-path complete-target #f))
-            (and (equal? simplified (simplify-path candidate #f))
-                 (loop (cdr remaining) simplified))]
+            (and (equal? simplified (simplify-path candidate #f)) (loop (cdr remaining) simplified))]
            ;; Non-existent tail: nothing further can be a link spelling.
            [else #t])]))))
 
@@ -138,12 +180,17 @@
             (symbol->string (ipc-request-capability req))
             'schema-version
             (ipc-request-schema-version req)))
-  ;; Omit the trust channel when absent so old workers see an unchanged wire
-  ;; format; only add it when the coordinator supplied one.
+  ;; Omit either trust channel when absent so old workers see an unchanged
+  ;; wire format; only add a channel when the coordinator supplied one.
   (define twd (ipc-request-trusted-working-dir req))
-  (if twd
-      (hash-set base 'trusted-working-dir twd)
-      base))
+  (define tsr (ipc-request-trusted-scratch-root req))
+  (define with-twd
+    (if twd
+        (hash-set base 'trusted-working-dir twd)
+        base))
+  (if tsr
+      (hash-set with-twd 'trusted-scratch-root tsr)
+      with-twd))
 
 (define (jsexpr->ipc-request data)
   (with-handlers ([exn:fail? (lambda (_) #f)])
@@ -154,6 +201,7 @@
                [timeout-ms (hash-ref data 'timeout-ms IPC-DEFAULT-TIMEOUT-MS)]
                [working-dir (hash-ref data 'working-dir #f)]
                [trusted-working-dir (hash-ref data 'trusted-working-dir #f)]
+               [trusted-scratch-root (hash-ref data 'trusted-scratch-root #f)]
                [capability (hash-ref data 'capability "any")]
                [schema-version (hash-ref data 'schema-version IPC-SCHEMA-VERSION)])
            (and (string? request-id)
@@ -166,22 +214,22 @@
                 ;; absence (#f / field omitted) keeps byte-identical
                 ;; behavior (§2.2.5); invalid trust fails closed and
                 ;; refuses the whole request (§2.2.4).
-                (or (not trusted-working-dir)
-                    (valid-trusted-working-dir? trusted-working-dir))
-                (make-ipc-request request-id
-                                  tool-name
-                                  arguments
-                                  (if (exact-positive-integer? timeout-ms)
-                                      timeout-ms
-                                      (inexact->exact (floor timeout-ms)))
-                                  working-dir
-                                  (if (symbol? capability)
-                                      capability
-                                      (string->symbol capability))
-                                  (if (exact-nonnegative-integer? schema-version)
-                                      schema-version
-                                      IPC-SCHEMA-VERSION)
-                                  trusted-working-dir))))))
+                (or (not trusted-working-dir) (valid-trusted-working-dir? trusted-working-dir))
+                (or (not trusted-scratch-root) (valid-trusted-scratch-root? trusted-scratch-root))
+                (make-ipc-request
+                 request-id
+                 tool-name
+                 arguments
+                 (if (exact-positive-integer? timeout-ms)
+                     timeout-ms
+                     (inexact->exact (floor timeout-ms)))
+                 working-dir
+                 (if (symbol? capability)
+                     capability
+                     (string->symbol capability))
+                 (if (exact-nonnegative-integer? schema-version) schema-version IPC-SCHEMA-VERSION)
+                 trusted-working-dir
+                 trusted-scratch-root))))))
 
 (define (positive-timeout? v)
   (and (real? v) (positive? v)))
@@ -235,7 +283,8 @@
 
 ;; ── Convenience Constructors ────────────────────────────────────
 
-(define (make-error-response request-id [message "unknown error"]
+(define (make-error-response request-id
+                             [message "unknown error"]
                              #:details [extra-details #f]
                              #:error-class [error-class #f])
   ;; WP3.5 (BUG-0056): structured outcome classes. error-class is attached in
@@ -243,21 +292,23 @@
   ;; parsing message strings. Detail values are jsexpr-safe (symbols allowed
   ;; for in-process consumers; wire-serialized responses should use a string
   ;; class because racket/json rejects symbols).
-  (define base (if (and (hash? extra-details) (not (hash-empty? extra-details)))
-                   extra-details
-                   (hasheq)))
-  (define details (if error-class (hash-set base 'error-class error-class) base))
+  (define base
+    (if (and (hash? extra-details) (not (hash-empty? extra-details)))
+        extra-details
+        (hasheq)))
+  (define details
+    (if error-class
+        (hash-set base 'error-class error-class)
+        base))
   (ipc-response (or request-id "") 'error (void) details message IPC-SCHEMA-VERSION))
 
-(define (make-timeout-response request-id
-                               [message "request timed out"]
-                               #:details [extra-details #f])
+(define (make-timeout-response request-id [message "request timed out"] #:details [extra-details #f])
   (define base (hasheq 'error-class 'command-timeout))
-  (define details (if (and (hash? extra-details) (not (hash-empty? extra-details)))
-                      (for/fold ([acc base])
-                                ([k (in-hash-keys extra-details)])
-                        (hash-set acc k (hash-ref extra-details k)))
-                      base))
+  (define details
+    (if (and (hash? extra-details) (not (hash-empty? extra-details)))
+        (for/fold ([acc base]) ([k (in-hash-keys extra-details)])
+          (hash-set acc k (hash-ref extra-details k)))
+        base))
   (ipc-response (or request-id "") 'timeout (void) details message IPC-SCHEMA-VERSION))
 
 ;; WP3.5 (BUG-0056): structured worker-busy rejection. Carries owner metadata
@@ -270,14 +321,24 @@
                             #:busy-elapsed-ms busy-elapsed-ms
                             [message #f])
   (define default-msg
-    (format "worker busy: request held by another caller (tool '~a', request ~a, ~a ms elapsed); it will not be preempted — retry after it completes"
-            owner-tool owner-request-id busy-elapsed-ms))
-  (ipc-response (or request-id "") 'error (void)
-                (hasheq 'error-class 'worker-busy
-                        'requested-tool requested-tool
-                        'owner-tool owner-tool
-                        'owner-request-id owner-request-id
-                        'busy-elapsed-ms busy-elapsed-ms)
+    (format
+     "worker busy: request held by another caller (tool '~a', request ~a, ~a ms elapsed); it will not be preempted — retry after it completes"
+     owner-tool
+     owner-request-id
+     busy-elapsed-ms))
+  (ipc-response (or request-id "")
+                'error
+                (void)
+                (hasheq 'error-class
+                        'worker-busy
+                        'requested-tool
+                        requested-tool
+                        'owner-tool
+                        owner-tool
+                        'owner-request-id
+                        owner-request-id
+                        'busy-elapsed-ms
+                        busy-elapsed-ms)
                 (or message default-msg)
                 IPC-SCHEMA-VERSION))
 
@@ -345,7 +406,9 @@
          ipc-request-capability
          ipc-request-schema-version
          ipc-request-trusted-working-dir
-         valid-trusted-working-dir?)
+         ipc-request-trusted-scratch-root
+         valid-trusted-working-dir?
+         valid-trusted-scratch-root?)
 
 (provide ipc-response
          ipc-response?
@@ -362,18 +425,16 @@
                        [jsexpr->ipc-response (-> any/c (or/c ipc-response? #f))]
                        [make-error-response
                         (->* ((or/c string? #f))
-                             (string?
-                              #:details (or/c hash? #f)
-                              #:error-class (or/c symbol? string? #f))
+                             (string? #:details (or/c hash? #f)
+                                      #:error-class (or/c symbol? string? #f))
                              ipc-response?)]
                        [make-timeout-response
                         (->* ((or/c string? #f)) (string? #:details (or/c hash? #f)) ipc-response?)]
                        [make-busy-response
-                        (->* ((or/c string? #f)
-                              #:requested-tool string?
-                              #:owner-tool string?
-                              #:owner-request-id string?
-                              #:busy-elapsed-ms real?)
+                        (->* ((or/c string? #f) #:requested-tool string?
+                                                #:owner-tool string?
+                                                #:owner-request-id string?
+                                                #:busy-elapsed-ms real?)
                              (string?)
                              ipc-response?)]
                        [ipc-request-too-large? (-> ipc-request? boolean?)]))

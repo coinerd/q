@@ -155,25 +155,24 @@
 
     (test-case "R91: round-trip preserves a valid trusted working directory"
       (define twd (make-temporary-file "r91-twd-~a" 'directory))
-      (dynamic-wind
-       void
-       (lambda ()
-         (define req
-           (make-ipc-request "twd-1"
-                             "write"
-                             (hasheq 'path "/tmp/test" 'content "hello")
-                             10000
-                             "/workspace"
-                             'file-write
-                             1
-                             (path->string twd)))
-         (define jsexpr (ipc-request->jsexpr req))
-         (check-equal? (hash-ref jsexpr 'trusted-working-dir #f) (path->string twd))
-         (define restored (jsexpr->ipc-request jsexpr))
-         (check-not-false restored)
-         (check-equal? (ipc-request-trusted-working-dir restored) (path->string twd))
-         (check-equal? (ipc-request-working-dir restored) "/workspace"))
-       (lambda () (delete-directory/files twd #:must-exist? #f))))
+      (dynamic-wind void
+                    (lambda ()
+                      (define req
+                        (make-ipc-request "twd-1"
+                                          "write"
+                                          (hasheq 'path "/tmp/test" 'content "hello")
+                                          10000
+                                          "/workspace"
+                                          'file-write
+                                          1
+                                          (path->string twd)))
+                      (define jsexpr (ipc-request->jsexpr req))
+                      (check-equal? (hash-ref jsexpr 'trusted-working-dir #f) (path->string twd))
+                      (define restored (jsexpr->ipc-request jsexpr))
+                      (check-not-false restored)
+                      (check-equal? (ipc-request-trusted-working-dir restored) (path->string twd))
+                      (check-equal? (ipc-request-working-dir restored) "/workspace"))
+                    (lambda () (delete-directory/files twd #:must-exist? #f))))
 
     (test-case "R91: legacy absent-field requests omit trust and decode #f"
       (define req (make-ipc-request "legacy-1" "bash" (hasheq 'command "ls") 5000 #f 'shell-exec 1))
@@ -190,14 +189,7 @@
        (lambda ()
          ;; JSON cannot encode path objects; the producer seam must normalize.
          (define req
-           (make-ipc-request "norm-1"
-                             "bash"
-                             (hasheq 'command "pwd")
-                             5000
-                             twd
-                             'shell-exec
-                             1
-                             twd))
+           (make-ipc-request "norm-1" "bash" (hasheq 'command "pwd") 5000 twd 'shell-exec 1 twd))
          (check-true (string? (ipc-request-trusted-working-dir req)))
          (check-true (string? (ipc-request-working-dir req)))
          (define jsexpr (ipc-request->jsexpr req))
@@ -210,15 +202,14 @@
 
     (test-case "R91: decoder fails closed on invalid trusted working directory"
       (define (decode-with-twd twd)
-        (jsexpr->ipc-request
-         (hasheq 'request-id
-                 "invalid-trust"
-                 'tool-name
-                 "bash"
-                 'arguments
-                 (hasheq 'command "echo hi")
-                 'trusted-working-dir
-                 twd)))
+        (jsexpr->ipc-request (hasheq 'request-id
+                                     "invalid-trust"
+                                     'tool-name
+                                     "bash"
+                                     'arguments
+                                     (hasheq 'command "echo hi")
+                                     'trusted-working-dir
+                                     twd)))
       ;; Non-string trust values.
       (check-false (decode-with-twd 5))
       (check-false (decode-with-twd (list "/tmp")))
@@ -238,32 +229,134 @@
        void
        (lambda ()
          (make-directory (build-path link-fixture "real"))
-         (make-file-or-directory-link (string->path "/etc")
-                                      (build-path link-fixture "evil-link"))
+         (make-file-or-directory-link (string->path "/etc") (build-path link-fixture "evil-link"))
          (make-file-or-directory-link (string->path "/nonexistent-r91-target")
                                       (build-path link-fixture "broken-link"))
          (check-false (decode-with-twd (path->string (build-path link-fixture "evil-link"))))
-         (check-false (decode-with-twd
-                       (path->string (build-path link-fixture "evil-link" "sub"))))
+         (check-false (decode-with-twd (path->string (build-path link-fixture "evil-link" "sub"))))
          (check-false (decode-with-twd (path->string (build-path link-fixture "broken-link"))))
          ;; A clean absolute spelling under the same fixture root is valid.
          (check-not-false (decode-with-twd (path->string (build-path link-fixture "real")))))
        (lambda () (delete-directory/files link-fixture #:must-exist? #f))))
+
+    (test-case "W2: trusted scratch root round-trips on the trusted channel"
+      (define req
+        (make-ipc-request "tsr-1"
+                          "write"
+                          (hasheq 'path "/tmp/probe" 'content "x")
+                          10000
+                          #f
+                          'file-write
+                          1
+                          #f
+                          "/tmp/q-agent-scratch/0123456789abcdef"))
+      (define jsexpr (ipc-request->jsexpr req))
+      (check-equal? (hash-ref jsexpr 'trusted-scratch-root #f)
+                    "/tmp/q-agent-scratch/0123456789abcdef")
+      (check-false (hash-has-key? jsexpr 'trusted-working-dir))
+      (define restored (jsexpr->ipc-request jsexpr))
+      (check-not-false restored)
+      (check-equal? (ipc-request-trusted-scratch-root restored)
+                    "/tmp/q-agent-scratch/0123456789abcdef")
+      ;; Legacy absence decodes #f and keeps the wire unchanged.
+      (define legacy (make-ipc-request "tsr-none" "bash" (hasheq 'command "ls") 5000 #f 'any 1))
+      (check-false (hash-has-key? (ipc-request->jsexpr legacy) 'trusted-scratch-root))
+      (check-false (ipc-request-trusted-scratch-root
+                    (jsexpr->ipc-request (ipc-request->jsexpr legacy)))))
+
+    (test-case "W2: decoder fails closed on an invalid trusted scratch root"
+      (define (decode-with-tsr tsr)
+        (jsexpr->ipc-request (hasheq 'request-id
+                                     "tsr-invalid"
+                                     'tool-name
+                                     "write"
+                                     'arguments
+                                     (hasheq 'path "/tmp/x" 'content "y")
+                                     'trusted-scratch-root
+                                     tsr)))
+      (check-false (decode-with-tsr 5))
+      (check-false (decode-with-tsr "relative/path"))
+      (check-false (decode-with-tsr "/tmp/../etc"))
+      (check-false (decode-with-tsr (string-append "/tmp/nul" (string #\null) "x")))
+      (check-not-false (decode-with-tsr "/tmp/q-agent-scratch/0123456789abcdef")))
+
+    (test-case "W2: decoder accepts a producer scratch root spelled through a symlinked ancestor"
+      ;; The trusted scratch producer hands over the allocation it created below
+      ;; its OWN base spelling. That spelling may reach the same directory
+      ;; through a symlinked temporary ancestor (a TMPDIR alias, a test-scoped
+      ;; link). Such an alias is legitimate: rejecting it makes the whole
+      ;; request malformed and starves the worker of the sanctioned root.
+      ;; The trust boundary that must survive: the FINAL component may not be a
+      ;; symbolic link, and the worker still demands an existing real private
+      ;; allocation (tools/scratch.rkt).
+      (define outer (make-temporary-file "w2-tsr-alias-~a" 'directory))
+      (define elsewhere (make-temporary-file "w2-tsr-elsewhere-~a" 'directory))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define real (build-path outer "real"))
+         (make-directory* real)
+         (define base (build-path real "q-agent-scratch"))
+         (make-directory* base)
+         (define root (build-path base "0123456789abcdef"))
+         (make-directory* root)
+         (define alias (build-path outer "alias"))
+         (make-file-or-directory-link real alias)
+         (define (decode-with-tsr tsr)
+           (jsexpr->ipc-request (hasheq 'request-id
+                                        "tsr-alias"
+                                        'tool-name
+                                        "write"
+                                        'arguments
+                                        (hasheq 'path "/tmp/x" 'content "y")
+                                        'trusted-scratch-root
+                                        tsr)))
+         (define alias-spelling
+           (path->string (build-path alias "q-agent-scratch" "0123456789abcdef")))
+         (define real-spelling (path->string root))
+         ;; The alias spelling decodes and is preserved verbatim (the decoder
+         ;; never rewrites the producer's allocation).
+         (define restored (decode-with-tsr alias-spelling))
+         (check-not-false restored "a symlink-aliased ancestor must not void the request")
+         (check-equal? (ipc-request-trusted-scratch-root restored) alias-spelling)
+         ;; The physical spelling keeps working.
+         (check-not-false (decode-with-tsr real-spelling))
+         ;; The working-dir trust channel keeps its stricter frozen spelling
+         ;; rule: an alias ancestor is still refused there.
+         (check-false (jsexpr->ipc-request (hasheq 'request-id
+                                                   "twd-alias"
+                                                   'tool-name
+                                                   "bash"
+                                                   'arguments
+                                                   (hasheq 'command "echo hi")
+                                                   'trusted-working-dir
+                                                   alias-spelling)))
+         ;; A SYMLINKED session component (final component) is still refused,
+         ;; whether it resolves or dangles.
+         (make-file-or-directory-link elsewhere (build-path base "fedcba9876543210"))
+         (check-false (decode-with-tsr (path->string (build-path base "fedcba9876543210"))))
+         (check-false (decode-with-tsr
+                       (path->string (build-path alias "q-agent-scratch" "fedcba9876543210"))))
+         (make-file-or-directory-link (build-path outer "missing-target")
+                                      (build-path base "aaaaaaaaaaaaaaaa"))
+         (check-false (decode-with-tsr (path->string (build-path base "aaaaaaaaaaaaaaaa")))))
+       (lambda ()
+         (delete-directory/files outer #:must-exist? #f)
+         (delete-directory/files elsewhere #:must-exist? #f))))
 
     (test-case "R91: valid absolute trust decodes (frozen contract enumeration)"
       ;; The frozen contract requires string, absolute, no `up` component,
       ;; no NUL, no symlink spelling. Existence is not part of the decoder
       ;; enumeration; a clean non-existent absolute directory remains valid.
       (define restored
-        (jsexpr->ipc-request
-         (hasheq 'request-id
-                 "valid-trust"
-                 'tool-name
-                 "bash"
-                 'arguments
-                 (hasheq)
-                 'trusted-working-dir
-                 "/r91-clean-nonexistent-target")))
+        (jsexpr->ipc-request (hasheq 'request-id
+                                     "valid-trust"
+                                     'tool-name
+                                     "bash"
+                                     'arguments
+                                     (hasheq)
+                                     'trusted-working-dir
+                                     "/r91-clean-nonexistent-target")))
       (check-not-false restored)
       (check-equal? (ipc-request-trusted-working-dir restored) "/r91-clean-nonexistent-target"))))
 

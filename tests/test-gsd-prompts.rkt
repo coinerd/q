@@ -11,12 +11,18 @@
 ;; Wave 3a: Verify all prompt templates contain required content.
 
 (require rackunit
+         racket/file
          racket/list
+         racket/path
          racket/string
          "../extensions/gsd/prompts.rkt"
          "../extensions/gsd/plan-types.rkt"
          "../extensions/gsd/wave-executor.rkt"
-         "../extensions/gsd/wave-docs.rkt")
+         "../extensions/gsd/wave-docs.rkt"
+         "../tools/scratch.rkt"
+         (only-in "../util/safe-mode/safe-mode-state.rkt"
+                  current-safe-mode-config
+                  make-safe-mode-config))
 
 (test-case "retry context supplements rather than masks durable verifier diagnostics"
   (check-false (wave-retry-context #f #f))
@@ -62,11 +68,9 @@
               "rereading for continuation is allowed"))
 
 (test-case "R96: planning-implement-prompt keeps read-before-edit without full-file promises"
-  (check-true (string-contains? planning-implement-prompt
-                                "Read each target file BEFORE editing")
+  (check-true (string-contains? planning-implement-prompt "Read each target file BEFORE editing")
               "read-before-edit rule retained")
-  (check-false (string-contains? planning-implement-prompt "full file")
-               "no full-file promise")
+  (check-false (string-contains? planning-implement-prompt "full file") "no full-file promise")
   (check-false (string-contains? planning-implement-prompt "NEVER re-read")
                "no absolute never-reread rule"))
 
@@ -307,22 +311,74 @@
   (check-true (string-contains? p "Completed")))
 
 ;; ============================================================
-;; W1 scratch guidance (sandbox-write-scratch-parity)
+;; W2 scratch guidance (one trusted session root)
 ;; ============================================================
 
-(test-case "scratch-guidance-section names token, absolute root, and contracts"
-  (define section
-    (scratch-guidance-section "tok1234567890ab" "/tmp/proj/.planning/scratch/tok1234567890ab"))
-  (check-true (string-contains? section ".planning/scratch/tok1234567890ab"))
-  (check-true (string-contains? section "/tmp/proj/.planning/scratch/tok1234567890ab"))
-  (check-true (string-contains? section "current working directory"))
-  (check-true (string-contains? section "write") "structured write tool instruction")
-  (check-true (string-contains? section "disposable"))
-  (check-true (string-contains? section "sanctioned") "bash redirection stays restricted")
-  (check-true (string-contains? section "/tmp") "arbitrary /tmp writes stay denied")
-  (check-true (string-contains? section "deliverable") "never a deliverable or receipt"))
+(test-case "scratch-guidance-section renders the one trusted session root"
+  (define base (make-temporary-file "q-gsd-scratch-prompt-~a" 'directory))
+  (dynamic-wind
+   void
+   (lambda ()
+     (parameterize ([current-scratch-base-dir base])
+       (reset-session-scratch-registry!)
+       ;; The runtime already allocated this session's root; the
+       ;; renderer PRESERVES it instead of moving it.
+       (define allocated (allocate-session-scratch-root! "0123456789abcdef" "0123456789abcdef"))
+       (define expected (path->string allocated))
+       (define section
+         (scratch-guidance-section "0123456789abcdef" "/tmp/proj/.planning/scratch/legacy-token"))
+       (check-true (string-contains? section (format "Path: `~a`" expected)))
+       (check-false (string-contains? section ".planning/scratch")
+                    "the obsolete .planning scratch path is not advertised")
+       (check-true (directory-exists? expected))
+       (check-equal? (file-or-directory-permissions expected 'bits) #o700)
+       (check-true (string-contains? section "write"))
+       (check-true (string-contains? section "edit"))
+       (check-true (string-contains? section "sanctioned"))
+       (check-true (string-contains? section "disposable"))
+       (check-true (string-contains? section "deliverable"))
+       ;; A trusted session root supplied by a migrated caller wins.
+       (define trusted (path->string (build-path base "fedcba9876543210")))
+       (define section2 (scratch-guidance-section "0123456789abcdef" trusted))
+       (check-true (string-contains? section2 trusted))
+       (check-false (string-contains? section2 expected))
+       (reset-session-scratch-registry!)))
+   (lambda () (delete-directory/files base #:must-exist? #f))))
 
-(test-case "scratch-guidance-section works without a resolved absolute root"
-  (define section (scratch-guidance-section "tok1234567890ab" #f))
-  (check-true (string-contains? section ".planning/scratch/tok1234567890ab"))
-  (check-false (string-contains? section "Resolved")))
+(test-case "scratch-guidance-section never falls back to the scratch base"
+  ;; W2: without a trusted root or an opaque token there is no scratch
+  ;; allocation for this session, so no scratch destination is advertised. The
+  ;; base container is never rendered as if it were a session root.
+  (define base (make-temporary-file "q-gsd-scratch-prompt-~a" 'directory))
+  (dynamic-wind void
+                (lambda ()
+                  (parameterize ([current-scratch-base-dir base])
+                    (reset-session-scratch-registry!)
+                    (define section (scratch-guidance-section #f #f))
+                    (check-equal? section "" "no trusted root, no advertised scratch path")
+                    (check-false (string-contains? section (path->string base)))
+                    (reset-session-scratch-registry!)))
+                (lambda () (delete-directory/files base #:must-exist? #f))))
+
+(test-case "scratch guidance states safe mode is read-only instead of promising writes"
+  ;; W2 review: safe mode blocks bash/edit/write and the structured tools refuse
+  ;; the scratch root. The prompt must not instruct a safe-mode executor to
+  ;; write there; a normal session renders the section unchanged (no note).
+  (define base (make-temporary-file "q-gsd-scratch-safe-~a" 'directory))
+  (parameterize ([current-safe-mode-config (make-safe-mode-config #:active #t #:project-root base)])
+    (dynamic-wind
+     void
+     (lambda ()
+       (parameterize ([current-scratch-base-dir base])
+         (reset-session-scratch-registry!)
+         (define section (scratch-guidance-section "0123456789abcdef" #f))
+         (check-true (string-contains? section
+                                       (format "Path: `~a`"
+                                               (path->string (allocated-session-scratch-root
+                                                              "0123456789abcdef")))))
+         (check-true (string-contains? section "Safe mode is read-only")
+                     "safe mode explicitly disclaims writable scratch")
+         (check-false (regexp-match? #px"Create diagnostic scripts" section)
+                      "no write instruction is issued in safe mode")
+         (reset-session-scratch-registry!)))
+     (lambda () (delete-directory/files base #:must-exist? #f)))))

@@ -15,7 +15,10 @@
 ;;   - the stored plan-id and the manifest hash recomputed from that record,
 ;;   - the frozen bound plan-body hash vs the live one,
 ;;   - per-wave status projections (index / doc / durable),
-;;   - snapshot drift classes.
+;;   - snapshot drift classes,
+;;   - the authoritative record/snapshot, attempts/fence, lease facts, the
+;;     legal operator actions, and unknown user backup artifacts (read-only),
+;;   - the exact `## Last Failure` exclusion span normalization uses.
 ;; Exit codes are unchanged: 0 ready, 1 rejected, 2 usage.
 
 (require rackunit
@@ -40,11 +43,21 @@
                   campaign-wave-descriptor-content-hash
                   campaign-wave-index
                   campaign-wave-status
+                  begin-attempt!
+                  set-campaign-fence-token!
                   make-campaign-manifest
                   migrate-campaign!
                   set-campaign-record-plan-snapshot-path!
                   set-campaign-record-plan-snapshot-digest!)
-         (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign!))
+         (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign!)
+         (only-in "../extensions/gsd/planning-artifact-validation.rkt"
+                  plan-artifact-explanation
+                  format-plan-artifact-explanation)
+         (only-in "../extensions/gsd/planning-paths.rkt" campaign-lock-file)
+         (only-in "../extensions/gsd/campaign-lease.rkt" lease-path)
+         (only-in "../extensions/gsd/plan-snapshot.rkt"
+                  normalize-wave-doc-content
+                  plan-snapshot-staging-marker-filename))
 
 (define repo-root
   (simplify-path
@@ -323,6 +336,254 @@
      (check-true (directory-exists? stale)
                  "read-only record loading must not sweep absent-manifest staging evidence"))
    (lambda () (drop-fixture dir))))
+
+;; --- W4 doctor: authoritative record, attempt/fence, lease, legal action ---
+
+(test-case "W4 doctor: names record/snapshot/attempts/lease and the legal action, read-only"
+  (define dir (make-fixture))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define rec (migrate-campaign! dir))
+     (begin-attempt! rec 0 11)
+     (set-campaign-fence-token! rec 11)
+     (persist-campaign! dir rec)
+     (define plan-id (campaign-plan-id rec))
+     (define planning (build-path dir ".planning"))
+     (define record-path (build-path planning "campaigns" (string-append plan-id ".rktd")))
+     ;; A leftover lock FILE with a recorded holder. The OS lock is NOT held,
+     ;; so this is diagnostic only: the doctor must say so and offer no release.
+     (define lock-path (build-path planning "campaigns" (string-append plan-id ".lock")))
+     (call-with-output-file lock-path
+       (lambda (out) (write (hasheq 'owner "session-A" 'pid 4242 'acquired 1700000000) out))
+       #:exists 'truncate)
+     (define record-before (file->bytes record-path))
+     (define lock-before (file->bytes lock-path))
+     ;; In-process inspection: same function the CLI prints from, without
+     ;; paying a subprocess spawn per assertion.
+     (define explanation (plan-artifact-explanation dir #:campaign-id plan-id))
+     (define out (format-plan-artifact-explanation explanation))
+     (check-equal? (hash-ref explanation 'errors) '() out)
+     (check-true (string-contains? out "what is authoritative:"))
+     (check-true (string-contains? out (format "durable record: ~a" (path->string record-path))))
+     (check-true (string-contains? out "bound snapshot:"))
+     (check-true (string-contains? out "authority used by /go: durable-campaign-record"))
+     (check-true (string-contains? out "campaign fence token: 11"))
+     (check-true (string-contains? out "attempt-count=1"))
+     (check-true (string-contains? out "current-attempt=attempt-1"))
+     (check-true (string-contains? out "fence=11"))
+     (check-true (string-contains? out "lease lock file:"))
+     (check-true (string-contains? out "lease file exists: yes"))
+     (check-true (string-contains? out "session-A (pid 4242"))
+     (check-true (string-contains? out "lease assessment: undetermined-read-only"))
+     (check-true (string-contains? out "no force-release command exists"))
+     (check-true (string-contains? out "legal operator action(s)"))
+     (check-true (string-contains? out "never delete campaign state"))
+     ;; READ-ONLY: record and lock bytes are untouched; nothing swept.
+     (check-equal? (file->bytes record-path) record-before)
+     (check-equal? (file->bytes lock-path) lock-before))
+   (lambda () (drop-fixture dir))))
+
+(test-case "W4 doctor: drift names an overridable class and a legal correction"
+  (define dir (make-fixture))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define rec (migrate-campaign! dir))
+     (persist-campaign! dir rec)
+     (define plan-id (campaign-plan-id rec))
+     (display-to-file (string-append "# Plan: Fixture\n\n## Waves\n\n"
+                                     "- [Inbox] W0: Fixture wave → waves/W0-fixture-wave.md\n\n"
+                                     "## Notes\n\nAmended after the freeze.\n")
+                      (build-path dir ".planning" "PLAN.md")
+                      #:exists 'replace)
+     (define explanation (plan-artifact-explanation dir #:campaign-id plan-id))
+     (define out (format-plan-artifact-explanation explanation))
+     (check-true (string-contains? out "resolve frozen-contract-stale for .planning/PLAN.md"))
+     (check-true (string-contains? out "re-freeze under a new campaign identity"))
+     ;; The doctor offers no release/reset action of any kind.
+     (check-false (string-contains? out "release the lease"))
+     (check-false (string-contains? out "delete the campaign")))
+   (lambda () (drop-fixture dir))))
+
+;; --- W4 doctor: one shared lease path -------------------------------
+
+(test-case "W4 doctor: the lease lock path is ONE shared helper"
+  (define base (make-temporary-file "lease-path-~a" 'directory))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define plan-id (make-string 64 #\c))
+     (check-equal? (lease-path base plan-id)
+                   (campaign-lock-file base plan-id)
+                   "the doctor and the lease can never name two lock files"))
+   (lambda () (drop-fixture base))))
+
+;; --- W4 doctor: unknown user artifacts are reported, never removed ---
+
+(test-case "W4 doctor: unknown .bak/temp/backup artifacts are reported and preserved"
+  (define dir (make-fixture))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define rec (migrate-campaign! dir))
+     (persist-campaign! dir rec)
+     (define plan-id (campaign-plan-id rec))
+     (define planning (build-path dir ".planning"))
+     (define campaign (build-path planning "campaigns" plan-id))
+     ;; Real user state in the planning root, the campaigns root and the
+     ;; selected campaign directory. None of it is ours.
+     (define plan-bak (build-path planning "PLAN.md.bak"))
+     (display-to-file "operator backup; keep it" plan-bak #:exists 'replace)
+     (define temp-file (build-path planning "notes.temp"))
+     (display-to-file "temp; keep it" temp-file #:exists 'replace)
+     (define backup-dir (build-path planning "waves-pre-plan-backup"))
+     (make-directory* backup-dir)
+     (define campaign-bak (build-path campaign "review-notes.bak"))
+     (display-to-file "campaign backup; keep it" campaign-bak #:exists 'replace)
+     (define stale-dir (build-path campaign "plan-snapshot.tmp-user"))
+     (make-directory* stale-dir)
+     ;; A lock FILE is not a user backup and must never be reported or probed
+     ;; as one.
+     (define lock-path (build-path planning "campaigns" (string-append plan-id ".lock")))
+     (call-with-output-file lock-path
+       (lambda (out) (write (hasheq 'owner "session-A" 'pid 4242) out))
+       #:exists 'truncate)
+     (define lock-before (file->bytes lock-path))
+     (define explanation (plan-artifact-explanation dir #:campaign-id plan-id))
+     (define out (format-plan-artifact-explanation explanation))
+     (define unknown (hash-ref explanation 'unknown-artifacts))
+     (check-equal? (hash-ref explanation 'errors) '() out)
+     (check-true (>= (length unknown) 5))
+     (for ([rel (in-list (list ".planning/PLAN.md.bak"
+                               ".planning/notes.temp"
+                               ".planning/waves-pre-plan-backup"
+                               (format ".planning/campaigns/~a/review-notes.bak" plan-id)
+                               (format ".planning/campaigns/~a/plan-snapshot.tmp-user" plan-id)))])
+       (check-true (for/or ([row (in-list unknown)])
+                     (equal? (hash-ref row 'path) rel))
+                   (format "missing unknown artifact ~a in ~a" rel out)))
+     (for ([row (in-list unknown)])
+       (check-eq? (hash-ref row 'ownership) 'unowned)
+       (check-false (string-suffix? (hash-ref row 'path) ".lock")))
+     (check-true (string-contains?
+                  out
+                  (format "unknown planning artifacts (~a, informational; nothing is removed):"
+                          (length unknown))))
+     (check-true (string-contains? out "[unowned] .planning/PLAN.md.bak"))
+     (check-false (string-contains? out "FAILED"))
+     ;; The CLI renders the same additive section and stays exit 0.
+     (define-values (code cli-out) (run-cli dir "--explain" "--campaign" plan-id))
+     (check-equal? code 0 cli-out)
+     (check-true (string-contains? cli-out "[unowned] .planning/PLAN.md.bak"))
+     ;; READ-ONLY: every user artifact survives byte-identically.
+     (check-true (file-exists? plan-bak))
+     (check-true (file-exists? temp-file))
+     (check-true (directory-exists? backup-dir))
+     (check-true (file-exists? campaign-bak))
+     (check-true (directory-exists? stale-dir))
+     (check-equal? (file->bytes plan-bak) (string->bytes/utf-8 "operator backup; keep it"))
+     (check-equal? (file->bytes lock-path) lock-before))
+   (lambda () (drop-fixture dir))))
+
+(test-case "W4 doctor: only an authentic ownership marker excludes a known owned artifact"
+  (define dir (make-fixture))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define campaigns (build-path dir ".planning" "campaigns"))
+     (make-directory* campaigns)
+     (define owned (build-path campaigns "plan-snapshot.tmp-owned"))
+     (make-directory* owned)
+     (call-with-output-file (build-path owned plan-snapshot-staging-marker-filename)
+       (lambda (out)
+         (write (hasheq 'schema-version 1
+                        'kind 'plan-snapshot-staging
+                        'pid 1
+                        'created-at 0)
+                out))
+       #:exists 'truncate)
+     ;; The OTHER authentic marker q writes: /plan supersede rotation.
+     (define waves-backup (build-path dir ".planning" "waves-pre-plan-backup"))
+     (make-directory* waves-backup)
+     (call-with-output-file (build-path waves-backup ".q-gsd-plan-supersede-owner")
+       (lambda (out)
+         (write (hasheq 'schema-version 1
+                        'kind 'waves-pre-plan-backup
+                        'pid 1
+                        'created-at 0)
+                out))
+       #:exists 'truncate)
+     ;; A lookalike name with a non-authentic marker is still UNKNOWN: only the
+     ;; exact kind/schema proves ownership.
+     (define impostor (build-path campaigns "plan-snapshot.tmp-impostor"))
+     (make-directory* impostor)
+     (call-with-output-file (build-path impostor plan-snapshot-staging-marker-filename)
+       (lambda (out) (write (hasheq 'schema-version 1 'kind 'not-ours) out))
+       #:exists 'truncate)
+     (define explanation (plan-artifact-explanation dir))
+     (define out (format-plan-artifact-explanation explanation))
+     (define unknown (hash-ref explanation 'unknown-artifacts))
+     (define known (hash-ref explanation 'owned-planning-artifacts))
+     (check-equal? (hash-ref explanation 'errors) '() out)
+     (check-equal? (length known) 2 out)
+     (for ([rel (in-list (list ".planning/waves-pre-plan-backup"
+                               ".planning/campaigns/plan-snapshot.tmp-owned"))])
+       (define row (for/first ([row (in-list known)]
+                               #:when (equal? (hash-ref row 'path) rel))
+                    row))
+       (check-not-false row (format "missing owned artifact ~a in ~a" rel out))
+       (check-eq? (hash-ref row 'ownership) 'owned))
+     (check-true (for/or ([row (in-list unknown)])
+                   (equal? (hash-ref row 'path)
+                           ".planning/campaigns/plan-snapshot.tmp-impostor")))
+     (check-false (for/or ([row (in-list unknown)])
+                    (equal? (hash-ref row 'path)
+                            ".planning/campaigns/plan-snapshot.tmp-owned")))
+     (check-false (for/or ([row (in-list unknown)])
+                    (equal? (hash-ref row 'path)
+                            ".planning/waves-pre-plan-backup")))
+     (check-true (string-contains? out
+                                  "known owned planning artifacts (2, excluded from unknown):"))
+     (check-true (string-contains? out "[owned] .planning/waves-pre-plan-backup"))
+     (check-true (string-contains? out "[owned] .planning/campaigns/plan-snapshot.tmp-owned"))
+     (check-true (string-contains? out
+                                  "[unowned] .planning/campaigns/plan-snapshot.tmp-impostor"))
+     ;; READ-ONLY: both markers and both directories survive.
+     (check-true (file-exists? (build-path owned plan-snapshot-staging-marker-filename)))
+     (check-true (file-exists? (build-path waves-backup ".q-gsd-plan-supersede-owner")))
+     (check-true (file-exists? (build-path impostor plan-snapshot-staging-marker-filename)))
+     (check-true (directory-exists? owned))
+     (check-true (directory-exists? waves-backup))
+     (check-true (directory-exists? impostor)))
+   (lambda () (drop-fixture dir))))
+
+;; --- W4 docs: the `## Last Failure` exclusion is span-exact -----------
+
+(test-case "W4 docs: Last Failure exclusion ends at the next top-level #/## heading, not ###"
+  (define base
+    (string-append "# Wave 0\nStatus: Inbox\n\n## Files\n\n- File: a.rkt\n\n"
+                   "## Last Failure\nreason one\n### Generated detail\nmore\n\n"
+                   "## Done\n\nDone means closed.\n"))
+  (define rewritten
+    (string-append "# Wave 0\nStatus: Inbox\n\n## Files\n\n- File: a.rkt\n\n"
+                   "## Last Failure\nreason two\n### Generated detail\nchanged\n\n"
+                   "## Done\n\nDone means closed.\n"))
+  (check-equal? (normalize-wave-doc-content base)
+                (normalize-wave-doc-content rewritten)
+                "the whole failure span, including ### lines, is excluded")
+  ;; The next `##` heading ends the excluded span, so authored edits after it
+  ;; are still compared.
+  (define done-edited (string-replace base "Done means closed." "Done means open."))
+  (check-false (equal? (normalize-wave-doc-content base)
+                       (normalize-wave-doc-content done-edited)))
+  ;; So does a top-level `#` heading.
+  (define top-base
+    (string-append "# Wave 0\nStatus: Inbox\n\n## Last Failure\nreason\n\n"
+                   "# Top\nauthored after the span\n"))
+  (define top-edited (string-replace top-base "authored after" "changed after"))
+  (check-false (equal? (normalize-wave-doc-content top-base)
+                       (normalize-wave-doc-content top-edited))))
 
 ;; --- exit codes and ordinary validation are unchanged ------------------
 

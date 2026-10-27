@@ -107,6 +107,36 @@
   (check-true (wave-doc-rel-path? "waves/W0-racket..9.3.md"))
   (check-false (wave-doc-rel-path? "waves/../W0-racket-9.3.md")))
 
+;; W5: two DISTINCT named grammars, never one narrowed grammar.
+;;   * declared-wave-doc-reference is the historical LENIENT lexical grammar
+;;     for author-declared arrow targets (nested/custom names accepted);
+;;   * canonical-snapshot-wave-doc-* is the frozen-snapshot identity grammar
+;;     (top-level W<n>-<slug>.md only).
+(test-case "declared lexical grammar stays lenient while canonical snapshot names stay distinct"
+  (check-equal? (declared-wave-doc-reference "→ waves/custom/nested-legal.md")
+                "waves/custom/nested-legal.md")
+  (check-equal? (declared-wave-doc-reference "see waves/W0-fine.md for details")
+                "waves/W0-fine.md")
+  (check-false (declared-wave-doc-reference "not-a-wave-path.md"))
+  (check-false (declared-wave-doc-reference "waves/../escape.md")
+               "traversal is not a lexical wave reference")
+  ;; The SAFETY layer keeps accepting the historical nested declared path.
+  (check-false (unsafe-declared-path-refusal "waves/custom/nested-legal.md"))
+  ;; But that historical declared name is deliberately NOT a canonical
+  ;; snapshot name: snapshot capture/binding continues to see the same
+  ;; narrower vocabulary (the existing bindability advisory names the gap).
+  (check-false (wave-doc-rel-path? "waves/custom/nested-legal.md"))
+  (check-false (regexp-match? canonical-snapshot-wave-doc-reference-rx
+                              "waves/custom/nested-legal.md"))
+  ;; Canonical snapshot names are unchanged.
+  (check-true (wave-doc-rel-path? "waves/W0-fine.md"))
+  (check-equal? (regexp-match* canonical-snapshot-wave-doc-reference-rx
+                               "→ waves/W0-fine.md")
+                '("waves/W0-fine.md"))
+  (check-equal? (regexp-match* canonical-snapshot-wave-doc-reference-rx
+                               "→ waves/WAVE-2-fine_2.md")
+                '("waves/WAVE-2-fine_2.md")))
+
 (test-case "builders are pure: they create nothing on disk"
   (define root (make-temporary-file "planning-paths-purity-~a" 'directory))
   (dynamic-wind

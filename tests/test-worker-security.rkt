@@ -24,6 +24,7 @@
          (only-in "../sandbox/worker-dispatch.rkt" process-ipc-request)
          "../sandbox/worker-main.rkt"
          (only-in "../tools/builtins/bash-safety.rkt" sanctioned-scratch-root)
+         (only-in "../tools/scratch.rkt" current-scratch-base-dir)
          "../util/config-paths.rkt")
 
 (define-runtime-path here ".")
@@ -63,7 +64,8 @@
                         IPC-SCHEMA-VERSION)))
 
 ;; R91/BUG-0091: same wire shape with the coordinator trust channel.
-(define (make-trusted-request-json req-id tool args #:wd [wd #f] #:twd [twd #f])
+;; W2: #:tsr adds the trusted scratch root channel.
+(define (make-trusted-request-json req-id tool args #:wd [wd #f] #:twd [twd #f] #:tsr [tsr #f])
   (define base
     (hash 'request-id
           req-id
@@ -79,7 +81,13 @@
           "any"
           'schema-version
           IPC-SCHEMA-VERSION))
-  (jsexpr->string (if twd (hash-set base 'trusted-working-dir twd) base)))
+  (define with-twd
+    (if twd
+        (hash-set base 'trusted-working-dir twd)
+        base))
+  (jsexpr->string (if tsr
+                      (hash-set with-twd 'trusted-scratch-root tsr)
+                      with-twd)))
 
 (define (parse-response resp)
   (ipc-response-status resp))
@@ -230,47 +238,305 @@
            (check-equal? (file->string target) "replacement")))
        (lambda () (delete-directory/files root))))
 
-    (test-case "W1 scratch: advertised relative scratch path works through worker dispatch"
-      ;; The /go guidance advertises `.planning/scratch/<token>/` relative to
-      ;; the executor's current working directory. The worker resolves
-      ;; relative paths against its cwd (= worker root), so the advertised
-      ;; path lands inside the allowed root in both base-dir and worktree
-      ;; execution, and W0's parent creation removes the mkdir detour.
+    (test-case "W2 scratch: the trusted session root is the only extra worker root"
+      ;; The /go prompt advertises ONE absolute trusted session root. That
+      ;; exact root arrives on the trusted channel; the worker may write there
+      ;; and may redirect bash output there, but no other path is widened.
       (define root (make-temporary-file "worker-scratch~a" 'directory))
-      (define other (make-temporary-file "worker-scratch-other~a" 'directory))
+      (define base (make-temporary-file "worker-scratch-base-~a" 'directory))
+      (define token "0123456789abcdef")
+      (define scratch (build-path base token))
+      ;; W2: the worker only accepts an allocation that already exists as a
+      ;; real owner-only directory pair (the coordinator's ensure-scratch-root!
+      ;; produces exactly that). The modes are set explicitly instead of
+      ;; relying on the ambient umask.
+      (file-or-directory-permissions base #o700)
+      (make-directory* scratch)
+      (file-or-directory-permissions scratch #o700)
+      (define foreign (make-temporary-file "worker-scratch-other-~a" 'directory))
       (dynamic-wind
        void
        (lambda ()
          (parameterize ([current-allowed-roots (list root)]
-                        [current-directory root])
-           (define resp
+                        [current-directory root]
+                        [current-scratch-base-dir base])
+           (define target (build-path scratch "probe.rkt"))
+           ;; Without the trusted channel the advertised path stays denied.
+           (define untrusted
              (process-request-line
-              (make-request-json "scratch"
+              (make-request-json "scratch-untrusted"
                                  "write"
-                                 (hash 'path
-                                       ".planning/scratch/tok1234567890ab/probe.rkt"
-                                       'content
-                                       "#lang racket/base\n"))))
-           (check-equal? (ipc-response-status resp) 'ok (ipc-response-error-message resp))
-           (check-equal?
-            (file->string (build-path root ".planning" "scratch" "tok1234567890ab" "probe.rkt"))
-            "#lang racket/base\n")
-           ;; The same token under a foreign root stays denied — the guidance
-           ;; contract never widens worker roots.
-           (define denied
+                                 (hash 'path (path->string target) 'content "no"))))
+           (check-equal? (ipc-response-status untrusted) 'error)
+           (check-false (file-exists? target))
+           ;; With the trusted session root, write and edit work there.
+           (define trusted
+             (process-request-line (make-trusted-request-json
+                                    "scratch"
+                                    "write"
+                                    (hash 'path (path->string target) 'content "#lang racket/base\n")
+                                    #:tsr (path->string scratch))))
+           (check-equal? (ipc-response-status trusted) 'ok (ipc-response-error-message trusted))
+           (check-equal? (file->string target) "#lang racket/base\n")
+           ;; Sanctioned bash redirection is armed for the SAME root.
+           (define allowed-redirect
              (process-request-line
-              (make-request-json
-               "scratch-x"
+              (make-trusted-request-json
+               "scratch-bash"
+               "bash"
+               (hash 'command (format "echo ok >~a" (path->string (build-path scratch "out.log"))))
+               #:tsr (path->string scratch))))
+           (check-equal? (ipc-response-status allowed-redirect)
+                         'ok
+                         (ipc-response-error-message allowed-redirect))
+           ;; Sibling sessions, the base itself and foreign roots stay denied.
+           (define sibling
+             (process-request-line
+              (make-trusted-request-json
+               "scratch-sibling"
                "write"
-               (hash 'path
-                     (path->string (build-path other ".planning" "scratch" "tok1234567890ab" "x.rkt"))
-                     'content
-                     "no"))))
-           (check-equal? (ipc-response-status denied) 'error)
-           (check-false (directory-exists? (build-path other ".planning")))))
+               (hash 'path (path->string (build-path base "fedcba9876543210" "x")) 'content "no")
+               #:tsr (path->string scratch))))
+           (check-equal? (ipc-response-status sibling) 'error)
+           (define foreign-write
+             (process-request-line
+              (make-trusted-request-json
+               "scratch-foreign"
+               "write"
+               (hash 'path (path->string (build-path foreign "x.rkt")) 'content "no")
+               #:tsr (path->string scratch))))
+           (check-equal? (ipc-response-status foreign-write) 'error)
+           (check-false (file-exists? (build-path foreign "x.rkt")))
+           ;; A malformed trusted value (base itself) fails closed.
+           (define invalid-trust
+             (process-request-line
+              (make-trusted-request-json
+               "scratch-invalid"
+               "write"
+               (hash 'path (path->string (build-path base "x.rkt")) 'content "no")
+               #:tsr (path->string base))))
+           (check-equal? (ipc-response-status invalid-trust) 'error)
+           (check-true (string-contains? (ipc-response-error-message invalid-trust)
+                                         "invalid trusted scratch root"))))
        (lambda ()
          (delete-directory/files root #:must-exist? #f)
-         (delete-directory/files other #:must-exist? #f))))
+         (delete-directory/files base #:must-exist? #f)
+         (delete-directory/files foreign #:must-exist? #f))))
+
+    (test-case "W2 scratch: worker refuses missing or lax allocations (direct struct bypass)"
+      ;; A directly constructed ipc-request bypasses the JSON decoder, so the
+      ;; worker's own validation is the last line: the base and the session
+      ;; directory must ALREADY exist as real owner-only directories. A
+      ;; missing root is refused (the worker never creates one), and a lax
+      ;; mode is refused instead of repaired.
+      (define parent (make-temporary-file "worker-scratch-validate-~a" 'directory))
+      (define base (build-path parent "q-agent-scratch"))
+      (define token "0123456789abcdef")
+      (define root (build-path base token))
+      (define (bash-request target)
+        (make-ipc-request "scratch-validate"
+                          "bash"
+                          (hasheq 'command (format "echo ok >~a" (path->string target)))
+                          5000
+                          #f
+                          'any
+                          IPC-SCHEMA-VERSION
+                          #f
+                          (path->string root)))
+      (define (run target [base-dir base])
+        (parameterize ([current-allowed-roots '()]
+                       [current-scratch-base-dir base-dir])
+          (process-ipc-request (bash-request target))))
+      (dynamic-wind
+       void
+       (lambda ()
+         (make-directory* base)
+         (file-or-directory-permissions base #o700)
+         ;; Missing session root: whole request refused.
+         (define missing (run (build-path root "missing.log")))
+         (check-equal? (ipc-response-status missing) 'error)
+         (check-true (string-contains? (or (ipc-response-error-message missing) "")
+                                       "invalid trusted scratch root"))
+         (check-false (directory-exists? root) "the worker never creates the root")
+         ;; Existing root, owner-only: accepted.
+         (make-directory* root)
+         (file-or-directory-permissions root #o700)
+         (check-equal? (ipc-response-status (run (build-path root "ok.log"))) 'ok)
+         ;; Lax session directory: refused instead of repaired.
+         (file-or-directory-permissions root #o775)
+         (define lax-root (run (build-path root "lax.log")))
+         (check-equal? (ipc-response-status lax-root) 'error)
+         (check-equal? (bitwise-and (file-or-directory-permissions root 'bits) #o077)
+                       #o075
+                       "the worker must not chmod a lax allocation")
+         (file-or-directory-permissions root #o700)
+         ;; Lax container: refused instead of repaired.
+         (file-or-directory-permissions base #o775)
+         (define lax-base (run (build-path root "laxbase.log")))
+         (check-equal? (ipc-response-status lax-base) 'error)
+         (file-or-directory-permissions base #o700)
+         (check-equal? (ipc-response-status (run (build-path root "ok2.log"))) 'ok)
+         ;; The decoding shape is not enough: the base itself is refused.
+         (define base-request
+           (parameterize ([current-allowed-roots '()]
+                          [current-scratch-base-dir base])
+             (process-ipc-request
+              (make-ipc-request "scratch-base"
+                                "write"
+                                (hasheq 'path (path->string (build-path base "x.rkt")) 'content "no")
+                                5000
+                                #f
+                                'any
+                                IPC-SCHEMA-VERSION
+                                #f
+                                (path->string base)))))
+         (check-equal? (ipc-response-status base-request) 'error)
+         (check-false (file-exists? (build-path base "x.rkt"))))
+       (lambda () (delete-directory/files parent #:must-exist? #f))))
+
+    (test-case "W2 scratch: worker bash resolves symlinks and canonical spellings"
+      ;; The worker's armed redirection root is a filesystem claim too: a
+      ;; symlink below the root is an escape, while a spelling that reaches the
+      ;; SAME root through a symlinked ancestor stays sanctioned.
+      (define real-parent (make-temporary-file "worker-scratch-canon-parent-~a" 'directory))
+      (define alias-parent (make-temporary-file "worker-scratch-canon-alias-~a" 'directory))
+      (define foreign (make-temporary-file "worker-scratch-canon-foreign-~a" 'directory))
+      (define base (build-path real-parent "q-agent-scratch"))
+      (define token "0123456789abcdef")
+      (define root (build-path base token))
+      (define alias (build-path alias-parent "alias"))
+      (make-file-or-directory-link real-parent alias)
+      (define alias-base (build-path alias "q-agent-scratch"))
+      (define alias-root (build-path alias-base token))
+      (define (run target tsr)
+        (parameterize ([current-allowed-roots '()]
+                       [current-scratch-base-dir alias-base])
+          (process-ipc-request (make-ipc-request "scratch-canon"
+                                                 "bash"
+                                                 (hasheq 'command
+                                                         (format "echo ok >~a" (path->string target)))
+                                                 5000
+                                                 #f
+                                                 'any
+                                                 IPC-SCHEMA-VERSION
+                                                 #f
+                                                 (path->string tsr)))))
+      (dynamic-wind
+       void
+       (lambda ()
+         (make-directory* base)
+         (file-or-directory-permissions base #o700)
+         (make-directory* root)
+         (file-or-directory-permissions root #o700)
+         ;; Alias spelling and physical spelling describe one root.
+         (check-equal? (ipc-response-status (run (build-path alias-root "alias.log") alias-root)) 'ok)
+         (check-equal? (ipc-response-status (run (build-path root "physical.log") alias-root)) 'ok)
+         (check-equal? (ipc-response-status (run (build-path root "via-alias.log") root)) 'ok)
+         ;; A directory symlink inside the root is still an escape.
+         (make-file-or-directory-link foreign (build-path root "escape-dir"))
+         (define escaped (run (build-path root "escape-dir" "pwned.log") root))
+         (check-equal? (ipc-response-status escaped) 'error)
+         (check-false (file-exists? (build-path foreign "pwned.log")))
+         ;; So is a symlinked target file.
+         (define victim (build-path foreign "victim.txt"))
+         (display-to-file "original\n" victim #:exists 'replace)
+         (make-file-or-directory-link victim (build-path root "victim-link"))
+         (define linked (run (build-path root "victim-link") root))
+         (check-equal? (ipc-response-status linked) 'error)
+         (check-equal? (file->string victim) "original\n"))
+       (lambda ()
+         (delete-directory/files real-parent #:must-exist? #f)
+         (delete-directory/files alias-parent #:must-exist? #f)
+         (delete-directory/files foreign #:must-exist? #f))))
+
+    (test-case "W2 scratch: a wire request carrying an alias-spelled producer root reaches the worker"
+      ;; RED-FIRST: the decoder applied the working-dir spelling rule to the
+      ;; scratch channel, so a producer root spelled through a symlinked
+      ;; temporary ancestor never reached the worker at all — the whole request
+      ;; was reported "malformed" even though tools/scratch.rkt itself produced
+      ;; that spelling. The wire path must accept the alias and still sanction
+      ;; only the existing private allocation it names.
+      (define outer (make-temporary-file "worker-scratch-wire-alias-~a" 'directory))
+      (define foreign (make-temporary-file "worker-scratch-wire-foreign-~a" 'directory))
+      (define real (build-path outer "real"))
+      (define base (build-path real "q-agent-scratch"))
+      (define token "0123456789abcdef")
+      (define root (build-path base token))
+      (define alias (build-path outer "alias"))
+      (define alias-root (build-path alias "q-agent-scratch" token))
+      (dynamic-wind
+       void
+       (lambda ()
+         (make-directory* base)
+         (file-or-directory-permissions base #o700)
+         (make-directory* root)
+         (file-or-directory-permissions root #o700)
+         (make-file-or-directory-link real alias)
+         (parameterize ([current-allowed-roots '()]
+                        [current-scratch-base-dir base])
+           (define target (build-path alias-root "wire-alias.rkt"))
+           (define resp
+             (process-request-line (make-trusted-request-json
+                                    "scratch-wire-alias"
+                                    "write"
+                                    (hash 'path (path->string target) 'content "#lang racket/base\n")
+                                    #:tsr (path->string alias-root))))
+           (check-equal? (ipc-response-status resp) 'ok (ipc-response-error-message resp))
+           (check-equal? (file->string (build-path root "wire-alias.rkt"))
+                         "#lang racket/base\n"
+                         "the alias spelling names the same sanctioned allocation")
+           ;; The alias spelling widens nothing else: a foreign path stays denied.
+           (define foreign-write
+             (process-request-line
+              (make-trusted-request-json
+               "scratch-wire-alias-foreign"
+               "write"
+               (hash 'path (path->string (build-path foreign "x.rkt")) 'content "no")
+               #:tsr (path->string alias-root))))
+           (check-equal? (ipc-response-status foreign-write) 'error)
+           (check-false (file-exists? (build-path foreign "x.rkt")))))
+       (lambda ()
+         (delete-directory/files outer #:must-exist? #f)
+         (delete-directory/files foreign #:must-exist? #f))))
+
+    (test-case "W2 scratch: a symlinked session root is refused even without the decoder"
+      ;; The wire decoder already refuses a symlink SPELLING. A directly
+      ;; constructed request bypasses that check, so the worker's own
+      ;; validation must also refuse a session directory that is a symlink: an
+      ;; armed root that is a followed link would sanction writes in whatever
+      ;; directory the link names.
+      (define base (make-temporary-file "worker-scratch-sym-base-~a" 'directory))
+      (define foreign (make-temporary-file "worker-scratch-sym-foreign-~a" 'directory))
+      (define token "0123456789abcdef")
+      (define link-root (build-path base token))
+      (make-file-or-directory-link foreign link-root)
+      (dynamic-wind
+       void
+       (lambda ()
+         (parameterize ([current-allowed-roots '()]
+                        [current-scratch-base-dir base])
+           (define resp
+             (process-ipc-request
+              (make-ipc-request "scratch-sym"
+                                "bash"
+                                (hasheq 'command
+                                        (format "echo escaped >~a"
+                                                (path->string (build-path link-root "escape.log"))))
+                                5000
+                                #f
+                                'any
+                                IPC-SCHEMA-VERSION
+                                #f
+                                (path->string link-root))))
+           (check-equal? (ipc-response-status resp) 'error)
+           (check-true (string-contains? (or (ipc-response-error-message resp) "")
+                                         "invalid trusted scratch root"))
+           (check-false (file-exists? (build-path foreign "escape.log"))
+                        "no bytes may be written through a symlinked session root")
+           (check-equal? (current-allowed-roots) '())))
+       (lambda ()
+         (delete-directory/files base #:must-exist? #f)
+         (delete-directory/files foreign #:must-exist? #f))))
 
     (test-case "write to allowed path succeeds"
       (define test-file (build-path allowed-dir "write-test"))
@@ -588,42 +854,39 @@
 
     (test-case "R91: model working-dir alone never becomes trust"
       (define base (make-temporary-file "r91-sec-model-~a" 'directory))
-      (dynamic-wind
-       void
-       (lambda ()
-         (define spawn-a (build-path base "a"))
-         (define owned-b (build-path base "b"))
-         (make-directory* spawn-a)
-         (make-directory* owned-b)
-         (parameterize ([current-allowed-roots (list spawn-a)]
-                        [current-directory spawn-a])
-           ;; The model-supplied cwd is honored as plain cwd (bash feature)…
-           (define pwd-resp
-             (process-request-line
-              (make-trusted-request-json
-               "r91-model-pwd"
-               "bash"
-               (hash 'command "pwd")
-               #:wd (path->string owned-b))))
-           (check-equal? (ipc-response-status pwd-resp) 'ok)
-           (check-equal?
-            (string-trim (format "~a" (ipc-response-content pwd-resp)))
-            (path->string owned-b))
-           ;; …but it must not extend roots: writes into B are refused.
-           (define write-resp
-             (process-request-line
-              (make-trusted-request-json
-               "r91-model-write"
-               "write"
-               (hash 'path (path->string (build-path owned-b "x.txt")) 'content "no"))))
-           (check-equal? (ipc-response-status write-resp) 'error)
-           (check-true (string-contains? (or (ipc-response-error-message write-resp) "")
-                                         "not allowed"))
-           (check-false (file-exists? (build-path owned-b "x.txt")))
-           ;; Missing-trust owned request: the owned directory B as wd without
-           ;; coordinator trust denies the write (never gains roots by omission).
-           (check-equal? (ipc-response-status write-resp) 'error)))
-       (lambda () (delete-directory/files base #:must-exist? #f))))
+      (dynamic-wind void
+                    (lambda ()
+                      (define spawn-a (build-path base "a"))
+                      (define owned-b (build-path base "b"))
+                      (make-directory* spawn-a)
+                      (make-directory* owned-b)
+                      (parameterize ([current-allowed-roots (list spawn-a)]
+                                     [current-directory spawn-a])
+                        ;; The model-supplied cwd is honored as plain cwd (bash feature)…
+                        (define pwd-resp
+                          (process-request-line (make-trusted-request-json "r91-model-pwd"
+                                                                           "bash"
+                                                                           (hash 'command "pwd")
+                                                                           #:wd
+                                                                           (path->string owned-b))))
+                        (check-equal? (ipc-response-status pwd-resp) 'ok)
+                        (check-equal? (string-trim (format "~a" (ipc-response-content pwd-resp)))
+                                      (path->string owned-b))
+                        ;; …but it must not extend roots: writes into B are refused.
+                        (define write-resp
+                          (process-request-line
+                           (make-trusted-request-json
+                            "r91-model-write"
+                            "write"
+                            (hash 'path (path->string (build-path owned-b "x.txt")) 'content "no"))))
+                        (check-equal? (ipc-response-status write-resp) 'error)
+                        (check-true (string-contains? (or (ipc-response-error-message write-resp) "")
+                                                      "not allowed"))
+                        (check-false (file-exists? (build-path owned-b "x.txt")))
+                        ;; Missing-trust owned request: the owned directory B as wd without
+                        ;; coordinator trust denies the write (never gains roots by omission).
+                        (check-equal? (ipc-response-status write-resp) 'error)))
+                    (lambda () (delete-directory/files base #:must-exist? #f))))
 
     (test-case "R91: coordinator B + model cwd C cannot extend to C"
       (define base (make-temporary-file "r91-sec-mix-~a" 'directory))
@@ -639,10 +902,11 @@
          (parameterize ([current-allowed-roots (list spawn-a)])
            (define req-args (hash 'path (path->string (build-path model-c "x.txt")) 'content "no"))
            (define resp
-             (process-request-line
-              (make-trusted-request-json "r91-mix" "write" req-args
-                                         #:wd (path->string model-c)
-                                         #:twd (path->string owned-b))))
+             (process-request-line (make-trusted-request-json "r91-mix"
+                                                              "write"
+                                                              req-args
+                                                              #:wd (path->string model-c)
+                                                              #:twd (path->string owned-b))))
            ;; The worker chdirs to model C (plain cwd semantics) but the only
            ;; extended root is coordinator B — C stays refused.
            (check-equal? (ipc-response-status resp) 'error)
@@ -650,13 +914,12 @@
            ;; Coordinator B remains writable under the same request shape.
            (define ok-resp
              (process-request-line
-              (make-trusted-request-json "r91-mix-ok" "write"
-                                         (hash 'path
-                                               (path->string (build-path owned-b "y.txt"))
-                                               'content
-                                               "yes")
-                                         #:wd (path->string model-c)
-                                         #:twd (path->string owned-b))))
+              (make-trusted-request-json
+               "r91-mix-ok"
+               "write"
+               (hash 'path (path->string (build-path owned-b "y.txt")) 'content "yes")
+               #:wd (path->string model-c)
+               #:twd (path->string owned-b))))
            (check-equal? (ipc-response-status ok-resp) 'ok (ipc-response-error-message ok-resp))
            (check-equal? (file->string (build-path owned-b "y.txt")) "yes")
            ;; And the model cwd never gained anything after the requests.
@@ -673,18 +936,17 @@
          (parameterize ([current-allowed-roots (list spawn-a)])
            (define (denied? twd target)
              (define resp
-               (process-request-line
-                (make-trusted-request-json
-                 "r91-invalid"
-                 "write"
-                 (hash 'path target 'content "no")
-                 #:twd twd)))
+               (process-request-line (make-trusted-request-json "r91-invalid"
+                                                                "write"
+                                                                (hash 'path target 'content "no")
+                                                                #:twd twd)))
              (and (equal? (ipc-response-status resp) 'error)
-                  (string-contains? (or (ipc-response-error-message resp) "")
-                                    "malformed request")))
+                  (string-contains? (or (ipc-response-error-message resp) "") "malformed request")))
            ;; Traversal, relative, non-string, NUL: the WHOLE request is
            ;; malformed and no tool runs (no target is ever created).
-           (for ([twd (list "/tmp/../etc" "relative/path" 7
+           (for ([twd (list "/tmp/../etc"
+                            "relative/path"
+                            7
                             (string-append "/tmp/n" (string #\null) "x"))])
              (check-true (denied? twd "/tmp/r91-never-created.txt")
                          (format "invalid trust ~s must refuse the request" twd)))
@@ -693,17 +955,16 @@
            ;; without dispatch (fail closed, no #f-and-continue fallback).
            (define direct
              (process-ipc-request
-              (make-ipc-request
-               "r91-direct"
-               "write"
-               (hasheq 'path "/tmp/r91-never-created-2.txt" 'content "no")
-               5000
-               #f
-               'any
-               1
-               ;; absolute twd carrying a '..' element, built from path
-               ;; pieces — the whole request must stay malformed/refused
-               (path->string (build-path (string->path "/") "a" ".." "b")))))
+              (make-ipc-request "r91-direct"
+                                "write"
+                                (hasheq 'path "/tmp/r91-never-created-2.txt" 'content "no")
+                                5000
+                                #f
+                                'any
+                                1
+                                ;; absolute twd carrying a '..' element, built from path
+                                ;; pieces — the whole request must stay malformed/refused
+                                (path->string (build-path (string->path "/") "a" ".." "b")))))
            (check-equal? (ipc-response-status direct) 'error)
            (check-true (string-contains? (or (ipc-response-error-message direct) "")
                                          "invalid trusted working directory"))
@@ -725,12 +986,11 @@
                             (path->string (build-path base "evil-link" "sub"))
                             (path->string (build-path base "broken-link")))])
              (define resp
-               (process-request-line
-                (make-trusted-request-json
-                 "r91-link"
-                 "write"
-                 (hash 'path "/tmp/r91-link-never.txt" 'content "no")
-                 #:twd twd)))
+               (process-request-line (make-trusted-request-json
+                                      "r91-link"
+                                      "write"
+                                      (hash 'path "/tmp/r91-link-never.txt" 'content "no")
+                                      #:twd twd)))
              (check-equal? (ipc-response-status resp) 'error)
              (check-true (string-contains? (or (ipc-response-error-message resp) "")
                                            "malformed request")
@@ -762,12 +1022,11 @@
            (check-false (directory-exists? (build-path base "b-escape")))
            ;; Absolute cross-root write refused; outside bytes preserved.
            (define cross-write
-             (process-request-line
-              (make-trusted-request-json
-               "r91-cross-w"
-               "write"
-               (hash 'path (path->string victim) 'content "OVERWRITTEN")
-               #:twd (path->string owned-b))))
+             (process-request-line (make-trusted-request-json
+                                    "r91-cross-w"
+                                    "write"
+                                    (hash 'path (path->string victim) 'content "OVERWRITTEN")
+                                    #:twd (path->string owned-b))))
            (check-equal? (ipc-response-status cross-write) 'error)
            (check-equal? (file->string victim) "OUTSIDE-BYTES")
            ;; Absolute cross-root edit refused; outside bytes preserved.
@@ -805,21 +1064,19 @@
            ;; The model plants a trust-looking TOOL ARGUMENT plus its own cwd.
            ;; Neither is the wire trust field, so roots never extend.
            (define resp
-             (process-request-line
-              (make-trusted-request-json
-               "r91-inject"
-               "write"
-               (hash 'path
-                     (path->string (build-path owned-b "injected.txt"))
-                     'content
-                     "no"
-                     'trusted-working-dir
-                     (path->string owned-b)
-                     'working-directory
-                     (path->string owned-b)))))
+             (process-request-line (make-trusted-request-json
+                                    "r91-inject"
+                                    "write"
+                                    (hash 'path
+                                          (path->string (build-path owned-b "injected.txt"))
+                                          'content
+                                          "no"
+                                          'trusted-working-dir
+                                          (path->string owned-b)
+                                          'working-directory
+                                          (path->string owned-b)))))
            (check-equal? (ipc-response-status resp) 'error)
-           (check-true (string-contains? (or (ipc-response-error-message resp) "")
-                                         "not allowed"))
+           (check-true (string-contains? (or (ipc-response-error-message resp) "") "not allowed"))
            (check-false (file-exists? (build-path owned-b "injected.txt")))
            (check-equal? (current-allowed-roots) (list spawn-a))))
        (lambda () (delete-directory/files base #:must-exist? #f))))
@@ -837,11 +1094,10 @@
                         [current-directory spawn-a])
            ;; wd inside the spawn root, no trust field: unchanged legacy path.
            (define legacy
-             (process-request-line
-              (make-trusted-request-json
-               "r91-legacy"
-               "write"
-               (hash 'path "legacy.txt" 'content "legacy ok"))))
+             (process-request-line (make-trusted-request-json
+                                    "r91-legacy"
+                                    "write"
+                                    (hash 'path "legacy.txt" 'content "legacy ok"))))
            (check-equal? (ipc-response-status legacy) 'ok (ipc-response-error-message legacy))
            (check-equal? (file->string (build-path spawn-a "legacy.txt")) "legacy ok")
            ;; The same legacy shape cannot write into B (no roots by omission).
@@ -870,41 +1126,28 @@
            ;; A crash INSIDE the extended scope (hook raises exn:fail, converted
            ;; by the tool boundary) must still restore the captured roots.
            (parameterize ([current-worker-edit-before-write-hook
-                           (lambda (path new-content)
-                             (error "r91 simulated tool crash"))])
+                           (lambda (path new-content) (error "r91 simulated tool crash"))])
              (define crashed
                (process-request-line
                 (make-trusted-request-json
                  "r91-crash"
                  "edit"
-                 (hash 'path
-                       (path->string edit-target)
-                       'old-text
-                       "alpha"
-                       'new-text
-                       "beta")
+                 (hash 'path (path->string edit-target) 'old-text "alpha" 'new-text "beta")
                  #:twd (path->string owned-b))))
              (check-equal? (ipc-response-status crashed) 'error)
-             (check-true (string-contains? (or (ipc-response-error-message crashed) "")
-                                           "crashed"))
+             (check-true (string-contains? (or (ipc-response-error-message crashed) "") "crashed"))
              (check-equal? (current-allowed-roots) (list spawn-a)))
            ;; An exception that ESCAPES the dispatch (non-exn raise) must also
            ;; restore the roots during unwinding.
-           (parameterize ([current-worker-edit-before-write-hook
-                           (lambda (path new-content) (raise 'r91-escape))])
+           (parameterize ([current-worker-edit-before-write-hook (lambda (path new-content)
+                                                                   (raise 'r91-escape))])
              (define escaped 'no-raise)
-             (with-handlers ([(lambda (e) (eq? e 'r91-escape))
-                              (lambda (e) (set! escaped 'escaped))])
+             (with-handlers ([(lambda (e) (eq? e 'r91-escape)) (lambda (e) (set! escaped 'escaped))])
                (process-request-line
                 (make-trusted-request-json
                  "r91-escape"
                  "edit"
-                 (hash 'path
-                       (path->string edit-target)
-                       'old-text
-                       "alpha"
-                       'new-text
-                       "gamma")
+                 (hash 'path (path->string edit-target) 'old-text "alpha" 'new-text "gamma")
                  #:twd (path->string owned-b))))
              (check-equal? escaped 'escaped "non-exn exception must propagate")
              (check-equal? (current-allowed-roots) (list spawn-a)))

@@ -248,10 +248,14 @@
 ;; trusted-working-dir). The worker extends its request-scoped allowed roots
 ;; only from that field — never from model-supplied 'working-directory, which
 ;; keeps its plain cwd semantics for tools like bash.
+;; W2: #:trusted-scratch-root carries the single trusted session scratch
+;; allocation on the same trusted producer channel. It is additive and omitted
+;; from the wire when absent, so old workers see an unchanged request.
 (define (execute-tool-via-worker tool-name
                                  args
                                  required-capability
-                                 #:coordinator-wd [coordinator-wd #f])
+                                 #:coordinator-wd [coordinator-wd #f]
+                                 #:trusted-scratch-root [trusted-scratch-root #f])
   (with-handlers ([exn:fail?
                    (lambda (e)
                      (make-error-response #f (format "execution plane error: ~a" (exn-message e))))])
@@ -273,7 +277,15 @@
     ;; value — never a model/hook-supplied argument.
     (define trusted-wd
       (and coordinator-wd
-           (if (path? coordinator-wd) (path->string coordinator-wd) coordinator-wd)))
+           (if (path? coordinator-wd)
+               (path->string coordinator-wd)
+               coordinator-wd)))
+    ;; W2: same producer-side normalization for the trusted scratch root.
+    (define trusted-scratch
+      (and trusted-scratch-root
+           (if (path? trusted-scratch-root)
+               (path->string trusted-scratch-root)
+               trusted-scratch-root)))
     ;; Effective-cwd precedence (§2.2.3): the wire working-dir field is the
     ;; coordinator twd when present, else the string-tolerated model
     ;; `working-directory` (BUG-0089). Only trusted-wd ever reaches the twd
@@ -287,7 +299,8 @@
                         effective-wd
                         required-capability
                         IPC-SCHEMA-VERSION
-                        trusted-wd))
+                        trusted-wd
+                        trusted-scratch))
     (define gw (ensure-worker!))
     (send-request! gw req timeout-ms)))
 
@@ -381,8 +394,10 @@
          gateway-alive?
          gateway-worker-process)
 
-(provide (contract-out
-          [ensure-worker! (-> gateway-worker?)]
-          [execute-via-worker (-> any/c hash?)]
-          [execute-tool-via-worker
-           (->* (string? hash? symbol?) (#:coordinator-wd (or/c path-string? #f)) ipc-response?)]))
+(provide (contract-out [ensure-worker! (-> gateway-worker?)]
+                       [execute-via-worker (-> any/c hash?)]
+                       [execute-tool-via-worker
+                        (->* (string? hash? symbol?)
+                             (#:coordinator-wd (or/c path-string? #f)
+                                               #:trusted-scratch-root (or/c path-string? #f))
+                             ipc-response?)]))

@@ -61,6 +61,9 @@
          "../util/event/event-bus.rkt"
          ;; ARCH-01 upward import — runtime→tools
          (only-in "layer-adapters.rkt" make-exec-context make-error-result list-tools-jsexpr)
+         ;; W2: the exec-context carries THIS session's trusted scratch root; the
+         ;; direct and sandboxed planes both key off that one value.
+         (only-in "layer-adapters.rkt" allocated-session-scratch-root)
          ;; Permission gate via adapter
          (only-in "layer-adapters.rkt" permission-config? make-default-permission-config)
          ;; ARCH-01 upward import via adapter
@@ -349,7 +352,13 @@
                           #:session-metadata
                           (hasheq 'session-id session-id 'session-index (config-session-index config))
                           #:permission-config (permission-config-for-execution config perm-cfg)
-                          #:capabilities (capabilities-for-tool-execution config))
+                          #:capabilities (capabilities-for-tool-execution config)
+                          ;; W2: one trusted scratch root per agent session. A
+                          ;; session with no allocation sends #f: there is no
+                          ;; process-wide fallback that sanctions the scratch
+                          ;; base directory.
+                          #:scratch-root (and session-id
+                                              (allocated-session-scratch-root session-id)))
                          #:parallel? (config-parallel-tools config)))]))
   ;; Dispatch 'tool.execution.completed hook after tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))

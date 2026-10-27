@@ -167,6 +167,15 @@
   (check-equal? (wave-status->state-string 'deferred) "DEFERRED")
   (check-equal? (wave-status->state-string 'pending) "PENDING"))
 
+;; W5: the display/state-row spellings are OWNED by wave-status.rkt; the
+;; kernel delegates. The historical spellings are preserved verbatim (every
+;; non-terminal durable status keeps the initial row/display text), because
+;; the projection shell must remain byte-identical to the legacy writers.
+(test-case "status mapping: every historical non-terminal spelling is preserved (owner-delegated)"
+  (for ([s (in-list '(pending in-progress verifying awaiting-delivery interrupted))])
+    (check-equal? (wave-status->projection-string s) "Inbox" (format "projection ~s" s))
+    (check-equal? (wave-status->state-string s) "PENDING" (format "state row ~s" s))))
+
 ;; ============================================================
 ;; Projection sets
 ;; ============================================================

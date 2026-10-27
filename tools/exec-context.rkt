@@ -24,6 +24,7 @@
          exec-context-bytes-written
          exec-context-browser-service
          exec-context-capabilities
+         exec-context-scratch-root
          (contract-out [make-exec-context
                         (->* ()
                              ;; path-string? covers both path? and string?
@@ -36,7 +37,8 @@
                                                   #:progress-callback (or/c procedure? #f)
                                                   #:permission-config permission-config?
                                                   #:browser-service (or/c any/c #f)
-                                                  #:capabilities any/c)
+                                                  #:capabilities any/c
+                                                  #:scratch-root (or/c path-string? #f))
                              exec-context?)]))
 
 ;; ============================================================
@@ -53,7 +55,10 @@
                            permission-config
                            bytes-written
                            browser-service ; (or/c secure-browser-service? #f) — F7
-                           capabilities)
+                           capabilities
+                           ;; W2: trusted per-session scratch root (#f when the
+                           ;; session has not allocated one).
+                           scratch-root)
   #:transparent
   #:guard (lambda (working-directory
                    cancellation-token
@@ -66,6 +71,7 @@
                    bytes-written
                    browser-service
                    capabilities
+                   scratch-root
                    _type-name)
             (values working-directory
                     cancellation-token
@@ -77,7 +83,8 @@
                     permission-config
                     bytes-written
                     browser-service
-                    (canonical-capabilities-snapshot capabilities))))
+                    (canonical-capabilities-snapshot capabilities)
+                    scratch-root)))
 
 ;; v0.99.66 (W1, finding #1 CRITICAL): the default permission-config is
 ;; now make-strict-permission-config instead of #f.  This closes the
@@ -92,7 +99,8 @@
                            #:progress-callback [progress-callback #f]
                            #:permission-config [permission-config (make-strict-permission-config)]
                            #:browser-service [browser-service #f]
-                           #:capabilities [capabilities (current-session-capabilities)])
+                           #:capabilities [capabilities (current-session-capabilities)]
+                           #:scratch-root [scratch-root #f])
   (exec-context working-directory
                 cancellation-token
                 event-publisher
@@ -103,4 +111,5 @@
                 permission-config
                 (box 0)
                 browser-service
-                (canonical-capabilities-snapshot capabilities)))
+                (canonical-capabilities-snapshot capabilities)
+                scratch-root))

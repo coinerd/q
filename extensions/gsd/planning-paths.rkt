@@ -45,6 +45,10 @@
          wave-doc-rel-path
          wave-doc-file
          unsafe-declared-path-refusal
+         declared-wave-doc-reference-rx
+         declared-wave-doc-reference
+         canonical-snapshot-wave-doc-reference-rx
+         canonical-snapshot-wave-doc-name-rx
          wave-doc-reference-rx
          parse-wave-doc-rel-path
          wave-doc-rel-path?
@@ -61,6 +65,7 @@
          campaign-review-sessions-dir
          campaign-review-tool-home-dir
          campaign-lint-verdict-file
+         campaign-lock-file
          reports-root
          wave-evidence-report-dir
          wave-review-report-dir
@@ -141,10 +146,44 @@
         (format "declared wave document path ~a contains an empty or `.` segment" rel-path)]
        [else #f])]))
 
-;; One canonical grammar for parsing, orphan diagnostics and snapshot capture.
-;; Safe dots, uppercase, underscores, W<n> and WAVE-<n> are all bindable.
-(define wave-doc-reference-rx #px"waves/(?:W|WAVE-)([0-9]+)-([A-Za-z0-9][A-Za-z0-9._-]*)\\.md")
-(define canonical-wave-doc-rx #px"^waves/(?:W|WAVE-)([0-9]+)-([A-Za-z0-9][A-Za-z0-9._-]*)\\.md$")
+;; ------------------------------------------------------------
+;; Historical DECLARED reference grammar (author-supplied arrow targets)
+;; ------------------------------------------------------------
+;; This is the LENIENT lexical extraction the index parser has always used:
+;; any `waves/<...>.md` reference embedded in an arrow target is a declared
+;; reference, including historical nested/custom names such as
+;; `waves/custom/nested-legal.md`. It is a LEXICAL grammar only: safety
+;; (traversal/absolute/empty-segment refusal) and filesystem/link checks stay
+;; in unsafe-declared-path-refusal and the readers, and are NOT narrowed by
+;; this grammar. `wave-ref-path-from-target` in wave-docs.rkt re-exports this
+;; ONE parser; no second regexp exists.
+(define declared-wave-doc-reference-rx
+  #rx"waves/[A-Za-z0-9][A-Za-z0-9._/-]*\\.md")
+
+;; declared-wave-doc-reference : (or/c string? #f) -> (or/c string? #f)
+(define (declared-wave-doc-reference target)
+  (and target
+       (let ([m (regexp-match declared-wave-doc-reference-rx target)])
+         (and m (car m)))))
+
+;; ------------------------------------------------------------
+;; Canonical FROZEN-SNAPSHOT name grammar (campaign identity)
+;; ------------------------------------------------------------
+;; Deliberately NARROWER than the historical declared grammar: a canonical
+;; snapshot name is exactly a top-level `waves/W<n>-<slug>.md` /
+;; `waves/WAVE-<n>-<slug>.md` (no nested directories). Snapshot capture and
+;; wave-doc-rel-path? use ONLY this pair, so a historical nested declared
+;; name can never masquerade as a canonical snapshot/binding name.
+(define canonical-snapshot-wave-doc-reference-rx
+  #px"waves/(?:W|WAVE-)([0-9]+)-([A-Za-z0-9][A-Za-z0-9._-]*)\\.md")
+(define canonical-snapshot-wave-doc-name-rx
+  #px"^waves/(?:W|WAVE-)([0-9]+)-([A-Za-z0-9][A-Za-z0-9._-]*)\\.md$")
+
+;; Legacy export names: the same regexp objects, kept for existing importers
+;; (plan-snapshot.rkt / wave-docs.rkt). New code should use the explicit
+;; canonical-snapshot-* names above.
+(define wave-doc-reference-rx canonical-snapshot-wave-doc-reference-rx)
+(define canonical-wave-doc-rx canonical-snapshot-wave-doc-name-rx)
 
 (define (parse-wave-doc-rel-path rel-path)
   (cond
@@ -157,7 +196,7 @@
      (cond
        [unsafe (values #f unsafe)]
        [else
-        (define match (regexp-match canonical-wave-doc-rx rel-path))
+        (define match (regexp-match canonical-snapshot-wave-doc-name-rx rel-path))
         (if match
             (values (string->number (cadr match)) #f)
             (values
@@ -217,6 +256,14 @@
 ;; Recorded wave-doc lint verdict (write-once at campaign creation).
 (define (campaign-lint-verdict-file base-dir plan-id)
   (campaign-path base-dir plan-id lint-verdict-filename))
+
+;; THE campaign lease lock file: one stable sibling of the durable record.
+;; The file persists after a crash (its content is diagnostic only); the OS
+;; advisory lock taken on it is what actually excludes a second runner, so a
+;; leftover file alone never blocks and is never force-released. Shared by
+;; campaign-lease.rkt and the read-only plan inspection so both name ONE path.
+(define (campaign-lock-file base-dir plan-id)
+  (build-path (campaigns-root base-dir) (string-append plan-id ".lock")))
 
 ;; ============================================================
 ;; Committed report paths (docs/reports)

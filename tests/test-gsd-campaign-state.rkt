@@ -23,6 +23,11 @@
          (only-in "../util/json/checksum.rkt" sha256-string)
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
+         ;; R-019/W5: the typed unknown-status rejection is owned by
+         ;; wave-status.rkt (campaign-state delegates to it).
+         (only-in "../extensions/gsd/wave-status.rkt"
+                  exn:fail:wave-status?
+                  exn:fail:wave-status-value)
          (only-in "../extensions/gsd/wave-executor.rkt"
                   wave-executor-statuses
                   wave-status-state
@@ -102,13 +107,19 @@
     ;; GSD-SIMPLIFICATION W1: the canonical vocabulary now lives in
     ;; wave-status.rkt. These pins prove the campaign API kept its exact
     ;; legacy spellings and its disjoint deferred semantics.
-    (test-case "W1: legacy spellings and fallback are preserved verbatim"
+    (test-case "W5: legacy aliases are accepted, unknown statuses are rejected"
       (check-eq? (canonical-wave-status "COMPLETED") 'done)
       (check-eq? (canonical-wave-status "NOT STARTED") 'pending)
       (check-eq? (canonical-wave-status "IN PROGRESS") 'in-progress)
-      ;; Unknown input keeps the historical pending fallback (no new meaning).
-      (check-eq? (canonical-wave-status "CANCELLED") 'pending)
-      (check-eq? (canonical-wave-status "nonsense") 'pending))
+      ;; R-019/W5: unknown input is a typed rejection, never `pending`.
+      (for ([bad (in-list '("CANCELLED" "nonsense" ""))])
+        (define ex
+          (with-handlers ([exn:fail:wave-status? values])
+            (canonical-wave-status bad)
+            #f))
+        (check-not-false ex (format "~s must be rejected" bad))
+        (when ex
+          (check-equal? (exn:fail:wave-status-value ex) bad))))
 
     (test-case "W1: deferred stays disjoint from done/completed"
       (check-true (completed-status? 'done))

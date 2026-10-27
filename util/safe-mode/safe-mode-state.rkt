@@ -38,7 +38,7 @@
 ;; Constants
 ;; ============================================================
 
-(define blocked-tools '("bash" "edit" "write" "firecrawl"))
+(define blocked-tools '("bash" "edit" "write" "delete-lines" "firecrawl"))
 
 ;; Browser tools that are blocked in safe-mode.
 ;; Also enforced via string-prefix? "browser_" for future-proofing.

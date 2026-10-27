@@ -29,6 +29,7 @@
                   exec-context?
                   exec-context-working-directory
                   exec-context-runtime-settings
+                  exec-context-scratch-root
                   tool-result?)
          "../../sandbox/subprocess.rkt"
          "../../sandbox/limits.rkt"
@@ -41,10 +42,17 @@
          (only-in "../../util/path/path-helpers.rkt" expand-home-path)
          (only-in "../../util/truncation.rkt" truncate-output)
          (only-in "../../util/safe-mode/safe-mode-predicates.rkt" safe-mode?)
+         ;; W2: a direct/in-process bash call must revalidate the exec-context
+         ;; scratch root with the SAME predicate the worker trusts. A shape-only
+         ;; path, a missing allocation, a lax directory or a symlink therefore
+         ;; arms no redirection target here either.
+         (only-in "../scratch.rkt" existing-trusted-session-scratch-root?)
          (only-in "bash-safety.rkt"
                   destructive-patterns
                   destructive-command?
                   destructive-diagnostic-message
+                  current-sanctioned-scratch-root
+                  scratch-redirection-guidance
                   high-risk-command?
                   structured-destructive-command?
                   process-kill-refusal?
@@ -215,7 +223,39 @@
 ;; Main tool function
 ;; --------------------------------------------------
 
+;; W2: the armed redirection policy for THIS execution. Only this session's
+;; trusted scratch root (carried on the execution context) is authoritative.
+;; There is no process-wide allocation and no base-directory default: when the
+;; session has no root, `current-sanctioned-scratch-root` is #f and bash
+;; sanctions no redirection target at all (fail closed).
+;;
+;; The context value is revalidated here rather than trusted by construction:
+;; a direct caller can put any path (or a string spelling) on the context. A
+;; root that is not an EXISTING owner-only allocation below the current scratch
+;; base — including the base itself, a missing token directory, a lax directory
+;; or a symlink — arms nothing. This is read-only and never repairs a root.
+(define (bash-scratch-policy-root exec-ctx)
+  (define root (and exec-ctx (exec-context-scratch-root exec-ctx)))
+  (and root
+       (existing-trusted-session-scratch-root? root)
+       root))
+
+;; W2: structured port preservation. stderr is labelled in the model-facing
+;; rendering and never silently concatenated onto stdout without identity.
+(define (labelled-combined-output stdout stderr)
+  (define out (string-trim stdout))
+  (define err (string-trim stderr))
+  (cond
+    [(and (string=? out "") (string=? err "")) ""]
+    [(string=? err "") out]
+    [(string=? out "") (string-append "[stderr]\n" err)]
+    [else (string-append out "\n[stderr]\n" err)]))
+
 (define (tool-bash args [exec-ctx #f])
+  (parameterize ([current-sanctioned-scratch-root (bash-scratch-policy-root exec-ctx)])
+    (run-bash-tool args exec-ctx)))
+
+(define (run-bash-tool args exec-ctx)
   (define command (hash-ref args 'command #f))
   (cond
     [(not command) (make-error-result "Missing required argument: command")]
@@ -244,9 +284,10 @@
         (make-error-result (format "Blocked by execution policy (allowlist mode): ~a" command))]
        ;; Block takes priority
        [(and block-destructive? (destructive-command? command))
-        (make-error-result (format "Blocked destructive command (~a): ~a"
+        (make-error-result (format "Blocked destructive command (~a): ~a\n~a"
                                    (destructive-diagnostic-message command)
-                                   command))]
+                                   command
+                                   (scratch-redirection-guidance)))]
        ;; BUG-0066: process-kill patterns (kill-by-name, unpinned
        ;; pkill/pgrep loops, self-matching interpreter kills) are refused
        ;; outright with the recorded-PID safe alternative.
@@ -313,12 +354,9 @@
 
         (define stdout (subprocess-result-stdout result))
         (define stderr-out (subprocess-result-stderr result))
-        ;; Combine stdout and stderr; include stderr if non-empty
-        (define raw-combined
-          (string-trim (string-append stdout
-                                      (if (string=? stderr-out "")
-                                          ""
-                                          (string-append "\n" stderr-out)))))
+        ;; W2: stdout and stderr stay separate structured fields; the
+        ;; model-facing text labels stderr instead of dropping its identity.
+        (define raw-combined (labelled-combined-output stdout stderr-out))
         ;; RA-1b (v0.24.7): Inject high-risk notice into tool output
         (define high-risk-notice
           (if (and (not block-destructive?) (high-risk-command? command))
@@ -347,5 +385,9 @@
                                      (subprocess-result-timed-out? result)
                                      'duration-ms
                                      (subprocess-result-elapsed-ms result)
+                                     'stdout
+                                     (truncate-output stdout)
+                                     'stderr
+                                     (truncate-output stderr-out)
                                      'command
                                      command))])]))

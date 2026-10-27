@@ -13,7 +13,9 @@
 ;; parsing waves from markdown, validation, serialization.
 
 (require rackunit
-         "../extensions/gsd/plan-types.rkt")
+         "../extensions/gsd/plan-types.rkt"
+         ;; W5: the shared status owner owns the accepted spelling vocabulary.
+         (only-in "../extensions/gsd/wave-status.rkt" exn:fail:wave-status?))
 
 ;; ============================================================
 ;; gsd-task construction
@@ -82,6 +84,26 @@
   (for ([s '(pending in-progress completed skipped failed)])
     (define w2 (gsd-wave-set-status w s))
     (check-eq? (gsd-wave-status w2) s)))
+
+;; W5 (R-019): plan-types no longer owns a second status-spelling table and
+;; no longer falls back to 'pending for an unknown spelling. It delegates the
+;; spelling vocabulary to wave-status.rkt and keeps only its own legacy
+;; row-vocabulary mapping (done -> completed, deferred -> skipped).
+(test-case "string->wave-status delegates the shared owner vocabulary (W5)"
+  (for ([pair (in-list '(("Inbox" pending)
+                         ("PENDING" pending)
+                         ("NOT STARTED" pending)
+                         ("In-Progress" in-progress)
+                         ("IN PROGRESS" in-progress)
+                         ("DONE" completed)
+                         ("COMPLETED" completed)
+                         ("FAILED" failed)
+                         ("DEFERRED" skipped)))])
+    (define spelling (car pair))
+    (define expected (cadr pair))
+    (check-eq? (string->wave-status spelling) expected spelling))
+  (for ([bad (in-list '("REWORK" "CANCELLED" ""))])
+    (check-exn exn:fail:wave-status? (lambda () (string->wave-status bad)) bad)))
 
 ;; ============================================================
 ;; gsd-plan construction

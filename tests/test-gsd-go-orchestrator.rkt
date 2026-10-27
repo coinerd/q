@@ -93,8 +93,14 @@
                   stamp-campaign-build-identity!
                   find-git-root
                   git-available?)
-         (only-in "../extensions/gsd/wave-runner-port.rkt" wave-execution-outcome)
-         (only-in "../extensions/gsd/delivery-verifier.rkt" delivery-verification)
+         (only-in "../extensions/gsd/wave-runner-port.rkt"
+                  wave-execution-outcome
+                  wave-execution-outcome/typed)
+         (only-in "../extensions/gsd/delivery-verifier.rkt"
+                  delivery-verification
+                  delivery-verification/typed
+                  delivery-verification-code
+                  VERIFICATION-CODE-NO-CHANGE)
          (only-in "../extensions/gsd/delivery-handoff.rkt"
                   delivered-proof-merge-sha
                   undelivered-proof-reason
@@ -112,11 +118,22 @@
                   current-gsd-wave-timeout-seconds
                   current-gsd-wave-timeout-retries
                   current-gsd-wave-verification-repair-retries
+                  current-gsd-wave-no-change-retries
                   current-gsd-wave-failure-context
                   current-gsd-campaign-infra-retries
                   current-gsd-campaign-infra-retry-delay
                   current-gsd-campaign-infra-patience)
-         (only-in "helpers/honest-delivery-fixture.rkt" test-delivered-reader))
+         (only-in "helpers/honest-delivery-fixture.rkt" test-delivered-reader)
+         ;; W2: per-executor-session trusted scratch allocation.
+         (only-in "../tools/scratch.rkt"
+                  current-scratch-base-dir
+                  reset-session-scratch-registry!
+                  take-adopted-session-scratch-root!
+                  trusted-session-scratch-path?
+                  allocated-session-scratch-root
+                  bind-session-scratch-root!)
+         ;; W2: the attempt's temporary registry key (released after the run).
+         (only-in "../extensions/gsd/campaign-request.rkt" request-attempt-scratch-key))
 
 ;; ============================================================
 ;; Helpers
@@ -599,6 +616,71 @@ check-equal? actual 14 expected 12")
         (check-eq? (wave-status* rec 0) 'failed)
         (check-eq? (wave-status* rec 1) 'pending)
         (cleanup-tmp dir)))
+
+    (test-case "zero-edit retry keys on the TYPED verdict, not message wording"
+      ;; Red-first wording mutation: every human-readable word of the verifier
+      ;; message is wrong/unrelated. The retry must still fire because the
+      ;; verification VALUE carries the typed 'no-change code and the typed
+      ;; target list.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define calls 0)
+      (define retry-context #f)
+      (define mutated "MUTATED WORDING: unrelated verification noise")
+      (define (failed-no-change)
+        (delivery-verification/typed
+         #f
+         (list (cons "files" (cons #f mutated)))
+         mutated
+         (hasheq 'code 'no-change 'target-files (list "q/typed-target.rkt"))))
+      (define result
+        (parameterize ([current-gsd-wave-no-change-retries 1])
+          (run-campaign-wave dir
+                             rec
+                             0
+                             #:runner (lambda (_)
+                                        (set! calls (add1 calls))
+                                        (when (= calls 2)
+                                          (set! retry-context (current-gsd-wave-failure-context)))
+                                        'ok)
+                             #:verifier (lambda (_)
+                                          (if (= calls 1)
+                                              (failed-no-change)
+                                              #t)))))
+      (check-equal? calls 2 "the typed no-change verdict authorizes the bounded retry")
+      (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
+      (check-true (and (string? retry-context) (string-contains? retry-context "q/typed-target.rkt"))
+                  "the retry context names the TYPED target files")
+      (cleanup-tmp dir))
+
+    (test-case "legacy no-change wording without the typed code never authorizes a retry"
+      ;; The undated inverse: historic message text alone (no typed verdict)
+      ;; is not an authority — the run fails on the first attempt.
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define calls 0)
+      (define legacy-message "no wave target files changed: q/a.rkt")
+      (define result
+        (parameterize ([current-gsd-wave-no-change-retries 1])
+          (run-campaign-wave dir
+                             rec
+                             0
+                             #:runner (lambda (_)
+                                        (set! calls (add1 calls))
+                                        'ok)
+                             #:verifier
+                             (lambda (_)
+                               (define failed
+                                 (delivery-verification #f
+                                                        (list (cons "files" (cons #f legacy-message)))
+                                                        legacy-message))
+                               (check-eq? (delivery-verification-code failed)
+                                          VERIFICATION-CODE-NO-CHANGE
+                                          "legacy values derive 'rejected, never 'no-change")
+                               failed))))
+      (check-equal? calls 1 "message wording alone must not authorize the retry")
+      (check-eq? (campaign-result-status result) 'wave-failed)
+      (cleanup-tmp dir))
 
     (test-case "durable cancellation during verification repair stops before another verify"
       (define dir (make-tmp-campaign-dir 1))
@@ -1659,7 +1741,103 @@ check-equal? actual 14 expected 12")
       (define result
         (run-campaign-wave dir rec 0 #:runner (lambda (_) 'ok) #:verifier (lambda (_) #t)))
       (check-eq? (campaign-result-status result) 'wave-awaiting-delivery)
-      (cleanup-tmp dir))))
+      (cleanup-tmp dir))
+
+    (test-case "W2: each executor attempt advertises and adopts its own scratch root"
+      ;; The campaign interpreter is the trusted producer of executor scratch
+      ;; ownership: it allocates ONE root per attempt, advertises EXACTLY that
+      ;; root in that attempt's prompt, and adopts it for the session the
+      ;; interface creates. Two attempts never share a root, and nothing falls
+      ;; back to the scratch base directory.
+      ;;
+      ;; W2 review: the allocation is bookkept under a TEMPORARY registry key
+      ;; for exactly the duration of the attempt. The session that adopts the
+      ;; root (here simulated with the same bind-session-scratch-root! call the
+      ;; runtime makes) is what owns it afterwards, so the temporary entry must
+      ;; be gone once the attempt returns while the session binding remains.
+      (define token "0123456789abcdef")
+      (define base (make-temporary-file "q-orch-scratch-base-~a" 'directory))
+      (define dirs (list (make-tmp-campaign-dir 1) (make-tmp-campaign-dir 1)))
+      (parameterize ([current-scratch-base-dir base])
+        (reset-session-scratch-registry!)
+        (define attempts
+          (for/list ([dir (in-list dirs)]
+                     [attempt-no (in-naturals)])
+            (define rec (load-or-migrate dir))
+            (define session-id (format "executor-session-~a" attempt-no))
+            (define advertised-box (box #f))
+            (define adopted-box (box #f))
+            (define in-flight-box (box #f))
+            (define prompt-box (box #f))
+            (define request
+              (make-campaign-request dir
+                                     rec
+                                     (lambda (wave-idx scratch-root)
+                                       (define root-str (path->string scratch-root))
+                                       (set-box! advertised-box root-str)
+                                       (format "W~a scratch=~a" wave-idx root-str))
+                                     (lambda (_) #t)
+                                     #:scratch-token token))
+            (define result
+              (execute-campaign-request!
+               request
+               (lambda (prompt)
+                 (set-box! prompt-box prompt)
+                 ;; While the attempt is in flight its allocation is bookkept
+                 ;; under the temporary attempt key. Recorded (not asserted here)
+                 ;; so a failure can never abort the executor thread; the
+                 ;; assertion runs after the attempt returns.
+                 (set-box! in-flight-box
+                           (allocated-session-scratch-root (request-attempt-scratch-key token 0)))
+                 ;; ... and adoption is in effect exactly while the interface
+                 ;; creates this attempt's session.
+                 (define adopted (take-adopted-session-scratch-root!))
+                 (set-box! adopted-box adopted)
+                 ;; What the runtime does for the real session: bind the
+                 ;; adopted root under the session's own id.
+                 (when adopted
+                   (bind-session-scratch-root! session-id adopted))
+                 (make-loop-result '() 'completed (hasheq)))))
+            (check-true (string? (unbox prompt-box)) "the attempt prompt was actually dispatched")
+            ;; The in-flight entry named exactly this attempt's advertised root.
+            (check-equal? (and (path? (unbox in-flight-box)) (path->string (unbox in-flight-box)))
+                          (unbox advertised-box)
+                          "the in-flight attempt owns its temporary entry")
+            ;; The attempt's temporary entry never outlives the attempt.
+            (check-false (allocated-session-scratch-root (request-attempt-scratch-key token 0))
+                         "no temporary attempt entry survives the run")
+            (hasheq 'session-id
+                    session-id
+                    'advertised
+                    (unbox advertised-box)
+                    'adopted
+                    (unbox adopted-box)
+                    'prompt
+                    (unbox prompt-box))))
+        (for ([attempt (in-list attempts)])
+          (define advertised (hash-ref attempt 'advertised))
+          (define adopted (hash-ref attempt 'adopted))
+          (check-true (string? advertised) "the attempt prompt names a scratch root")
+          (check-true (trusted-session-scratch-path? (string->path advertised)))
+          (check-true (directory-exists? (string->path advertised)))
+          (check-equal? (file-or-directory-permissions (string->path advertised) 'bits) #o700)
+          (check-true (string-contains? (hash-ref attempt 'prompt) advertised)
+                      "the prompt advertises the adopted path verbatim")
+          (check-equal? (and (path? adopted) (path->string adopted))
+                        advertised
+                        "the advertised root IS the adopted session root")
+          ;; Releasing the temporary entry does not revoke the real binding:
+          ;; the adopted root stays owned by the session that adopted it.
+          (define bound (allocated-session-scratch-root (hash-ref attempt 'session-id)))
+          (check-true (and bound (equal? (path->string bound) advertised))
+                      "the adopted session keeps its binding after the attempt entry is released"))
+        (check-not-equal? (hash-ref (first attempts) 'advertised)
+                          (hash-ref (second attempts) 'advertised)
+                          "two executor sessions never share a scratch root")
+        (check-false (take-adopted-session-scratch-root!) "adoption is single-shot per attempt")
+        (reset-session-scratch-registry!))
+      (delete-directory/files base #:must-exist? #f)
+      (for-each cleanup-tmp dirs))))
 
 ;; ============================================================
 ;; Runner

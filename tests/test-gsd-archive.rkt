@@ -11,12 +11,17 @@
 
 (require rackunit
          racket/file
+         racket/list
          racket/path
          racket/string
          "../extensions/gsd/archive.rkt"
          "../extensions/gsd/state-machine.rkt"
          "../extensions/gsd/wave-docs.rkt"
          "../extensions/gsd/plan-types.rkt"
+         ;; W4: the ONE authentic ownership-marker predicate/registry. Archive
+         ;; cleanup may remove an empty directory only when THIS proves it ours.
+         (only-in "../extensions/gsd/planning-artifact-ownership.rkt"
+                  planning-artifact-marker-filename)
          (only-in "../extensions/gsd/command-types.rkt"
                   gsd-command-result-success
                   gsd-command-result-message
@@ -59,6 +64,36 @@
 (define (cleanup-tmp base-dir)
   (when (directory-exists? base-dir)
     (delete-directory/files base-dir)))
+
+;; W4: write the AUTHENTIC ownership record a creating module writes (real
+;; nofollow marker file, hash datum, schema-version 1, exact kind).
+(define (write-ownership-marker! dir kind)
+  (call-with-output-file (build-path dir (planning-artifact-marker-filename kind))
+    (lambda (out)
+      (write (hasheq 'schema-version 1 'kind kind 'pid 1 'created-at 0) out))
+    #:exists 'truncate))
+
+(define (write-text-file! path text)
+  (make-directory* (path-only path))
+  (call-with-output-file path (lambda (out) (display text out)) #:exists 'truncate))
+
+;; Every temp/owned staging name these modules allocate. A completed or
+;; interrupted archive must leave NONE of them behind.
+(define (temp-like-name? name)
+  (or (string-prefix? name "plan-snapshot.tmp-")
+      (string-prefix? name "projection.tmp-")
+      (string-suffix? name ".tmp")))
+
+(define (temp-residue dir)
+  (if (not (directory-exists? dir))
+      '()
+      (append*
+       (for/list ([p (in-list (directory-list dir #:build? #t))])
+         (define name (path->string (file-name-from-path p)))
+         (append (if (temp-like-name? name) (list (path->string p)) '())
+                 (if (and (not (link-exists? p)) (directory-exists? p))
+                     (temp-residue p)
+                     '()))))))
 
 ;; ============================================================
 ;; Tests: all-waves-complete? (#2155)
@@ -278,6 +313,155 @@
                   ;; archive should still exist even though empty
                   (check-true (directory-exists? archive-dir)))
                 (lambda () (cleanup-tmp tmp))))
+
+;; W4: cleanup removes only directories it can prove are this operation's own
+;; leftovers. Unknown backups and campaign state survive even when empty.
+(test-case "cleanup-empty-subdirs!: preserves unknown backups and campaign state"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     (for ([name (in-list '("waves-pre-plan-backup" "campaigns" "scratch" "reports.bak"))])
+       (make-directory (build-path tmp ".planning" name)))
+     (define backup (build-path tmp ".planning" "waves-pre-plan-backup"))
+     (call-with-output-file (build-path backup "W0-old.md.bak")
+                            (lambda (out) (display "precious\n" out)))
+     (cleanup-empty-subdirs! (build-path tmp ".planning"))
+     (check-true (file-exists? (build-path backup "W0-old.md.bak"))
+                 "unknown .bak content is preserved")
+     (check-true (directory-exists? backup))
+     (check-true (directory-exists? (build-path tmp ".planning" "campaigns")))
+     (check-true (directory-exists? (build-path tmp ".planning" "scratch")))
+     (check-true (directory-exists? (build-path tmp ".planning" "reports.bak"))))
+   (lambda () (cleanup-tmp tmp))))
+
+;; W4 BLOCKER (RED): archiving used to delete EVERY empty directory under
+;; `.planning/` whose name was not on a hard-coded deny-list, so an operator's
+;; empty `notes/` directory (any unknown name) was destroyed by /done. Emptiness
+;; is not ownership; only a known archive-owned leftover name or an authentic
+;; ownership marker authorizes a delete.
+(test-case "W4: archive preserves an unknown empty planning directory"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     (write-plan! tmp)
+     (write-state! tmp)
+     (write-wave! tmp 0 "setup" "DONE" "Root cause.\nAction.\nVerify.")
+     (write-wave! tmp 1 "implement" "DONE" "Root cause.\nAction.\nVerify.")
+     (define notes (build-path tmp ".planning" "notes"))
+     (make-directory notes)
+     (define result (archive-completed-plan! tmp))
+     (check-true (gsd-command-result-success result) (gsd-command-result-message result))
+     (check-true (directory-exists? notes)
+                 "an unknown empty directory is operator state, not archive leftover")
+     ;; The known waves leftover is still archive-owned and does not survive.
+     (check-false (directory-exists? (build-path tmp ".planning" "waves"))))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
+
+(test-case "W4: cleanup removes an empty directory only when an authentic marker proves it ours"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define planning (build-path tmp ".planning"))
+     ;; Owned: an interrupted plan-snapshot staging directory of OURS.
+     (define owned (build-path planning "plan-snapshot.tmp-left"))
+     (make-directory owned)
+     (write-ownership-marker! owned 'plan-snapshot-staging)
+     ;; Impostor: same marker NAME, wrong kind (and same shape as owned).
+     (define impostor (build-path planning "plan-snapshot.tmp-impostor"))
+     (make-directory impostor)
+     (call-with-output-file (build-path impostor
+                                       (planning-artifact-marker-filename
+                                        'plan-snapshot-staging))
+       (lambda (out) (write (hasheq 'schema-version 1 'kind 'not-ours) out))
+       #:exists 'truncate)
+     ;; Unknown: an operator backup directory that merely has a familiar name.
+     (define operator-backup (build-path planning "waves-pre-plan-backup"))
+     (make-directory operator-backup)
+     (cleanup-empty-subdirs! planning)
+     (check-false (directory-exists? owned) "proven owned empty leftover is removed")
+     (check-true (directory-exists? impostor)
+                 "an impostor marker never authorizes a delete")
+     (check-true (directory-exists? operator-backup)
+                 "an unmarked backup directory is preserved even when empty"))
+   (lambda () (cleanup-tmp tmp))))
+
+;; W4 interruption evidence (end-to-end): a blocked archive reports a typed
+;; failure, destroys nothing, and leaves no temp/owned residue.
+(test-case "W4: an interrupted archive-completed-plan! reports failure and loses no state"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     (write-plan! tmp)
+     (write-state! tmp)
+     (write-wave! tmp 0 "setup" "DONE" "Root cause.\nAction.\nVerify.")
+     (write-wave! tmp 1 "implement" "DONE" "Root cause.\nAction.\nVerify.")
+     (define planning (build-path tmp ".planning"))
+     (define notes (build-path planning "notes"))
+     (make-directory notes)
+     ;; A non-directory `.planning/archive` obstruction interrupts archive setup
+     ;; before any rename: the operation must report a typed filesystem failure
+     ;; and leave every planning artifact exactly where it was.
+     (write-text-file! (build-path planning "archive") "blocked\n")
+     (define result (archive-completed-plan! tmp))
+     (check-false (gsd-command-result-success result))
+     (check-true (string-contains? (gsd-command-result-message result) "Filesystem error"))
+     (check-true (directory-exists? (build-path planning "waves")))
+     (check-true (file-exists? (build-path planning "STATE.md")))
+     (check-true (directory-exists? notes))
+     (check-equal? (temp-residue planning) '()))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
+
+;; W4 interruption evidence: archiving is rename-only, so a failure partway
+;; through the rename chain tears nothing, deletes nothing, and invents no
+;; temp/owned residue. Re-running after the obstruction clears completes the
+;; SAME archive.
+(test-case "W4: an interrupted archive leaves no residue and preserves unknown state"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     (write-plan! tmp)
+     (write-state! tmp)
+     (write-wave! tmp 0 "setup" "DONE" "Root cause.\nAction.\nVerify.")
+     (define planning (build-path tmp ".planning"))
+     (define notes (build-path planning "notes"))
+     (make-directory notes)
+     (define archive-dir (build-path planning "archive" "interrupted"))
+     (make-directory* archive-dir)
+     (define plan-before (file->string (build-path planning "PLAN.md")))
+     ;; Obstruct the SECOND rename (STATE.md) so the operation fails after
+     ;; PLAN.md has already been renamed into the archive.
+     (write-text-file! (build-path archive-dir "STATE.md") "occupied\n")
+     (check-exn exn:fail? (lambda () (move-to-archive! tmp archive-dir)))
+     ;; Already-renamed files are complete in the archive...
+     (check-equal? (file->string (build-path archive-dir "PLAN.md")) plan-before
+                   "a rename never tears the file it moves")
+     ;; ...and not-yet-renamed files are still complete in .planning/.
+     (check-true (file-exists? (build-path planning "STATE.md")))
+     (check-true (directory-exists? (build-path planning "waves")))
+     (check-true (directory-exists? notes))
+     (check-equal? (temp-residue planning) '()
+                   "an interrupted archive allocates no temp/owned artifact")
+     ;; Clear the obstruction and re-run: the SAME archive completes.
+     (delete-file (build-path archive-dir "STATE.md"))
+     (move-to-archive! tmp archive-dir)
+     (check-true (file-exists? (build-path archive-dir "STATE.md")))
+     (check-true (directory-exists? (build-path archive-dir "waves")))
+     (check-false (directory-exists? (build-path planning "waves")))
+     (check-true (directory-exists? notes)
+                 "unknown empty directory survives the completed archive")
+     (check-equal? (temp-residue planning) '()))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
 
 ;; ============================================================
 ;; Tests: ensure-state-md! auto-creates STATE.md (#2164)

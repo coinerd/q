@@ -41,8 +41,9 @@
                   planning-root
                   planning-waves-dir
                   unsafe-declared-path-refusal
+                  declared-wave-doc-reference
+                  canonical-snapshot-wave-doc-reference-rx
                   wave-doc-file
-                  wave-doc-reference-rx
                   wave-doc-rel-path)
          (only-in "wave-status.rkt"
                   STATUS-INBOX
@@ -53,8 +54,14 @@
                   active-status?
                   normalize-status!
                   WAVE-STATUS-MARKERS
+                  exn:fail:wave-status
+                  exn:fail:wave-status?
+                  exn:fail:wave-status-accepted
+                  exn:fail:wave-status-context
+                  exn:fail:wave-status-value
                   wave-status-marker
                   wave-status-recognized?
+                  wave-status-comparison-key
                   wave-status-symbol))
 
 ;; Struct exports (plain)
@@ -122,6 +129,18 @@
           [compute-plan-overall-status (-> (listof wave-index-entry?) symbol?)]
           [wave-exists? (-> path-string? exact-nonnegative-integer? string? boolean?)]
           [wave-status-markers (-> (listof pair?))]
+          ;; W5: ONE required-header/section contract shared with the
+          ;; planning prompt template (no second copy in prompts.rkt).
+          [WAVE-DOC-HEADING-PREFIX string?]
+          [WAVE-DOC-STATUS-PREFIX string?]
+          [WAVE-DOC-FILE-LINE-PREFIX string?]
+          [WAVE-DOC-FILES-SECTION string?]
+          [WAVE-DOC-VERIFY-SECTION string?]
+          [WAVE-DOC-DONE-SECTION string?]
+          [WAVE-DOC-INITIAL-STATUS string?]
+          [WAVE-DOC-REQUIRED-SECTIONS
+           (listof (list/c string? symbol? symbol?))]
+          [wave-doc-required-section-names (-> (listof string?))]
           [count-inline-wave-sections (-> string? exact-nonnegative-integer?)]
           [index-entry-doc-display-path (-> wave-index-entry? string?)]
           [missing-index-doc-paths (-> path-string? (listof wave-index-entry?) (listof string?))]
@@ -149,12 +168,52 @@
 ;; THE marker vocabulary is owned by wave-status.rkt (one table, including the
 ;; verbatim legacy [COMPLETED]/[CANCELLED] spellings). This accessor keeps the
 ;; historical wave-docs export shape.
+;; COMPATIBILITY WRAPPER (W5): pure delegation, no policy of its own.
+;; TODO(#v1.00.40): remove this accessor and have the remaining callers import
+;; WAVE-STATUS-MARKERS from wave-status.rkt directly.
 (define (wave-status-markers)
   WAVE-STATUS-MARKERS)
 
-;; Pre-compiled regex patterns (using #rx for proper \n handling)
-(define wave-header-rx #rx"^# Wave [0-9]+\nStatus: ([^\n]+)\n")
-(define wave-header-full-rx #rx"^# Wave [0-9]+\nStatus: [^\n]+\n\n(.*)$")
+;; THE required wave-doc contract (W5, R-003/R-015): ONE source for the lint
+;; and the authoring template.
+;;
+;; The machine-managed header (BUG-0041/BUG-0095) is exactly one
+;; `# Wave <N>` H1 followed by exactly one `Status: <status>` line, then one
+;; of each required section. `lint-wave-doc` below VALIDATES this contract and
+;; `extensions/gsd/prompts.rkt` GENERATES its fenced authoring template from
+;; the same constants, so template and validator cannot drift apart again.
+(define WAVE-DOC-HEADING-PREFIX "# Wave ")
+(define WAVE-DOC-STATUS-PREFIX "Status: ")
+(define WAVE-DOC-FILE-LINE-PREFIX "- File: ")
+
+(define WAVE-DOC-FILES-SECTION "Files")
+(define WAVE-DOC-VERIFY-SECTION "Verify")
+(define WAVE-DOC-DONE-SECTION "Done")
+
+;; (list section-name requirement violation-section)
+;;   'file-line — section needs at least one `- File: <path>` bullet
+;;   'nonempty  — section needs at least one non-blank body line
+(define WAVE-DOC-REQUIRED-SECTIONS
+  (list (list WAVE-DOC-FILES-SECTION 'file-line 'files)
+        (list WAVE-DOC-VERIFY-SECTION 'nonempty 'verify)
+        (list WAVE-DOC-DONE-SECTION 'nonempty 'done)))
+
+;; The status a new wave doc's machine header carries; the same value the
+;; parser substitutes when the header is absent.
+(define WAVE-DOC-INITIAL-STATUS STATUS-INBOX)
+
+(define (wave-doc-required-section-names)
+  (for/list ([entry (in-list WAVE-DOC-REQUIRED-SECTIONS)])
+    (car entry)))
+
+;; Pre-compiled regex patterns (using #rx for proper \n handling). The machine
+;; header is built from the shared prefix constants above.
+(define wave-header-rx
+  (regexp (string-append "^" (regexp-quote WAVE-DOC-HEADING-PREFIX) "[0-9]+\n"
+                         (regexp-quote WAVE-DOC-STATUS-PREFIX) "([^\n]+)\n")))
+(define wave-header-full-rx
+  (regexp (string-append "^" (regexp-quote WAVE-DOC-HEADING-PREFIX) "[0-9]+\n"
+                         (regexp-quote WAVE-DOC-STATUS-PREFIX) "[^\n]+\n\n(.*)$")))
 (define index-line-rx #rx"^[-*] +\\[([A-Za-z-]+)\\] +W([0-9]+): +(.+?)(?: +\u2192 +(.+))?$")
 (define relaxed-index-line-rx #rx"^[-*] +W([0-9]+): +(.+?)(?: +→ +(.+))?$")
 
@@ -232,7 +291,11 @@
     (make-directory* dir))
   ;; BUG-0050 (W2): the authoring path emits exactly ONE `Status:` line
   ;; (the machine header); any body `Status:` line is stripped.
-  (define header (format "# Wave ~a\nStatus: ~a\n\n" header-idx status))
+  (define header (format "~a~a\n~a~a\n\n"
+                         WAVE-DOC-HEADING-PREFIX
+                         header-idx
+                         WAVE-DOC-STATUS-PREFIX
+                         status))
   (define sanitized-body (strip-body-status-lines content))
   (call-with-output-file path
                          (lambda (out)
@@ -290,7 +353,7 @@
   (define m (regexp-match wave-header-rx text))
   (if m
       (string-trim (cadr m))
-      "Inbox"))
+      WAVE-DOC-INITIAL-STATUS))
 
 (define (strip-status-header text)
   (define m (regexp-match wave-header-full-rx text))
@@ -309,9 +372,9 @@
 ;; route a wave through another campaign's W-numbered carrier doc.
 
 ;; Extract the full declared doc path from an arrow target (or #f).
-(define (wave-ref-path-from-target target)
-  (and target
-       (let ([m (regexp-match #rx"waves/[A-Za-z0-9][A-Za-z0-9._/-]*\\.md" target)]) (and m (car m)))))
+;; W5: the ONE lenient lexical grammar lives in planning-paths.rkt; this is a
+;; pure alias (same procedure value), not a second parser/regexp.
+(define wave-ref-path-from-target declared-wave-doc-reference)
 
 ;; The wave's document path: the declared arrow path when present, else the
 ;; classic W<idx>-<slug>.md synthesis; #f when the wave is not in the index.
@@ -523,7 +586,7 @@
 ;; Previously this returned (slugify target), producing nonsense expected
 ;; paths like W0-wavesnotesmd.md in strict-validation errors.
 (define (extract-slug-from-target target)
-  (define m (regexp-match wave-doc-reference-rx target))
+  (define m (regexp-match canonical-snapshot-wave-doc-reference-rx target))
   (and m (caddr m)))
 
 ;; BUG-0082: an arrow target that the LENIENT wave-ref-path-from-target
@@ -621,14 +684,25 @@
 ;;                                     header is the single marker)
 (struct status-divergence (wave-idx plan-status doc-status plan-path doc-path kind) #:transparent)
 
-;; status->symbol : (or/c string? symbol?) -> symbol?
-;; Canonical comparison key, DELEGATED to wave-status.rkt (the single
+;; status->symbol : (or/c string? symbol?) -> any/c
+;; COMPATIBILITY WRAPPER (W5): pure delegation to wave-status.rkt's
+;; `wave-status-comparison-key`; it holds no table and no fallback of its own.
+;; TODO(#v1.00.40): remove once the remaining wave-docs call sites name the
+;; wave-status function directly.
+;; Canonical COMPARISON key, DELEGATED to wave-status.rkt (the single
 ;; vocabulary owner). Semantically IDENTICAL statuses spelled differently
 ;; ("Inbox" row vs "PENDING" doc header) compare equal: the same meaning is
-;; not a BUG-0034 divergence. Unrecognized values keep the historical
-;; 'pending fallback shared with the campaign layer.
+;; not a BUG-0034 divergence.
+;;
+;; W5 (R-019): an unrecognized value is NO LONGER coerced to 'pending. A
+;; comparison has to describe both sides, so it uses the explicit unknown
+;; identity `(unknown <SPELLING>)`: `[CANCELLED]` vs `Status: CANCELLED` still
+;; compares equal (the same claim) while `[CANCELLED]` vs `Status: PENDING`
+;; now DIVERGES instead of silently agreeing on a `pending` fallback.
+;; Control-flow callers that must not guess use `wave-status-symbol` (typed
+;; rejection) instead of this key.
 (define (status->symbol s)
-  (wave-status-symbol s))
+  (wave-status-comparison-key s))
 
 ;; check-status-consistency : path-string? -> (listof status-divergence?)
 ;; Pure read path: compares every PLAN.md index-row status against its
@@ -730,6 +804,8 @@
 ;; Implemented as exactly one function so tests pin the decision.
 ;; Selection reads statuses through it; everything else (warnings)
 ;; reports both raw sides.
+;; Comparison goes through the explicit comparison key, so an unknown row
+;; status is described (and later rejected by selection), never coerced.
 (define (resolve-status-precedence plan-row-status doc-header-status)
   (if (eq? (status->symbol plan-row-status) 'deferred)
       STATUS-DEFERRED
@@ -748,6 +824,33 @@
   (if (and doc (not refusal))
       (resolve-status-precedence (wave-index-entry-status e) (hash-ref doc 'status))
       (wave-index-entry-status e)))
+
+;; selection-status-symbol : path-string? wave-index-entry? -> symbol?
+;; The EFFECTIVE status as a strict durable symbol for selection. Unknown
+;; values raise the typed `exn:fail:wave-status` rejection naming the wave and
+;; the offending spelling (W5, R-019) — a typo must never make a wave
+;; selectable (the historical `pending` fallback did exactly that) nor silently
+;; skip it.
+(define (selection-status-symbol base-dir e)
+  (define effective (effective-wave-status base-dir e))
+  (with-handlers ([exn:fail:wave-status?
+                   (lambda (ex)
+                     (raise (exn:fail:wave-status
+                             (string-append
+                              (format "wave selection refused: W~a declares unknown status ~s"
+                                      (wave-index-entry-idx e)
+                                      (exn:fail:wave-status-value ex))
+                              ". Accepted spellings are "
+                              (string-join (exn:fail:wave-status-accepted ex) ", ")
+                              ". Correct the PLAN.md row or the wave doc header; no wave is "
+                              "selected and nothing is dispatched.")
+                             (current-continuation-marks)
+                             (exn:fail:wave-status-value ex)
+                             (exn:fail:wave-status-accepted ex)
+                             (format "W~a (effective status ~s)"
+                                     (wave-index-entry-idx e)
+                                     effective))))])
+    (wave-status-symbol effective)))
 
 ;; ============================================================
 ;; Plan-format deprecation warnings (BUG-0035, W6)
@@ -849,14 +952,26 @@
            '()
            (cons (car lines) (loop (cdr lines) 'body)))])))
 
-;; wave-doc-section-nonempty? : string? string? -> boolean?
+;; wave-doc-required-section-satisfied? : string? (list/c string? symbol? symbol?) -> boolean?
+;; PURE. Does CONTENT satisfy one entry of WAVE-DOC-REQUIRED-SECTIONS?
+(define (wave-doc-required-section-satisfied? content entry)
+  (define name (first entry))
+  (case (second entry)
+    [(file-line)
+     (and (ormap (lambda (l) (regexp-match? wave-doc-file-line-rx l))
+                 (wave-doc-section-body content name))
+          #t)]
+    [(nonempty) (and (wave-doc-section-nonempty? content name) #t)]
+    [else #f]))
+
+;; wave-doc-required-section-nonempty? : string? string? -> boolean?
 ;; Section exists and has at least one non-blank body line.
 (define (wave-doc-section-nonempty? content name)
   (ormap (lambda (l) (not (string=? (string-trim l) ""))) (wave-doc-section-body content name)))
 
 ;; recognized-status? : (or/c string? symbol?) -> boolean?
-;; #t iff the spelling is part of the shared vocabulary (i.e. a real
-;; canonical status was found, not the 'pending fallback).
+;; #t iff the spelling is part of the shared vocabulary (a real canonical
+;; status, not an unknown spelling).
 (define (recognized-status? s)
   (wave-status-recognized? s))
 
@@ -886,7 +1001,7 @@
     (or (hash-ref doc 'path #f)
         (format ".planning/waves/W~a-~a.md" idx (hash-ref doc 'slug "unknown"))))
   (define content (hash-ref doc 'content ""))
-  (define status (hash-ref doc 'status "Inbox"))
+  (define status (hash-ref doc 'status WAVE-DOC-INITIAL-STATUS))
   (append (if (and (hash-ref doc 'status-header? #t) (recognized-status? status))
               '()
               (list (wave-doc-violation idx path-display 'status-header)))
@@ -895,16 +1010,12 @@
           (if (body-status-line content)
               (list (wave-doc-violation idx path-display 'duplicate-status))
               '())
-          (if (ormap (lambda (l) (regexp-match? wave-doc-file-line-rx l))
-                     (wave-doc-section-body content "Files"))
-              '()
-              (list (wave-doc-violation idx path-display 'files)))
-          (if (wave-doc-section-nonempty? content "Verify")
-              '()
-              (list (wave-doc-violation idx path-display 'verify)))
-          (if (wave-doc-section-nonempty? content "Done")
-              '()
-              (list (wave-doc-violation idx path-display 'done)))))
+          ;; W5: the required sections come from the ONE shared contract table
+          ;; (WAVE-DOC-REQUIRED-SECTIONS), which the planning prompt template
+          ;; is generated from as well.
+          (for*/list ([entry (in-list WAVE-DOC-REQUIRED-SECTIONS)]
+                      #:when (not (wave-doc-required-section-satisfied? content entry)))
+            (wave-doc-violation idx path-display (third entry)))))
 
 ;; lint-campaign-wave-docs : path-string? -> (listof wave-doc-violation?)
 ;; File-backed lint of every wave doc the PLAN.md index references. Docs
@@ -1151,6 +1262,10 @@
                          (string=? (wave-index-entry-status e) STATUS-FAILED)))
     e))
 
+;; next-inbox-wave : path-string? -> (or/c wave-index-entry? #f)
+;; First selectable (pending or failed) wave under the documented precedence.
+;; W5: an unknown EFFECTIVE status refuses selection with the typed
+;; `exn:fail:wave-status` rejection instead of acting like `pending`.
 (define (next-inbox-wave base-dir)
   (define plan-path (plan-file base-dir))
   (cond
@@ -1183,7 +1298,7 @@
         ;; doctored row can no longer silently steer next-wave selection.
         ;; BUG-0082: the header is the DECLARED document's header.
         (for/first ([e (in-list entries)]
-                    #:when (memq (status->symbol (effective-wave-status base-dir e))
+                    #:when (memq (selection-status-symbol base-dir e)
                                  '(pending failed)))
           e)])]))
 

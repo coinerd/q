@@ -23,6 +23,16 @@
          wave-execution-outcome?
          wave-execution-outcome-kind
          wave-execution-outcome-message
+         ;; GSD simplification W5: the typed failure CAUSE rides an additive
+         ;; transparent subtype (historical 2-field struct line unchanged).
+         typed-wave-execution-outcome
+         typed-wave-execution-outcome?
+         typed-wave-execution-outcome-cause
+         wave-execution-outcome/typed
+         wave-execution-outcome-cause
+         OUTCOME-CAUSE-STALL
+         OUTCOME-CAUSE-PROVIDER
+         OUTCOME-CAUSE-EMPTY-RESPONSE
          make-wave-runner-port
          coerce-run-result
          (contract-out (struct gsd-wave-runner-port
@@ -52,6 +62,34 @@
     (unless (string? message)
       (raise-arguments-error name "outcome message must be a string" "message" message))
     (values kind message)))
+
+;; ============================================================
+;; Typed failure cause (GSD simplification W5)
+;; ============================================================
+
+;; The ONE typed cause vocabulary for a terminal failure. It is ADDITIVE to the
+;; historical kind switch above: a consumer that must distinguish "stalled"
+;; from "provider blew up" reads this symbol, never the human message. Legacy
+;; 2-argument constructions carry no cause (#f); the adapters that own the
+;; typed knowledge (stall watchdog, prompt-result translation) set it.
+(define OUTCOME-CAUSE-STALL 'stall)
+(define OUTCOME-CAUSE-PROVIDER 'provider)
+(define OUTCOME-CAUSE-EMPTY-RESPONSE 'empty-response)
+
+;; The historical struct line above stays VERBATIM; the cause rides a
+;; transparent subtype so every existing constructor call site, accessor and
+;; match pattern is unchanged (the same pattern campaign-result.rkt uses).
+(struct typed-wave-execution-outcome wave-execution-outcome (cause) #:transparent)
+
+;; Typed producer constructor. `cause` must be a symbol from the vocabulary.
+(define (wave-execution-outcome/typed kind message cause)
+  (unless (memq cause (list OUTCOME-CAUSE-STALL OUTCOME-CAUSE-PROVIDER OUTCOME-CAUSE-EMPTY-RESPONSE))
+    (raise-argument-error 'wave-execution-outcome/typed "a typed outcome cause symbol" cause))
+  (typed-wave-execution-outcome kind message cause))
+
+;; The typed cause of an outcome, or #f for a legacy value.
+(define (wave-execution-outcome-cause outcome)
+  (and (typed-wave-execution-outcome? outcome) (typed-wave-execution-outcome-cause outcome)))
 
 ;; ============================================================
 ;; Executor port

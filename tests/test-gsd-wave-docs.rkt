@@ -22,7 +22,16 @@
          racket/path
          racket/port
          "../extensions/gsd/wave-docs.rkt"
-         "../extensions/gsd/prompts.rkt")
+         "../extensions/gsd/prompts.rkt"
+         ;; W5: the lenient declared-wave-reference lexical grammar is owned by
+         ;; planning-paths.rkt; wave-docs only re-exports the same binding.
+         (only-in "../extensions/gsd/planning-paths.rkt"
+                  declared-wave-doc-reference)
+         ;; W5/R-019: the typed unknown-status rejection lives in wave-status.
+         (only-in "../extensions/gsd/wave-status.rkt"
+                  exn:fail:wave-status?
+                  exn:fail:wave-status-value
+                  wave-status-comparison-key))
 
 ;; ============================================================
 ;; Test helpers
@@ -288,6 +297,54 @@
   (setup)
   (check-false (next-inbox-wave test-dir))
   (teardown))
+
+;; ============================================================
+;; W5 (R-019): unknown statuses are typed rejections
+;; ============================================================
+
+(test-case "W5: next-inbox-wave rejects an unknown status instead of selecting it"
+  (setup)
+  (define plan-path (build-path test-dir ".planning" "PLAN.md"))
+  (define plan-text
+    (string-append "- [REWORK] W0: Unknown → waves/W0-unknown.md\n"
+                   "- [Inbox] W1: Next → waves/W1-next.md\n"))
+  (call-with-output-file plan-path (lambda (out) (display plan-text out)) #:exists 'truncate)
+  ;; The historical `pending` fallback made W0 selectable (and dispatched).
+  (check-exn exn:fail:wave-status?
+             (lambda () (next-inbox-wave test-dir)))
+  (define ex (with-handlers ([exn:fail:wave-status? values])
+               (next-inbox-wave test-dir)))
+  (check-equal? (exn:fail:wave-status-value ex) "REWORK")
+  (check-true (string-contains? (exn-message ex) "wave selection refused"))
+  (check-true (string-contains? (exn-message ex) "W0"))
+  (teardown))
+
+(test-case "W5: documented legacy aliases still select normally"
+  (setup)
+  (define plan-path (build-path test-dir ".planning" "PLAN.md"))
+  ;; `[COMPLETED]` is DONE, `[PENDING]` is pending (documented legacy aliases).
+  (define plan-text
+    (string-append "- [COMPLETED] W0: Done → waves/W0-done.md\n"
+                   "- [PENDING] W1: Next → waves/W1-next.md\n"))
+  (call-with-output-file plan-path (lambda (out) (display plan-text out)) #:exists 'truncate)
+  (define next (next-inbox-wave test-dir))
+  (check-not-false next)
+  (check-equal? (wave-index-entry-idx next) 1)
+  (teardown))
+
+(test-case "W5: unknown status is described, not coerced, by status precedence"
+  ;; Precedence is a comparison: an unknown PLAN row status must NOT be
+  ;; treated as `deferred` (the only row that wins), so the doc header stands.
+  (check-equal? (resolve-status-precedence "DEFERRED" "DONE") "DEFERRED")
+  (check-equal? (resolve-status-precedence "CANCELLED" "DONE") "DONE")
+  (check-equal? (resolve-status-precedence "CANCELLED" "COMPLETED") "COMPLETED")
+  ;; Comparison keys give an unknown spelling its own identity, so two
+  ;; different typos never compare equal (the old `pending` fallback did).
+  (check-not-equal? (wave-status-comparison-key "CANCELLED")
+                    (wave-status-comparison-key "PENDING"))
+  (check-equal? (wave-status-comparison-key "CANCELLED")
+                (wave-status-comparison-key "cancelled"))
+  (check-eq? (wave-status-comparison-key "COMPLETED") 'done))
 
 ;; ============================================================
 ;; Dual-write status transition
@@ -582,3 +639,13 @@ Some description without status header.")
   (check-equal? (cdr (assoc "COMPLETED" markers)) "[COMPLETED]")
   (check-equal? (cdr (assoc "CANCELLED" markers)) "[CANCELLED]")
   (check-equal? (length markers) 7))
+
+;; W5: the lenient lexical grammar for author-declared arrow targets moved to
+;; planning-paths.rkt. wave-docs re-exports that ONE binding (no second
+;; regexp/parser) and keeps the historical lenient behavior for nested names.
+(test-case "W5: wave-ref-path-from-target is the planning-paths declared grammar"
+  (check-eq? wave-ref-path-from-target declared-wave-doc-reference)
+  (check-equal? (wave-ref-path-from-target "→ waves/custom/nested-legal.md")
+                "waves/custom/nested-legal.md")
+  (check-equal? (wave-ref-path-from-target "see waves/W0-fine.md for details")
+                "waves/W0-fine.md"))

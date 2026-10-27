@@ -109,13 +109,15 @@
          (check-true (tool-result-is-error? result))
          (define txt (error-text result))
          (check-true (string-contains? txt "Nearest match at line 4"))
-         (check-true (string-contains? txt "First differing offset: 16 (U+78 vs U+7a)"))
-         (check-true
-          (string-contains?
-           txt
-           "Context around mismatch in file:  [U+70 U+20 U+28 U+5b U+79 U+20 U+78 U+5d U+29"))
-         (check-true (string-contains? txt "file line has 2 leading spaces, old-text has 2"))
-         (check-false (string-contains? txt "Context around mismatch in file:  [U+23")))
+         (check-true (string-contains? txt "First differing offset: 16 (line 4, column 17)"))
+         (check-true (string-contains? txt "file 'x' (U+78) vs old-text 'z' (U+7a)"))
+         (check-true (string-contains? txt "  file:"))
+         (check-true (string-contains? txt "(let loop ([y x])"))
+         (check-true (string-contains? txt "  old-text:"))
+         (check-true (string-contains? txt "(let loop ([y z])"))
+         (check-true (string-contains? txt "file line has 2 leading spaces"))
+         (check-false (string-contains? txt "Context around mismatch in file:  [U+")
+                      "raw code-point lists are gone"))
        (lambda () (cleanup-path p))))
 
     (test-case "indentation-only mismatch still matches (lenient leading whitespace)"

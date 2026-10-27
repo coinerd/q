@@ -3,11 +3,18 @@
 ;; @speed fast  ;; @suite extensions
 
 (require racket/path
+         racket/list
          racket/string
          rackunit
          rackunit/text-ui
          racket/file
          "../extensions/gsd/plan-snapshot.rkt"
+         ;; W4: the ONE ownership-marker registry (filename and kind per kind).
+         (only-in "../extensions/gsd/planning-artifact-ownership.rkt"
+                  planning-artifact-marker-filename)
+         (only-in "../extensions/gsd/projection-kernel.rkt"
+                  project-wave-doc-update
+                  project-plan-index-update)
          (only-in "../util/json/checksum.rkt" sha256-string))
 (define plan-text
   (string-append "# Plan\n\n"
@@ -18,9 +25,23 @@
 (define wave-1 "# Wave 1\n\nbeta body\n")
 (define campaign-id (make-string 64 #\a))
 
+;; Imported names used by the W4 lifecycle cases below.
+
 (define (write-text! path text)
   (make-directory* (path-only path))
   (call-with-output-file path (lambda (out) (display text out)) #:exists 'truncate))
+
+;; W4: an ownership marker is only authentic when it is a real marker file whose
+;; datum records the creating module's schema-version and kind. The snapshot
+;; sweep, /plan supersede rotation, the doctor and archive cleanup share ONE
+;; predicate (planning-artifact-ownership.rkt), so a test that expects an owned
+;; staging directory to be swept must write the AUTHENTIC record — mere marker
+;; existence is not proof of ownership.
+(define (write-ownership-marker! dir kind)
+  (call-with-output-file (build-path dir (planning-artifact-marker-filename kind))
+    (lambda (out)
+      (write (hasheq 'schema-version 1 'kind kind 'pid 1 'created-at 0) out))
+    #:exists 'truncate))
 
 (define (make-plan-tree)
   (define dir (make-temporary-file "plan-snapshot-~a" 'directory))
@@ -60,13 +81,24 @@
 
     (test-case "read-only snapshot loading neither sweeps nor invents drift"
       (define dir (make-plan-tree))
-      (define stale (build-path dir ".planning" "campaigns" campaign-id "plan-snapshot.tmp-stale"))
+      (define campaign-dir* (build-path dir ".planning" "campaigns" campaign-id))
+      (define stale (build-path campaign-dir* "plan-snapshot.tmp-stale"))
       (make-directory* stale)
       (check-false (load-snapshot-manifest dir campaign-id #:sweep-stale? #f))
       (check-true (directory-exists? stale))
       (check-equal? (classify-snapshot-drift dir campaign-id #:sweep-stale? #f) '())
+      ;; W4: a staging-shaped directory without our ownership marker is
+      ;; unknown operator state — the legacy explicit load preserves it too.
       (check-false (load-snapshot-manifest dir campaign-id))
-      (check-false (directory-exists? stale) "the legacy explicit load retains its cleanup behavior")
+      (check-true (directory-exists? stale)
+                  "cleanup may only remove PROVEN owned staging directories")
+      ;; The interrupted operation of OURS carries the authentic marker and is swept.
+      (define owned (build-path campaign-dir* "plan-snapshot.tmp-owned"))
+      (make-directory* owned)
+      (write-ownership-marker! owned 'plan-snapshot-staging)
+      (check-false (load-snapshot-manifest dir campaign-id))
+      (check-false (directory-exists? owned) "owned interrupted staging is swept")
+      (check-true (directory-exists? stale))
       (delete-directory/files dir))
 
     (test-case "seed binds and verifies PLAN plus every referenced wave"
@@ -265,10 +297,182 @@
       (define outside (build-path dir "outside-plan.md"))
       (delete-file live-plan)
       (make-file-or-directory-link outside live-plan)
-      (check-exn exn:fail?
-                 (lambda ()
-                   (restore-plan-from-snapshot! dir campaign-id #:override-existing-drift? #t)))
+      (define refusal-message
+        (with-handlers ([exn:fail? exn-message])
+          (restore-plan-from-snapshot! dir campaign-id #:override-existing-drift? #t)
+          #f))
+      (check-true (string? refusal-message))
+      (check-true (string-contains? refusal-message "symlink")
+                  "the refusal names the non-overridable class")
+      (check-true (string-contains? refusal-message "PLAN.md")
+                  "the refusal names the path")
       (check-false (file-exists? outside))
+      (delete-directory/files dir))
+
+    ;; ── W4: every generated projection block is status-neutral ──────────
+    ;;
+    ;; CHARACTERIZATION (hypothesis, now pinned): the wave-doc projection
+    ;; writes a MULTILINE header block (`# Wave N` + `Status: ...` + blank
+    ;; line). A doc whose authored header carries extra lines (a second
+    ;; `Status:` marker, an `Attempt:` line, no blank separator) does not
+    ;; match the header-rewrite regexp, so the projection PREPENDS its block
+    ;; instead of replacing it. Normalization must therefore treat a leading
+    ;; generated header block as projection state — repeated blocks included —
+    ;; or a pure status projection is misreported as authored content drift.
+
+    (test-case "W4: leading generated header blocks are projection state (multiline header)"
+      (define authored "# Wave 0\n\nGoal: alpha\n\n## Verify\n\nraco test .\n")
+      (check-equal? (normalize-wave-doc-content (string-append "# Wave 0\nStatus: Inbox\n\n" authored))
+                    (normalize-wave-doc-content authored)
+                    "one generated header block is projection state")
+      (check-equal? (normalize-wave-doc-content (string-append "# Wave 0\nStatus: Inbox\n\n"
+                                                              "# Wave 0\nStatus: DONE\n\n"
+                                                              authored))
+                    (normalize-wave-doc-content authored)
+                    "repeated generated header blocks are projection state too"))
+
+    (test-case "W4: headingless authored docs stay status-neutral after projection"
+      (define authored "Goal: alpha\n\n## Verify\n\nraco test .\n")
+      (check-equal? (normalize-wave-doc-content (project-wave-doc-update authored 0 "Inbox"))
+                    (normalize-wave-doc-content authored)))
+
+    (test-case "W4: authored extra header lines do not turn a status projection into drift"
+      ;; Legacy template residue and authored `Attempt:` metadata: the
+      ;; projection prepends its managed block instead of rewriting these.
+      (for ([authored (in-list (list "# Wave 0\nStatus: PENDING\nStatus: STALE\n\nbody\n"
+                                     "# Wave 0\nStatus: Inbox\nAttempt: 2\n\nbody\n"
+                                     "# Wave 0\nStatus: Inbox\nbody\n"))])
+        (define projected (project-wave-doc-update authored 0 "DONE"))
+        (check-equal? (normalize-wave-doc-content projected)
+                      (normalize-wave-doc-content authored)
+                      (format "status-only projection of ~s must not drift" authored)))
+      ;; CHARACTERIZED mechanism: extra authored header lines defeat the
+      ;; header REWRITE, so the managed block is PREPENDED (two headings).
+      (check-equal? (regexp-match* #px"(?m:^# Wave 0$)"
+                                   (project-wave-doc-update
+                                    "# Wave 0\nStatus: PENDING\nStatus: STALE\n\nbody\n"
+                                    0 "DONE"))
+                    '("# Wave 0" "# Wave 0")
+                    "the projection prepends its multiline managed block"))
+
+    (test-case "W4: an authored `## Last Failure` only hides its own section"
+      ;; `record-wave-failure!` rewrites the failure section in place. The
+      ;; normalization may ignore that section, but never the authored
+      ;; content that follows it.
+      (define authored (string-append "# Wave 0\nStatus: DONE\n\nbody\n\n"
+                                      "## Last Failure\nold reason\n\n"
+                                      "## Verify\n\nraco test .\n"))
+      (define replayed (string-append "# Wave 0\nStatus: DONE\n\nbody\n\n"
+                                      "## Last Failure\nnew reason\n\n"
+                                      "## Verify\n\nraco test .\n"))
+      (check-equal? (normalize-wave-doc-content replayed)
+                    (normalize-wave-doc-content authored)
+                    "the failure section body is projection state")
+      (define edited-after-failure
+        (string-append "# Wave 0\nStatus: DONE\n\nbody\n\n"
+                       "## Last Failure\nnew reason\n\n"
+                       "## Verify\n\nraco test EDITED.rkt\n"))
+      (check-not-equal? (normalize-wave-doc-content edited-after-failure)
+                        (normalize-wave-doc-content authored)
+                        "authored content after the failure section is still compared"))
+
+    (test-case "W4: PLAN index status markers are the only normalized PLAN bytes"
+      (define base (string-append "# Plan\n\n"
+                                  "- [Inbox] W0: Alpha -> waves/W0-a.md\n"
+                                  "* [Inbox] W1: Beta -> waves/W1-b.md\n"))
+      (define progressed (string-append "# Plan\n\n"
+                                        "- [DONE] W0: Alpha -> waves/W0-a.md\n"
+                                        "* [FAILED] W1: Beta -> waves/W1-b.md\n"))
+      (check-equal? (plan-body-normalized-hash progressed) (plan-body-normalized-hash base)
+                    "index status markers are projection state")
+      (check-not-equal? (plan-body-normalized-hash
+                         (string-append base "\n## Notes\n\nauthored addition\n"))
+                        (plan-body-normalized-hash base)
+                        "authored PLAN bytes still count as identity"))
+
+    (test-case "W4: replaying status projections changes no bound identity"
+      (define dir (make-plan-tree))
+      (define-values (_path digest) (seed-and-bind-plan-snapshot! dir campaign-id))
+      (define plan-path (build-path dir ".planning" "PLAN.md"))
+      (define doc-path (build-path dir ".planning" "waves" "W0-alpha.md"))
+      ;; Exactly what the projection shell writes on completion/reconcile.
+      (write-text! plan-path (project-plan-index-update (file->string plan-path) 0 "DONE"))
+      (write-text! doc-path (project-wave-doc-update (file->string doc-path) 0 "DONE"))
+      (check-equal? (snapshot-drift? dir campaign-id) '()
+                    "status-only projection replay is informational non-drift")
+      (check-equal? (snapshot-manifest-digest (load-snapshot-manifest dir campaign-id)) digest)
+      (delete-directory/files dir))
+
+    (test-case "W4: drift taxonomy is explicit and only overridable classes are overridable"
+      (check-equal? (snapshot-drift-classes)
+                    '(symlink missing content-drift frozen-contract-stale))
+      (check-false (snapshot-drift-class-overridable? 'symlink)
+                   "the trust-boundary class is never overridable")
+      (for ([kind (in-list '(missing content-drift frozen-contract-stale))])
+        (check-true (snapshot-drift-class-overridable? kind))
+        (check-true (string? (snapshot-drift-class-description kind))
+                    "every class names itself for the operator"))
+      ;; The classes stay DISTINCT: no smaller ambiguous `structural` bucket.
+      (check-equal? (length (remove-duplicates (map snapshot-drift-class-description
+                                                    (snapshot-drift-classes)) string=?))
+                    4))
+
+    (test-case "W4: a malformed stored manifest is storage corruption, not a drift class"
+      (define dir (make-plan-tree))
+      (seed-and-bind-plan-snapshot! dir campaign-id)
+      (define manifest-path (build-path (snapshot-dir dir campaign-id)
+                                        "snapshot-manifest.rktd"))
+      (write-text! manifest-path "not-a-manifest\n")
+      (check-exn exn:fail? (lambda () (classify-snapshot-drift dir campaign-id)))
+      (delete-directory/files dir))
+
+    (test-case "W4: snapshot staging cleanup removes only proven owned artifacts"
+      (define dir (make-plan-tree))
+      (define campaigns-dir (build-path dir ".planning" "campaigns" campaign-id))
+      (make-directory* campaigns-dir)
+      ;; An interrupted operation of OURS (carries the AUTHENTIC ownership marker).
+      (define owned (build-path campaigns-dir "plan-snapshot.tmp-owned"))
+      (make-directory* owned)
+      (write-ownership-marker! owned 'plan-snapshot-staging)
+      ;; Unknown artifacts that merely share the name shape, plus user backups.
+      (define unknown (build-path campaigns-dir "plan-snapshot.tmp-unknown"))
+      (make-directory* unknown)
+      (write-text! (build-path unknown "notes.md") "unknown payload\n")
+      (define backup (build-path campaigns-dir "waves-pre-plan-backup"))
+      (make-directory* backup)
+      (write-text! (build-path backup "W0-old.md.bak") "precious\n")
+      (check-false (load-snapshot-manifest dir campaign-id))
+      (check-false (directory-exists? owned) "owned staging is swept")
+      (check-true (directory-exists? unknown) "unknown staging-shaped dir is preserved")
+      (check-true (file-exists? (build-path unknown "notes.md")))
+      (check-true (file-exists? (build-path backup "W0-old.md.bak"))
+                  "unknown waves-pre-plan-backup and .bak files are preserved")
+      (delete-directory/files dir))
+
+    ;; W4 BLOCKER (RED): marker EXISTENCE used to authorize the sweep, so an
+    ;; impostor marker (wrong kind or wrong schema) deleted operator state.
+    (test-case "W4: an impostor ownership marker never authorizes a staging sweep"
+      (define dir (make-plan-tree))
+      (define campaigns-dir (build-path dir ".planning" "campaigns" campaign-id))
+      (make-directory* campaigns-dir)
+      (define (impostor name marker-text)
+        (define d (build-path campaigns-dir name))
+        (make-directory* d)
+        (write-text! (build-path d plan-snapshot-staging-marker-filename) marker-text)
+        (write-text! (build-path d "payload.md") "operator payload\n")
+        d)
+      (define wrong-kind
+        (impostor "plan-snapshot.tmp-wrong-kind"
+                  "#hash((schema-version . 1) (kind . waves-pre-plan-backup))\n"))
+      (define wrong-schema
+        (impostor "plan-snapshot.tmp-wrong-schema"
+                  "#hash((schema-version . 2) (kind . plan-snapshot-staging))\n"))
+      (define empty-marker (impostor "plan-snapshot.tmp-empty" "\n"))
+      (check-false (load-snapshot-manifest dir campaign-id))
+      (for ([d (in-list (list wrong-kind wrong-schema empty-marker))])
+        (check-true (directory-exists? d)
+                    (format "~a must survive an impostor marker" (path->string d)))
+        (check-true (file-exists? (build-path d "payload.md"))))
       (delete-directory/files dir))))
 
 (void (run-tests plan-snapshot-suite))

@@ -344,6 +344,12 @@
                              (current-worker-cumulative-limit . CONFIGURATION)
                              (current-worker-write-limit . CONFIGURATION)
                              (current-allowed-roots . CONFIGURATION))
+ ;; W2 single trusted scratch allocation: the sanctioned redirection root is
+ ;; armed per bash execution from the SESSION's own trusted allocation and is
+ ;; never a process-wide default (the former container-wide base was removed
+ ;; because it sanctioned sibling sessions). It is not a turn, iteration or
+ ;; prompt lifetime and not an injected service: reviewed here.
+ ("tools/builtins/bash-safety.rkt" (current-sanctioned-scratch-root . OTHER_REVIEWED))
  ("tools/builtins/bash.rkt" (current-bash-execution-config . CONFIGURATION)
                             (current-allowed-commands . CONFIGURATION)
                             (current-execution-policy . CONFIGURATION))
@@ -357,6 +363,14 @@
  ("tools/file-mutation-queue.rkt" (current-file-mutation-queue-hook . SERVICE_HANDLE)
                                   (current-file-mutation-queue-owner . TURN_LOCAL))
  ("tools/scheduler-execution.rkt" (max-parallel-tools . CONFIGURATION))
+ ;; W2 single trusted scratch allocation. The base directory is a platform
+ ;; policy knob (default `<platform-temp>/q-agent-scratch`) overridable by the
+ ;; trusted caller, so CONFIGURATION. The adopted session root is bound for
+ ;; exactly ONE session creation in the same dynamic extent and consumed by the
+ ;; first take, so it is neither startup configuration nor turn-local state;
+ ;; reviewed here.
+ ("tools/scratch.rkt" (current-scratch-base-dir . CONFIGURATION)
+                      (current-adopted-session-scratch-root . OTHER_REVIEWED))
  ("tui/cell-diff-render.rkt" (current-full-render-threshold . CONFIGURATION))
  ("tui/clipboard.rkt" (current-clipboard-mode . CONFIGURATION))
  ("tui/commands/runtime-control.rkt" (current-browser-launcher . SERVICE_HANDLE))

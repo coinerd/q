@@ -11,7 +11,13 @@
 (require rackunit
          rackunit/text-ui
          racket/string
-         (only-in "../tools/tool.rkt" tool-result? tool-result-is-error? tool-result-content)
+         (only-in "../tools/tool.rkt"
+                  tool-result?
+                  tool-result-is-error?
+                  tool-result-content
+                  tool-result-details
+                  tool-result->jsexpr
+                  jsexpr->tool-result)
          "../tools/builtins/bash.rkt")
 
 (define bash-tests
@@ -42,6 +48,38 @@
       (check-false (tool-result-is-error? r))
       (define text (hash-ref (car (tool-result-content r)) 'text))
       (check-regexp-match "err-msg" text (format "expected 'err-msg' in output, got: ~a" text)))
+
+    (test-case "W2: stdout and stderr stay separate structured fields"
+      (define r (tool-bash (hasheq 'command "echo out-line; echo err-line 1>&2")))
+      (check-false (tool-result-is-error? r))
+      (define d (tool-result-details r))
+      (check-true (string-contains? (hash-ref d 'stdout "") "out-line"))
+      (check-true (string-contains? (hash-ref d 'stderr "") "err-line"))
+      (check-false (string-contains? (hash-ref d 'stdout "") "err-line")
+                   "stderr must not leak into the stdout field")
+      (check-false (string-contains? (hash-ref d 'stderr "") "out-line")
+                   "stdout must not leak into the stderr field")
+      (define text (hash-ref (car (tool-result-content r)) 'text))
+      (check-true (string-contains? text "[stderr]") "combined model-facing text labels stderr")
+      (check-true (string-contains? text "out-line"))
+      (check-true (string-contains? text "err-line")))
+
+    (test-case "W2: stderr-only output is labelled and preserved"
+      (define r (tool-bash (hasheq 'command "echo only-err 1>&2")))
+      (define text (hash-ref (car (tool-result-content r)) 'text))
+      (check-true (string-contains? text "[stderr]"))
+      (check-true (string-contains? text "only-err"))
+      (define d (tool-result-details r))
+      (check-equal? (hash-ref d 'stdout "") "")
+      (check-true (string-contains? (hash-ref d 'stderr "") "only-err")))
+
+    (test-case "W2: structured stdout/stderr survive the tool-result envelope"
+      (define r (tool-bash (hasheq 'command "echo out-line; echo err-line 1>&2; exit 3")))
+      (define roundtrip (jsexpr->tool-result (tool-result->jsexpr r)))
+      (define d (tool-result-details roundtrip))
+      (check-equal? (hash-ref d 'exit-code) 3)
+      (check-true (string-contains? (hash-ref d 'stdout "") "out-line"))
+      (check-true (string-contains? (hash-ref d 'stderr "") "err-line")))
 
     (test-case "exit 1 returns success result (non-zero exit is not a tool error)"
       (define r (tool-bash (hasheq 'command "exit 1")))
@@ -141,4 +179,7 @@
         (define r (tool-bash (hasheq 'command "rm -rf /tmp/test")))
         (check-true (tool-result-is-error? r))))))
 
-(run-tests destructive-filter-tests)
+;; W2: both suites in this file must actually run. `bash-tests` was defined but
+;; never executed, so its assertions could not fail. Nest both suites in one
+;; runner invocation (no test deleted or weakened).
+(run-tests (test-suite "bash-tool" bash-tests destructive-filter-tests))

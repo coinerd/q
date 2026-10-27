@@ -93,9 +93,9 @@
   (define path (safe-path (build-path (snapshot-dir base plan) (snapshot-file-path (car entries)))))
   (define content (file->string path))
   (define parsed (parse-wave-content content))
-  (define structural-refusal (hash-ref parsed 'verify-refusal #f))
-  (when structural-refusal
-    (refuse (format "frozen Verify is malformed: ~a" structural-refusal)))
+  (define fence-refusal (hash-ref parsed 'verify-refusal #f))
+  (when fence-refusal
+    (refuse (format "frozen Verify is malformed: ~a" fence-refusal)))
   (define declaration (hash-ref parsed 'verify #f))
   (unless (and (string? declaration) (non-empty-string? declaration))
     (refuse "empty frozen Verify"))
@@ -103,7 +103,30 @@
   ;; pure extractor). The binding records the normalizer contract version so
   ;; a historical-normalization change refuses rebinding loudly: retained
   ;; authority is compared, never regenerated.
-  (define normalized (normalize-declared-verify declaration))
+  ;;
+  ;; R-011 / W4: the frozen consumer renders the SAME structured extractor
+  ;; errors as live execution — the identical reason name and authored span —
+  ;; instead of collapsing every failure into "no executable command". An
+  ;; operator comparing a frozen refusal with a live one can therefore match
+  ;; them field by field.
+  (define extraction (verify-declaration-extraction declaration))
+  (define rejections (hash-ref extraction 'rejections '()))
+  (define declaration-path (snapshot-file-path (car entries)))
+  (when (pair? rejections)
+    (refuse (format "frozen Verify declaration in ~a rejects ~a authored gate span(s): ~a"
+                    declaration-path
+                    (length rejections)
+                    (string-join
+                     (for/list ([rj (in-list rejections)])
+                       (format "[~a] `~a`" (hash-ref rj 'reason) (hash-ref rj 'span)))
+                     "; "))))
+  (define structural-refusal (hash-ref extraction 'refusal #f))
+  (when structural-refusal
+    (refuse (format (string-append "frozen Verify declaration in ~a contains no executable "
+                                   "command or is ambiguous (~a); refusing prose-as-shell")
+                    declaration-path
+                    (format "~a" structural-refusal))))
+  (define normalized (hash-ref extraction 'canonical ""))
   (unless (non-empty-string? normalized)
     (refuse "frozen Verify has no executable command"))
   (hasheq 'snapshot-sha256 (snapshot-manifest-digest m)

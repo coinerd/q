@@ -19,6 +19,9 @@
          racket/string
          "campaign-state.rkt"
          "campaign-repository.rkt"
+         ;; W3: the ONE pure campaign decision. This module owns the
+         ;; authenticated readback adapter that feeds it, never routing.
+         "campaign-decision.rkt"
          ;; R76 (BUG-0076): shared layout-aware delivery-root resolution.
          (only-in "git-root-layout.rkt" delivery-root-or-raise)
          (only-in "delivery-journal.rkt" load-delivery-journal)
@@ -40,7 +43,7 @@
          delivery-handoff-path
          reconcile-delivered-handoff!
          persist-delivery-handoff!
-         ready-for-run-checkpoint
+         campaign-delivery-view-for-pass
          delivered-predecessor-resolver
          pending-delivery-message
          ;; B2b: the coordinator's default controller shells gsd-delivery.py
@@ -419,29 +422,44 @@
           handoff
           (delivery-action-hint plan-id (campaign-wave-index w))))
 
-;; Decide the next loop action AFTER the bounded authenticated readback
-;; (up to 240 s controller call). Re-reads durable disk truth so an
-;; external mutation that landed during the call wins; cancellation/fence
-;; discipline is preserved. A FRESH campaign has no durable record until
-;; the first wave persists it, so the very first iteration legitimately
-;; falls back to `current`; a record that vanishes after waves completed
-;; is still a hard error. Returns (values status live extra message):
-;;   status ∈ 'wave-cancelled | 'wave-blocked | 'campaign-complete | 'run
-;;   'wave-cancelled   → durable mutation/cancellation during readback
-;;   'wave-blocked     → a done wave lacks authenticated delivery proof
-;;   'campaign-complete→ every wave done/deferred and delivery-proven
-;;   'run              → proceed with `live` and next index `extra`
-(define (ready-for-run-checkpoint base-dir plan-id current completed delivery-reader verified)
+;; W3: the ONE authenticated delivery-readback adapter. It produces the
+;; delivery facts the pure decision consumes (campaign-decision.rkt); it makes
+;; NO routing decision itself. The bounded controller call (up to 240 s) runs
+;; against `current`, then durable disk truth is re-read so an external mutation
+;; that landed during the call wins; cancellation/fence discipline is preserved
+;; as an explicit fact for the decision. A FRESH campaign has no durable record
+;; until the first wave persists it, so the very first iteration legitimately
+;; falls back to `current`; a record that vanishes after waves completed is still
+;; a hard error.
+;;
+;; Returns (values delivery-view stale? live pending-message):
+;;   delivery-view — (campaign-delivery-view pending awaiting) where `pending`
+;;                   is (cons wave-index reason) for the first durable wave
+;;                   whose authenticated proof is not binding, and `awaiting`
+;;                   maps a wave index to its memoized 40-hex merge SHA
+;;   stale?        — durable state moved during the readback (or vanished)
+;;   live          — the authoritative record to carry forward
+;;   pending-message — the operator text for a delivery block (this adapter
+;;                   owns the idempotent handoff-ledger write)
+(define (campaign-delivery-view-for-pass base-dir plan-id current completed delivery-reader verified)
   (hash-clear! verified)
-  (define pending
+  (define raw-pending
     (and (not (campaign-record-cancellation current))
          (delivery-pending-wave base-dir
                                 plan-id
                                 (campaign-record-waves current)
                                 delivery-reader
                                 verified)))
+  ;; The pure decision consumes a wave INDEX; the human text is built here
+  ;; from the durable wave (it also persists the pending handoff record).
+  (define pending
+    (and raw-pending (cons (campaign-wave-index (car raw-pending)) (cdr raw-pending))))
+  (define pending-message
+    (and raw-pending (pending-delivery-message base-dir plan-id raw-pending)))
   (define reloaded (load-campaign-record base-dir plan-id))
   (define live (or reloaded current))
+  ;; A campaign that had durable progress and then lost its record is a hard
+  ;; stale signal; a brand-new campaign legitimately has no record yet.
   (define disappeared
     (and (not reloaded)
          (or (not (null? completed))
@@ -454,32 +472,18 @@
              (not (equal? (map campaign-wave-status (campaign-record-waves reloaded))
                           (map campaign-wave-status (campaign-record-waves current)))))))
   (define awaiting
-    (and (not (or stale? pending (campaign-record-cancellation live)))
-         (for/first ([w (in-list (campaign-record-waves live))]
-                     #:when (eq? (campaign-wave-status w) 'awaiting-delivery))
-           w)))
-  (define next-idx
-    (and (not (or stale? pending awaiting (campaign-record-cancellation live)))
-         (select-next-actionable-wave live)))
-  (cond
-    [stale?
-     (values 'wave-cancelled
-             live
-             #f
-             "campaign changed during delivery readback; stale result ignored, resume /go")]
-    [(campaign-record-cancellation live)
-     (values 'wave-cancelled live #f "campaign cancellation requested")]
-    [pending
-     (values 'wave-blocked live (car pending) (pending-delivery-message base-dir plan-id pending))]
-    [awaiting (values 'finalize-wave live awaiting "authenticated delivery ready for finalization")]
-    [(not next-idx) (values 'campaign-complete live #f "all waves done or deferred")]
-    [else (values 'run live next-idx #f)]))
+    (if (or stale? pending (campaign-record-cancellation live))
+        (hasheq)
+        (for/hash ([w (in-list (campaign-record-waves live))]
+                   #:when (eq? (campaign-wave-status w) 'awaiting-delivery))
+          (values (campaign-wave-index w) (hash-ref verified (campaign-wave-index w) #f)))))
+  (values (campaign-delivery-view pending awaiting) stale? live pending-message))
 
 ;; Memoized, ledger-reconciled predecessor-proof resolver derived from a
 ;; delivery-reader — the SAME authenticated source as the final full-loop
 ;; check, never a local regex fixture. `verified` is cleared once per loop
-;; iteration by ready-for-run-checkpoint, so a later runner mutation forces
-;; revalidation of publication AND synchronized bytes.
+;; iteration by campaign-delivery-view-for-pass, so a later runner mutation
+;; forces revalidation of publication AND synchronized bytes.
 (define (delivered-predecessor-resolver base-dir plan-id verified delivery-reader)
   (lambda (b p w)
     (or (hash-ref verified w #f)

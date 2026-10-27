@@ -1689,38 +1689,21 @@ def prepare(repo, plan, wave, number, relative, campaign_root, output,
             'next':'Copy trio into a dedicated fresh-main worktree; complete genuine binding review and gates; '
                    'publish through protected squash PR; wait for main governance; sync and resume /go.'}
 
-def scratch_exempt_porcelain(repo):
-    """sandbox-write-scratch-parity W1: UNTRACKED files under
-    .planning/scratch/ are disposable executor probes (created by the
-    structured-write tool for diagnostic scripts) and must not block delivery
-    synchronization. Only bare-untracked ('??') lines are exempt: a COMMITTED
-    scratch file's local modification or deletion is real working-tree dirt
-    and still refuses, as does any edit outside the scratch root. Handles
-    porcelain v1 quoting (core.quotePath wraps non-ASCII paths in double
-    quotes) and rename pairs `R  old -> new`."""
-    def exempt(path):
-        path = path.strip().strip('"')
-        return path.startswith('.planning/scratch/')
-    kept = []
-    # -uall expands collapsed untracked directories: a fresh `.planning/`
-    # would otherwise report as one `?? .planning/` line and hide whether the
-    # dirt is scratch-only. Tracked-file modifications are unaffected.
-    for line in git(repo, 'status', '--porcelain', '--untracked-files=all').splitlines():
-        if not line.strip():
-            continue
-        body = line[3:] if len(line) > 3 else ''
-        code = line[:2]
-        if code == '??':
-            # An untracked path is one path even when its literal name contains
-            # " -> "; splitting it would let a foreign path masquerade as scratch.
-            if exempt(body):
-                continue
-        elif code[0] in ('R', 'C') and ' -> ' in body:
-            old, new = body.split(' -> ', 1)
-            if exempt(old) and exempt(new):
-                continue
-        kept.append(line)
-    return '\n'.join(kept)
+def porcelain(repo):
+    """Working-tree dirt report for delivery synchronization.
+
+    W2 retirement (mirrors extensions/gsd/delivery-verifier.rkt): executor
+    scratch moved OUT of the repository to one trusted session root below the
+    platform temporary directory, so there is no in-tree `.planning/scratch/`
+    evidence exemption any more. Any untracked or modified path inside the
+    checkout is ordinary working-tree dirt and blocks synchronization; a
+    genuinely disposable probe belongs under the session scratch root, which is
+    outside this checkout and therefore invisible to git.
+    """
+    # -uall keeps the report explicit per file instead of collapsing a fresh
+    # directory into one line. It no longer changes the verdict (every dirt
+    # entry refuses) but keeps the diagnostic specific.
+    return git(repo, 'status', '--porcelain', '--untracked-files=all')
 
 def sync(repo, expected_branch):
     require(isinstance(expected_branch, str) and expected_branch.strip(),
@@ -1736,7 +1719,7 @@ def sync(repo, expected_branch):
     require(current == expected_branch or current == 'main',
             'synchronization refused: HEAD is %r, expected %r (unrelated branch changes not accepted)'
             % (current, expected_branch))
-    require(not scratch_exempt_porcelain(repo).strip(), 'dirty checkout; refusing synchronization')
+    require(not porcelain(repo).strip(), 'dirty checkout; refusing synchronization')
     refresh(repo)
     git(repo, 'merge', '--ff-only', 'origin/main')
     return {'status':'synchronized', 'head':git(repo, 'rev-parse', 'HEAD').strip(),

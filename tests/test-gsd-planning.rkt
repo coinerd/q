@@ -42,12 +42,15 @@
                   campaign-request?
                   campaign-request-prompt-for-wave
                   campaign-request-verifier
+                  campaign-request-scratch-token
                   lookup-campaign-request)
+         ;; The anchor helper registers a real /go request; forget it again so
+         ;; the process-wide request registry does not grow across test runs.
+         (only-in "../extensions/gsd/campaign-request.rkt" unregister-campaign-request!)
          (only-in "../extensions/gsd/delivery-verifier.rkt"
                   delivery-verification?
                   delivery-verification-approved?)
-         (only-in "../extensions/gsd/wave-outcome-reporting.rkt"
-                  emit-wave-outcome-error!))
+         (only-in "../extensions/gsd/wave-outcome-reporting.rkt" emit-wave-outcome-error!))
 
 ;; ============================================================
 ;; Helpers
@@ -1142,10 +1145,15 @@
      (delete-directory/files tmp-dir))))
 
 ;; ============================================================
-;; sandbox-write-scratch-parity W1: /go scratch guidance
+;; W2/W5: the /go anchor prompt and the request's per-attempt scratch
 ;; ============================================================
 
-(define (run-go-capture-scratch)
+;; Run /go once and return the amended hook payload. `new-session` is the
+;; ANCHOR prompt: a display/legacy fallback for a session that has not run a
+;; tool yet. It is deliberately NOT a bound executor attempt, so it cannot name
+;; a scratch path -- the campaign interpreter advertises the exact per-attempt
+;; root in each wave prompt it actually runs.
+(define (run-go-capture-anchor)
   (with-gsd-cleanup
    (lambda ()
      (with-temp-dir
@@ -1163,18 +1171,41 @@
           (write-test-wave-docs dir "W0-fix.md")
           (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
           (define result (handler (hasheq 'command "/go" 'input "/go")))
-          (hash-ref (hook-result-payload result) 'new-session)))))))
+          (hook-result-payload result)))))))
 
-(test-case "/go prompt carries a session-owned scratch directory"
-  (define submit-text (run-go-capture-scratch))
-  (define scratch-match (regexp-match #px"[.]planning/scratch/([0-9a-f]{16})/" submit-text))
-  (check-true (and scratch-match #t) "scratch dir with 16-hex token present in /go prompt")
-  (check-true (string-contains? submit-text "current working directory"))
-  (check-true (string-contains? submit-text "structured write tool")))
+(test-case "/go anchor prompt intentionally advertises no scratch path"
+  ;; The anchor is not a bound session. Advertising a root here would promise a
+  ;; path that no session owns yet (and, before W2, that a process-wide
+  ;; allocation reused). The real contract -- one root per executor ATTEMPT,
+  ;; advertised in that attempt's prompt and adopted for its session -- is
+  ;; asserted against the wave runner in
+  ;; tests/test-gsd-go-orchestrator.rkt ("each executor attempt advertises and
+  ;; adopts its own scratch root"). This test pins the anchor half of it.
+  (define payload (run-go-capture-anchor))
+  (define submit-text (hash-ref payload 'new-session))
+  (check-true (string? submit-text))
+  (check-false (string-contains? submit-text "q-agent-scratch")
+               "the unbound anchor never names a scratch root")
+  (check-false (string-contains? submit-text ".planning/scratch")
+               "the obsolete in-tree scratch path is never advertised")
+  (check-false (regexp-match? #px"Session scratch directory" submit-text)
+               "the anchor carries no scratch guidance section")
+  (unregister-campaign-request! (hash-ref payload 'campaign-token)))
 
-(test-case "/go scratch tokens differ across fresh sessions"
-  (define a (run-go-capture-scratch))
-  (define b (run-go-capture-scratch))
-  (define token-a (cadr (regexp-match #px"[.]planning/scratch/([0-9a-f]{16})/" a)))
-  (define token-b (cadr (regexp-match #px"[.]planning/scratch/([0-9a-f]{16})/" b)))
-  (check-false (string=? token-a token-b) "fresh sessions must not share a scratch destination"))
+(test-case "each /go request owns a fresh scratch token (no process root reuse)"
+  ;; The /go boundary hands the campaign interpreter an opaque token, never a
+  ;; path and never a process-wide root. Two /go requests therefore own two
+  ;; independent tokens, so no attempt can inherit another campaign's scratch.
+  (define payload-a (run-go-capture-anchor))
+  (define payload-b (run-go-capture-anchor))
+  (define request-a (lookup-campaign-request (hash-ref payload-a 'campaign-token)))
+  (define request-b (lookup-campaign-request (hash-ref payload-b 'campaign-token)))
+  (check-true (campaign-request? request-a))
+  (check-true (campaign-request? request-b))
+  (define token-a (campaign-request-scratch-token request-a))
+  (define token-b (campaign-request-scratch-token request-b))
+  (check-true (and (string? token-a) (regexp-match? #px"^[0-9a-f]{16,64}$" token-a))
+              "the request carries an opaque scratch token, not a path")
+  (check-not-equal? token-a token-b "two /go requests never share one scratch ownership token")
+  (unregister-campaign-request! (hash-ref payload-a 'campaign-token))
+  (unregister-campaign-request! (hash-ref payload-b 'campaign-token)))

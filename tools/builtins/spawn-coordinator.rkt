@@ -459,7 +459,11 @@
                               #:progress-callback (exec-context-progress-callback exec-ctx)
                               #:permission-config (exec-context-permission-config exec-ctx)
                               #:capabilities (exec-context-capabilities exec-ctx)
-                              #:browser-service (exec-context-browser-service exec-ctx))
+                              #:browser-service (exec-context-browser-service exec-ctx)
+                              ;; W2: a parallel batch runs in the SAME session,
+                              ;; so it keeps exactly that session's trusted
+                              ;; scratch root (never a process-wide one).
+                              #:scratch-root (exec-context-scratch-root exec-ctx))
            (make-exec-context #:cancellation-token batch-token)))
      (define threads
        (for/list ([job (in-list jobs)]

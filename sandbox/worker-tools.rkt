@@ -36,11 +36,15 @@
                   edit-contract-result-content
                   edit-contract-result-occurrences
                   edit-contract-result-replacements)
+         ;; W2: one readable bounded mismatch diagnostic shared with the direct
+         ;; edit tool (line/column, visible escaping, identical bytes).
+         (only-in "../tools/builtins/edit-mismatch.rkt" format-not-found-diagnostic)
          ;; SEC-1 (v0.99.76 W1): shared shell-safety predicates — same source of
          ;; truth as the main tool-bash path (STATE D1: import, don't duplicate).
          (only-in "../tools/builtins/bash-safety.rkt"
                   destructive-command?
                   destructive-diagnostic-message
+                  scratch-redirection-guidance
                   high-risk-command?
                   structured-destructive-command?
                   structured-critical-command?))
@@ -263,6 +267,17 @@
         #f)
       "edit: file was modified concurrently"))
 
+;; W2: the direct edit tool resolves every input to ONE canonical (absolute,
+;; symlink-resolved) spelling and reports THAT in its details and diagnostics.
+;; The worker resolves the same way so a relative input or a symlinked input is
+;; described identically on both planes. A path that cannot be resolved keeps
+;; its absolute simplified spelling, preserving the caller's own not-found
+;; handling (the direct tool does the same).
+(define (canonical-worker-path p)
+  (define absolute (path->complete-path (expand-user-path p) (current-directory)))
+  (with-handlers ([exn:fail? (lambda (_) absolute)])
+    (simplify-path (resolve-path absolute) #f)))
+
 ;; ── Tool Execution Functions ────────────────────────────────────
 
 ;; Each function accepts a hash and returns an ipc-response. execute-edit also
@@ -283,9 +298,10 @@
     ;; is BLOCK (stricter than main's warn): the worker has no approval channel.
     [(destructive-command? command)
      (make-error-response #f
-                          (format "bash: blocked destructive command (~a): ~a"
+                          (format "bash: blocked destructive command (~a): ~a\n~a"
                                   (destructive-diagnostic-message command)
-                                  command))]
+                                  command
+                                  (scratch-redirection-guidance)))]
     [(structured-critical-command? command)
      (make-error-response #f (format "bash: blocked by structured risk classifier: ~a" command))]
     [else
@@ -417,10 +433,10 @@
     [(not (path-allowed? path))
      (make-error-response #f (format "edit: path not allowed: ~a~a" path (allowed-roots-suffix)))]
     [else
-     (define resolved (path->complete-path (expand-user-path path) (current-directory)))
+     (define resolved (canonical-worker-path path))
      (cond
        [(not (file-exists? resolved))
-        (make-error-response #f (format "edit: file not found: ~a" path))]
+        (make-error-response #f (format "edit: file not found: ~a" resolved))]
        [else
         (define content (file->string resolved))
         ;; SEC-7 (v0.99.76 W2): record inode before read for TOCTOU check
@@ -445,8 +461,9 @@
                     effective-max-old-text-len
                     SAFE-MAX-OLD-TEXT-LEN))]
           [(not-found)
-           (define detail (build-not-found-detail content old-text))
-           (make-error-response #f (format "edit: old-text not found in file\n~a" detail))]
+           (make-error-response #f
+                                (format "edit: ~a"
+                                        (format-not-found-diagnostic resolved old-text content)))]
           [(duplicate)
            (make-error-response
             #f
@@ -644,73 +661,8 @@
         execute-delete-lines))
 
 ;; --------------------------------------------------
-;; Enhanced diagnostics: first-difference offset, escaped code points, whitespace count
-;; (W3 parity with tools/builtins/edit.rkt)
+;; Dispatch
 ;; --------------------------------------------------
-
-(define (first-differing-offset a b)
-  (define len-a (string-length a))
-  (define len-b (string-length b))
-  (define min-len (min len-a len-b))
-  (let loop ([i 0])
-    (cond
-      [(= i min-len)
-       (if (= len-a len-b)
-           (values #f #f #f)
-           (values i (and (< i len-a) (string-ref a i)) (and (< i len-b) (string-ref b i))))]
-      [(not (char=? (string-ref a i) (string-ref b i))) (values i (string-ref a i) (string-ref b i))]
-      [else (loop (+ i 1))])))
-
-(define (escape-char c)
-  (format "U+~X" (char->integer c)))
-
-(define (escaped-context s offset [context-radius 6])
-  (define len (string-length s))
-  (define start (max 0 (- offset context-radius)))
-  (define end (min len (+ offset context-radius 1)))
-  (define parts
-    (for/list ([i (in-range start end)])
-      (escape-char (string-ref s i))))
-  (format "[~a]" (string-join parts " ")))
-
-(define (count-leading-spaces s)
-  (for/fold ([count 0])
-            ([ch (in-string s)]
-             #:break (not (char=? ch #\space)))
-    (add1 count)))
-
-(define (build-not-found-detail content old-text)
-  (define-values (diff-offset content-char old-char) (first-differing-offset content old-text))
-  (define diff-detail
-    (cond
-      [(and diff-offset content-char old-char)
-       (format
-        "First differing offset: ~a (~a vs ~a)\nContext around mismatch in file:  ~a\nContext around mismatch in old-text: ~a"
-        diff-offset
-        (escape-char content-char)
-        (escape-char old-char)
-        (escaped-context content diff-offset)
-        (escaped-context old-text diff-offset))]
-      [diff-offset
-       (format "First differing offset: ~a (file has ~a chars, old-text has ~a chars)"
-               diff-offset
-               (string-length content)
-               (string-length old-text))]
-      [else ""]))
-  (define ws-info
-    (let* ([c-lines (string-split content "\n" #:trim? #f)]
-           [o-lines (string-split old-text "\n" #:trim? #f)]
-           [diff-lines (for/list ([c (in-list c-lines)]
-                                  [o (in-list o-lines)]
-                                  #:when (and c o (not (equal? c o))))
-                         (define c-spaces (count-leading-spaces c))
-                         (define o-spaces (count-leading-spaces o))
-                         (format "  file has ~a leading spaces, old-text has ~a" c-spaces o-spaces))])
-      (if (pair? diff-lines)
-          (string-append "Whitespace differences:\n" (string-join diff-lines "\n"))
-          "")))
-  (string-append diff-detail (if (equal? diff-detail "") "" "\n") ws-info))
-
 (define (dispatch-tool tool-name arguments)
   (define executor (hash-ref worker-tool-registry tool-name #f))
   (cond

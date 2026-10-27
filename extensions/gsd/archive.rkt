@@ -19,7 +19,15 @@
          "command-types.rkt"
          (only-in "shared.rkt" extract-plan-title)
          "wave-status.rkt"
-         (only-in "planning-paths.rkt" plan-file planning-root state-file)
+         (only-in "planning-paths.rkt" plan-file planning-root state-file waves-dir-name)
+         ;; W4: the ONE authentic ownership-marker predicate. Cleanup removes a
+         ;; directory only when it is a known archive-owned leftover or when this
+         ;; predicate PROVES the directory is ours; unknown state is preserved.
+         (only-in "planning-artifact-ownership.rkt"
+                  authentic-planning-artifact-marker?
+                  owned-planning-artifact-dir?
+                  planning-artifact-marker-filename
+                  planning-artifact-ownership-kinds)
          (only-in "session-state.rkt" current-gsd-ctx))
 
 (provide (contract-out [archive-completed-plan!
@@ -75,6 +83,18 @@
 ;; Move planning files to archive directory.
 ;; Moves: PLAN.md, STATE.md, HANDOFF.json, wave docs in waves/
 ;; Returns the archive directory path.
+;;
+;; W4: this operation writes NO temporary artifacts — every step is a single
+;; rename — so an interruption cannot leave owned staging behind and there is
+;; nothing for a later run to guess at. Unknown backups/`.bak` files are never
+;; moved or deleted by archiving; only the files it explicitly names move.
+;;
+;; W4 interruption evidence (`tests/test-gsd-archive.rkt`): a failure partway
+;; through the rename chain moves nothing back and deletes nothing. Files
+;; already renamed are complete in the archive, files not yet renamed are still
+;; complete in `.planning/`, NO temp/owned artifact is created, and unknown
+;; empty directories survive. Re-invoking this function after the obstruction is
+;; cleared completes the SAME archive with no duplicated or guessed state.
 (define (move-to-archive! base-dir archive-dir)
   (define planning-dir (planning-root base-dir))
   (unless (directory-exists? archive-dir)
@@ -256,17 +276,71 @@
 ;; extract-plan-title: imported from shared.rkt (v0.32.1 Wave 1 DRY))
 
 ;; Remove empty subdirectories under .planning/ after archive (#2160).
-;; Does NOT delete the archive/ subdir itself.
+;; Does NOT delete the archive/ subdir itself, and does not recurse.
+;;
+;; W4 (GSD-SIMPLIFICATION-PLAN) BLOCKER FIX: this used to delete EVERY empty
+;; directory whose name was not on a deny-list, so an operator's empty
+;; `.planning/notes/` (or any unknown name) was destroyed by archiving. An
+;; empty directory is not proof of ownership: emptiness says nothing about who
+;; created it. Cleanup is now allow-list-only and removes an empty directory
+;; ONLY when it is:
+;;
+;;   1. the KNOWN `waves` directory this operation archives (an archive-owned
+;;      name from planning-paths.rkt), when it is genuinely empty, or
+;;   2. a directory that an AUTHENTIC ownership marker proves is ours AND whose
+;;      only remaining entries are authentic markers a known creator wrote
+;;      (planning-artifact-ownership.rkt: real nofollow marker file, hash
+;;      datum, schema-version 1, matching kind). A marked directory can never be
+;;      byte-empty, so "leftover" means "nothing left but our own marker".
+;;
+;; Everything else — the campaign root, scratch, an unknown `notes/`, hidden
+;; directories, `.bak` backups, a `waves-pre-plan-backup` without our marker,
+;; an impostor marker — is preserved verbatim and merely logged. The former
+;; name-based `PROTECTED-PLANNING-SUBDIRS` deny-list is gone: a deny-list can
+;; only guess which unknown names are safe to keep, and it guessed wrong.
+(define (real-directory-entries p)
+  (and (not (link-exists? p))
+       (directory-exists? p)
+       (with-handlers ([exn:fail? (lambda (_) #f)])
+         (directory-list p))))
+
+(define (known-marker-name? name)
+  (for/or ([kind (in-list (planning-artifact-ownership-kinds))])
+    (string=? name (planning-artifact-marker-filename kind))))
+
+;; True when the directory is proven ours and contains nothing except the
+;; AUTHENTIC ownership markers this contract knows.
+(define (only-authentic-markers-inside? sub-path)
+  (and (owned-planning-artifact-dir? sub-path)
+       (for/and ([entry (in-list (directory-list sub-path))])
+         (define name (path->string entry))
+         (and (known-marker-name? name)
+              (for/or ([kind (in-list (planning-artifact-ownership-kinds))]
+                       #:when (string=? name (planning-artifact-marker-filename kind)))
+                (authentic-planning-artifact-marker? sub-path kind))))))
+
+(define (archive-owned-leftover? sub-name sub-path)
+  (define entries (real-directory-entries sub-path))
+  (and entries
+       (cond
+         [(string=? sub-name waves-dir-name) (null? entries)]
+         [else (only-authentic-markers-inside? sub-path)])))
+
 (define (cleanup-empty-subdirs! planning-dir)
   (when (directory-exists? planning-dir)
     (for ([sub (directory-list planning-dir)])
+      (define sub-name (path->string sub))
       (define sub-path (build-path planning-dir sub))
-      (when (and (directory-exists? sub-path) (not (string=? (path->string sub) "archive")))
-        (with-handlers ([exn:fail? (lambda (e)
-                                     (log-debug "gsd: cleanup-empty-subdirs failed: ~a"
-                                                (exn-message e)))])
-          (when (null? (directory-list sub-path))
-            (delete-directory sub-path)))))))
+      (cond
+        [(not (real-directory-entries sub-path))
+         (void)]
+        [(archive-owned-leftover? sub-name sub-path)
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (log-debug "gsd: cleanup-empty-subdirs failed: ~a"
+                                                 (exn-message e)))])
+           (delete-directory/files sub-path))]
+        [else
+         (log-debug "gsd: preserving unknown empty planning directory ~a" sub-name)]))))
 
 ;; Auto-create minimal STATE.md if it doesn't exist (#2164).
 ;; Called from /plan initialization.

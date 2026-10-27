@@ -8,6 +8,7 @@
 ;; @boundary unit
 (require rackunit
          rackunit/text-ui
+         racket/file
          racket/runtime-path
          (only-in racket/list first)
          (only-in "../tools/tool.rkt"
@@ -29,6 +30,11 @@
                   tool-externalizable?
                   tool-required-capability)
          (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result-results)
+         (only-in "../tools/scratch.rkt"
+                  current-scratch-base-dir
+                  fresh-scratch-token
+                  scratch-root-for-token
+                  ensure-scratch-root!)
          (only-in "../sandbox/gateway-bridge.rkt"
                   current-execution-plane-enabled
                   current-worker-args
@@ -71,6 +77,15 @@
              #:dangerous? #t
              #:required-capability 'shell-exec
              #:externalizable? #f))
+
+(define (make-write-tool)
+  (make-tool "write"
+             "Write tool routed to the worker"
+             (hasheq 'type "object" 'properties (hasheq) 'required (list))
+             (lambda (args [ctx #f]) (make-success-result "executed locally"))
+             #:dangerous? #t
+             #:required-capability 'file-write
+             #:externalizable? #t))
 
 ;; ── Test Suite ──────────────────────────────────────────────────
 
@@ -192,6 +207,51 @@
         ;; The worker's tool registry has "bash" so it should work
         (check-false (tool-result-is-error? (first results)))
         (shutdown-worker!)))
+
+    ;; ── W2: trusted scratch root reaches the worker ──
+
+    (test-case "W2: exec-context scratch root is propagated, model args cannot widen worker roots"
+      ;; The worker validates the trusted scratch shape against its own scratch
+      ;; base, so this test uses the real platform scratch base and cleans up
+      ;; its own token directory afterwards.
+      (define scratch (scratch-root-for-token (fresh-scratch-token)))
+      (ensure-scratch-root! scratch)
+      (dynamic-wind
+       void
+       (lambda ()
+         (parameterize ([current-execution-plane-enabled #t])
+           (define reg (make-tool-registry))
+           (register-tool! reg (make-write-tool))
+           (define target (build-path scratch "probe.rkt"))
+           (define allowed
+             (run-tool-batch
+              (list (make-tool-call
+                     "tc-8"
+                     "write"
+                     (hasheq 'path (path->string target) 'content "#lang racket/base\n")))
+              reg
+              #:exec-context
+              (make-exec-context #:permission-config (make-permissive-permission-config)
+                                 #:scratch-root scratch)))
+           (define allowed-result (first (scheduler-result-results allowed)))
+           (check-false (tool-result-is-error? allowed-result)
+                        (format "advertised scratch path must work in the worker: ~a"
+                                (tool-result-content allowed-result)))
+           (check-true (file-exists? target))
+           ;; A request without the trusted root does not inherit it.
+           (define sibling (build-path (current-scratch-base-dir) "fedcba9876543210" "x.rkt"))
+           (define denied
+             (run-tool-batch
+              (list
+               (make-tool-call "tc-9" "write" (hasheq 'path (path->string sibling) 'content "no")))
+              reg
+              #:exec-context (make-exec-context #:permission-config
+                                                (make-permissive-permission-config))))
+           (check-true (tool-result-is-error? (first (scheduler-result-results denied))))
+           (check-false (file-exists? sibling))))
+       (lambda ()
+         (delete-directory/files scratch #:must-exist? #f)
+         (shutdown-worker!))))
 
     ;; ── Result format consistency ──
 
