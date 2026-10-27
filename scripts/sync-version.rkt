@@ -114,6 +114,10 @@
       (string-contains? s "/docs/adr/")
       (string-contains? s "/docs/security.md")
       (string-contains? s "/docs/reports/")
+      ;; Locally generated, gitignored audit reports (`scripts/audit-project.rkt
+      ;; --ci` writes docs/audits/ during a lint-all pass) are never version
+      ;; targets; lint-version.rkt already skips this directory.
+      (string-contains? s "/docs/audits/")
       ;; Frozen release-evidence baselines (C0 cohort, ci-baseline reports):
       ;; historical milestone evidence, never rewritten (matches lint-version.rkt)
       (string-contains? s "/artifacts/")))

@@ -15,7 +15,9 @@
 (provide make-review-tool-registry)
 
 (define (refuse detail)
-  (error 'review-tools "Blocked read-only reviewer command: ~a. Use read for source/proof/output files." detail))
+  (error 'review-tools
+         "Blocked read-only reviewer command: ~a. Use read for source/proof/output files."
+         detail))
 
 ;; No expansion, escaping, operators, substitutions, globbing, or multiline commands.
 ;; Quotes only group literal arguments (including paths with spaces).
@@ -38,17 +40,26 @@
   (for ([c (in-string command)])
     (cond
       [quote-char
-       (if (char=? c quote-char) (set! quote-char #f) (write-char c out))]
-      [(memv c '(#\' #\")) (set! quote-char c) (set! started? #t)]
+       (if (char=? c quote-char)
+           (set! quote-char #f)
+           (write-char c out))]
+      [(memv c '(#\' #\"))
+       (set! quote-char c)
+       (set! started? #t)]
       [(char-whitespace? c) (flush!)]
-      [else (write-char c out) (set! started? #t)]))
-  (when quote-char (refuse "unclosed quote"))
+      [else
+       (write-char c out)
+       (set! started? #t)]))
+  (when quote-char
+    (refuse "unclosed quote"))
   (flush!)
-  (when (null? words) (refuse "empty command"))
+  (when (null? words)
+    (refuse "empty command"))
   (reverse words))
 
 (define (literal-path? s)
-  (and (string? s) (non-empty-string? s)
+  (and (string? s)
+       (non-empty-string? s)
        (not (string-prefix? s "-"))
        (not (regexp-match? #px"[*?\\[\\]{}]" s))))
 (define (paths! paths)
@@ -56,7 +67,9 @@
     (refuse "expected literal paths, not flags or glob patterns"))
   paths)
 (define (strip-divider args)
-  (if (and (pair? args) (equal? (car args) "--")) (cdr args) args))
+  (if (and (pair? args) (equal? (car args) "--"))
+      (cdr args)
+      args))
 (define (absolute-paths cwd paths)
   (map (lambda (p) (path->string (path->complete-path p cwd))) (paths! paths)))
 (define (count! n)
@@ -75,23 +88,40 @@
                  (not (member ".." (string-split p "/")))))
     (refuse "Git paths must be literal checkout-relative paths without .."))
   paths)
-(define diff-flags '("--no-ext-diff" "--no-textconv" "--no-color" "--no-renames" "--ignore-submodules=all"))
+(define diff-flags
+  '("--no-ext-diff" "--no-textconv" "--no-color" "--no-renames" "--ignore-submodules=all"))
 ;; Fixed trusted options override executable hooks/helpers in repository config.
 ;; No user-supplied global options or arbitrary log/diff/show flags are forwarded.
 (define git-prefix
   '("--no-pager" "--no-optional-locks"
-    "-c" "core.fsmonitor=false" "-c" "core.hooksPath=/dev/null"
-    "-c" "core.attributesFile=/dev/null" "-c" "core.pager=cat"
-    "-c" "diff.external=" "-c" "log.showSignature=false"
-    "-c" "protocol.allow=never" "-c" "maintenance.auto=false" "-c" "gc.auto=0"))
+                 "-c"
+                 "core.fsmonitor=false"
+                 "-c"
+                 "core.hooksPath=/dev/null"
+                 "-c"
+                 "core.attributesFile=/dev/null"
+                 "-c"
+                 "core.pager=cat"
+                 "-c"
+                 "diff.external="
+                 "-c"
+                 "log.showSignature=false"
+                 "-c"
+                 "protocol.allow=never"
+                 "-c"
+                 "maintenance.auto=false"
+                 "-c"
+                 "gc.auto=0"))
 (define (git-argv args)
   (define payload
     (match args
       [(list "status") '("status" "--short" "--untracked-files=no" "--ignore-submodules=all")]
-      [(list "status" "--short") '("status" "--short" "--untracked-files=no" "--ignore-submodules=all")]
+      [(list "status" "--short")
+       '("status" "--short" "--untracked-files=no" "--ignore-submodules=all")]
       [(list "status" "--short" "--branch")
        '("status" "--short" "--branch" "--untracked-files=no" "--ignore-submodules=all")]
-      [(list "rev-parse" (and fact (or "HEAD" "HEAD^{tree}" "--show-toplevel"))) (list "rev-parse" fact)]
+      [(list "rev-parse" (and fact (or "HEAD" "HEAD^{tree}" "--show-toplevel")))
+       (list "rev-parse" fact)]
       [(list "log") '("log" "-10" "--format=fuller" "--no-show-signature" "--no-decorate")]
       [(list "log" "--oneline") '("log" "-10" "--oneline" "--no-show-signature" "--no-decorate")]
       [(list "log" "-n" n)
@@ -99,23 +129,49 @@
        (list "log" "-n" n "--format=fuller" "--no-show-signature" "--no-decorate")]
       [(list "show" spec)
        (define parts (string-split spec ":" #:trim? #f))
-       (unless (and (<= 1 (length parts) 2) (revision? (car parts))) (refuse "unsupported Git show revision"))
-       (when (= (length parts) 2) (git-paths! (cdr parts)))
-       (append '("show" "--format=fuller" "--no-show-signature" "--no-decorate") diff-flags (list spec "--"))]
+       (unless (and (<= 1 (length parts) 2) (revision? (car parts)))
+         (refuse "unsupported Git show revision"))
+       (when (= (length parts) 2)
+         (git-paths! (cdr parts)))
+       (append '("show" "--format=fuller" "--no-show-signature" "--no-decorate")
+               diff-flags
+               (list spec "--"))]
       [(list* "diff" rest)
        ;; Accept these compatibility spellings, but always inject the protection ourselves.
        (define without-safety
          (if (and (>= (length rest) 2) (equal? (take rest 2) '("--no-ext-diff" "--no-textconv")))
-             (drop rest 2) rest))
+             (drop rest 2)
+             rest))
        (define style
-         (and (pair? without-safety) (member (car without-safety) '("--stat" "--name-only")) (car without-safety)))
-       (define body (if style (cdr without-safety) without-safety))
+         (and (pair? without-safety)
+              (member (car without-safety) '("--stat" "--name-only"))
+              (car without-safety)))
+       (define body
+         (if style
+             (cdr without-safety)
+             without-safety))
        (define split-at-path (index-of body "--"))
-       (define revisions (if split-at-path (take body split-at-path) body))
-       (define paths (if split-at-path (git-paths! (drop body (add1 split-at-path))) '()))
-       (unless (and (<= (length revisions) 2) (andmap revision? revisions)) (refuse "unsupported Git diff shape"))
-       (append '("diff") diff-flags (if style (list style) '()) revisions '("--") paths)]
-      [_ (refuse "unsupported Git fact; use status --short, diff [revisions] [-- paths], show REV[:path], or log")]))
+       (define revisions
+         (if split-at-path
+             (take body split-at-path)
+             body))
+       (define paths
+         (if split-at-path
+             (git-paths! (drop body (add1 split-at-path)))
+             '()))
+       (unless (and (<= (length revisions) 2) (andmap revision? revisions))
+         (refuse "unsupported Git diff shape"))
+       (append '("diff")
+               diff-flags
+               (if style
+                   (list style)
+                   '())
+               revisions
+               '("--")
+               paths)]
+      [_
+       (refuse
+        "unsupported Git fact; use status --short, diff [revisions] [-- paths], show REV[:path], or log")]))
   (append git-prefix payload))
 
 (define (inspection-argv cwd program args)
@@ -123,36 +179,89 @@
     ["git" (git-argv args)]
     ["ls"
      (define flag (and (pair? args) (member (car args) '("-l" "-a" "-la" "-al" "-1")) (car args)))
-     (define paths (strip-divider (if flag (cdr args) args)))
-     (append (if flag (list flag) '()) '("--") (absolute-paths cwd (if (null? paths) '(".") paths)))]
+     (define paths
+       (strip-divider (if flag
+                          (cdr args)
+                          args)))
+     (append (if flag
+                 (list flag)
+                 '())
+             '("--")
+             (absolute-paths cwd
+                             (if (null? paths)
+                                 '(".")
+                                 paths)))]
     ["cat" (append '("--") (absolute-paths cwd (strip-divider args)))]
     ["wc"
      (define flag (and (pair? args) (member (car args) '("-l" "-c" "-w")) (car args)))
-     (append (if flag (list flag) '()) '("--") (absolute-paths cwd (strip-divider (if flag (cdr args) args))))]
+     (append (if flag
+                 (list flag)
+                 '())
+             '("--")
+             (absolute-paths cwd
+                             (strip-divider (if flag
+                                                (cdr args)
+                                                args))))]
     [(or "head" "tail")
      (define counted? (and (pair? args) (equal? (car args) "-n")))
-     (when (and counted? (< (length args) 3)) (refuse "expected -n COUNT and literal paths"))
-     (define n (if counted? (count! (cadr args)) "20"))
-     (append (list "-n" n "--") (absolute-paths cwd (strip-divider (if counted? (cddr args) args))))]
+     (when (and counted? (< (length args) 3))
+       (refuse "expected -n COUNT and literal paths"))
+     (define n
+       (if counted?
+           (count! (cadr args))
+           "20"))
+     (append (list "-n" n "--")
+             (absolute-paths cwd
+                             (strip-divider (if counted?
+                                                (cddr args)
+                                                args))))]
     [(or "grep" "rg")
-     (define body (let loop ([xs args])
-                    (if (and (pair? xs) (member (car xs) '("-n" "-F" "-nF" "-Fn"))) (loop (cdr xs)) xs)))
+     (define body
+       (let loop ([xs args])
+         (if (and (pair? xs) (member (car xs) '("-n" "-F" "-nF" "-Fn")))
+             (loop (cdr xs))
+             xs)))
      (define pattern-and-paths (strip-divider body))
      (unless (and (>= (length pattern-and-paths) 2) (literal-path? (car pattern-and-paths)))
        (refuse "search expects a literal pattern and explicit paths; only -n/-F are supported"))
-     (append (if (equal? program "rg") '("--no-config" "--color=never" "--no-heading") '())
-             '("-n" "-F" "--") (list (car pattern-and-paths)) (absolute-paths cwd (cdr pattern-and-paths)))]
+     (append (if (equal? program "rg")
+                 '("--no-config" "--color=never" "--no-heading")
+                 '())
+             '("-n" "-F" "--")
+             (list (car pattern-and-paths))
+             (absolute-paths cwd (cdr pattern-and-paths)))]
     [_ (refuse "only pwd, fixed Git facts, ls, cat, wc, head, tail, grep, and rg are supported")]))
 
 ;; Start empty: inherited GIT_*, loaders, shell startup, credential agents, PATH,
 ;; ripgrep config, and locale hooks never reach the child. No secrets are authorized
 ;; merely because read can inspect controller-provided absolute private-proof paths.
 (define (inspection-environment)
-  (make-environment-variables
-   #"PATH" #"/usr/bin:/bin" #"HOME" #"/dev/null" #"XDG_CONFIG_HOME" #"/dev/null" #"LC_ALL" #"C"
-   #"GIT_CONFIG_NOSYSTEM" #"1" #"GIT_CONFIG_SYSTEM" #"/dev/null" #"GIT_CONFIG_GLOBAL" #"/dev/null"
-   #"GIT_ATTR_NOSYSTEM" #"1" #"GIT_TERMINAL_PROMPT" #"0" #"GIT_OPTIONAL_LOCKS" #"0"
-   #"GIT_NO_REPLACE_OBJECTS" #"1" #"GIT_NO_LAZY_FETCH" #"1" #"GIT_LITERAL_PATHSPECS" #"1"))
+  (make-environment-variables #"PATH"
+                              #"/usr/bin:/bin"
+                              #"HOME"
+                              #"/dev/null"
+                              #"XDG_CONFIG_HOME"
+                              #"/dev/null"
+                              #"LC_ALL"
+                              #"C"
+                              #"GIT_CONFIG_NOSYSTEM"
+                              #"1"
+                              #"GIT_CONFIG_SYSTEM"
+                              #"/dev/null"
+                              #"GIT_CONFIG_GLOBAL"
+                              #"/dev/null"
+                              #"GIT_ATTR_NOSYSTEM"
+                              #"1"
+                              #"GIT_TERMINAL_PROMPT"
+                              #"0"
+                              #"GIT_OPTIONAL_LOCKS"
+                              #"0"
+                              #"GIT_NO_REPLACE_OBJECTS"
+                              #"1"
+                              #"GIT_NO_LAZY_FETCH"
+                              #"1"
+                              #"GIT_LITERAL_PATHSPECS"
+                              #"1"))
 ;; --no-ext-diff/--no-textconv do NOT disable clean/process filters used while
 ;; comparing worktree files. Read config without executing helpers, then override
 ;; every filter. Unsupported subsection names fail closed instead of becoming argv.
@@ -160,16 +269,22 @@
 ;; for checkout authentication itself; this is not isolation from a concurrent OS user.
 (define (git-filter-overrides cwd timeout)
   (define result
-    (run-subprocess (trusted-executable "git") #:directory cwd #:environment (inspection-environment)
-                    #:limits (strict-exec-limits) #:timeout (min timeout 1)
-                    #:args (append git-prefix '("config" "--null" "--name-only" "--get-regexp" "^filter\\."))))
-  (unless (and (not (subprocess-result-timed-out? result)) (not (subprocess-result-truncated? result))
+    (run-subprocess (trusted-executable "git")
+                    #:directory cwd
+                    #:environment (inspection-environment)
+                    #:limits (strict-exec-limits)
+                    #:timeout (min timeout 1)
+                    #:args (append git-prefix
+                                   '("config" "--null" "--name-only" "--get-regexp" "^filter\\."))))
+  (unless (and (not (subprocess-result-timed-out? result))
+               (not (subprocess-result-truncated? result))
                (member (subprocess-result-exit-code result) '(0 1)))
     (refuse "could not safely inspect Git filter configuration"))
   (define names
     (for/list ([key (in-list (string-split (subprocess-result-stdout result) (string #\nul)))])
       (define m (regexp-match #px"^filter\\.([a-zA-Z0-9_.-]+)\\.[a-zA-Z][a-zA-Z0-9-]*$" key))
-      (unless m (refuse "unsupported Git filter configuration name"))
+      (unless m
+        (refuse "unsupported Git filter configuration name"))
       (cadr m)))
   (append-map (lambda (name)
                 (append-map (lambda (setting) (list "-c" (string-append "filter." name "." setting)))
@@ -177,42 +292,74 @@
               (remove-duplicates names)))
 (define (trusted-executable program)
   (or (for/first ([dir '("/usr/bin" "/bin")]
-                 #:when (file-exists? (build-path dir program)))
+                  #:when (file-exists? (build-path dir program)))
         (path->string (build-path dir program)))
       (refuse "inspection executable is unavailable")))
 (define (validate-keys! args allowed)
-  (unless (and (hash? args) (for/and ([key (in-hash-keys args)]) (memq key allowed)))
+  (unless (and (hash? args)
+               (for/and ([key (in-hash-keys args)])
+                 (memq key allowed)))
     (refuse "unsupported arguments (cwd/environment overrides are forbidden)")))
+;; W2 canonical path resolution resolves relative tool paths against the
+;; execution context's working directory, not `current-directory`. The reviewer
+;; checkout IS the working directory, so a caller-supplied context may contribute
+;; its cancellation/authorization fields but never its own directory: re-pin it
+;; to the checkout before delegating to the builtin inspection tools.
+(define (pin-context! cwd ctx)
+  (if (not ctx)
+      (make-exec-context #:working-directory cwd)
+      (make-exec-context #:working-directory cwd
+                         #:cancellation-token (exec-context-cancellation-token ctx)
+                         #:event-publisher (exec-context-event-publisher ctx)
+                         #:runtime-settings (exec-context-runtime-settings ctx)
+                         #:call-id (exec-context-call-id ctx)
+                         #:session-metadata (exec-context-session-metadata ctx)
+                         #:progress-callback (exec-context-progress-callback ctx)
+                         #:permission-config (exec-context-permission-config ctx)
+                         #:browser-service (exec-context-browser-service ctx)
+                         #:capabilities (exec-context-capabilities ctx)
+                         #:scratch-root (exec-context-scratch-root ctx))))
 (define (make-review-tool-registry checkout)
   (define cwd (simplify-path (path->complete-path checkout) #t))
-  (unless (directory-exists? cwd) (raise-argument-error 'make-review-tool-registry "existing checkout directory" checkout))
+  (unless (directory-exists? cwd)
+    (raise-argument-error 'make-review-tool-registry "existing checkout directory" checkout))
   (define registry (make-tool-registry))
   (register-default-tools! registry #:only '("read"))
   (define builtin-read (lookup-tool registry "read"))
   (register-tool!
    registry
-   (make-tool
-    "read" (tool-description builtin-read) (tool-schema builtin-read)
-    (lambda (args [ctx #f])
-      (with-handlers ([exn:fail? (lambda (e) (make-error-result (exn-message e)))])
-        (validate-keys! args '(path offset limit))
-        ;; Builtin read intentionally allows absolute retained-proof paths outside
-        ;; the checkout. Pin only relative resolution; do not claim a secret ACL.
-        (parameterize ([current-directory cwd]) ((tool-execute builtin-read) args ctx))))
-    #:required-capability 'read-only))
+   (make-tool "read"
+              (tool-description builtin-read)
+              (tool-schema builtin-read)
+              (lambda (args [ctx #f])
+                (with-handlers ([exn:fail? (lambda (e) (make-error-result (exn-message e)))])
+                  (validate-keys! args '(path offset limit))
+                  ;; Builtin read intentionally allows absolute retained-proof paths outside
+                  ;; the checkout. Pin relative resolution to the checkout; do not claim a
+                  ;; secret ACL.
+                  (parameterize ([current-directory cwd])
+                    ((tool-execute builtin-read) args (pin-context! cwd ctx)))))
+              #:required-capability 'read-only))
   (register-tool!
    registry
    (make-tool
     "bash"
     "Read-only inspection, not a shell: pwd; fixed git status/diff/show/log/rev-parse; ls/cat/wc/head/tail; literal grep/rg. Use read otherwise."
-    (hasheq 'type "object" 'required '("command")
-            'properties (hasheq 'command (hasheq 'type "string" 'description "One supported read-only inspection command")
-                                'timeout (hasheq 'type "number" 'description "Seconds, positive and at most 10")))
+    (hasheq 'type
+            "object"
+            'required
+            '("command")
+            'properties
+            (hasheq 'command
+                    (hasheq 'type "string" 'description "One supported read-only inspection command")
+                    'timeout
+                    (hasheq 'type "number" 'description "Seconds, positive and at most 10")))
     (lambda (args [ctx #f])
       (with-handlers ([exn:fail? (lambda (e) (make-error-result (exn-message e)))])
         (validate-keys! args '(command timeout))
         (define timeout (hash-ref args 'timeout 5))
-        (unless (and (real? timeout) (< 0 timeout) (<= timeout 10)) (refuse "timeout must be positive and at most 10 seconds"))
+        (unless (and (real? timeout) (< 0 timeout) (<= timeout 10))
+          (refuse "timeout must be positive and at most 10 seconds"))
         (define argv (command->argv (hash-ref args 'command #f)))
         (define program (car argv))
         (cond
@@ -220,18 +367,33 @@
           [else
            (define safe-args (inspection-argv cwd program (cdr argv)))
            (define started (current-inexact-monotonic-milliseconds))
-           (define overrides (if (equal? program "git") (git-filter-overrides cwd timeout) '()))
-           (define remaining (- timeout (/ (- (current-inexact-monotonic-milliseconds) started) 1000)))
-           (unless (> remaining 0) (refuse "inspection deadline exceeded during Git configuration check"))
+           (define overrides
+             (if (equal? program "git")
+                 (git-filter-overrides cwd timeout)
+                 '()))
+           (define remaining
+             (- timeout (/ (- (current-inexact-monotonic-milliseconds) started) 1000)))
+           (unless (> remaining 0)
+             (refuse "inspection deadline exceeded during Git configuration check"))
            (define result
-             (run-subprocess (trusted-executable program) #:args (append overrides safe-args) #:directory cwd
-                             #:environment (inspection-environment) #:limits (strict-exec-limits) #:timeout remaining
-                             #:process-group? #f)) ; DIRECT execution, never the process-group shell supervisor.
-           (make-tool-result
-            (string-append (subprocess-result-stdout result) (subprocess-result-stderr result))
-            (hasheq 'exit-code (subprocess-result-exit-code result)
-                    'timed-out (subprocess-result-timed-out? result) 'truncated (subprocess-result-truncated? result))
-            (or (subprocess-result-timed-out? result) (not (equal? 0 (subprocess-result-exit-code result)))))])))
+             (run-subprocess (trusted-executable program)
+                             #:args (append overrides safe-args)
+                             #:directory cwd
+                             #:environment (inspection-environment)
+                             #:limits (strict-exec-limits)
+                             #:timeout remaining
+                             #:process-group?
+                             #f)) ; DIRECT execution, never the process-group shell supervisor.
+           (make-tool-result (string-append (subprocess-result-stdout result)
+                                            (subprocess-result-stderr result))
+                             (hasheq 'exit-code
+                                     (subprocess-result-exit-code result)
+                                     'timed-out
+                                     (subprocess-result-timed-out? result)
+                                     'truncated
+                                     (subprocess-result-truncated? result))
+                             (or (subprocess-result-timed-out? result)
+                                 (not (equal? 0 (subprocess-result-exit-code result)))))])))
     #:required-capability 'read-only
     #:timeout-seconds 10))
   registry)

@@ -321,11 +321,12 @@ cannot drift silently. The rules that keep the contract single-owner:
 - Compatibility wrappers delegate only. Current wrappers and their removal
   target:
   `wave-docs.rkt`'s `wave-status-markers` accessor and internal
-  `status->symbol` alias (`TODO(#v1.00.40)`). `extensions/gsd-planning.rkt`
-  remains the extension entry point, not a second policy layer.
+  `status->symbol` alias (`TODO(#v1.00.40)`; removal planned for v1.00.40).
+  `extensions/gsd-planning.rkt` remains the extension entry point, not a
+  second policy layer.
   Legacy message readers in `stall-policy.rkt` and `review-checkpoint.rkt`
-  are boundary-only adapters scheduled for removal in v1.00.40 after external
-  callers migrate; internal retry/authorization consumes typed data.
+  are boundary-only adapters whose removal is scheduled for v1.00.40 after
+  external callers migrate; internal retry/authorization consumes typed data.
 
 ## Simplification campaign (v1.00.31): measured before/after
 

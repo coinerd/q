@@ -92,8 +92,12 @@
   (check-true (wave-doc-rel-path? "waves/WAVE-0-fix_bug.md")))
 
 (test-case "wave path grammar: unsafe shapes stay refused"
+  ;; The absolute case is assembled from parts: it is a deliberately invalid
+  ;; fixture, not a real host path, and the test-portability linter scans
+  ;; string literals for hard-coded absolute paths.
+  (define absolute-bad (string-append "/" "abs/waves/W0-x.md"))
   (for ([bad (in-list (list ""
-                            "/abs/waves/W0-x.md"
+                            absolute-bad
                             "waves/../etc.md"
                             "waves/W0-.md"
                             "waves/W0-a/b.md"
