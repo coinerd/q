@@ -57,23 +57,26 @@
               "0c9e45d27cfb3934c29dc9bdc44686b62a6011ddf21c08d8c507beaf88e6e5c0"
               'allocation
               (hasheq 'attempt-id "attempt-5" 'attempt-fence 8 'coordinator-fence 8))))
-;; DISPOSITION-AMENDMENT-3 TERMINAL BINDING IS DELIBERATELY PENDING. The
-;; owner-authorized third bounded grant for campaign
+;; DISPOSITION-AMENDMENT-3 TERMINAL BINDING. The owner-authorized third
+;; bounded grant for campaign
 ;; 79a69b427b40fb6c6b68b4fd1484a74551db182afa9b96f065353324af16b19e wave 1
 ;; binds the exact live v3 pair 15e68c8b…/ccf20bc9… (the amendment-2
 ;; disposition child), its consumed attempt-6/fence-9 lineage and the spent
 ;; amendment-2 parent pair f4238535…/f8ea96b8… as immutable prior ancestry.
-;; Attempt-6 has not sealed a spent terminal record: its operation sits at
-;; state "verifying" revision 5 (past the blocked/revision-3 typed-loss
-;; window) and the journal never rewrites bound facts or lowers revisions,
-;; so both terminal digest namespaces cannot be derived yet. They hold the
-;; documented all-zero pending marker and EVERY production admission
-;; refuses fail-closed ("exact spent terminal amendment facts required")
-;; until the owner replaces this one binding per the runbook in
-;; .planning/bugs/remediation-planning/impl/AMENDMENT-3.md. Nothing else in
-;; the record may change; snapshot, model-dispatches and successor-permitted
-;; stay inherited, and no fourth successor is permitted.
-(define pending-terminal-digest (make-string 64 #\0))
+;; The expired attempt-6 operation was then genuinely sealed at
+;; state "blocked" revision 6 (launch consumed, block-reason "operator
+;; deadline expired") by the supported terminal writer; the two digest
+;; namespaces below are derived from that authentic sealed record exactly as
+;; amendment-2 derived its own (the record's own sha256 field, and sha256
+;; over its complete canonical JSON bytes). The late-terminal shape is
+;; admitted only for this fixed third generation; ancestor generations keep
+;; the blocked/revision-3 launch-spent shape, so no generic late-terminal
+;; recovery exists. snapshot, model-dispatches and successor-permitted stay
+;; inherited, and no fourth successor is permitted.
+(define amendment-3-terminal-body-sha256
+  "758d653547879fe5204785af73acf1f7850810ad61e72bc9664532fd3d7068b1")
+(define amendment-3-terminal-record-sha256
+  "837710077fec71c156ac65ee86075d2c1d847270617056cbf34a1a7e1a7160c4")
 (define disposition-amendment-3
   (seal-supplemental-record
    (hash-set* disposition-amendment-2
@@ -86,9 +89,9 @@
               'parent-approval
               (ref "task-approval" "ccf20bc98f7688b4bb5fa69226c54a876038c88fd28a8fe476dcad9ae7e1f9ac")
               'terminal-body-sha256
-              pending-terminal-digest
+              amendment-3-terminal-body-sha256
               'terminal-record-sha256
-              pending-terminal-digest
+              amendment-3-terminal-record-sha256
               'allocation
               (hasheq 'attempt-id "attempt-6" 'attempt-fence 9 'coordinator-fence 9))))
 (define default-amendment disposition-amendment-3)
@@ -158,9 +161,8 @@
     (unless (and
              (hash? amendment)
              (immutable? amendment)
-             (equal?
-              (sort (hash-keys amendment) symbol<?)
-              (sort (hash-keys (generation-template amendment)) symbol<?))
+             (equal? (sort (hash-keys amendment) symbol<?)
+                     (sort (hash-keys (generation-template amendment)) symbol<?))
              (equal? amendment (seal-supplemental-record amendment))
              (equal? (hash-ref amendment 'kind) "supplemental-disposition-amendment/v1")
              (for/and ([key '(plan-id terminal-body-sha256 terminal-record-sha256 snapshot-sha256)])
@@ -193,13 +195,13 @@
       ;; pinned to its grand-predecessor's parent pair, mirroring the
       ;; production private recovery claim target check.
       (define ancestors
-        (if (fixture-amendment) (fixture-predecessor) '()))
+        (if (fixture-amendment)
+            (fixture-predecessor)
+            '()))
       (when (pair? ancestors)
         (define grand (car ancestors))
-        (unless (and (equal? (hash-ref amendment 'v2-proposal)
-                             (hash-ref grand 'parent-proposal))
-                     (equal? (hash-ref amendment 'v2-approval)
-                             (hash-ref grand 'parent-approval)))
+        (unless (and (equal? (hash-ref amendment 'v2-proposal) (hash-ref grand 'parent-proposal))
+                     (equal? (hash-ref amendment 'v2-approval) (hash-ref grand 'parent-approval)))
           (error 'call-with-test-disposition-amendment "fixture grand-predecessor mismatch"))))
     (parameterize ([fixture-amendment (cons root (seal-supplemental-record amendment))]
                    [fixture-predecessor (if predecessor

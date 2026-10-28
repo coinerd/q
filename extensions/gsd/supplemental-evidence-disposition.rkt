@@ -16,6 +16,7 @@
          "supplemental-evidence-format.rkt"
          "supplemental-evidence-journal.rkt"
          "supplemental-disposition-policy.rkt"
+         (only-in "supplemental-disposition-claim.rkt" disposition-late-terminal?)
          (only-in "supplemental-evidence-controller.rkt"
                   load-supplemental-pointer
                   supplemental-pointer-path)
@@ -72,16 +73,27 @@
   (define w
     (and rec (findf (lambda (w) (= wave (campaign-wave-index w))) (campaign-record-waves rec))))
   (define attempt (and w (campaign-wave-current-attempt w)))
+  ;; The live late-stage checkpoint parks the spent attempt at
+  ;; `awaiting-delivery` before the owner deadline terminalizes its retained
+  ;; operation. That status is admitted ONLY for this exact authenticated
+  ;; fixed third-generation late terminal (blocked/revision-6
+  ;; verifying-prefix facts, already digest-matched above); the amendment's
+  ;; own bound allocation must also remain the campaign's current
+  ;; attempt/fences. Every ordinary disposition still requires `failed`, and
+  ;; nothing here mutates the live wave status.
+  (define late? (disposition-late-terminal? a terminal))
   (unless (and rec
                w
                attempt
-               (eq? (campaign-wave-status w) 'failed)
+               (or (eq? (campaign-wave-status w) 'failed)
+                   (and late? (eq? (campaign-wave-status w) 'awaiting-delivery)))
                (not (campaign-record-cancellation rec))
                (not (campaign-record-budget-pause rec))
                (equal? (campaign-attempt-id attempt) (hash-ref allocation 'attempt-id))
                (equal? (campaign-attempt-fence-token attempt) (hash-ref allocation 'attempt-fence))
                (equal? (campaign-fence-token rec) (hash-ref allocation 'coordinator-fence)))
-    (refuse "parent must own current failed uncancelled unpaused attempt and fences"))
+    (refuse
+     "parent must own current failed (or exact fixed late awaiting-delivery) uncancelled unpaused attempt and fences"))
   (define context (hash-ref task 'context))
   (unless (and (equal? (hash-ref context 'plan-id) plan)
                (equal? (hash-ref context 'wave) wave)

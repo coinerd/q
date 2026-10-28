@@ -26,7 +26,8 @@
 (provide inspect-supplemental-disposition-parent
          install-supplemental-disposition-claim!
          validate-disposition-claim!
-         read-disposition-claim!)
+         read-disposition-claim!
+         disposition-late-terminal?)
 (define (refuse message)
   (error 'supplemental-disposition-claim "~a" message))
 (define (claim-path id)
@@ -37,15 +38,57 @@
   (for/and ([(key value) (in-hash parent)]
             #:unless (memq key '(kind sha256 control-plane-head disposition)))
     (equal? value (hash-ref task key #f))))
-(define (spent? r)
+;; A terminal shape is fixed per amendment generation and is never inferred
+;; from an arbitrary blocked record. The exhausted ancestor generations keep
+;; the original launched blocked/revision-3 launch-spent shape. The fixed
+;; third amendment is the ONLY generation permitted the late
+;; blocked/revision-6 verifying-prefix shape (the shape the expired attempt-6
+;; operation genuinely sealed), and only with exactly its six typed facts.
+;; This is not a generic late-terminal recovery: any other revision, fact set,
+;; generation or value refuses, so ancestors can never admit a late terminal.
+(define (nonempty-string? v)
+  (and (string? v) (positive? (string-length v))))
+(define (reference-kind? v kind)
+  (and (supplemental-reference? v) (equal? (hash-ref v 'kind) kind)))
+(define (allocation-shape? a)
+  (and (exact-keys? a '(attempt-id attempt-fence coordinator-fence))
+       (nonempty-string? (hash-ref a 'attempt-id #f))
+       (exact-nonnegative-integer? (hash-ref a 'attempt-fence #f))
+       (exact-nonnegative-integer? (hash-ref a 'coordinator-fence #f))))
+(define (launched-terminal? r)
   (define facts (hash-ref r 'facts))
   (and (equal? (hash-ref r 'state) "blocked")
        (= (hash-ref r 'revision) 3)
        (hash-ref r 'launch-consumed)
        (exact-keys? facts '(allocation dispatch-id block-reason))
-       (for/and ([key '(dispatch-id block-reason)])
-         (define v (hash-ref facts key))
-         (and (string? v) (positive? (string-length v))))))
+       (allocation-shape? (hash-ref facts 'allocation))
+       (nonempty-string? (hash-ref facts 'dispatch-id))
+       (nonempty-string? (hash-ref facts 'block-reason))))
+(define (late-terminal? r)
+  (define facts (hash-ref r 'facts))
+  (and (equal? (hash-ref r 'state) "blocked")
+       (= (hash-ref r 'revision) 6)
+       (hash-ref r 'launch-consumed)
+       (exact-keys?
+        facts
+        '(allocation dispatch-id candidate-ref candidate-approval-ref verify-job block-reason))
+       (allocation-shape? (hash-ref facts 'allocation))
+       (nonempty-string? (hash-ref facts 'dispatch-id))
+       (reference-kind? (hash-ref facts 'candidate-ref) "candidate-proposal")
+       (reference-kind? (hash-ref facts 'candidate-approval-ref) "candidate-approval")
+       (let ([job (hash-ref facts 'verify-job)]) (and (hash? job) (positive? (hash-count job))))
+       (nonempty-string? (hash-ref facts 'block-reason))))
+;; The amendment's own `prior-parent-*` keys identify the fixed third
+;; generation (production has exactly one: disposition-amendment-3); the
+;; isolated test seam can only present the same fixed shape.
+(define (third-generation? amendment)
+  (hash-has-key? amendment 'prior-parent-proposal))
+(define (terminal-shape? amendment record)
+  (if (third-generation? amendment)
+      (late-terminal? record)
+      (launched-terminal? record)))
+(define (disposition-late-terminal? amendment record)
+  (and (third-generation? amendment) (late-terminal? record)))
 (define (inspect-supplemental-disposition-parent grant)
   (inspect-parent grant (disposition-amendment) (disposition-ancestors)))
 (define (inspect-parent grant a ancestors)
@@ -55,7 +98,10 @@
   ;; spent terminal and permanent claim. No generic chain construction: the
   ;; chain is exactly the fixed amendment list from the policy module.
   (define predecessor (and (pair? ancestors) (car ancestors)))
-  (define rest (if (pair? ancestors) (cdr ancestors) '()))
+  (define rest
+    (if (pair? ancestors)
+        (cdr ancestors)
+        '()))
   (define prior-keys
     (if (hash-has-key? a 'prior-parent-proposal)
         '(prior-parent-proposal prior-parent-approval)
@@ -112,7 +158,7 @@
      (when (present? intent)
        (refuse "disposition parent has pending intent"))
      (define record (validate-record! (read-sealed snapshot) grant proposal task expiry))
-     (unless (and (spent? record)
+     (unless (and (terminal-shape? a record)
                   (equal? (hash-ref record 'sha256) (hash-ref a 'terminal-body-sha256))
                   (equal? (sha256-string (canonical-evidence-json record))
                           (hash-ref a 'terminal-record-sha256))
@@ -161,13 +207,10 @@
   (define bound (hash-ref c 'pointer-path #f))
   (unless (and (exact-keys? c '(schema amendment lineage pointer-path target sha256))
                (equal? (hash-ref c 'schema) "supplemental-disposition-claim/v1")
-               (exact-keys? (hash-remove
-                             (hash-remove
-                              (hash-remove
-                               (hash-remove a 'v2-proposal)
-                               'v2-approval)
-                              'prior-parent-proposal)
-                             'prior-parent-approval)
+               (exact-keys? (hash-remove (hash-remove (hash-remove (hash-remove a 'v2-proposal)
+                                                                   'v2-approval)
+                                                      'prior-parent-proposal)
+                                         'prior-parent-approval)
                             '(kind plan-id
                                    wave
                                    root-proposal
