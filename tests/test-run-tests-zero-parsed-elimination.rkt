@@ -27,6 +27,19 @@
             [expected (in-list '(3 6))])
         (define result (run-single-file path #:timeout 120000))
         (check-equal? (test-file-result-exit-code result) 0 path)
-        (check-equal? (test-file-result-total result) expected path)))))
+        (check-equal? (test-file-result-total result) expected path)))
+
+    (test-case "an alias module reports the canonical pins it executes"
+      ;; tests/test-gsd-planning-preflight-kernel.rkt is a historical alias: it
+      ;; runs the canonical plan-validation pins from its own (module+ test) body.
+      ;; While it was a bare `require`, plain `racket` executed the pins silently
+      ;; and the runner classified the file ZERO_PARSED (strict exit 4) even
+      ;; though every assertion passed. The alias must keep reporting parsed
+      ;; tests, so a regression to the silent shape fails here.
+      (define result
+        (run-single-file "tests/test-gsd-planning-preflight-kernel.rkt" #:timeout 120000))
+      (check-equal? (test-file-result-exit-code result) 0)
+      (check-equal? (test-file-result-total result) 20)
+      (check-eq? (classify-test-result result) 'PASS))))
 
 (run-tests zero-parsed-elimination-tests)
