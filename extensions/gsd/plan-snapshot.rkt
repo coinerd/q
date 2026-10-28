@@ -5,7 +5,8 @@
 ;; At campaign start the orchestrator captures PLAN.md and every referenced
 ;; wave document into .planning/campaigns/<campaign-id>/plan-snapshot/ via a
 ;; temporary sibling directory and an atomic rename, guarded by a manifest
-;; (schema-version, campaign id, created-at, per-file path/size/sha256, plan-id).
+;; (schema-version, campaign id, created-at, per-file path/size/sha256, plan-id,
+;; and — for captures that record it — the per-file digest scheme).
 ;;
 ;; Invariants:
 ;;  - absence of a referenced wave document is a typed failure, never the SHA
@@ -16,6 +17,11 @@
 ;;  - recovery may restore missing live files explicitly; existing authored
 ;;    content drift is reported and never overwritten; status-only projection
 ;;    changes are ignored by snapshot-drift?.
+;;  - an authentic capture stays readable across a reader upgrade: recorded
+;;    digests are verified against the ENUMERATED known digest schemes (see
+;;    "Persisted digest schemes" below), and semantic drift is decided by
+;;    comparing live against the frozen bytes, never against a digest an older
+;;    scheme wrote. New captures record their scheme explicitly.
 ;;
 ;; W4 (GSD-SIMPLIFICATION-PLAN) — snapshot taxonomy, made explicit. A drift
 ;; class is never collapsed into a smaller ambiguous bucket:
@@ -70,6 +76,9 @@
          plan-snapshot-manifest-created-at
          plan-snapshot-manifest-plan-id
          plan-snapshot-manifest-files
+         plan-snapshot-manifest-hash-scheme
+         snapshot-hash-scheme-current
+         snapshot-hash-scheme-versions
          snapshot-file-path
          snapshot-file-size
          snapshot-file-sha256
@@ -112,7 +121,10 @@
   (normalized-file-hash "PLAN.md" text))
 
 (struct snapshot-file (path size sha256) #:transparent)
-(struct plan-snapshot-manifest (schema-version campaign created-at plan-id files) #:transparent)
+;; `hash-scheme` is the digest scheme the capture was WRITTEN with; #f means the
+;; manifest predates scheme recording (see the scheme block below).
+(struct plan-snapshot-manifest (schema-version campaign created-at plan-id files hash-scheme)
+  #:transparent)
 
 (define lowercase-hex "0123456789abcdef")
 
@@ -131,6 +143,18 @@
 (define (snapshot-link? path)
   (with-handlers ([exn:fail:filesystem? (lambda (_) #t)])
     (link-exists? path)))
+
+;; Walk every component of `rel` below `root` WITHOUT following links: a
+;; symlinked intermediate directory (e.g. the snapshot's `waves/`, or the live
+;; `.planning/waves/`) redirects a read outside the trusted tree even when the
+;; leaf is a regular file, so each component is probed with the no-follow
+;; predicate instead of `file-exists?` alone.
+(define (path-components-cross-link? root rel)
+  (let loop ([p root]
+             [parts (explode-path (string->path rel))])
+    (and (pair? parts)
+         (let ([next (build-path p (car parts))])
+           (or (snapshot-link? next) (loop next (cdr parts)))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Wave document reference extraction (decoupled from campaign-state to avoid
@@ -177,13 +201,11 @@
 ;; The one explicit override may only proceed for overridable classes; the
 ;; symlink trust boundary never is.
 (define (snapshot-drift-class-overridable? kind)
-  (and (memq kind SNAPSHOT-DRIFT-CLASSES)
-       (not (eq? kind 'symlink))))
+  (and (memq kind SNAPSHOT-DRIFT-CLASSES) (not (eq? kind 'symlink))))
 
 (define (snapshot-drift-class-description kind)
   (case kind
-    [(symlink)
-     "a live path crosses the symlink trust boundary (not overridable; fix the path)"]
+    [(symlink) "a live path crosses the symlink trust boundary (not overridable; fix the path)"]
     [(missing) "a live bound file is absent; it can be reconstructed from the verified snapshot"]
     [(content-drift)
      "live wave-doc content differs from the frozen snapshot beyond status projections"]
@@ -238,7 +260,8 @@
          (drop-failure-section-body (cdr lines)))]))
 
 (define (strip-failure-sections lines)
-  (let loop ([remaining lines] [acc '()])
+  (let loop ([remaining lines]
+             [acc '()])
     (cond
       [(null? remaining) (reverse acc)]
       [(string=? (string-trim (car remaining)) failure-section-heading)
@@ -261,14 +284,123 @@
   (define without-failure (strip-failure-sections without-header))
   (canonical-lines (string-join (drop-trailing-blank-lines without-failure) "\n")))
 
+;; ---------------------------------------------------------------------------
+;; Persisted digest schemes
+;;
+;; A manifest entry's `sha256` is the SHA-256 of a projection-normalized
+;; rendering of the captured bytes, and two such renderings have been written
+;; under manifest schema-version 1:
+;;
+;;   scheme 1  legacy; written by builds up to d5bf128b.
+;;             waves: delete the `Status:` line directly under a leading
+;;             `# Wave N` heading (`# Wave N` itself is RETAINED), drop a
+;;             duplicated generated title prefix, canonicalize line joining,
+;;             then truncate AT the first `## Last Failure` heading — i.e. it
+;;             keeps everything before that heading and discards the rest of
+;;             the document (see the limitation note below).
+;;             PLAN.md: index-status strip.
+;;   scheme 2  current; written from 4ac41abc on (`normalize-wave-doc-content`).
+;;             waves: drop leading generated `# Wave N`/`Status:`/blank blocks,
+;;             drop every `## Last Failure` section, drop trailing blank lines.
+;;             PLAN.md: index-status strip (IDENTICAL to scheme 1).
+;;
+;; They differ in ONE place: wave documents. A PLAN.md digest therefore means
+;; the same thing under either scheme.
+;;
+;; Manifests written before the scheme was recorded carry no `hash-scheme`
+;; datum. Such an entry is verified against the ENUMERATED known schemes only,
+;; by exact digest equality: never a heuristic, never a raw-bytes fallback, and
+;; never an arbitrary third scheme. New captures RECORD `hash-scheme 2` and are
+;; then verified STRICTLY against the declared scheme.
+;;
+;; Integrity (this scheme check) stays separate from SEMANTIC drift: drift is
+;; decided by comparing the live projection against the AUTHENTICATED snapshot
+;; bytes under the CURRENT scheme (see classify-snapshot-drift), never against
+;; a digest that a different scheme recorded. A scheme upgrade therefore cannot
+;; invent drift. An authored section following a failure body is compared if
+;; the CURRENT scheme retains it; a live-vs-frozen difference is refused.
+;; Failure-body-only edits are intentionally NOT an integrity or drift signal.
+;;
+;; Limitation, stated explicitly: a scheme-1 manifest authenticates only the
+;; scheme-1 projection of its capture. Two different exclusions hide there and
+;; they must not be confused:
+;;   - the `## Last Failure` BODY is excluded INTENTIONALLY. That section is
+;;     projection-owned, and the durable campaign record — not the rendered
+;;     text — is authoritative for the failure reason.
+;;   - every AUTHORED section that follows the failure section is excluded too,
+;;     because scheme 1 truncates at the heading through end of document rather
+;;     than stopping at the next heading. That over-ignore is a scheme-1
+;;     artifact, NOT a designed exclusion.
+;; Discarded bytes are unauthenticated by construction. Drift refuses changes
+;; only to authored content retained by the CURRENT scheme when live differs
+;; from frozen; it does not authenticate excluded failure bodies or repair
+;; historical integrity omissions. A legacy capture requiring a stronger
+;; integrity scheme must be re-frozen under a new campaign identity
+;; (snapshot bytes are never rewritten in place).
+(define snapshot-hash-scheme-versions '(1 2))
+(define snapshot-hash-scheme-current 2)
+
+(define (snapshot-hash-scheme? value)
+  (and (memq value snapshot-hash-scheme-versions) #t))
+
+;; Scheme 1 wave-doc normalization, transcribed VERBATIM from d5bf128b. Do not
+;; "improve" it: it defines what every already-recorded legacy digest means.
+;; tests/test-gsd-plan-snapshot.rkt carries an independent copy of this code and
+;; pins the authentic legacy digests of a real capture against it.
+(define legacy-wave-doc-status-header-rx #rx"^(# Wave [0-9]+\n)Status: [^\n]+\n")
+
+(define (normalize-wave-doc-content-v1 text)
+  (define without-status (regexp-replace legacy-wave-doc-status-header-rx text "\\1"))
+  (define lines (string-split without-status "\n" #:trim? #f))
+  ;; Projection of a headerless authored wave prepends "# Wave / Status" to
+  ;; the original document, so removing Status can expose duplicate titles.
+  (define first-heading (and (pair? lines) (regexp-match #rx"^# Wave ([0-9]+)(?::.*)?$" (car lines))))
+  (define authored-heading
+    (and (>= (length lines) 3) (regexp-match #rx"^#+ Wave ([0-9]+)(?::.*)?$" (caddr lines))))
+  (define without-generated-prefix
+    (if (and first-heading
+             authored-heading
+             (string=? (cadr lines) "")
+             (equal? (cadr first-heading) (cadr authored-heading)))
+        (cddr lines)
+        lines))
+  (define normalized (canonical-lines (string-join without-generated-prefix "\n")))
+  ;; Failure projection appends this advisory section; the durable campaign
+  ;; record, not the projection text, is authoritative for the reason, so the
+  ;; failure BODY is intentionally ignored. Truncating at the heading also drops
+  ;; any AUTHORED section after it through end of document — a scheme-1
+  ;; over-ignore, which is why this digest is not a whole-document seal.
+  (define failure-marker (regexp-match-positions #rx"\n+## Last Failure\n" normalized))
+  (if failure-marker
+      (substring normalized 0 (caar failure-marker))
+      normalized))
+
 (define (strip-plan-index-status text)
   (canonical-lines (regexp-replace* plan-index-status-rx text "\\1[STATUS]\\2")))
 
-(define (normalized-file-hash rel-path raw-text)
-  (string-sha256-hex (cond
-                       [(string-prefix? rel-path "waves/") (normalize-wave-doc-content raw-text)]
-                       [(equal? rel-path "PLAN.md") (strip-plan-index-status raw-text)]
-                       [else raw-text])))
+(define (normalized-file-hash rel-path raw-text #:scheme [scheme snapshot-hash-scheme-current])
+  (define normalized
+    (cond
+      [(string-prefix? rel-path "waves/")
+       (case scheme
+         [(1) (normalize-wave-doc-content-v1 raw-text)]
+         [(2) (normalize-wave-doc-content raw-text)]
+         [else (snapshot-fail "plan-snapshot: unknown snapshot hash scheme ~s" scheme)])]
+      [(equal? rel-path "PLAN.md") (strip-plan-index-status raw-text)]
+      [else raw-text]))
+  (string-sha256-hex normalized))
+
+;; Which ENUMERATED scheme, if any, produced this recorded digest. A manifest
+;; that declares a scheme is verified against that scheme alone. The legacy
+;; preference order (current first, then legacy) only decides which known
+;; rendering to check first; both are exact, documented renderings of the same
+;; captured bytes.
+(define (recorded-digest-scheme rel-path raw-text recorded declared-scheme)
+  (for/first ([scheme (in-list (if declared-scheme
+                                   (list declared-scheme)
+                                   (list snapshot-hash-scheme-current 1)))]
+              #:when (equal? (normalized-file-hash rel-path raw-text #:scheme scheme) recorded))
+    scheme))
 
 (define (file-sha256-hex path)
   (sha256-file path))
@@ -353,11 +485,17 @@
                              (bytes-length (cdr wb))
                              (normalized-file-hash (car wb) (bytes->string/utf-8 (cdr wb)))))))
   (define manifest
-    (plan-snapshot-manifest 1 campaign-id (or now-ms (current-inexact-milliseconds)) plan-id files))
+    (plan-snapshot-manifest 1
+                            campaign-id
+                            (or now-ms (current-inexact-milliseconds))
+                            plan-id
+                            files
+                            snapshot-hash-scheme-current))
   ;; 2. Write into a temporary sibling, then atomically rename.
   (define campaigns-dir (campaign-dir base-dir campaign-id))
   (make-directory* campaigns-dir)
-  (define tmp (make-temporary-file (string-append plan-snapshot-staging-prefix "~a") #f campaigns-dir))
+  (define tmp
+    (make-temporary-file (string-append plan-snapshot-staging-prefix "~a") #f campaigns-dir))
   ;; make-temporary-file yields a file; the staging area must be a directory.
   (delete-file tmp)
   (make-directory tmp)
@@ -398,7 +536,15 @@
                   #:when (equal? (snapshot-file-path f) "PLAN.md"))
         f))
     (define authored-sha (plan-body-normalized-hash (file->string live-plan-path)))
-    (define frozen-sha (and frozen-entry (snapshot-file-sha256 frozen-entry)))
+    ;; F13 compares the live body against the AUTHENTICATED frozen bytes under
+    ;; the CURRENT scheme, not against a digest a possibly older scheme wrote
+    ;; (PLAN.md normalization is scheme-invariant, so this is also exactly the
+    ;; recorded digest for every known capture).
+    (define frozen-sha
+      (and frozen-entry
+           (normalized-file-hash "PLAN.md"
+                                 (file->string (build-path (snapshot-dir base-dir campaign-id)
+                                                           "PLAN.md")))))
     (unless (equal? authored-sha frozen-sha)
       (raise (make-exn:fail:gsd-frozen-contract-stale
               (format (string-append "plan-snapshot: frozen contract is stale for campaign ~a: "
@@ -420,14 +566,23 @@
   (values (path->string (snapshot-dir base-dir campaign-id)) (snapshot-manifest-digest m)))
 
 (define (manifest->datum m)
-  `#hasheq((schema-version . ,(plan-snapshot-manifest-schema-version m))
-           (campaign . ,(plan-snapshot-manifest-campaign m))
-           (created-at . ,(plan-snapshot-manifest-created-at m))
-           (plan-id . ,(plan-snapshot-manifest-plan-id m))
-           (files . ,(for/list ([f (in-list (plan-snapshot-manifest-files m))])
-                       `#hasheq((path . ,(snapshot-file-path f))
-                                (size . ,(snapshot-file-size f))
-                                (sha256 . ,(snapshot-file-sha256 f)))))))
+  (define base
+    `#hasheq((schema-version . ,(plan-snapshot-manifest-schema-version m))
+             (campaign . ,(plan-snapshot-manifest-campaign m))
+             (created-at . ,(plan-snapshot-manifest-created-at m))
+             (plan-id . ,(plan-snapshot-manifest-plan-id m))
+             (files . ,(for/list ([f (in-list (plan-snapshot-manifest-files m))])
+                         `#hasheq((path . ,(snapshot-file-path f))
+                                  (size . ,(snapshot-file-size f))
+                                  (sha256 . ,(snapshot-file-sha256 f)))))))
+  ;; The scheme key is written only when the capture recorded one, so a legacy
+  ;; manifest re-serializes to the exact datum it was stored as (its digest is
+  ;; bound into the durable campaign record and must not shift under a reader
+  ;; upgrade).
+  (define scheme (plan-snapshot-manifest-hash-scheme m))
+  (if scheme
+      (hash-set base 'hash-scheme scheme)
+      base))
 
 (define (snapshot-manifest-digest manifest)
   (string-sha256-hex (format "~s" (manifest->datum manifest))))
@@ -440,6 +595,13 @@
   (define created-at (hash-ref d 'created-at #f))
   (define plan-id (hash-ref d 'plan-id #f))
   (define files-datum (hash-ref d 'files #f))
+  ;; #f = manifest predates scheme recording; only the enumerated known
+  ;; schemes may verify it. A DECLARED scheme must be one we know: a
+  ;; present-but-unknown value is storage corruption, never a fallback prompt.
+  (define declared-scheme (hash-ref d 'hash-scheme #f))
+  (unless (or (and (not (hash-has-key? d 'hash-scheme)) (not declared-scheme))
+              (snapshot-hash-scheme? declared-scheme))
+    (snapshot-fail "plan-snapshot: unsupported snapshot hash scheme ~s" declared-scheme))
   (unless (equal? schema-version 1)
     (snapshot-fail "plan-snapshot: unsupported manifest schema ~s" schema-version))
   (unless (and (equal? campaign expected-campaign) (equal? plan-id expected-campaign))
@@ -468,7 +630,7 @@
       (values (cons (snapshot-file rel size digest) files) (hash-set seen rel #t))))
   (unless (hash-has-key? seen "PLAN.md")
     (snapshot-fail "plan-snapshot: manifest omits PLAN.md"))
-  (plan-snapshot-manifest schema-version campaign created-at plan-id (reverse files)))
+  (plan-snapshot-manifest schema-version campaign created-at plan-id (reverse files) declared-scheme))
 
 ;; Load and fully verify the on-disk manifest: the manifest must exist and
 ;; every listed file must be present with the exact recorded size and hash.
@@ -487,31 +649,41 @@
     (when (and sweep-stale? (directory-exists? snapshot-parent))
       (sweep-stale-tmp-dirs! snapshot-parent)))
   (and (file-exists? mp)
-       (let* ([m (datum->manifest (call-with-input-file mp read) campaign-id)])
-         ;; Integrity check: every file present, size+normalized-hash exact.
+       (let* ([m (datum->manifest (call-with-input-file mp read) campaign-id)]
+              [declared-scheme (plan-snapshot-manifest-hash-scheme m)])
+         ;; Integrity check: every file present, size exact, and its digest equal
+         ;; to the recorded one under the declared scheme — or, for a manifest
+         ;; that predates scheme recording, under one of the ENUMERATED known
+         ;; schemes. No heuristic and no raw-bytes fallback is ever accepted.
          (for ([f (in-list (plan-snapshot-manifest-files m))])
-           (define p (build-path (snapshot-dir base-dir campaign-id) (snapshot-file-path f)))
+           (define rel (snapshot-file-path f))
+           (define p (build-path (snapshot-dir base-dir campaign-id) rel))
            (define broken?
-             (or (snapshot-link? p)
-                 (not (file-exists? p))
-                 (let ([size (file-size p)])
-                   (or (not (= size (snapshot-file-size f)))
-                       (not (equal? (normalized-file-hash (snapshot-file-path f) (file->string p))
-                                    (snapshot-file-sha256 f)))))))
+             (or ;; Leaf OR any intermediate directory is a link: never resolve
+              ;; one component through the symlink trust boundary.
+              (path-components-cross-link? (snapshot-dir base-dir campaign-id) rel)
+              (not (file-exists? p))
+              (let ([size (file-size p)])
+                (or (not (= size (snapshot-file-size f)))
+                    (not (recorded-digest-scheme rel
+                                                 (file->string p)
+                                                 (snapshot-file-sha256 f)
+                                                 declared-scheme))))))
            (when broken?
              (raise (make-exn:fail
                      (format "plan-snapshot: partial/corrupt snapshot entry ~a for campaign ~a"
-                             (snapshot-file-path f)
+                             rel
                              campaign-id)
                      (current-continuation-marks)))))
          m)))
 
 (define (live-path-has-link? base-dir rel)
   (define root (planning-root base-dir))
-  (define live (build-path root rel))
   (or (snapshot-link? root)
-      (and (string-prefix? rel "waves/") (snapshot-link? (build-path root "waves")))
-      (snapshot-link? live)))
+      ;; The leaf and every intermediate directory below the root (`waves/`): a
+      ;; symlinked intermediate crosses the same trust boundary as a symlinked
+      ;; document.
+      (path-components-cross-link? root rel)))
 
 ;; Paths of live plan/wave documents that drifted from the snapshot
 ;; (content changed, file missing, or untrusted symlink boundary). Empty list
@@ -525,6 +697,13 @@
 ;;   'missing       — live file absent (recoverable from the snapshot)
 ;;   'content-drift — live content differs beyond normalized projection state
 ;; Ordered: symlink first (fail-closed), then missing, then content drift.
+;;
+;; SEMANTIC drift is live-vs-frozen, not live-vs-recorded-digest: the live
+;; projection is compared with the projection of the AUTHENTICATED snapshot
+;; bytes under the CURRENT scheme. The stored digest may have been written by
+;; an older scheme (integrity already verified it), so comparing against it
+;; would report drift for unchanged bytes; comparing projections of both sides
+;; cannot, while an authored change the legacy scheme hid is still caught.
 (define (classify-snapshot-drift base-dir campaign-id #:sweep-stale? [sweep-stale? #t])
   (define m (load-snapshot-manifest base-dir campaign-id #:sweep-stale? sweep-stale?))
   (reverse (for/fold ([acc '()])
@@ -533,12 +712,13 @@
                                       '()))])
              (define rel (snapshot-file-path f))
              (define live (planning-path base-dir rel))
+             (define frozen (build-path (snapshot-dir base-dir campaign-id) rel))
              (define kind
                (cond
                  [(live-path-has-link? base-dir rel) 'symlink]
                  [(not (file-exists? live)) 'missing]
                  [(not (equal? (normalized-file-hash rel (file->string live))
-                               (snapshot-file-sha256 f)))
+                               (normalized-file-hash rel (file->string frozen))))
                   ;; F13 (v1.00.31 W5): a diverging PLAN.md body means the
                   ;; authored contract is no longer the frozen one — named
                   ;; distinctly from ordinary wave-doc content drift.
@@ -562,9 +742,7 @@
   (define classified (classify-snapshot-drift base-dir campaign-id))
   (for ([item (in-list classified)])
     (unless (snapshot-drift-class-overridable? (cadr item))
-      (snapshot-fail "plan-snapshot: refusing ~a restore boundary: ~a"
-                     (cadr item)
-                     (car item))))
+      (snapshot-fail "plan-snapshot: refusing ~a restore boundary: ~a" (cadr item) (car item))))
   (define existing-drift
     (for/list ([item (in-list classified)]
                #:when (and (snapshot-drift-class-overridable? (cadr item))
