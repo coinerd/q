@@ -448,6 +448,29 @@ the amendment's own current attempt/fences match; every cancellation, budget-pau
 snapshot, receipt, clean-source and owned-proof check still applies, and admission
 never mutates the live wave status.
 
+#### Candidate-preserving mode (amendment-3 only)
+
+An explicitly authorized metadata-only descendant M may preserve the model-authored
+candidate K without rerunning its author. The optional sealed
+`disposition.preserved-candidate` binding names the genuine historical K and its
+live approval, original Git source, exact direct descendant M, and each changed
+inherited owner path with before/after Git blob and SHA-256 identities. All other
+Git tree entries must remain unchanged. Metadata settlement is not verification
+or approval; the original K, receipt, terminal operation and spent claims remain
+immutable. Ordinary `current-evidence-context` still refuses source drift.
+
+The owner CLI accepts `--preserved-candidate /absolute/binding.json` only with
+`--verb propose-disposition`; it validates the binding against authentic ancestry,
+old receipt context, candidate approval and the actual clean linked checkout
+before retaining an inert proposal. No caller-provided validator grants authority.
+The exact-T keyboard decision remains required to install the sole amendment-3
+claim. Then `/go` consumes that authorization with an explicit adoption marker,
+**zero new author-model calls**, and a fresh candidate K' bound to M, the new T and
+new monotonic allocation. Historical K approval is provenance, never approval of
+M or K'. A separate genuine K' decision precedes fresh C1/probe verification;
+S remains a later human decision. There is no ordinary-author fallback, fourth
+successor, reused verification result or reset of old accounting on any failure.
+
 ## Campaign lifecycle
 
 This is the ONE campaign-lifecycle diagram. `/go` evaluates it once per pass:

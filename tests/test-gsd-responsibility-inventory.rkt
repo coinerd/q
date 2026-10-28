@@ -75,13 +75,15 @@
   (for/list ([eff (in-list valid-effects)]
              #:when
              (case eff
-               [(fs-write) (has? #rx"\\((?:write-file|with-output-to-file|call-with-output-file|open-output-file)")]
+               [(fs-write)
+                (has?
+                 #rx"\\((?:write-file|with-output-to-file|call-with-output-file|open-output-file)")]
                [(fs-read) (has? #rx"call-with-input-file|file->string|file->lines|file->bytes")]
                [(fs-rename) (has? #rx"rename-file-or-directory|copy-file")]
                [(fs-delete) (has? #rx"delete-file|delete-directory")]
                [(mkdir) (has? #rx"make-directory")]
                [(dir-list) (has? #rx"directory-list")]
-               [(sha256) (has? #rx"sha256-string")]
+               [(sha256) (has? #rx"sha256-string|sha256-bytes")]
                [(git) (has? #rx"\"git\"")]
                [(subprocess) (has? #rx"subprocess|process-wait|process-status")]
                [(parameterize) (has? #rx"parameterize")]
@@ -135,8 +137,10 @@
       ;; +1 GSD simplification W4 (planning-artifact-ownership): the ONE
       ;; authentic ownership-marker predicate, a pure read shell consumed by the
       ;; snapshot sweep, supersede rotation, archive cleanup and the doctor.
+      ;; +1 candidate-preserving recovery core leaf
+      ;; (supplemental-preserved-candidate).
       (check-equal? (length inventory)
-                    113
+                    114
                     "every on-disk GSD module has exactly one inventory entry"))
 
     (test-case "supplemental worker descriptor projects policy without dispatch authority"
@@ -210,8 +214,7 @@
       (check-equal? (entry-effects decision) '())
       (check-equal? (entry-params decision) '())
       (check-equal? (entry-deps decision) '("campaign-state"))
-      (check-not-false (memq (entry-domain decision)
-                             '(pure-planning transition-logic)))
+      (check-not-false (memq (entry-domain decision) '(pure-planning transition-logic)))
       ;; The interpreter is no longer a routing owner: the lease (mkdir/lock) and
       ;; the request value are separate modules, so the orchestrator keeps only
       ;; its own marker effects.
@@ -250,18 +253,15 @@
       ;; Read-only by contract: no write/rename/delete/mkdir effects at all.
       (check-equal? (entry-effects ownership) '(fs-read))
       (check-equal? (entry-params ownership) '())
-      (check-not-false (memq (entry-domain ownership)
-                             '(persistence pure-planning)))
+      (check-not-false (memq (entry-domain ownership) '(persistence pure-planning)))
       ;; Every destructive consumer depends on it instead of re-implementing
       ;; ownership from marker existence or a name deny-list.
-      (for ([file (in-list '("plan-snapshot.rkt"
-                             "command-handlers.rkt"
-                             "archive.rkt"
-                             "planning-artifact-validation.rkt"))])
-        (check-not-false
-         (member "planning-artifact-ownership"
-                 (entry-deps (hash-ref inventory-map file)))
-         (format "~a must consume the ONE ownership predicate" file))))
+      (for ([file (in-list '("plan-snapshot.rkt" "command-handlers.rkt"
+                                                 "archive.rkt"
+                                                 "planning-artifact-validation.rkt"))])
+        (check-not-false (member "planning-artifact-ownership"
+                                 (entry-deps (hash-ref inventory-map file)))
+                         (format "~a must consume the ONE ownership predicate" file))))
 
     (test-case "domain vocabulary is closed"
       (for ([e (in-list inventory)])

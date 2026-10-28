@@ -7,7 +7,41 @@
 (provide disposition-amendment
          disposition-amendment-1
          disposition-amendment-2
-         disposition-amendment-3)
+         disposition-amendment-3
+         disposition-pointer
+         disposition-descriptor
+         disposition-third-generation?)
+(define (disposition-pointer proposal grant)
+  (hasheq 'schema "supplemental-pointer/v1" 'task-proposal proposal 'task-approval grant))
+;; Canonical descriptor for one amendment generation. `old` is the exact
+;; predecessor pointer the descriptor binds. An optional preserved-candidate
+;; binding is appended as the ONLY permitted extra key: the amendment object
+;; itself is never mutated or widened by preserved-mode callers.
+(define (disposition-descriptor a old #:preserved [preserved #f])
+  (define d
+    (hasheq 'amendment-id
+            (hash-ref a 'sha256)
+            'root-proposal
+            (hash-ref a 'root-proposal)
+            'root-approval
+            (hash-ref a 'root-approval)
+            'parent-proposal
+            (hash-ref a 'parent-proposal)
+            'parent-approval
+            (hash-ref a 'parent-approval)
+            'terminal-body-sha256
+            (hash-ref a 'terminal-body-sha256)
+            'terminal-record-sha256
+            (hash-ref a 'terminal-record-sha256)
+            'pointer-sha256
+            (supplemental-record-digest old)
+            'allocation
+            (hash-ref a 'allocation)))
+  (if preserved
+      (hash-set d 'preserved-candidate preserved)
+      d))
+(define (disposition-third-generation? amendment)
+  (and (hash? amendment) (hash-has-key? amendment 'prior-parent-proposal)))
 (define production-home (simplify-path (find-system-path 'home-dir) #f))
 (define production-root (build-path production-home ".q" "agent" "supplemental-evidence"))
 (define (ref kind digest)

@@ -6,6 +6,7 @@
          "supplemental-evidence-format.rkt"
          "supplemental-evidence-authority.rkt"
          "supplemental-disposition-policy.rkt"
+         "supplemental-preserved-candidate.rkt"
          (submod "supplemental-disposition-policy.rkt" ancestry-support)
          "../../util/json/checksum.rkt"
          (only-in "evidence-repair-format.rkt" canonical-evidence-json)
@@ -125,8 +126,8 @@
                     (equal? (hash-ref previous 'target) (pointer proposal grant))
                     (equal? (hash-ref previous 'lineage) (hash-ref task 'disposition))
                     (equal? (hash-ref task 'disposition)
-                            (descriptor predecessor
-                                        (pointer pp (hash-ref predecessor 'parent-approval))))
+                            (disposition-descriptor predecessor
+                                                    (pointer pp (hash-ref predecessor 'parent-approval))))
                     (inherited? pt task))
          (refuse "historical disposition claim or scope mismatch")))
      (define r (hash-ref task 'recovery))
@@ -165,32 +166,31 @@
                   (equal? (hash-ref (hash-ref record 'facts) 'allocation) (hash-ref a 'allocation)))
        (refuse "exact spent terminal amendment facts required"))
      (values proposal task record))))
-(define (descriptor a old)
-  (hasheq 'amendment-id
-          (hash-ref a 'sha256)
-          'root-proposal
-          (hash-ref a 'root-proposal)
-          'root-approval
-          (hash-ref a 'root-approval)
-          'parent-proposal
-          (hash-ref a 'parent-proposal)
-          'parent-approval
-          (hash-ref a 'parent-approval)
-          'terminal-body-sha256
-          (hash-ref a 'terminal-body-sha256)
-          'terminal-record-sha256
-          (hash-ref a 'terminal-record-sha256)
-          'pointer-sha256
-          (supplemental-record-digest old)
-          'allocation
-          (hash-ref a 'allocation)))
+(define (descriptor-base-matches? d a old)
+  ;; The fixed nine fields must be byte-equal. The ONLY permitted optional
+  ;; extra key is a structurally valid preserved-candidate binding, and only
+  ;; for the fixed third generation (never predecessors/ancestors).
+  (and (hash? d)
+       (immutable? d)
+       (or (equal? d (disposition-descriptor a old))
+           (and (disposition-third-generation? a)
+                (equal? (hash-remove d 'preserved-candidate) (disposition-descriptor a old))
+                (valid-preserved-candidate? (hash-ref d 'preserved-candidate #f))))))
 (define (check-lineage! task)
   (define a (disposition-amendment))
   (define-values (p parent terminal)
     (inspect-supplemental-disposition-parent (hash-ref a 'parent-approval)))
   (define old (pointer p (hash-ref a 'parent-approval)))
+  (define d (hash-ref task 'disposition #f))
+  (define preserved? (and (hash? d) (hash-has-key? d 'preserved-candidate)))
   (unless (and (equal? (hash-ref task 'kind) "supplemental-evidence-task/v3")
-               (equal? (hash-ref task 'disposition) (descriptor a old))
+               (descriptor-base-matches? d a old)
+               ;; Preserved mode revalidates candidate/approval identity, the
+               ;; exact K->M settlement and the fixed a3 ancestry on every
+               ;; admission. Ordinary mode never loads the preserved leaf.
+               (if preserved?
+                   (validate-preserved-candidate-claim-binding! task)
+                   #t)
                (inherited? parent task))
     (refuse "disposition changed fixed amendment or inherited scope"))
   (define old-claim (read-recovery-claim! (recovery-claim-path (hash-ref a 'root-approval))))
@@ -238,18 +238,10 @@
                (digest? (hash-ref a 'snapshot-sha256))
                (equal? (hash-ref a 'model-dispatches) 1)
                (eq? (hash-ref a 'successor-permitted) #f)
-               (exact-keys? d
-                            '(amendment-id root-proposal
-                                           root-approval
-                                           parent-proposal
-                                           parent-approval
-                                           terminal-body-sha256
-                                           terminal-record-sha256
-                                           pointer-sha256
-                                           allocation))
-               (equal?
-                d
-                (descriptor a (pointer (hash-ref a 'parent-proposal) (hash-ref a 'parent-approval))))
+               (descriptor-base-matches? d
+                                         a
+                                         (pointer (hash-ref a 'parent-proposal)
+                                                  (hash-ref a 'parent-approval)))
                (for/and ([key '(root-proposal root-approval parent-proposal parent-approval)]
                          [kind '("task-proposal" "task-approval" "task-proposal" "task-approval")])
                  (ref? (hash-ref a key) kind))

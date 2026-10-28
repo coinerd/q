@@ -13,7 +13,14 @@
          "evidence-probe.rkt"
          "evidence-discovery.rkt")
 (provide current-evidence-context
-         evidence-readiness)
+         evidence-readiness
+         authenticated-evidence-receipt?
+         authenticated-evidence-receipt-context
+         authenticated-evidence-receipt-root
+         authenticated-evidence-receipt-manifest
+         authenticated-evidence-receipt-source-repo
+         load-authenticated-evidence-receipt
+         validate-current-evidence-source!)
 (define (git repo . args)
   (define out (open-output-string))
   (define err (open-output-string))
@@ -24,7 +31,12 @@
   (unless (zero? code)
     (error 'evidence-readiness "git authentication failed: ~a" (get-output-string err)))
   (string-trim (get-output-string out)))
-(define (authenticated base plan wave)
+;; A strict authenticated receipt snapshot. The context is derived from the
+;; retained receipt/proof/manifest bytes; the live checkout source gate is a
+;; SEPARATE step so preserved-mode admission can authenticate E_old without
+;; weakening current-evidence-context. The struct is data, never authority.
+(struct authenticated-evidence-receipt (context root manifest source-repo) #:transparent)
+(define (load-authenticated-evidence-receipt base plan wave)
   (define journal (load-delivery-journal base plan wave))
   (define receipt (and journal (hash-ref journal 'receipt #f)))
   (unless (and (hash? receipt) (hash-ref receipt 'owned-proof #f))
@@ -38,11 +50,6 @@
   ;; The receipt's logical repository is digest-bound, not an execution port.
   (define repo
     (path->string (simplify-path (path->complete-path (hash-ref manifest 'execution-cwd)))))
-  (unless (and (equal? (git repo "rev-parse" "HEAD") (hash-ref receipt 'head))
-               (equal? (git repo "rev-parse" "HEAD^{tree}") (hash-ref receipt 'tree))
-               (equal? (git repo "symbolic-ref" "--short" "HEAD") (hash-ref receipt 'branch))
-               (string=? (git repo "status" "--porcelain" "--untracked-files=all") ""))
-    (error 'evidence-readiness "stale-or-dirty-receipt"))
   (define context
     (for/fold ([c (hasheq 'plan-id
                           plan
@@ -66,7 +73,23 @@
                     (hash-ref (if (memq key '(attempt-id attempt-fence)) binding receipt) key)))))
   (unless (valid-evidence-context? context)
     (error 'evidence-readiness "invalid-current-context"))
-  (values context root manifest))
+  (authenticated-evidence-receipt context root manifest repo))
+(define (validate-current-evidence-source! context source-repo)
+  ;; The physical source gate: strict equality of the live clean checkout to
+  ;; the authenticated receipt context. Preserved mode substitutes an explicit
+  ;; K->M proof only OUTSIDE this procedure, never by weakening it.
+  (unless (and (equal? (git source-repo "rev-parse" "HEAD") (hash-ref context 'head))
+               (equal? (git source-repo "rev-parse" "HEAD^{tree}") (hash-ref context 'tree))
+               (equal? (git source-repo "symbolic-ref" "--short" "HEAD") (hash-ref context 'branch))
+               (string=? (git source-repo "status" "--porcelain" "--untracked-files=all") ""))
+    (error 'evidence-readiness "stale-or-dirty-receipt")))
+(define (authenticated base plan wave)
+  (define receipt (load-authenticated-evidence-receipt base plan wave))
+  (validate-current-evidence-source! (authenticated-evidence-receipt-context receipt)
+                                     (authenticated-evidence-receipt-source-repo receipt))
+  (values (authenticated-evidence-receipt-context receipt)
+          (authenticated-evidence-receipt-root receipt)
+          (authenticated-evidence-receipt-manifest receipt)))
 (define (current-evidence-context base plan wave)
   (define-values (context root manifest) (authenticated base plan wave))
   context)

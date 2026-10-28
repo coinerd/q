@@ -11,11 +11,17 @@
          (only-in "../../util/json/checksum.rkt" sha256-string)
          (only-in "delivery-receipt.rkt" committed-delivery-snapshot)
          (only-in "review-proof.rkt" load-receipt-owned-proof)
-         (only-in "evidence-readiness.rkt" current-evidence-context)
+         (only-in "evidence-readiness.rkt"
+                  current-evidence-context
+                  load-authenticated-evidence-receipt
+                  authenticated-evidence-receipt-context)
          "supplemental-evidence-authority.rkt"
          "supplemental-evidence-format.rkt"
          "supplemental-evidence-journal.rkt"
          "supplemental-disposition-policy.rkt"
+         (only-in "supplemental-preserved-candidate.rkt"
+                  preserved-candidate-binding
+                  validate-preserved-candidate!)
          (only-in "supplemental-disposition-claim.rkt" disposition-late-terminal?)
          (only-in "supplemental-evidence-controller.rkt"
                   load-supplemental-pointer
@@ -52,7 +58,14 @@
           (hash-ref a 'parent-proposal)
           'task-approval
           (hash-ref a 'parent-approval)))
-(define (eligible! base plan wave pointer)
+;; Preserved mode authenticates the retained E_old receipt/context WITHOUT the
+;; physical live-source gate: the live checkout is the metadata descendant M,
+;; never E_old.head, and the preserved-candidate leaf proves that exact K->M
+;; settlement separately. Ordinary mode below keeps current-evidence-context
+;; and therefore its strict live-source equality unchanged.
+(define (preserved-parent-context base plan wave)
+  (authenticated-evidence-receipt-context (load-authenticated-evidence-receipt base plan wave)))
+(define (eligible! base plan wave pointer #:preserved [preserved #f])
   (define a (amendment))
   (unless (and (equal? plan (hash-ref a 'plan-id))
                (equal? wave (hash-ref a 'wave))
@@ -98,20 +111,52 @@
   (unless (and (equal? (hash-ref context 'plan-id) plan)
                (equal? (hash-ref context 'wave) wave)
                (equal? (hash-ref context 'snapshot-sha256) (hash-ref a 'snapshot-sha256))
-               (equal? context (current-evidence-context base plan wave)))
+               (equal? context
+                       (if preserved
+                           (preserved-parent-context base plan wave)
+                           (current-evidence-context base plan wave))))
     (refuse "parent context, frozen snapshot or receipt changed"))
+  (define descendant (and preserved (hash-ref preserved 'descendant-source)))
   (define source (committed-delivery-snapshot (hash-ref context 'repo)))
   (define journal (load-delivery-journal base plan wave))
   (define receipt (and journal (hash-ref journal 'receipt #f)))
   (define manifest (and receipt (load-receipt-owned-proof receipt base plan wave)))
+  ;; Preserved mode: the retained clean source must be exactly the bound
+  ;; metadata descendant M; the source/oldK/terminal authentication itself is
+  ;; the preserved-candidate helper (called by propose/install after the inert
+  ;; task exists). Ordinary mode keeps full E_old equality, unchanged.
+  (define expected-head
+    (if descendant
+        (hash-ref descendant 'head)
+        (hash-ref context 'head)))
+  (define expected-tree
+    (if descendant
+        (hash-ref descendant 'tree)
+        (hash-ref context 'tree)))
   (unless (and source
                manifest
                (equal? (hash-ref manifest 'execution-cwd) (hash-ref context 'repo))
-               (for/and ([key '(branch origin head tree)])
-                 (equal? (hash-ref source key) (hash-ref context key))))
+               (for/and ([key '(branch origin)])
+                 (equal? (hash-ref source key) (hash-ref context key)))
+               (equal? (hash-ref source 'head) expected-head)
+               (equal? (hash-ref source 'tree) expected-tree))
     (refuse "retained clean source or authenticated owned receipt proof changed"))
   (values proposal task terminal))
-(define (propose-supplemental-disposition! base plan wave expected-parent-proposal-sha expires-at)
+(define (propose-supplemental-disposition! base
+                                           plan
+                                           wave
+                                           expected-parent-proposal-sha
+                                           expires-at
+                                           #:preserved-candidate [preserved-candidate #f])
+  ;; Preserved mode is a structural binding only at proposal time: the caller
+  ;; supplies the exact JSON object (never an authorization), and the leaf
+  ;; helper below re-authenticates every source/K/terminal fact before any
+  ;; inert bytes are retained. There is no file/boolean/policy substitute.
+  (when preserved-candidate
+    (unless (valid-preserved-candidate? preserved-candidate)
+      (refuse "preserved candidate binding is malformed"))
+    (unless (disposition-third-generation? (amendment))
+      (refuse "preserved candidate requires the fixed third-generation amendment")))
   (under-lease
    base
    plan
@@ -123,25 +168,20 @@
         (unless (equal? expected-parent-proposal-sha
                         (hash-ref (hash-ref pointer 'task-proposal) 'sha256))
           (refuse "expected parent proposal changed"))
-        (define-values (proposal parent terminal) (eligible! base plan wave pointer))
+        (define-values (proposal parent terminal)
+          (eligible! base plan wave pointer #:preserved preserved-candidate))
         (define now (current-seconds))
         (unless (and (exact-positive-integer? expires-at)
                      (< now expires-at)
                      (<= expires-at (+ now (hash-ref (hash-ref parent 'bounds) 'deadline-sec))))
           (refuse "fresh bounded expiry required"))
         (define a (amendment))
+        ;; The descriptor is built by the policy helper; preserved mode adds
+        ;; exactly ONE optional key and never widens the amendment object.
         (define disposition
-          (for/fold ([d (hasheq 'amendment-id
-                                (hash-ref a 'sha256)
-                                'pointer-sha256
-                                (supplemental-record-digest pointer))])
-                    ([key '(root-proposal root-approval
-                                          parent-proposal
-                                          parent-approval
-                                          terminal-body-sha256
-                                          terminal-record-sha256
-                                          allocation)])
-            (hash-set d key (hash-ref a key))))
+          (disposition-descriptor a (parent-pointer a) #:preserved preserved-candidate))
+        (unless (equal? (supplemental-record-digest pointer) (hash-ref disposition 'pointer-sha256))
+          (refuse "active pointer is not the fixed amendment predecessor"))
         (define task
           (seal-supplemental-record (hash-set* parent
                                                'kind
@@ -152,6 +192,10 @@
                                                disposition)))
         (unless (valid-supplemental-task? task)
           (refuse "invalid disposition lineage"))
+        (when preserved-candidate
+          ;; All actual old-candidate/E_old/K->M authentication is the leaf
+          ;; helper; a proposal that cannot authenticate is never retained.
+          (validate-preserved-candidate! base plan wave task))
         (values (propose-retain! "task-proposal" (hasheq 'task task 'expires-at expires-at))
                 task))))))
 (define (install-supplemental-disposition! base plan wave new-proposal-ref new-approval-ref)
@@ -167,8 +211,13 @@
         (unless (and (valid-supplemental-task? task)
                      (equal? (hash-ref task 'kind) "supplemental-evidence-task/v3"))
           (refuse "disposition requires task/v3"))
+        (define preserved (preserved-candidate-binding task))
         (define old (parent-pointer (amendment)))
-        (eligible! base plan wave old)
+        (eligible! base plan wave old #:preserved preserved)
+        (when preserved
+          ;; Recheck the full E_old/K->M settlement and the exact live source
+          ;; immediately before the permanent claim/pointer mutation.
+          (validate-preserved-candidate! base plan wave task))
         (define target
           (hasheq 'schema
                   "supplemental-pointer/v1"

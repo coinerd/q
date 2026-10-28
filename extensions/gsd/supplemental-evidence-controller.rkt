@@ -56,6 +56,9 @@
          (only-in "evidence-readiness.rkt" current-evidence-context evidence-readiness)
          (only-in "evidence-probe.rkt" run-staged-supplemental-probe! validate-baseline-probe!)
          (only-in "evidence-repair-format.rkt" canonical-evidence-json canonical-evidence-digest)
+         (only-in "supplemental-preserved-candidate.rkt"
+                  preserved-candidate-binding
+                  validate-preserved-candidate!)
          "effective-verify-binding.rkt"
          "supplemental-evidence-format.rkt"
          "supplemental-evidence-authority.rkt"
@@ -229,11 +232,10 @@
 ;; that did not happen stays an explicitly pending note. Idempotent: an
 ;; already-blocked retained operation adds no note and writes nothing.
 (define expired-authority-refusals
-  (list
-   "task deadline expired"
-   "approval requires a valid bounded task and unexpired operator expiry"
-   "live authenticated task approval required"
-   "linked private approval unavailable, revoked or expired"))
+  (list "task deadline expired"
+        "approval requires a valid bounded task and unexpired operator expiry"
+        "live authenticated task approval required"
+        "linked private approval unavailable, revoked or expired"))
 (define (expired-authority-refusal? secondary)
   (and (string? secondary)
        (for/or ([text (in-list expired-authority-refusals)])
@@ -246,9 +248,9 @@
                (memq (hash-ref disc 'cause #f) '(expired revoked))))
      #f]
     [else
-     (with-handlers ([exn:fail?
-                      (lambda (e)
-                        (format " [expired operation seal pending: ~a]" (trim-message e 200)))])
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (format " [expired operation seal pending: ~a]"
+                                          (trim-message e 200)))])
        (define operation (supplemental-retained-operation grant))
        (cond
          [(not operation) #f]
@@ -372,12 +374,27 @@
 ;; Task proposal construction from authentic local facts (owner CLI helper)
 ;; ----------------------------------------------------------------------
 (define-runtime-path disposition-module "supplemental-evidence-disposition.rkt")
-(define (propose-supplemental-disposition! base plan wave parent-sha expires-at)
-  ((dynamic-require disposition-module 'propose-supplemental-disposition!) base
-                                                                           plan
-                                                                           wave
-                                                                           parent-sha
-                                                                           expires-at))
+(define (propose-supplemental-disposition! base
+                                           plan
+                                           wave
+                                           parent-sha
+                                           expires-at
+                                           #:preserved-candidate [preserved-candidate #f])
+  ;; The optional preserved binding is ordinary inert DATA here; the
+  ;; disposition owner re-authenticates it before retaining anything.
+  (if preserved-candidate
+      ((dynamic-require disposition-module 'propose-supplemental-disposition!) base
+                                                                               plan
+                                                                               wave
+                                                                               parent-sha
+                                                                               expires-at
+                                                                               #:preserved-candidate
+                                                                               preserved-candidate)
+      ((dynamic-require disposition-module 'propose-supplemental-disposition!) base
+                                                                               plan
+                                                                               wave
+                                                                               parent-sha
+                                                                               expires-at)))
 (define (install-supplemental-disposition! base plan wave proposal approval)
   ((dynamic-require disposition-module 'install-supplemental-disposition!) base
                                                                            plan
@@ -738,9 +755,16 @@
   ;; installed process without reapproving unchanged T. Caller-supplied code
   ;; is not admitted here; HEAD equality would not authenticate loaded bytes
   ;; (nor a dirty engine) within the same-uid/trusted-process boundary.
-  ;; Live source/receipt context must still match exactly.
-  (unless (equal? context (current-evidence-context base plan wave))
-    (refuse "supplemental checkpoint task context drifted"))
+  ;; Live source/receipt context must still match exactly — EXCEPT for an
+  ;; optional preserved-candidate task, whose authenticated E_old receipt
+  ;; context must match byte-for-byte while the live checkout is the exact
+  ;; metadata descendant M proved by the preserved-candidate leaf. The
+  ;; ordinary strict current-evidence-context gate is never weakened.
+  (cond
+    [(preserved-candidate-binding task) (preserved-admission! base plan wave task)]
+    [else
+     (unless (equal? context (current-evidence-context base plan wave))
+       (refuse "supplemental checkpoint task context drifted"))])
   context)
 
 ;; The supplemental task OWNS the retained receipt checkout while a pointer
@@ -827,6 +851,30 @@
 (define (allocation-of operation)
   (hash-ref (hash-ref operation 'facts) 'allocation #f))
 
+;; ----------------------------------------------------------------------
+;; Preserved-candidate admission (authenticated K -> M metadata settlement)
+;; ----------------------------------------------------------------------
+;; The leaf re-authenticates the retained E_old receipt/context, the genuine
+;; spent candidate/approval, the fixed third-generation ancestry/terminal and
+;; the exact K->M owner-path settlement, then requires the CURRENT clean
+;; checkout to be exactly M. Data only: it grants nothing and never runs a
+;; model. Ordinary tasks never call it.
+(define (task-preserved-candidate task)
+  (preserved-candidate-binding task))
+(define (preserved-admission! base plan wave task)
+  (validate-preserved-candidate! base plan wave task))
+;; Recheck the live campaign authority immediately around an adoption. The
+;; journal's own transitions revalidate the task/claim/approvals; this pins
+;; the CURRENT attempt, cancellation and pause state that only the campaign
+;; record owns (never a cached view captured before an operator wait).
+(define (preserved-attempt-live! base plan wave attempt-id fence)
+  (define rec (load-campaign-record base plan))
+  (unless (and rec
+               (current-wave-for-attempt rec wave fence attempt-id)
+               (not (campaign-record-cancellation rec))
+               (not (campaign-record-budget-pause rec)))
+    (refuse "preserved adoption requires the current uncancelled unpaused attempt and fences")))
+
 ;; Request an operator decision; ANY channel/transport failure is an honest
 ;; typed pause, never a failure and never a synthetic approval.
 (define (request-operator-approval ref publisher what)
@@ -873,6 +921,43 @@
            (refuse (format "intervening commit changed forbidden path ~s (~a)" path status)))]
         [other
          (refuse (format "intervening commit recorded an unsupported change entry: ~a" other))]))))
+;; Extract the fresh candidate K' seal used by BOTH the ordinary model-author
+;; lane and the zero-model preserved-candidate adoption: the SAME task, the
+;; caller's allocation/fences, and the current committed source (for
+;; preserved mode that source is exactly the authenticated descendant M).
+(define (seal-candidate-proposal! repo context task tref grant attempt-id fence)
+  (define committed (committed-delivery-snapshot repo))
+  (unless committed
+    (refuse "candidate sealing requires a committed retained checkout"))
+  (validate-commit-chain! repo context task)
+  (for ([path (in-list (task-expected-paths task))])
+    (unless (regexp-match? #px"^100644 blob [0-9a-f]{40}\t" (git repo "ls-tree" "HEAD" "--" path))
+      (refuse (format "candidate path ~s is absent or not a regular committed blob" path))))
+  (define manifest
+    (for/list ([path (in-list (task-expected-paths task))])
+      (manifest-entry repo path)))
+  (define candidate
+    (seal-supplemental-record (hasheq 'kind
+                                      "supplemental-evidence-candidate/v1"
+                                      'context
+                                      context
+                                      'task-sha256
+                                      (hash-ref task 'sha256)
+                                      'task-proposal
+                                      tref
+                                      'task-approval
+                                      grant
+                                      'source
+                                      committed
+                                      'attempt-id
+                                      attempt-id
+                                      'attempt-fence
+                                      fence
+                                      'execution-cwd
+                                      (hash-ref context 'repo)
+                                      'manifest
+                                      manifest)))
+  (propose-retain! "candidate-proposal" candidate (list tref grant)))
 (define (run-supplemental-author-phases! base
                                          plan
                                          wave
@@ -908,6 +993,12 @@
     (define tref (hash-ref pointer 'task-proposal))
     (define task (hash-ref (hash-ref (load-supplemental-record tref) 'payload) 'task))
     (define context (hash-ref task 'context))
+    ;; A preserved-candidate task authenticates the SAME retained E_old
+    ;; receipt/context but runs on the exact metadata descendant M, so the
+    ;; expected clean source is the bound descendant, never E_old.head. The
+    ;; ordinary task keeps its exact approved-context equality.
+    (define preserved (task-preserved-candidate task))
+    (define descendant (and preserved (hash-ref preserved 'descendant-source)))
     ;; The campaign identity guard alone may still name a failed attempt.
     ;; A terminal journal must also invalidate any retained author callback.
     (define (author-live?)
@@ -918,10 +1009,33 @@
     (unless (same-path? (hash-ref context 'repo) repo)
       (refuse "supplemental task must run in its authenticated retained checkout"))
     (define source (committed-delivery-snapshot repo))
+    (define expected-source
+      (hasheq 'branch
+              (hash-ref context 'branch)
+              'origin
+              (hash-ref context 'origin)
+              'head
+              (if descendant
+                  (hash-ref descendant 'head)
+                  (hash-ref context 'head))
+              'tree
+              (if descendant
+                  (hash-ref descendant 'tree)
+                  (hash-ref context 'tree))))
     (unless (and source
                  (for/and ([key '(branch origin head tree)])
-                   (equal? (hash-ref source key) (hash-ref context key))))
-      (refuse "retained checkout drifted from the approved task context"))
+                   (equal? (hash-ref source key) (hash-ref expected-source key))))
+      (refuse (if preserved
+                  "retained checkout is not the authenticated metadata descendant"
+                  "retained checkout drifted from the approved task context")))
+    (when preserved
+      ;; Entry revalidation: E_old receipt/context, genuine old candidate,
+      ;; third-generation terminal and exact K->M settlement, with a clean
+      ;; current checkout that IS M, plus the CURRENT campaign attempt,
+      ;; cancellation and pause state. No model has run yet, so none of
+      ;; these denials may even reserve the fresh permission.
+      (preserved-admission! base plan wave task)
+      (preserved-attempt-live! base plan wave attempt-id fence))
     ;; Initialize the protected operation under the live task approval; the
     ;; journal revalidates the operator authority at every access.
     (define operation
@@ -958,75 +1072,81 @@
     ;; response after this commit can never buy another dispatch.
     (unless (author-live?)
       (refuse "stale campaign authority before supplemental launch"))
-    (define contract (make-supplemental-author-contract tref grant repo attempt-id base plan wave))
-    (define launched
-      (step! grant
-             operation*
-             "launched"
-             (hasheq 'dispatch-id (format "supplemental-author-~a" attempt-id))))
-    ;; Capture the durable launched identity (BUG-0101): the failure handler
-    ;; above uses THIS record, never a rediscovery, to settle the task.
-    (set-box! launch-identity (cons grant launched))
-    (unless (author-live?)
-      (refuse "stale campaign authority before model dispatch"))
-    (define outcome
-      (run-supplemental-test-author! repo contract attempt-id run author-live? after-phase))
-    (if (not (eq? (wave-execution-outcome-kind outcome) 'done))
-        (let-values ([(persisted? secondary)
-                      ;; The launch was durably consumed: a phase that ends
-                      ;; without an authentic committed candidate
-                      ;; (refusal/failure/cancellation) spends the task. It
-                      ;; is never silently retried and never re-reserved;
-                      ;; only owner governance may re-plan. A refused
-                      ;; blocked transition is a reported secondary, not a
-                      ;; silent one.
-                      (blocked-transition! grant launched (wave-execution-outcome-message outcome))])
-          (wave-execution-outcome (wave-execution-outcome-kind outcome)
-                                  (if persisted?
-                                      (wave-execution-outcome-message outcome)
-                                      (with-secondary (wave-execution-outcome-message outcome)
-                                                      secondary))))
+    (if preserved
         (let ()
-          (define committed (committed-delivery-snapshot repo))
-          (unless committed
-            (refuse "author phase left the retained checkout uncommitted"))
-          (validate-commit-chain! repo context task)
-          (for ([path (in-list (task-expected-paths task))])
-            (unless (regexp-match? #px"^100644 blob [0-9a-f]{40}\t"
-                                   (git repo "ls-tree" "HEAD" "--" path))
-              (refuse (format "candidate path ~s is absent or not a regular committed blob" path))))
-          (define manifest
-            (for/list ([path (in-list (task-expected-paths task))])
-              (manifest-entry repo path)))
-          (define candidate
-            (seal-supplemental-record (hasheq 'kind
-                                              "supplemental-evidence-candidate/v1"
-                                              'context
-                                              context
-                                              'task-sha256
-                                              (hash-ref task 'sha256)
-                                              'task-proposal
-                                              tref
-                                              'task-approval
-                                              grant
-                                              'source
-                                              committed
-                                              'attempt-id
-                                              attempt-id
-                                              'attempt-fence
-                                              fence
-                                              'execution-cwd
-                                              (hash-ref context 'repo)
-                                              'manifest
-                                              manifest)))
-          (define kref (propose-retain! "candidate-proposal" candidate (list tref grant)))
+          ;; Zero-model preserved-candidate adoption. The fresh one-shot T
+          ;; permission is still unconsumed: revalidate the exact settlement
+          ;; and live campaign authority, THEN consume it with an honest
+          ;; adoption dispatch id/kind and no model callback — the operator
+          ;; `run` thunk is never invoked.
+          (preserved-admission! base plan wave task)
+          (preserved-attempt-live! base plan wave attempt-id fence)
+          (unless (author-live?)
+            (refuse "stale campaign authority before preserved adoption"))
+          (define launched
+            (step! grant
+                   operation*
+                   "launched"
+                   (hasheq 'dispatch-id
+                           (format "adoption:~a" attempt-id)
+                           'dispatch-kind
+                           "preserved-candidate-adoption")))
+          ;; The launch is now durably consumed (launch-consumed -> #t).
+          (set-box! launch-identity (cons grant launched))
+          ;; Recheck AFTER the irreversible consumption, immediately before
+          ;; sealing fresh K' from the authenticated descendant M.
+          (preserved-admission! base plan wave task)
+          (preserved-attempt-live! base plan wave attempt-id fence)
+          (unless (author-live?)
+            (refuse "stale campaign authority before preserved candidate seal"))
+          (define kref (seal-candidate-proposal! repo context task tref grant attempt-id fence))
           (step! grant
-                 (reload-for-step! grant operation*)
+                 (reload-for-step! grant launched)
                  "candidate-sealed"
                  (hasheq 'candidate-ref kref))
           (wave-execution-outcome
            'done
-           "supplemental test evidence committed and candidate sealed; operator candidate approval is next")))))
+           "preserved candidate adopted: fresh K' sealed for the metadata descendant; operator candidate approval is next"))
+        (let ()
+          (define contract
+            (make-supplemental-author-contract tref grant repo attempt-id base plan wave))
+          (define launched
+            (step! grant
+                   operation*
+                   "launched"
+                   (hasheq 'dispatch-id (format "supplemental-author-~a" attempt-id))))
+          ;; Capture the durable launched identity (BUG-0101): the failure handler
+          ;; above uses THIS record, never a rediscovery, to settle the task.
+          (set-box! launch-identity (cons grant launched))
+          (unless (author-live?)
+            (refuse "stale campaign authority before model dispatch"))
+          (define outcome
+            (run-supplemental-test-author! repo contract attempt-id run author-live? after-phase))
+          (if (not (eq? (wave-execution-outcome-kind outcome) 'done))
+              (let-values
+                  ([(persisted? secondary)
+                    ;; The launch was durably consumed: a phase that ends
+                    ;; without an authentic committed candidate
+                    ;; (refusal/failure/cancellation) spends the task. It
+                    ;; is never silently retried and never re-reserved;
+                    ;; only owner governance may re-plan. A refused
+                    ;; blocked transition is a reported secondary, not a
+                    ;; silent one.
+                    (blocked-transition! grant launched (wave-execution-outcome-message outcome))])
+                (wave-execution-outcome (wave-execution-outcome-kind outcome)
+                                        (if persisted?
+                                            (wave-execution-outcome-message outcome)
+                                            (with-secondary (wave-execution-outcome-message outcome)
+                                                            secondary))))
+              (let ()
+                (define kref (seal-candidate-proposal! repo context task tref grant attempt-id fence))
+                (step! grant
+                       (reload-for-step! grant operation*)
+                       "candidate-sealed"
+                       (hasheq 'candidate-ref kref))
+                (wave-execution-outcome
+                 'done
+                 "supplemental test evidence committed and candidate sealed; operator candidate approval is next")))))))
 
 ;; Reload the operation before a transition so the revision/state pair is the
 ;; durable truth, not a caller-held copy.
@@ -1601,6 +1721,7 @@
         (refuse "supplemental retention requires the campaign pointer")))
   (define task
     (hash-ref (hash-ref (load-supplemental-record (hash-ref pointer 'task-proposal)) 'payload) 'task))
+  (define preserved (task-preserved-candidate task))
   (let* ([context (hash-ref task 'context)]
          ;; The evidence context carries the exact execution checkout string
          ;; (no trailing separator); running the wave there must stringify
@@ -1608,8 +1729,19 @@
          [cwd (string->path (regexp-replace #px"/+$" (hash-ref context 'repo) ""))]
          [source (committed-delivery-snapshot cwd)])
     (unless (and source
-                 (for/and ([key '(branch origin head tree)])
-                   (equal? (hash-ref source key) (hash-ref context key))))
+                 (for/and ([key '(branch origin)])
+                   (equal? (hash-ref source key) (hash-ref context key)))
+                 (if preserved
+                     ;; Preserved retention is the authenticated metadata
+                     ;; descendant M, not the retained E_old head; the leaf
+                     ;; re-proves the exact K->M settlement at entry.
+                     (let ([m (hash-ref preserved 'descendant-source)])
+                       (and (equal? (hash-ref source 'head) (hash-ref m 'head))
+                            (equal? (hash-ref source 'tree) (hash-ref m 'tree))))
+                     (and (equal? (hash-ref source 'head) (hash-ref context 'head))
+                          (equal? (hash-ref source 'tree) (hash-ref context 'tree)))))
       (error 'supplemental-evidence-controller
              "exact retained supplemental checkout unavailable; no fallback or rewind"))
+    (when preserved
+      (preserved-admission! root plan wave task))
     (wave-worktree cwd cwd (hash-ref context 'branch) "origin/main" (build-path root ".planning"))))

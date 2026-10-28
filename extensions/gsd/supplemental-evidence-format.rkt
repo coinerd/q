@@ -14,7 +14,8 @@
 (provide supplemental-record-digest
          seal-supplemental-record
          valid-supplemental-task?
-         valid-supplemental-record?)
+         valid-supplemental-record?
+         valid-preserved-candidate?)
 
 (define supplemental-record-digest canonical-evidence-digest)
 ;; Copy strings before sealing so caller mutation cannot alter retained bytes.
@@ -102,16 +103,70 @@
               (positive? (string-length (hash-ref a 'attempt-id)))
               (exact-nonnegative-integer? (hash-ref a 'attempt-fence))
               (exact-nonnegative-integer? (hash-ref a 'coordinator-fence))))))
+;; Optional preserved-candidate binding. This is wire identity only: the
+;; semantic validator (supplemental-preserved-candidate.rkt) authenticates the
+;; candidate/approval records and proves the Git K->M metadata settlement.
+;; The descriptor never grants capability and never implies verification.
+(define preserved-candidate-fields
+  '(schema candidate candidate-approval original-source descendant-source owner-paths))
+(define (valid-source? s fields)
+  (and (exact-keys? s fields)
+       (for/and ([key '(repo branch origin)]
+                 #:when (memq key fields))
+         (define v (hash-ref s key #f))
+         (and (string? v) (positive? (string-length v))))
+       (hex? (hash-ref s 'head #f) 40)
+       (hex? (hash-ref s 'tree #f) 40)))
+(define (valid-owner-entry? e)
+  (and (exact-keys? e '(path before-blob before-sha256 after-blob after-sha256))
+       (relative-path? (hash-ref e 'path #f))
+       (hex? (hash-ref e 'before-blob #f) 40)
+       (hex? (hash-ref e 'before-sha256 #f) 64)
+       (hex? (hash-ref e 'after-blob #f) 40)
+       (hex? (hash-ref e 'after-sha256 #f) 64)))
+(define (valid-preserved-candidate? p)
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (and (exact-keys? p preserved-candidate-fields)
+         (equal? (hash-ref p 'schema) "supplemental-preserved-candidate/v1")
+         (let ([c (hash-ref p 'candidate)])
+           (and (exact-keys? c '(kind sha256))
+                (equal? (hash-ref c 'kind) "candidate-proposal")
+                (hex? (hash-ref c 'sha256) 64)))
+         (let ([c (hash-ref p 'candidate-approval)])
+           (and (exact-keys? c '(kind sha256))
+                (equal? (hash-ref c 'kind) "candidate-approval")
+                (hex? (hash-ref c 'sha256) 64)))
+         (valid-source? (hash-ref p 'original-source) '(repo branch origin head tree))
+         (valid-source? (hash-ref p 'descendant-source) '(head tree))
+         (let ([entries (hash-ref p 'owner-paths)])
+           (and (list? entries)
+                (pair? entries)
+                (andmap valid-owner-entry? entries)
+                (= (length entries)
+                   (length (remove-duplicates (map (lambda (e) (hash-ref e 'path)) entries)))))))))
 (define (valid-disposition? d)
-  (and (exact-keys? d
-                    '(amendment-id root-proposal
-                                   root-approval
-                                   parent-proposal
-                                   parent-approval
-                                   terminal-body-sha256
-                                   terminal-record-sha256
-                                   pointer-sha256
-                                   allocation))
+  (and (or (exact-keys? d
+                        '(amendment-id root-proposal
+                                       root-approval
+                                       parent-proposal
+                                       parent-approval
+                                       terminal-body-sha256
+                                       terminal-record-sha256
+                                       pointer-sha256
+                                       allocation))
+           ;; A preserved binding is an OPTIONAL extra key on the same exact
+           ;; descriptor; no other field may be added, removed or widened.
+           (and (exact-keys? d
+                             '(amendment-id root-proposal
+                                            root-approval
+                                            parent-proposal
+                                            parent-approval
+                                            terminal-body-sha256
+                                            terminal-record-sha256
+                                            pointer-sha256
+                                            allocation
+                                            preserved-candidate))
+                (valid-preserved-candidate? (hash-ref d 'preserved-candidate))))
        (for/and ([key '(amendment-id terminal-body-sha256 terminal-record-sha256 pointer-sha256)])
          (hex? (hash-ref d key) 64))
        (for/and ([key '(root-proposal root-approval parent-proposal parent-approval)]
