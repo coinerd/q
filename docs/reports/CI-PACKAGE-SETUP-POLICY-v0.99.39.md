@@ -2,7 +2,7 @@
 
 **Status**: Active
 **Created**: v0.99.39 (W4, #8507)
-**Related**: [CI-GitHub-Actions Permanent Remediation Plan](../../.planning/PLAN-v0.99.39-CI-GITHUB-ACTIONS-PERMANENT-REMEDIATION.md)
+**Related**: CI-GitHub-Actions Permanent Remediation Plan (`.planning/PLAN-v0.99.39-CI-GITHUB-ACTIONS-PERMANENT-REMEDIATION.md`; historical planning artifact, not shipped)
 
 ## 1. Problem Statement
 

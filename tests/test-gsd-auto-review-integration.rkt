@@ -12,8 +12,11 @@
          "../extensions/gsd/delivery-journal.rkt"
          "../extensions/gsd/delivery-finalize.rkt"
          "../extensions/gsd/delivery-coordinator.rkt"
-         (only-in "../extensions/gsd/delivery-finalize.rkt"
-                  current-gsd-review-infra-retry-limit)
+         (only-in "../extensions/gsd/delivery-finalize.rkt" current-gsd-review-infra-retry-limit)
+         (only-in "../extensions/gsd/campaign-result.rkt"
+                  campaign-result?
+                  campaign-result-status
+                  campaign-result-findings)
          "../extensions/gsd/policy.rkt")
 (define manifest (make-campaign-manifest 1 "w0" '() '() "constraints"))
 (define plan (campaign-manifest-hash manifest))
@@ -81,6 +84,65 @@
                (check-equal? (hash-ref journal 'review-rejection-count 0) 1)
                (check-equal? (hash-ref (hash-ref journal 'review-rejection (hash)) 'findings #f)
                              (hash-ref rejection 'findings)))))
+  (test-case "typed rejection authorizes regardless of the operator message wording"
+    ;; Red-first wording mutation: the operator text is deliberately unrelated.
+    ;; Authorization comes ONLY from the typed payload on the delivery outcome.
+    (fixture (lambda (root rec)
+               (define outcome (delivery-outcome 'review-rejected "MUTATED WORDING" rejection))
+               (check-equal? (run-coordinator-checkpoint root
+                                                         plan
+                                                         (car (campaign-record-waves rec))
+                                                         "pending"
+                                                         (lambda (_d _p _w) outcome)
+                                                         #:on-cancel (lambda (_) 'cancelled)
+                                                         #:on-advance (lambda () 'retry)
+                                                         #:on-blocked (lambda (_) 'blocked))
+                             'retry)
+               (check-equal?
+                (campaign-wave-status (car (campaign-record-waves (load-campaign-record root plan))))
+                'failed))))
+
+  (test-case "typed rejection payload identity still guards the retry"
+    ;; The typed payload is authoritative but NOT trusted blindly: a payload
+    ;; whose identity does not match the durable receipt refuses exactly like
+    ;; the legacy message path.
+    (fixture (lambda (root rec)
+               (define stale-data (hash-set rejection 'head (make-string 40 #\d)))
+               (define outcome
+                 (delivery-outcome 'review-rejected (review-rejected-message stale-data) stale-data))
+               (check-equal? (run-coordinator-checkpoint root
+                                                         plan
+                                                         (car (campaign-record-waves rec))
+                                                         "pending"
+                                                         (lambda (_d _p _w) outcome)
+                                                         #:on-cancel (lambda (_) 'cancelled)
+                                                         #:on-advance (lambda () 'retry)
+                                                         #:on-blocked (lambda (_) 'blocked))
+                             'blocked)
+               (check-equal? (hash-ref (load-delivery-journal root plan 0) 'review-rejection-count 0)
+                             0))))
+
+  (test-case "blocked typed rejection carries findings without message parsing"
+    ;; The typed findings ride the blocked outcome's typed payload all the way
+    ;; into the campaign result, so no consumer has to parse the JSON message.
+    (fixture (lambda (root rec)
+               (define blocked #f)
+               (parameterize ([current-gsd-wave-review-rejection-retries 0])
+                 (run-coordinator-checkpoint
+                  root
+                  plan
+                  (car (campaign-record-waves rec))
+                  "pending"
+                  (lambda (_d _p _w) (delivery-outcome 'review-rejected "MUTATED WORDING" rejection))
+                  #:on-cancel (lambda (_) 'cancelled)
+                  #:on-advance (lambda () 'retry)
+                  #:on-blocked (lambda (v)
+                                 (set! blocked v)
+                                 'blocked)))
+               (check-true (campaign-result? blocked))
+               (check-eq? (campaign-result-status blocked) 'wave-blocked)
+               (check-equal? (campaign-result-findings blocked) (hash-ref rejection 'findings)))))
+
   (test-case "cancel, exhausted retry, stale identity, and postmerge never reenter implementation"
     (for ([mode '(cancel exhausted stale postmerge malformed)])
       (fixture
@@ -127,20 +189,17 @@
     ;; BUG-0084: a typed review-infra outcome relaunches the review from the
     ;; separate durable per-round budget; only exhaustion stops blocked. The
     ;; rejection budget is never touched in either case.
-    (fixture (lambda (root rec)
-               (define (infra reason)
-                 (run-coordinator-checkpoint root
-                                             plan
-                                             (car (campaign-record-waves rec))
-                                             "pending"
-                                             (lambda (_d _p _w)
-                                               (delivery-outcome 'review-infra reason))
-                                             #:on-advance (lambda () 'retry)
-                                             #:on-blocked (lambda (_) 'blocked)))
-               (parameterize ([current-gsd-review-infra-retry-limit 1])
-                 (check-equal? (infra "timeout") 'retry)
-                 (check-equal? (infra "timeout again") 'blocked))
-               (check-equal? (hash-ref (load-delivery-journal root plan 0)
-                                       'review-rejection-count
-                                       0)
-                             0)))))
+    (fixture
+     (lambda (root rec)
+       (define (infra reason)
+         (run-coordinator-checkpoint root
+                                     plan
+                                     (car (campaign-record-waves rec))
+                                     "pending"
+                                     (lambda (_d _p _w) (delivery-outcome 'review-infra reason))
+                                     #:on-advance (lambda () 'retry)
+                                     #:on-blocked (lambda (_) 'blocked)))
+       (parameterize ([current-gsd-review-infra-retry-limit 1])
+         (check-equal? (infra "timeout") 'retry)
+         (check-equal? (infra "timeout again") 'blocked))
+       (check-equal? (hash-ref (load-delivery-journal root plan 0) 'review-rejection-count 0) 0)))))

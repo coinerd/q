@@ -12,6 +12,14 @@ custom behavior at lifecycle points.
 
 ---
 
+## Remote scratch trust boundary
+
+The local coordinator may pass a session scratch allocation over its trusted
+local worker channel. Remote executor wire requests may not assert that
+allocation: the server rejects `trusted-scratch-root` with
+`remote-trusted-root-refused`, even for authenticated mTLS/capability clients.
+Remote scratch remains unavailable; client omission is not the security guard.
+
 ## 1. Safe Mode Guarantees
 
 Safe mode restricts the agent to read-only operations, preventing any
@@ -31,7 +39,7 @@ Safe mode activates when **any** of the following is true:
 When safe mode is active:
 
 - **Tool blocking** — The scheduler (`q/tools/scheduler.rkt`) blocks
-  execution of `bash`, `edit`, `write`, `firecrawl`, and all
+  execution of `bash`, `edit`, `write`, `delete-lines`, `firecrawl`, and all
   extension-provided tools before they run. Only `read`, `ls`, `grep`,
   `find`, and `date` are permitted.
 
@@ -41,9 +49,10 @@ When safe mode is active:
 
 - **Destructive command warnings** (default on) — Even when bash *is*
   available (full trust mode), the bash tool (`q/tools/builtins/bash.rkt`)
-  emits a `WARNING` to stderr for commands matching destructive patterns
-  such as `rm -rf`, `mkfs`, `dd of=/dev/`, `shutdown`, `reboot`,
-  `git push --force`, and pipe-to-shell patterns.
+  reports a `WARNING` in the tool result for commands matching destructive
+  patterns such as `rm -rf`, `mkfs`, `dd of=/dev/`, `shutdown`, `reboot`,
+  `git push --force`, and pipe-to-shell patterns. The sandbox worker has no
+  approval channel and refuses these commands instead of warning.
 
 - **Destructive command blocking** (opt-in) — When
   `current-block-destructive` is set to `#t`, destructive commands
@@ -226,7 +235,14 @@ The bash tool (`q/tools/builtins/bash.rkt`) executes commands via
 
 In safe mode, the `edit` and `write` tools check `safe-mode?` and
 `allowed-path?` before operating. The scheduler also validates path
-arguments in the preflight phase.
+arguments in the preflight phase, and re-validates the final arguments
+(both the tool allowlist and the path policy) after any `tool-call-pre`
+hook amendment, before approval or execution.
+
+A session scratch root (`tools/scratch.rkt`) is **not** a safe-mode path
+exception: safe mode is read-only, so `read`, `write`, `edit` and
+`delete-lines` all refuse the scratch root there and stay bounded by the
+project root.
 
 ### Tool isolation
 

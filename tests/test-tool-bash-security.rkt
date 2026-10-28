@@ -39,12 +39,13 @@
                   destructive-diagnostic
                   process-kill-refusal?
                   process-kill-diagnostic
-                  sanctioned-scratch-root)
+                  current-sanctioned-scratch-root)
          (only-in "../tools/tool.rkt" tool-result-is-error? tool-result-content)
          (only-in "../runtime/safe-mode.rkt"
                   safe-mode?
                   current-safe-mode-config
                   make-safe-mode-config)
+         racket/file
          racket/string)
 
 ;; ── SEC-01: Bypass-vector pattern tests ──
@@ -323,12 +324,96 @@
   (check-eq? (destructive-reason "producer | tee file.log &") 'tee-file-write))
 
 (test-case "BUG-0061: only containment-checked scratch redirections are allowed"
-  (define scratch-file (path->string (build-path sanctioned-scratch-root "formatter.log")))
-  (check-false (destructive-command? (format "racket scripts/pre-commit.rkt >~a 2>&1" scratch-file)))
-  (check-true (destructive-command? "raco fmt source.rkt >/tmp/source.rkt"))
-  (check-true (destructive-command? (format "raco fmt source.rkt >~a"
-                                            (build-path sanctioned-scratch-root ".." "escape.rkt"))))
-  (check-true (destructive-command? "printf bad >/etc/passwd")))
+  ;; W2: the redirection policy is armed per execution with ONE session root
+  ;; (there is no process-wide base default any more).
+  (define session-root (build-path (find-system-path 'temp-dir) "q-agent-scratch" "0123456789abcdef"))
+  (parameterize ([current-sanctioned-scratch-root session-root])
+    (define scratch-file (path->string (build-path session-root "formatter.log")))
+    (check-false (destructive-command? (format "racket scripts/pre-commit.rkt >~a 2>&1"
+                                               scratch-file)))
+    (check-true (destructive-command? "raco fmt source.rkt >/tmp/source.rkt"))
+    (check-true (destructive-command? (format "raco fmt source.rkt >~a"
+                                              (build-path session-root ".." "escape.rkt"))))
+    (check-true (destructive-command? (format "raco fmt source.rkt >~a"
+                                              (path->string (build-path (find-system-path 'temp-dir)
+                                                                        "q-agent-scratch")))))
+    (check-true (destructive-command? "printf bad >/etc/passwd"))))
+
+(test-case "W2: scratch redirection resolves symlinks before sanctioning"
+  ;; Sanctioning is a filesystem claim, not a string claim: a symlink INSIDE
+  ;; the armed root (or at the redirect target itself) makes bash write
+  ;; through the link. The target is therefore resolved on its longest
+  ;; existing prefix before containment is decided.
+  (define base (make-temporary-file "q-bash-sym-base-~a" 'directory))
+  (define foreign (make-temporary-file "q-bash-sym-foreign-~a" 'directory))
+  (define token "0123456789abcdef")
+  (define root (build-path base token))
+  (make-directory* root)
+  (dynamic-wind
+   void
+   (lambda ()
+     (define victim (build-path foreign "victim.txt"))
+     (display-to-file "original\n" victim #:exists 'replace)
+     (make-file-or-directory-link foreign (build-path root "escape-dir"))
+     (make-file-or-directory-link victim (build-path root "victim-link"))
+     (parameterize ([current-sanctioned-scratch-root root])
+       ;; A directory symlink inside the root is an escape.
+       (check-true (destructive-command?
+                    (format "raco fmt x.rkt >~a"
+                            (path->string (build-path root "escape-dir" "pwned.txt")))))
+       ;; A file symlink at the target itself is an escape.
+       (check-true (destructive-command? (format "raco fmt x.rkt >~a"
+                                                 (path->string (build-path root "victim-link")))))
+       ;; A plain new file below the root stays sanctioned.
+       (check-false (destructive-command? (format "raco fmt x.rkt >~a"
+                                                  (path->string (build-path root "plain.log"))))))
+     ;; End to end: the direct bash tool refuses the escaped redirect and no
+     ;; bytes land outside the session root.
+     (parameterize ([current-sanctioned-scratch-root root]
+                    [current-bash-execution-config (make-bash-execution-config #:block? #t)])
+       (define escaped
+         (tool-bash (hasheq 'command
+                            (format "echo escaped >~a"
+                                    (path->string (build-path root "escape-dir" "pwned.txt"))))))
+       (check-true (tool-result-is-error? escaped))
+       (check-false (file-exists? (build-path foreign "pwned.txt")))))
+   (lambda ()
+     (delete-directory/files base #:must-exist? #f)
+     (delete-directory/files foreign #:must-exist? #f))))
+
+(test-case "W2: a symlinked ancestor spelling describes the same session root"
+  ;; The platform temp directory is itself an alias on some systems
+  ;; (/var -> /private/var on macOS), and a model can reach its own root
+  ;; through a symlinked spelling. Containment therefore compares CANONICAL
+  ;; spellings of both sides instead of raw strings.
+  (define real (make-temporary-file "q-bash-alias-real-~a" 'directory))
+  (define alias-parent (make-temporary-file "q-bash-alias-~a" 'directory))
+  (define alias (build-path alias-parent "alias"))
+  (make-file-or-directory-link real alias)
+  (define token "0123456789abcdef")
+  (define real-root (build-path real token))
+  (make-directory* real-root)
+  (define alias-root (build-path alias token))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; Armed with the alias spelling, the physical spelling stays sanctioned.
+     (parameterize ([current-sanctioned-scratch-root alias-root])
+       (check-false (destructive-command?
+                     (format "echo ok >~a" (path->string (build-path real-root "physical.log")))))
+       (check-false (destructive-command?
+                     (format "echo ok >~a" (path->string (build-path alias-root "aliased.log"))))))
+     ;; And the reverse spelling agrees: one root, one containment decision.
+     (parameterize ([current-sanctioned-scratch-root real-root])
+       (check-false (destructive-command?
+                     (format "echo ok >~a" (path->string (build-path alias-root "aliased.log")))))
+       ;; A SIBLING token below the same base is still outside this root.
+       (check-true (destructive-command?
+                    (format "echo no >~a"
+                            (path->string (build-path real "fedcba9876543210" "x.log")))))))
+   (lambda ()
+     (delete-directory/files real #:must-exist? #f)
+     (delete-directory/files alias-parent #:must-exist? #f))))
 
 (test-case "BUG-0061: redirection diagnostics name reason, segment, and target"
   (define command "echo ok; raco fmt source.rkt >/tmp/source.rkt; tail /tmp/source.rkt")

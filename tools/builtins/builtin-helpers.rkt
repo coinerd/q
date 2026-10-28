@@ -10,11 +10,54 @@
          (only-in "../../util/safe-mode/safe-mode-predicates.rkt"
                   safe-mode?
                   allowed-path?
-                  safe-mode-project-root))
+                  safe-mode-project-root)
+         (only-in "../../util/path/path-helpers.rkt" expand-home-path))
 
 (provide (contract-out [require-safe-path! (-> (or/c path? string?) string? (or/c #f string?))]
                        [check-utf8-file? (-> path? (or/c #t string?))]
-                       [validate-utf8-bytes (-> bytes? (or/c #t string?))]))
+                       [validate-utf8-bytes (-> bytes? (or/c #t string?))]
+                       [expand-tool-path (->* ((or/c path? string?)) ((or/c path? string? #f)) path?)]
+                       [canonical-tool-path
+                        (->* ((or/c path? string?)) ((or/c path? string? #f)) path?)]))
+
+;; --------------------------------------------------
+;; W2: canonical path resolution shared by find/read/edit/write
+;; --------------------------------------------------
+
+;; An execution working directory is a path or a string (BUG-0089 tolerates
+;; the string form end to end), so the shared resolver accepts both. A
+;; non-path, non-string value still fails loudly at the boundary.
+(define (working-directory->path working-directory)
+  (cond
+    [(not working-directory) (current-directory)]
+    [(path? working-directory) working-directory]
+    [(string? working-directory) (string->path working-directory)]
+    [else (raise-argument-error 'expand-tool-path "path-string? or #f" working-directory)]))
+
+;; Absolute, simplified path in the executing filesystem namespace, without
+;; resolving the final symlink. find uses this: it preserves the historical
+;; search-root semantics while guaranteeing absolute, openable results.
+(define (expand-tool-path path-value [working-directory #f])
+  (define expanded (expand-home-path path-value))
+  (define p
+    (if (path? expanded)
+        expanded
+        (string->path expanded)))
+  (parameterize ([current-directory (working-directory->path working-directory)])
+    (simplify-path (path->complete-path p) #f)))
+
+;; Absolute path with symlink components resolved — the identity read/edit/
+;; write use for filesystem operations and for the path they return. A path
+;; that cannot be resolved (e.g. a missing parent) is returned in its
+;; absolute simplified form, preserving the caller's own not-found handling.
+(define (canonical-tool-path path-value [working-directory #f])
+  (define absolute (expand-tool-path path-value working-directory))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "canonical-tool-path: resolve failed for ~a: ~a"
+                                            absolute
+                                            (exn-message e))
+                               absolute)])
+    (simplify-path (resolve-path absolute) #f)))
 
 ;; --------------------------------------------------
 ;; UTF-8 byte-level validator
@@ -113,11 +156,20 @@
             [(>= b #xFE) (format "Invalid UTF-8 at byte ~a: invalid lead byte 0x~X" i b)]
             [else (format "Invalid UTF-8 at byte ~a: unexpected continuation byte 0x~X" i b)])))))
 
-;; require-safe-path! : string? string? -> (or/c #f string?)
+;; require-safe-path! : (or/c path? string?) string? -> (or/c #f string?)
 ;; Validates that a path is allowed under safe-mode constraints.
 ;; Returns #f if path is allowed, or an error message string if blocked.
 ;; Encapsulates the repeated pattern:
 ;;   (and (safe-mode?) (not (allowed-path? path))) -> error message
+;;
+;; W2 review: safe mode stays READ-ONLY, exactly as its allowlist says. The
+;; blocked-tools list already refuses bash/edit/write outright, so a session
+;; scratch allocation must NOT be turned into a safe-mode write exception here:
+;; that would widen write/edit (and contradict the read-only policy) for any
+;; caller that reaches the tool directly. A session's scratch root is therefore
+;; unavailable in safe mode, and read/write/edit all refuse it consistently via
+;; the ordinary project-root path policy. Scratch remains a trusted per-session
+;; destination only when safe mode is off.
 (define (require-safe-path! path-str tool-name)
   (cond
     [(and (safe-mode?) (not (allowed-path? path-str)))

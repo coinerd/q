@@ -104,7 +104,8 @@
                               #:progress-callback (or/c procedure? #f)
                               #:permission-config permission-config?
                               #:browser-service (or/c any/c #f)
-                              #:capabilities any/c)
+                              #:capabilities any/c
+                              #:scratch-root (or/c path-string? #f))
                              exec-context?)])
          exec-context?
          exec-context-working-directory
@@ -118,6 +119,7 @@
          exec-context-bytes-written
          exec-context-browser-service
          exec-context-capabilities
+         exec-context-scratch-root
          emit-progress!
          ;; ── Tool-call struct (re-exported from agent/types.rkt) ──
          tool-call

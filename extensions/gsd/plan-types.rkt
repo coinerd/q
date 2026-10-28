@@ -16,6 +16,12 @@
          racket/list
          racket/format)
 
+;; W5 (R-019): the accepted status-spelling vocabulary is owned by
+;; wave-status.rkt. This module keeps only its own legacy row-vocabulary
+;; mapping and never owns a second spelling table or a `pending` fallback.
+(require/typed "wave-status.rkt"
+               [wave-status-symbol ((U String Symbol) -> Symbol)])
+
 ;; ============================================================
 ;; Type definitions
 ;; ============================================================
@@ -190,13 +196,23 @@
 
 (: string->wave-status : String -> WaveStatus)
 (define (string->wave-status str)
-  (cond
-    [(string=? str "Inbox") 'pending]
-    [(string=? str "In-Progress") 'in-progress]
-    [(string=? str "DONE") 'completed]
-    [(string=? str "FAILED") 'failed]
-    [(string=? str "DEFERRED") 'skipped]
-    [else 'pending]))
+  ;; Delegate every accepted spelling (including the historical aliases
+  ;; PENDING / NOT STARTED / COMPLETED / IN PROGRESS) to the shared status
+  ;; owner. An unknown spelling raises its typed `exn:fail:wave-status`
+  ;; instead of silently becoming 'pending. The case below is a TYPE mapping
+  ;; (canonical durable symbol -> legacy plan-types row symbol), not a
+  ;; spelling table.
+  (case (wave-status-symbol str)
+    [(pending) 'pending]
+    [(in-progress) 'in-progress]
+    [(done) 'completed]
+    [(failed) 'failed]
+    [(deferred) 'skipped]
+    [else
+     (raise-argument-error
+      'string->wave-status
+      "a plan-row wave status (Inbox, In-Progress, DONE, FAILED, DEFERRED)"
+      str)]))
 
 (: gsd-wave-slug : gsd-wave -> String)
 (define (gsd-wave-slug w)

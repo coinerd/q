@@ -54,13 +54,13 @@
 ;; Scanner false-positive exclusions: (file . (effect ...)) where the token is a
 ;; symbol/predicate, not a real call (e.g. policy.rkt's 'write-file decision
 ;; symbol). path-ops for policy.rkt is REAL (string->path/path->string in
-;; in-planning-dir?); fs-read for wave-executor.rkt is REAL (call-with-input-file).
-;; git for verify-command-format.rkt is a FALSE POSITIVE (R75): the token is the
-;; quoted "git" entry in the verify-accept-first-tokens vocabulary DATA — a
-;; pure canonicalization module (requires only racket/string) that never
-;; invokes git; declaring the effect would be the dishonest direction.
-(define scanner-exclusions '(("policy.rkt" . (fs-write))
-                             ("verify-command-format.rkt" . (git))))
+;; in-planning-dir?); fs-read for wave-executor.rkt is REAL when present.
+;; git for verify-command-grammar.rkt is a FALSE POSITIVE (R75): the token is
+;; the quoted "git" entry in the accepted-command vocabulary DATA, not an
+;; invocation. policy.rkt's fs-write match is likewise documentation text.
+;; W5: the list is empty of new entries — a real opening of an output port is
+;; fs-write, not something to waive.
+(define scanner-exclusions '(("policy.rkt" . (fs-write)) ("verify-command-grammar.rkt" . (git))))
 
 ;; Scan a source file's non-comment code for effect markers.
 (define (scan-effects file)
@@ -75,7 +75,7 @@
   (for/list ([eff (in-list valid-effects)]
              #:when
              (case eff
-               [(fs-write) (has? #rx"\\((?:write-file|with-output-to-file|call-with-output-file)")]
+               [(fs-write) (has? #rx"\\((?:write-file|with-output-to-file|call-with-output-file|open-output-file)")]
                [(fs-read) (has? #rx"call-with-input-file|file->string|file->lines|file->bytes")]
                [(fs-rename) (has? #rx"rename-file-or-directory|copy-file")]
                [(fs-delete) (has? #rx"delete-file|delete-directory")]
@@ -128,10 +128,16 @@
       ;; (supplemental-evidence-store-core);
       ;; +1 R76 (BUG-0076) shared leaf delivery-root resolver
       ;; (git-root-layout).
-      (check-equal?
-       (length inventory)
-       106
-       "105 existing modules + BUG-0090 journal store core + R76 git-root-layout"))
+      ;; +3 GSD simplification W1 planning paths/preflight/Verify grammar.
+      ;; +3 GSD simplification W3 (campaign-decision, campaign-lease,
+      ;; campaign-request): the pure decision, the ONE process-safe lease and
+      ;; the interface-safe request value moved out of go-orchestrator.
+      ;; +1 GSD simplification W4 (planning-artifact-ownership): the ONE
+      ;; authentic ownership-marker predicate, a pure read shell consumed by the
+      ;; snapshot sweep, supersede rotation, archive cleanup and the doctor.
+      (check-equal? (length inventory)
+                    113
+                    "every on-disk GSD module has exactly one inventory entry"))
 
     (test-case "supplemental worker descriptor projects policy without dispatch authority"
       (define descriptor (hash-ref inventory-map "supplemental-author-contract.rkt"))
@@ -196,6 +202,66 @@
                                                "../gsd-planning/execution-policy"))])
         (for ([dep (in-list (cdr binding))])
           (check-not-false (member dep (entry-deps (hash-ref inventory-map (car binding))))))))
+
+    (test-case "W3: the pure campaign decision is the ONE routing authority"
+      (define decision (hash-ref inventory-map "campaign-decision.rkt"))
+      ;; A decision kernel: no effects, no parameters, and its only dependency
+      ;; is the campaign record it inspects.
+      (check-equal? (entry-effects decision) '())
+      (check-equal? (entry-params decision) '())
+      (check-equal? (entry-deps decision) '("campaign-state"))
+      (check-not-false (memq (entry-domain decision)
+                             '(pure-planning transition-logic)))
+      ;; The interpreter is no longer a routing owner: the lease (mkdir/lock) and
+      ;; the request value are separate modules, so the orchestrator keeps only
+      ;; its own marker effects.
+      (define orchestrator (hash-ref inventory-map "go-orchestrator.rkt"))
+      (check-false (memq 'mkdir (entry-effects orchestrator))
+                   "campaign mkdir moved to campaign-lease.rkt")
+      (check-not-false (member "campaign-lease" (entry-deps orchestrator)))
+      (check-not-false (member "campaign-decision" (entry-deps orchestrator)))
+      (check-not-false (member "campaign-request" (entry-deps orchestrator))))
+
+    (test-case "W3: the lease owns the lock-file effects the loop used to hide"
+      (define lease (hash-ref inventory-map "campaign-lease.rkt"))
+      (check-equal? (entry-domain lease) 'persistence)
+      ;; It creates the campaign directory, opens its own lock-file port and
+      ;; renders the lock path — no effect is waived to the orchestrator.
+      (check-not-false (memq 'mkdir (entry-effects lease)))
+      (check-not-false (memq 'fs-write (entry-effects lease)))
+      (check-not-false (memq 'fs-read (entry-effects lease)))
+      (check-not-false (memq 'path-ops (entry-effects lease)))
+      ;; The interface-safe request value is a value boundary: no effects.
+      (define request (hash-ref inventory-map "campaign-request.rkt"))
+      (check-equal? (entry-effects request) '())
+      (check-not-false (member "delivery-handoff" (entry-deps request))))
+
+    (test-case "W5: prompts declares path-ops and delegates the scratch effect"
+      (define prompts (hash-ref inventory-map "prompts.rkt"))
+      (check-not-false (memq 'path-ops (entry-effects prompts))
+                       "scratch guidance renders an absolute path")
+      ;; The ONE allocation is owned by tools/scratch.rkt; prompts only depends
+      ;; on it and must not grow a second allocator.
+      (check-not-false (member "tools/scratch" (entry-deps prompts)))
+      (check-false (memq 'mkdir (entry-effects prompts))))
+
+    (test-case "W4: the ownership predicate is a pure read shell with one owner"
+      (define ownership (hash-ref inventory-map "planning-artifact-ownership.rkt"))
+      ;; Read-only by contract: no write/rename/delete/mkdir effects at all.
+      (check-equal? (entry-effects ownership) '(fs-read))
+      (check-equal? (entry-params ownership) '())
+      (check-not-false (memq (entry-domain ownership)
+                             '(persistence pure-planning)))
+      ;; Every destructive consumer depends on it instead of re-implementing
+      ;; ownership from marker existence or a name deny-list.
+      (for ([file (in-list '("plan-snapshot.rkt"
+                             "command-handlers.rkt"
+                             "archive.rkt"
+                             "planning-artifact-validation.rkt"))])
+        (check-not-false
+         (member "planning-artifact-ownership"
+                 (entry-deps (hash-ref inventory-map file)))
+         (format "~a must consume the ONE ownership predicate" file))))
 
     (test-case "domain vocabulary is closed"
       (for ([e (in-list inventory)])

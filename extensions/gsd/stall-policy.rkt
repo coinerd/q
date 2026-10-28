@@ -21,7 +21,13 @@
          (only-in "wave-docs.rkt" wave-slug read-wave-doc)
          (only-in "prompts.rkt" executor-reanchor-prompt)
          (only-in "wave-executor.rkt" stall-watchdog-observe! stall-watchdog-snapshot)
-         (only-in "wave-runner-port.rkt" wave-execution-outcome)
+         (only-in "wave-runner-port.rkt"
+                  wave-execution-outcome
+                  wave-execution-outcome?
+                  wave-execution-outcome-message
+                  wave-execution-outcome/typed
+                  wave-execution-outcome-cause
+                  OUTCOME-CAUSE-STALL)
          (only-in "../../runtime/settings-query.rkt"
                   gsd-stall-soft-limit
                   gsd-stall-hard-limit
@@ -45,6 +51,11 @@
          wrap-run-one-with-stall-watchdog
          stall-cause-prefix
          stall-cause-message?
+         STALL-CAUSE-CODE
+         stall-cause-code?
+         stall-cause-code-of-message
+         verification-cause-no-change
+         verification-cause-of-message
          no-change-rejection-prefix
          no-change-rejection?
          no-change-target-files
@@ -185,7 +196,9 @@
           ;; the attempt back up with prior-attempt context instead of
           ;; halting the campaign on 'wave-failed.
           (with-handlers ([gsd-stall-exn? (lambda (e)
-                                            (wave-execution-outcome 'infra-failed (exn-message e)))])
+                                            (wave-execution-outcome/typed 'infra-failed
+                                                                          (exn-message e)
+                                                                          STALL-CAUSE-CODE))])
             (parameterize
                 ([current-post-tool-result-hook
                   (lambda (msgs sid root)
@@ -242,17 +255,44 @@
 ;; stall message — so the gsd-stall-exn? handlers at the runner boundary
 ;; never fire and the death classified as a plain 'failed. Recognize the
 ;; canonical prefix here and route it to the retryable infra-failed path.
+;;
+;; GSD simplification W5: these message predicates are the DATED COMPAT
+;; READERS. The internal authorities are typed: the stall CAUSE on the runner
+;; outcome (wave-runner-port.rkt) and the verdict CODE on the verification
+;; value (delivery-verifier.rkt: VERIFICATION-CODE-NO-CHANGE). They delegate
+;; to the same vocabulary here so there is no second classification policy.
 (define stall-cause-prefix "mutation-stall watchdog:")
+
+;; The typed stall cause (re-exported from the outcome vocabulary so the
+;; legacy reader below and every typed adapter agree on ONE symbol).
+(define STALL-CAUSE-CODE OUTCOME-CAUSE-STALL)
+
+(define (stall-cause-code? cause)
+  (eq? cause STALL-CAUSE-CODE))
+
+;; DATED COMPAT READER: classify the historic executor failure text as a
+;; typed cause. Used only at boundaries that cannot carry a typed value (the
+;; runtime loop-result metadata string, third-party runners, legacy values).
+(define (stall-cause-code-of-message msg)
+  (and (string? msg)
+       (>= (string-length msg) (string-length stall-cause-prefix))
+       (string-prefix? msg stall-cause-prefix)
+       STALL-CAUSE-CODE))
 
 ;; BUG-0037 W1: classify a failure message as a stall-watchdog kill so
 ;; infra-retry treats it as bounded-auto-resume, and W6 (BUG-0040) maps it
 ;; to the 'stall-terminal notification kind.
+;; LEGACY (dated) — delegates to stall-cause-code-of-message; no internal
+;; decision may use it (the typed cause/verdict is authoritative).
 (define (stall-cause-message? msg)
-  (and (string? msg)
-       (>= (string-length msg) (string-length stall-cause-prefix))
-       (string-prefix? msg stall-cause-prefix)))
+  (stall-cause-code? (stall-cause-code-of-message msg)))
 
 (define no-change-rejection-prefix "no wave target files changed")
+
+;; The typed verification verdict this legacy reader maps onto. Must equal
+;; delivery-verifier.rkt's VERIFICATION-CODE-NO-CHANGE (asserted by
+;; tests/test-gsd-stall-policy.rkt; no module dependency cycle).
+(define verification-cause-no-change 'no-change)
 
 ;; v1.00.22 W7 (BUG-0042): effective stall-threshold composition moved
 ;; here from run-campaign-wave (v1.00.21 W1, BUG-0044) — behavior
@@ -278,14 +318,26 @@
               (or (gsd-stall-backstop settings) STALL-BACKSTOP-LIMIT-DEFAULT)
               backstop)))
 
+;; DATED COMPAT READER: the historic verifier message shape → typed verdict.
+;; Only the exact legacy text maps to `verification-cause-no-change`; anything
+;; else is unclassified (#f). No internal decision may call this: the
+;; coordinator reads the verification VALUE's code.
+(define (verification-cause-of-message message)
+  (and (string? message)
+       (>= (string-length message) (string-length no-change-rejection-prefix))
+       (string-prefix? message no-change-rejection-prefix)
+       verification-cause-no-change))
+
+;; LEGACY (dated) predicate, delegating to the ONE typed verdict vocabulary.
 (define (no-change-rejection? verifier-message)
-  (and (string? verifier-message)
-       (>= (string-length verifier-message) (string-length no-change-rejection-prefix))
-       (string-prefix? verifier-message no-change-rejection-prefix)))
+  (eq? (verification-cause-of-message verifier-message) verification-cause-no-change))
 
 ;; "no wave target files changed: f1, f2" → '("f1" "f2"). The verifier
 ;; comma-space-joins the declared targets into its message; recover the list
 ;; so the retry prompt can name the files explicitly.
+;; LEGACY (dated): the typed retry prompt uses
+;; delivery-verification-target-files instead; retained for old message
+;; consumers only.
 (define (no-change-target-files verifier-message)
   (define body
     (substring verifier-message
@@ -293,8 +345,18 @@
                     (add1 (string-length no-change-rejection-prefix)))))
   (filter non-empty-string? (map string-trim (string-split body ","))))
 
-;; v1.00.22 W6 (BUG-0040): map a runner failure message to the terminal
-;; notification kind — a stall-watchdog kill is its own surface kind so a
-;; detached operator can tell "broken" from "hung".
-(define (wave-failure-notification-kind message)
-  (if (and (string? message) (stall-cause-message? message)) 'stall-terminal 'wave-failed))
+;; v1.00.22 W6 (BUG-0040): map a runner failure to the terminal notification
+;; kind — a stall-watchdog kill is its own surface kind so a detached operator
+;; can tell "broken" from "hung".
+;; TYPED FIRST: an outcome value or cause symbol decides; a plain string is the
+;; dated reader for legacy/external callers that only have a message.
+(define (wave-failure-notification-kind failure)
+  (define cause
+    (cond
+      [(wave-execution-outcome? failure)
+       (or (wave-execution-outcome-cause failure)
+           (stall-cause-code-of-message (wave-execution-outcome-message failure)))]
+      [(symbol? failure) failure]
+      [(string? failure) (stall-cause-code-of-message failure)]
+      [else #f]))
+  (if (stall-cause-code? cause) 'stall-terminal 'wave-failed))

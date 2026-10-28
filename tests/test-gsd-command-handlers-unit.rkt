@@ -12,12 +12,22 @@
          racket/string
          rackunit
          rackunit/text-ui
-         (only-in "../extensions/gsd/plan-types.rkt" gsd-plan gsd-wave)
-         (only-in "../extensions/gsd/wave-executor.rkt"
-                  current-gsd-worktree-isolation
-                  wave-worktree-dir)
+         (only-in "../extensions/gsd/plan-types.rkt"
+                  gsd-plan
+                  gsd-plan-waves
+                  gsd-wave
+                  gsd-wave-status)
          "../extensions/gsd/command-parser.rkt"
-         "../extensions/gsd/command-handlers.rkt")
+         "../extensions/gsd/command-handlers.rkt"
+         (only-in "../extensions/gsd/planning-artifact-validation.rkt"
+                  validate-plan-artifacts
+                  plan-validation-finding-code
+                  plan-validation-finding-message
+                  plan-validation-finding-wave-idx)
+         (only-in "../tools/scratch.rkt"
+                  current-scratch-base-dir
+                  reset-session-scratch-registry!
+                  allocate-session-scratch-root!))
 
 (define (make-scratch-prompt-fixture)
   (define dir (make-temporary-file "scratch-prompt-~a" 'directory))
@@ -45,6 +55,28 @@
             #f
             '()
             '()))
+
+;; A complete, otherwise-preflight-clean plan whose only variable is the
+;; PLAN.md row's bracket status spelling.
+(define (make-status-plan-fixture status)
+  (define dir (make-temporary-file "status-preflight-~a" 'directory))
+  (make-directory* (build-path dir ".planning" "waves"))
+  (call-with-output-file
+   (build-path dir ".planning" "PLAN.md")
+   (lambda (out)
+     (display (format "# Plan\n\n- [~a] W0: status probe → waves/W0-status-probe.md\n" status)
+              out))
+   #:exists 'truncate)
+  (call-with-output-file
+   (build-path dir ".planning" "waves" "W0-status-probe.md")
+   (lambda (out)
+     (display (string-append "# Wave 0\nStatus: Inbox\n\n"
+                             "## Files\n- File: q/status-probe.rkt\n\n"
+                             "## Verify\n- `printf 'status-probe'` green.\n\n"
+                             "## Done\n- status probe done\n")
+              out))
+   #:exists 'truncate)
+  dir)
 
 (define suite
   (test-suite "GSD command parsing + dispatch unit tests"
@@ -229,28 +261,55 @@
       (define doc "## Last Failure\nline one\nline two\n## Next")
       (check-equal? (extract-last-failure doc) "line one\nline two"))
 
-    ;; ── sandbox-write-scratch-parity W1: executor scratch guidance ──
+    ;; ── W2: one trusted session scratch root in the executor prompt ──
 
-    (test-case "single-wave prompt embeds scratch guidance only when a token is supplied"
+    (test-case "single-wave prompt embeds the trusted scratch root only when a token or root is supplied"
       (define dir (make-scratch-prompt-fixture))
-      (dynamic-wind
-       void
-       (lambda ()
-         (define plan (make-scratch-test-plan))
-         (define plain (build-single-wave-prompt dir plan 0))
-         (check-false (string-contains? plain ".planning/scratch/")
-                      "no token → no scratch section (backward-compatible bytes)")
-         (define guided
-           (build-single-wave-prompt dir
-                                     plan
-                                     0
-                                     #:scratch-token "tok1234567890ab"
-                                     #:scratch-root-abs "/tmp/abs/.planning/scratch/tok1234567890ab"))
-         (check-true (string-contains? guided ".planning/scratch/tok1234567890ab"))
-         (check-true (string-contains? guided "/tmp/abs/.planning/scratch/tok1234567890ab")
-                     "concrete absolute path present")
-         (check-true (string-contains? guided "current working directory")))
-       (lambda () (delete-directory/files dir #:must-exist? #f))))
+      (define base (make-temporary-file "q-gsd-scratch-handlers-~a" 'directory))
+      (dynamic-wind void
+                    (lambda ()
+                      (parameterize ([current-scratch-base-dir base])
+                        (reset-session-scratch-registry!)
+                        (define plan (make-scratch-test-plan))
+                        (define plain (build-single-wave-prompt dir plan 0))
+                        (check-false (string-contains? plain "Session scratch directory")
+                                     "no token → no scratch section (backward-compatible bytes)")
+                        (define expected
+                          (path->string
+                           (allocate-session-scratch-root! "0123456789abcdef" "0123456789abcdef")))
+                        (define guided
+                          (build-single-wave-prompt dir
+                                                    plan
+                                                    0
+                                                    #:scratch-token "0123456789abcdef"
+                                                    #:scratch-root-abs
+                                                    "/tmp/abs/.planning/scratch/legacy"))
+                        (check-true (string-contains? guided (format "~a" expected))
+                                    "one concrete trusted absolute path")
+                        (check-false (string-contains? guided ".planning/scratch")
+                                     "the obsolete .planning scratch path is retired")
+                        (check-false (string-contains? guided "/tmp/abs/.planning/scratch/legacy")
+                                     "a legacy absolute root is not advertised")
+                        ;; W2: when the campaign interpreter hands the prompt
+                        ;; builder the exact root allocated for THIS executor
+                        ;; session, that exact root is what the prompt
+                        ;; advertises (no re-derivation, no shared process root).
+                        (define session-root
+                          (allocate-session-scratch-root! "wave-attempt-token" "fedcba9876543210"))
+                        (define exact
+                          (build-single-wave-prompt dir
+                                                    plan
+                                                    0
+                                                    #:scratch-token "wave-attempt-token"
+                                                    #:scratch-root-abs session-root))
+                        (check-true (string-contains? exact (path->string session-root))
+                                    "the session's own allocated root is advertised")
+                        (check-false (string-contains? exact expected)
+                                     "another session's root is never advertised")
+                        (reset-session-scratch-registry!)))
+                    (lambda ()
+                      (delete-directory/files dir #:must-exist? #f)
+                      (delete-directory/files base #:must-exist? #f))))
 
     (test-case "fresh executor scratch tokens are opaque 16-hex and distinct"
       (define a (fresh-executor-scratch-token))
@@ -259,24 +318,43 @@
       (check-true (regexp-match? #px"^[0-9a-f]{16}$" a))
       (check-false (string=? a b) "fresh sessions must not share a scratch token"))
 
-    (test-case "scratch root follows worker roots: worktree in isolation, base-dir otherwise"
-      (define base (make-temporary-file "scratch-root-~a" 'directory))
+    ;; === W5: typed unknown status at the /go preflight seam ===
+
+    (test-case "W5: unknown row status is a stable preflight finding and /go rejects it"
+      (define dir (make-status-plan-fixture "REWORK"))
       (dynamic-wind
        void
        (lambda ()
-         (parameterize ([current-gsd-worktree-isolation #f])
-           (check-equal? (executor-scratch-root-abs base "abcdef1234567890" 0 "tok1234567890ab")
-                         (path->string (simplify-path
-                                        (build-path base ".planning" "scratch" "tok1234567890ab")
-                                        #f))))
-         (parameterize ([current-gsd-worktree-isolation #t])
-           (check-equal? (executor-scratch-root-abs base "abcdef1234567890" 0 "tok1234567890ab")
-                         (path->string (simplify-path
-                                        (build-path (wave-worktree-dir base "abcdef1234567890" 0)
-                                                    ".planning"
-                                                    "scratch"
-                                                    "tok1234567890ab")
-                                        #f)))))
-       (lambda () (delete-directory/files base #:must-exist? #f))))))
+         (define kernel (validate-plan-artifacts dir))
+         (check-false (hash-ref kernel 'ok?) "unknown status is blocking, never a pending wave")
+         (check-not-false (member 'wave-status-unknown (hash-ref kernel 'codes))
+                          (format "stable machine code expected; got ~s" (hash-ref kernel 'codes)))
+         (define finding
+           (for/first ([f (in-list (hash-ref kernel 'findings))]
+                       #:when (eq? (plan-validation-finding-code f) 'wave-status-unknown))
+             f))
+         (check-not-false finding "the unknown status is a named finding")
+         (when finding
+           (check-equal? (plan-validation-finding-wave-idx finding) 0)
+           (check-true (string-contains? (plan-validation-finding-message finding) "W0"))
+           (check-true (string-contains? (plan-validation-finding-message finding) "REWORK")))
+         ;; /go's own seam turns the typed diagnostic into an ordinary error
+         ;; result (no uncaught exception, no dispatch).
+         (define go-result (validate-plan-for-go dir))
+         (check-equal? (car go-result) 'error)
+         (check-true (string-contains? (cadr go-result) "unknown wave status"))
+         (check-true (string-contains? (cadr go-result) "REWORK")))
+       (lambda () (delete-directory/files dir #:must-exist? #f))))
+
+    (test-case "W5: legacy status aliases keep their canonical meaning in preflight"
+      (define dir (make-status-plan-fixture "COMPLETED"))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define kernel (validate-plan-artifacts dir))
+         (check-true (hash-ref kernel 'ok?) (hash-ref kernel 'error-message))
+         (define wave (car (gsd-plan-waves (hash-ref kernel 'plan))))
+         (check-eq? (gsd-wave-status wave) 'completed))
+       (lambda () (delete-directory/files dir #:must-exist? #f))))))
 
 (run-tests suite)

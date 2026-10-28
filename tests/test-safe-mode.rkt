@@ -8,7 +8,11 @@
 (require rackunit
          racket/port
          racket/runtime-path
-         "../runtime/safe-mode.rkt")
+         "../runtime/safe-mode.rkt"
+         (only-in "../tools/registry-table.rkt"
+                  tool-specs
+                  tool-spec-name
+                  tool-spec-required-capability))
 
 (define-runtime-path test-dir ".")
 
@@ -58,6 +62,35 @@
     (check-true (allowed-tool? "ls"))
     (check-true (allowed-tool? "grep"))
     (check-true (allowed-tool? "find"))))
+
+;; ============================================================
+;; 3b. Every registry file-write/shell-exec tool stays denied, even
+;; when a custom allowlist names it. The set is DERIVED from the
+;; registry specs at test time so a future file-write tool cannot be
+;; registered without inheriting the safe-mode denial; the safe-mode
+;; module itself does not import the registry (no dependency cycle).
+;; ============================================================
+
+(test-case "every registry file-write/shell-exec tool is denied in safe mode"
+  (define file-write-or-shell-exec
+    (for/list ([spec (in-list tool-specs)]
+               #:when (memq (tool-spec-required-capability spec) '(file-write shell-exec)))
+      (tool-spec-name spec)))
+  (check-not-false (member "bash" file-write-or-shell-exec))
+  (check-not-false (member "write" file-write-or-shell-exec))
+  (check-not-false (member "edit" file-write-or-shell-exec))
+  (check-not-false (member "delete-lines" file-write-or-shell-exec))
+  (parameterize ([current-safe-mode #t])
+    (for ([name (in-list file-write-or-shell-exec)])
+      (check-false (allowed-tool? name)
+                   (format "~a must be denied by safe mode" name))))
+  ;; A custom allowlist is not an admission path: blocked-tools wins.
+  (parameterize ([current-safe-mode-config (make-safe-mode-config #:active #t
+                                                                   #:allowed-tools file-write-or-shell-exec)])
+    (check-true (safe-mode?))
+    (for ([name (in-list file-write-or-shell-exec)])
+      (check-false (allowed-tool? name)
+                   (format "~a must not be admitted by an allowlist in safe mode" name)))))
 
 ;; ============================================================
 ;; 4. allowed-tool?: extension:foo blocked in safe mode
@@ -114,7 +147,7 @@
     (check-true (hash-has-key? cfg 'project-root) "has project-root key")
     (check-true (hash-ref cfg 'active?) "active? is #t")
     (check-equal? (hash-ref cfg 'trust-level) 'restricted)
-    (for ([expected '("bash" "edit" "write" "firecrawl")])
+    (for ([expected '("bash" "edit" "write" "delete-lines" "firecrawl")])
       (check-not-false (member expected (hash-ref cfg 'blocked-tools))
                        (format "blocked-tools contains ~a" expected)))))
 

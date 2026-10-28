@@ -70,6 +70,6 @@ in the current project for schema compliance.
 
 ## See Also
 
-- [Extension API](api.rkt) — public extension interface
+- [Extension API](../extensions/api.rkt) — public extension interface
 - [API Stability](../docs/api-stability.md) — tier definitions
 - [Publishing Guide](../docs/publish-verify-workflow.md) — how to publish

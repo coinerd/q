@@ -29,6 +29,11 @@
          "delivery-receipt.rkt"
          "evidence-repair-controller.rkt"
          "evidence-author-repair.rkt"
+         (only-in "planning-paths.rkt"
+                  wave-evidence-report-rel-path
+                  wave-evidence-report-rel-prefix
+                  wave-review-report-rel-prefix
+                  wave-validation-report-rel-prefix)
          (only-in "delivery-publication.rkt" replay-approved-publication! load-approved-publication)
          (only-in "delivery-journal.rkt"
                   delivery-stages
@@ -48,9 +53,7 @@
                   review-runner-installed?
                   auto-review-dispatch!)
          ;; R76 (BUG-0076): shared layout-aware delivery-root resolution.
-         (only-in "git-root-layout.rkt"
-                  delivery-root-or-raise
-                  git-root-marker?))
+         (only-in "git-root-layout.rkt" delivery-root-or-raise git-root-marker?))
 
 (provide delivery-effect-result
          delivery-effect-result?
@@ -60,6 +63,7 @@
          delivery-outcome?
          delivery-outcome-kind
          delivery-outcome-message
+         delivery-outcome-data
          run-delivery-coordinator!
          default-delivery-controller
          binding-generation
@@ -112,27 +116,49 @@
 (define (delivery-effect-result-data r)
   (cdr r))
 
-(define (delivery-outcome kind [message ""])
-  (cons kind
-        (if (string? message)
-            message
-            (format "~a" message))))
+(define (delivery-outcome kind [message ""] [data #f])
+  ;; Legacy shape (kind . message) when there is no typed payload; a
+  ;; three-element list (kind message data) when the effect produced typed
+  ;; facts. Every consumer uses the accessors, so both shapes coexist.
+  (define text
+    (if (string? message)
+        message
+        (format "~a" message)))
+  (if data
+      (list kind text data)
+      (cons kind text)))
 
 (define (delivery-outcome? o)
-  (and (pair? o) (symbol? (car o)) (string? (cdr o))))
+  (and (pair? o)
+       (symbol? (car o))
+       (let ([rest (cdr o)]) (or (string? rest) (and (pair? rest) (string? (car rest)))))))
 
 (define (delivery-outcome-kind o)
   (car o))
+
+;; The operator-facing message (unchanged for legacy and typed outcomes).
 (define (delivery-outcome-message o)
-  (cdr o))
+  (let ([rest (cdr o)])
+    (if (string? rest)
+        rest
+        (car rest))))
+
+;; The typed payload carried by an outcome (a hash for review rejections), or
+;; #f for a legacy value. Retry authorization reads THIS, never the message.
+(define (delivery-outcome-data o)
+  (let ([rest (cdr o)]) (and (pair? rest) (cadr rest))))
 
 ;; Operator-facing message for a typed review rejection: the exact receipt
 ;; identity plus every finding, so a blocked wave surfaces the genuine
-;; review verdict (never an opaque strict-gate failure) and the runtime
-;; integration (slice C) can checkpoint on it.
+;; review verdict (never an opaque strict-gate failure).
+;;
+;; GSD simplification W5: this is a DISPLAY rendering of the typed rejection
+;; payload. Internal retry authorization reads the typed hash that travels
+;; alongside it on the delivery outcome (delivery-outcome-data); the text is
+;; never parsed back into authorization.
 (define (review-rejected-message data)
   ;; Lossless checkpoint envelope: findings may themselves contain delimiters
-  ;; or newlines. Never parse operator prose into retry authorization.
+  ;; or newlines.
   (string-append "review-rejected: " (jsexpr->string data)))
 
 (define (indexof lst v)
@@ -327,7 +353,7 @@
                            'awaiting-review
                            (hash-ref data 'reason "awaiting genuine independent review"))]
                          [(review-rejected)
-                          (delivery-outcome 'review-rejected (review-rejected-message data))]
+                          (delivery-outcome 'review-rejected (review-rejected-message data) data)]
                          [(review-infra)
                           (delivery-outcome 'review-infra
                                             (hash-ref data 'reason "review infrastructure failure"))]
@@ -347,9 +373,10 @@
                       [(awaiting-review) (delivery-outcome 'awaiting-review reason)]
                       [(retryable) (delivery-outcome 'retryable reason)]
                       [(review-rejected)
+                       (define preflight-data (delivery-effect-result-data preflight))
                        (delivery-outcome 'review-rejected
-                                         (review-rejected-message (delivery-effect-result-data
-                                                                   preflight)))]
+                                         (review-rejected-message preflight-data)
+                                         preflight-data)]
                       [(review-infra) (delivery-outcome 'review-infra reason)]
                       [else (blocked (format "delivery preflight: ~a" reason))])])])]
              [else
@@ -377,7 +404,7 @@
                     (delivery-outcome 'awaiting-review
                                       (hash-ref data 'reason "awaiting genuine independent review"))]
                    [(review-rejected)
-                    (delivery-outcome 'review-rejected (review-rejected-message data))]
+                    (delivery-outcome 'review-rejected (review-rejected-message data) data)]
                    [(review-infra)
                     (delivery-outcome 'review-infra
                                       (hash-ref data 'reason "review infrastructure failure"))]
@@ -491,9 +518,9 @@
 ;; root on Git enumeration failure. A Git marker with an unavailable or
 ;; corrupt repository MUST fail closed rather than inspecting idle main.
 (define excluded-evidence-prefixes
-  (list "docs/reports/gsd-wave-evidence/"
-        "docs/reports/gsd-wave-reviews/"
-        "docs/reports/gsd-wave-validation/"))
+  (list (wave-evidence-report-rel-prefix)
+        (wave-review-report-rel-prefix)
+        (wave-validation-report-rel-prefix)))
 
 ;; The receipt-tip law for a checkout HEAD: exactly the receipt head, or a
 ;; descendant over a strictly evidence-only tail (same ancestry +
@@ -527,7 +554,9 @@
 ;; enumeration failure such unscoped roots keep flowing to the callers.
 (define (resolve-coordinator-repo base-dir)
   (or (delivery-root-or-raise base-dir)
-      (if (git-root-marker? base-dir) #f (build-path base-dir "q"))))
+      (if (git-root-marker? base-dir)
+          #f
+          (build-path base-dir "q"))))
 
 (define (default-artifact-provenance-root base-dir plan wave #:run-git [run-git shell-git])
   (define repo (resolve-coordinator-repo base-dir))
@@ -1034,12 +1063,7 @@
     (if base-dir
         (binding-generation base-dir plan wave)
         0))
-  (format "docs/reports/gsd-wave-evidence/~a-w~a~a.rktd"
-          plan
-          wave
-          (if (zero? generation)
-              ""
-              (format "-r~a" generation))))
+  (wave-evidence-report-rel-path plan wave generation))
 
 (define (q-prefixed-path->repo-relative base-dir path)
   (if (and (string? path)

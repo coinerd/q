@@ -32,7 +32,9 @@
                   exec-context-event-publisher
                   exec-context-permission-config
                   exec-context-capabilities
+                  exec-context-scratch-root
                   tool-execute)
+         (only-in "scratch.rkt" trusted-session-scratch-path?)
          (only-in "tool-struct.rkt"
                   tool-execute
                   tool-dangerous?
@@ -70,7 +72,8 @@
                   preflight-entry-status
                   preflight-entry-tool-call
                   preflight-entry-tool
-                  preflight-entry-error-message))
+                  preflight-entry-error-message
+                  safe-mode-invocation-denial))
 
 (provide tool-pre-hook-payload
          tool-pre-hook-payload?
@@ -286,6 +289,16 @@
             #f))
         (cond
           [validation-error (make-error-result (exn-message validation-error))]
+          ;; Safe mode is re-asserted against the FINAL invocation. Preflight
+          ;; admitted the call before this tool-call-pre hook ran, so without
+          ;; this second check an amended 'path (or an extension that amends
+          ;; one) could move an allowed read/write outside the project root and
+          ;; escape the read-only policy between admission and execution. The
+          ;; denial happens before approval: no callback is asked to approve an
+          ;; invocation safe mode already refuses.
+          [(safe-mode-invocation-denial tc-name final-args)
+           =>
+           (lambda (denial) (make-error-result denial))]
           [(worker-tool-denial tc-name final-args policy)
            =>
            (lambda (reason)
@@ -307,6 +320,11 @@
                   ;; TRUSTED channel so worker allowed-roots track the active
                   ;; attempt worktree; model-supplied 'working-directory keeps
                   ;; plain cwd semantics and never extends roots.
+                  ;; W2: the session's trusted scratch root travels on the same
+                  ;; trusted channel so the advertised scratch path works in the
+                  ;; sandbox too. It never comes from model arguments and there
+                  ;; is no process-wide fallback: a session without its own
+                  ;; allocation sends no scratch channel at all.
                   (define resp
                     (execute-tool-via-worker
                      tc-name
@@ -317,7 +335,13 @@
                        (and cwd
                             (if (path? cwd)
                                 (path->string cwd)
-                                cwd)))))
+                                cwd)))
+                     #:trusted-scratch-root
+                     (let ([scratch (and exec-ctx (exec-context-scratch-root exec-ctx))])
+                       (and scratch
+                            (if (path? scratch)
+                                (path->string scratch)
+                                scratch)))))
                   (ipc-response->tool-result resp)]
                  [else
                   ;; Existing in-process execution (unchanged)

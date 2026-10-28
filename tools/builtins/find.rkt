@@ -32,7 +32,7 @@
          racket/path
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../define-tool.rkt" define-tool)
-         (only-in "builtin-helpers.rkt" require-safe-path!)
+         (only-in "builtin-helpers.rkt" require-safe-path! expand-tool-path)
          (only-in "../../util/path/glob.rkt" glob->regexp)
          (only-in "../../util/path/path-filters.rkt"
                   hidden-name?
@@ -211,8 +211,10 @@
         (make-error-result (format "Path is not a directory: ~a" path-str))]
 
        [else
-        ;; Resolve to absolute path for checks and traversal
-        (define root-path (simple-form-path path-str))
+        ;; Resolve to an absolute path for checks and traversal (W2: shared
+        ;; canonical resolution helper; results stay absolute traversal
+        ;; paths, never user-string concatenation).
+        (define root-path (expand-tool-path path-str))
 
         ;; BUG-2: Reject filesystem root and system directories
         (cond

@@ -17,6 +17,7 @@
                   set-current-max-old-text-len!
                   tool-edit)
          (only-in "../tools/builtins/edit-contract.rkt" DEFAULT-MAX-OLD-TEXT-LEN)
+         (only-in "../tools/exec-context.rkt" make-exec-context)
          (only-in "../sandbox/ipc-protocol.rkt"
                   ipc-response-status
                   ipc-response-content
@@ -346,6 +347,81 @@
          (delete-directory/files dir-a)
          (delete-directory/files dir-b))))
 
+    (test-case "worker edit reports the same canonical path as direct edit"
+      ;; The direct edit tool resolves its input to one absolute,
+      ;; symlink-resolved spelling and reports THAT in details and diagnostics.
+      ;; The worker used to report the lexical `path->complete-path` spelling,
+      ;; so a relative input or a symlinked input produced two different
+      ;; success details for the same bytes.
+      (define direct-dir (make-temporary-file "q-edit-canonical-direct-~a" 'directory))
+      (define worker-dir (make-temporary-file "q-edit-canonical-worker-~a" 'directory))
+      (define direct-file (build-path direct-dir "real.txt"))
+      (define worker-file (build-path worker-dir "real.txt"))
+      (define worker-link (build-path worker-dir "link.txt"))
+      (display-to-file "alpha\n" direct-file #:exists 'replace)
+      (display-to-file "alpha\n" worker-file #:exists 'replace)
+      (make-file-or-directory-link worker-file worker-link)
+      (dynamic-wind
+       void
+       (lambda ()
+         (define direct-result
+           (parameterize ([current-fuzzy-edit-enabled? #f])
+             (tool-edit (hasheq 'path "real.txt" 'old-text "alpha" 'new-text "beta")
+                        (make-exec-context #:working-directory direct-dir))))
+         (check-false (tool-result-is-error? direct-result) "direct relative edit succeeds")
+         (define direct-path (hash-ref (tool-result-details direct-result) 'path))
+         (check-equal? direct-path
+                       (path->string (simplify-path (resolve-path direct-file) #f))
+                       "direct details are the canonical spelling")
+         (define worker-canonical (path->string (simplify-path (resolve-path worker-file) #f)))
+         ;; Worker, relative input from the same kind of working directory.
+         (define worker-relative
+           (parameterize ([current-allowed-roots (list worker-dir)]
+                          [current-directory worker-dir])
+             (execute-edit (hasheq 'path "real.txt" 'old-text "alpha" 'new-text "beta"))))
+         (check-equal? (ipc-response-status worker-relative) 'ok)
+         (check-equal? (hash-ref (ipc-response-details worker-relative) 'path)
+                       worker-canonical
+                       "worker details report the canonical spelling of a relative input")
+         ;; Worker, symlinked input: the reported path is the target, not the link.
+         (display-to-file "alpha\n" worker-file #:exists 'replace)
+         (define worker-linked
+           (parameterize ([current-allowed-roots (list worker-dir)]
+                          [current-directory worker-dir])
+             (execute-edit (hasheq 'path "link.txt" 'old-text "alpha" 'new-text "gamma"))))
+         (check-equal? (ipc-response-status worker-linked) 'ok)
+         (check-equal? (hash-ref (ipc-response-details worker-linked) 'path)
+                       worker-canonical
+                       "worker details report the resolved target of a symlinked input")
+         (check-false (string=? (hash-ref (ipc-response-details worker-linked) 'path)
+                                (path->string worker-link))
+                      "the link spelling is never reported")
+         (check-equal? (file->string worker-file) "gamma\n")
+         (check-true (link-exists? worker-link)
+                     "the edit writes through the canonical path, not over the link")
+         ;; Not-found diagnostics name an absolute canonical path in both planes.
+         (define direct-missing
+           (tool-edit (hasheq 'path "missing.txt" 'old-text "x" 'new-text "y")
+                      (make-exec-context #:working-directory direct-dir)))
+         (check-true (tool-result-is-error? direct-missing))
+         (define direct-missing-text (local-result-text direct-missing))
+         (define worker-missing
+           (parameterize ([current-allowed-roots (list worker-dir)]
+                          [current-directory worker-dir])
+             (execute-edit (hasheq 'path "missing.txt" 'old-text "x" 'new-text "y"))))
+         (check-equal? (ipc-response-status worker-missing) 'error)
+         (define worker-missing-text (ipc-response-error-message worker-missing))
+         (define missing-relative (path->string (build-path "missing.txt")))
+         (for ([text (in-list (list direct-missing-text worker-missing-text))]
+               [dir (in-list (list direct-dir worker-dir))])
+           (check-false (string-contains? text (string-append " " missing-relative))
+                        "a relative spelling is not what diagnostics report")
+           (check-true (string-contains? text (path->string (build-path dir "missing.txt")))
+                       "diagnostics name the absolute path")))
+       (lambda ()
+         (delete-directory/files direct-dir #:must-exist? #f)
+         (delete-directory/files worker-dir #:must-exist? #f))))
+
     (test-case "not-found diagnostics include first-differing-offset, escaped code points, whitespace count"
       (define content "def foo(em — dash):\n    pass\n")
       (define old-text-with-em-dash "def foo(em \u2014 dash):\n    pass\n")
@@ -379,9 +455,18 @@
            (tool-edit (hasheq 'path p 'old-text old-text-different-body 'new-text "replaced") #f))
          (check-true (tool-result-is-error? fail-result) "content mismatch should fail")
          (define err-text (local-result-text fail-result))
-         (check-true (string-contains? err-text "offset") "diagnostics should mention offset")
-         (check-true (or (string-contains? err-text "U+20") (string-contains? err-text "U+0020"))
-                     "diagnostics should show escaped whitespace"))
+         (check-true (string-contains? err-text "First differing offset:")
+                     "diagnostics should mention the first difference")
+         (check-true (string-contains? err-text "line 2, column 5")
+                     "diagnostics should give line and column")
+         (check-true (string-contains? err-text "  file:")
+                     "diagnostics should show a readable file line")
+         (check-true (string-contains? err-text "  old-text:")
+                     "diagnostics should show the readable old-text line")
+         (check-true (string-contains? err-text "(U+70)")
+                     "the differing printable character keeps its code point")
+         (check-false (string-contains? err-text "Context around mismatch in file:  [U+")
+                      "raw code-point lists are gone"))
        (lambda () (delete-file p))))
 
     (test-case "not-found diagnostics show escaped code points for U+2014 mismatch"

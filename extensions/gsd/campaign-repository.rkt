@@ -30,17 +30,20 @@
          racket/contract
          "campaign-state.rkt"
          (only-in "plan-snapshot.rkt" snapshot-dir load-snapshot-manifest snapshot-manifest-digest)
-         (only-in "plan-snapshot.rkt" classify-snapshot-drift))
+         (only-in "plan-snapshot.rkt" classify-snapshot-drift)
+         (only-in "planning-paths.rkt" campaigns-root campaign-record-file))
 
 ;; ============================================================
 ;; Public API
 ;; ============================================================
 
-(provide (contract-out [persist-campaign! (-> path-string? campaign-record? void?)]
-                       [load-campaign-record (-> path-string? string? (or/c #f campaign-record?))]
-                       [load-or-migrate-campaign! (-> path-string? campaign-record?)]
-                       [validate-campaign-record! (-> campaign-record? void?)]
-                       [exn:fail:campaign-corrupt? (-> any/c boolean?)]))
+(provide (contract-out
+          [persist-campaign! (-> path-string? campaign-record? void?)]
+          [load-campaign-record
+           (->* (path-string? string?) (#:sweep-stale? boolean?) (or/c #f campaign-record?))]
+          [load-or-migrate-campaign! (-> path-string? campaign-record?)]
+          [validate-campaign-record! (-> campaign-record? void?)]
+          [exn:fail:campaign-corrupt? (-> any/c boolean?)]))
 
 ;; Raised when a durable .rktd file is corrupt, malformed, unsupported,
 ;; outside the containment policy, or a symlink (fail-closed boundary).
@@ -468,15 +471,40 @@
 (define (datum->record d)
   (match d
     ;; Execution policy is record metadata, never part of canonical plan identity.
-    [(list 'campaign-record pid m waves cancellation fence prov created updated
-           build-version main-head-sha stale-override budget-pause
-           snapshot-path snapshot-digest execution-policy)
+    [(list 'campaign-record
+           pid
+           m
+           waves
+           cancellation
+           fence
+           prov
+           created
+           updated
+           build-version
+           main-head-sha
+           stale-override
+           budget-pause
+           snapshot-path
+           snapshot-digest
+           execution-policy)
      (unless (or (eq? execution-policy #f) (eq? execution-policy 'owned-red-v1))
        (corrupt! "unknown execution policy ~s" execution-policy))
      (define rec
-       (datum->record (list 'campaign-record pid m waves cancellation fence prov created updated
-                            build-version main-head-sha stale-override budget-pause
-                            snapshot-path snapshot-digest)))
+       (datum->record (list 'campaign-record
+                            pid
+                            m
+                            waves
+                            cancellation
+                            fence
+                            prov
+                            created
+                            updated
+                            build-version
+                            main-head-sha
+                            stale-override
+                            budget-pause
+                            snapshot-path
+                            snapshot-digest)))
      (set-campaign-record-execution-policy! rec execution-policy)
      rec]
     ;; v1.00.24 W3 (BUG-0052): current records carry the immutable snapshot
@@ -603,7 +631,7 @@
 ;; ============================================================
 
 (define (campaigns-dir-of base-dir)
-  (build-path base-dir ".planning" "campaigns"))
+  (campaigns-root base-dir))
 
 ;; True when p is a symbolic link (file-or-directory-type does not follow
 ;; links). Used for no-follow containment on read and write.
@@ -614,7 +642,7 @@
   (validate-campaign-record! rec)
   (define dir (campaigns-dir-of base-dir))
   (make-directory* dir)
-  (define target (build-path dir (string-append (campaign-plan-id rec) ".rktd")))
+  (define target (campaign-record-file base-dir (campaign-plan-id rec)))
   (when (symlink-target? target)
     (corrupt! "refusing to overwrite symlinked campaign file ~a" target))
   (define tmp (build-path dir (format ".tmp-~a-~a" (campaign-plan-id rec) (random 1000000))))
@@ -631,7 +659,7 @@
          (delete-file tmp)))))
   (void))
 
-(define (verify-snapshot-binding! base-dir rec)
+(define (verify-snapshot-binding! base-dir rec #:sweep-stale? [sweep-stale? #t])
   (define bound-path (campaign-record-plan-snapshot-path rec))
   (define bound-digest (campaign-record-plan-snapshot-digest rec))
   (when (or bound-path bound-digest)
@@ -645,16 +673,16 @@
       (with-handlers ([exn:fail? (lambda (e)
                                    (corrupt! "campaign snapshot verification failed: ~a"
                                              (exn-message e)))])
-        (load-snapshot-manifest base-dir (campaign-plan-id rec))))
+        (load-snapshot-manifest base-dir (campaign-plan-id rec) #:sweep-stale? sweep-stale?)))
     (unless manifest
       (corrupt! "campaign snapshot binding points to a missing snapshot"))
     (unless (equal? bound-digest (snapshot-manifest-digest manifest))
       (corrupt! "campaign snapshot manifest digest does not match durable binding")))
   (void))
 
-(define (load-campaign-record base-dir plan-id)
+(define (load-campaign-record base-dir plan-id #:sweep-stale? [sweep-stale? #t])
   (validate-plan-id! plan-id)
-  (define target (build-path (campaigns-dir-of base-dir) (string-append plan-id ".rktd")))
+  (define target (campaign-record-file base-dir plan-id))
   (cond
     ;; no-follow first: file-exists? FOLLOWS links, so a dangling symlink
     ;; would otherwise be misreported as "no durable record" (MINOR-1).
@@ -672,7 +700,7 @@
                           (corrupt! "malformed campaign datum in ~a: ~a" target (exn-message e)))])
          (datum->record datum)))
      (validate-campaign-record! rec)
-     (verify-snapshot-binding! base-dir rec)
+     (verify-snapshot-binding! base-dir rec #:sweep-stale? sweep-stale?)
      rec]))
 
 (define (active-campaign-records base-dir)

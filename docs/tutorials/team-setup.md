@@ -461,7 +461,7 @@ The credentials file should be readable only by your user.
 
 ## See Also
 
-- [Installation Guide](install.md) — Full installation instructions
-- [Builder Tutorials](tutorials/builder-tutorials.md) — Build custom tools, providers, and extensions
-- [Configuration Reference](../docs/getting-started/configuration.md) — Complete config schema
+- [Installation Guide](../install.md) — Full installation instructions
+- [Builder Tutorials](builder-tutorials.md) — Build custom tools, providers, and extensions
+- [Configuration Schema](../config-schema.rktd) — Complete config schema
 - [Architecture Overview](../adr/0001-small-trusted-core.md) — How q works internally

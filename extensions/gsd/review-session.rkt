@@ -20,6 +20,7 @@
          "../../util/message/message.rkt"
          "../../util/content/content-parts.rkt"
          "review-tools.rkt"
+         (only-in "planning-paths.rkt" campaign-review-sessions-dir campaign-review-tool-home-dir)
          "../../tools/permission-gate.rkt"
          "../../sandbox/subprocess.rkt"
          "../../sandbox/gateway-bridge.rkt"
@@ -236,9 +237,9 @@
       (define answer (make-channel))
       (define session #f)
       (define env (sanitize-env))
-      (define session-root (build-path root ".planning" "campaigns" plan "review-sessions"))
+      (define session-root (campaign-review-sessions-dir root plan))
       (make-directory* session-root)
-      (define private-home (build-path session-root "tool-home"))
+      (define private-home (campaign-review-tool-home-dir root plan))
       (make-directory* private-home)
       ;; Do not inherit credential agents, Git helpers, shell startup files,
       ;; or the initiating user's CLI credential configuration.

@@ -24,6 +24,7 @@
          ;; GSD tracking files — update PLAN.md + wave docs on completion
          (only-in "wave-docs.rkt" wave-slug)
          (only-in "wave-status.rkt" STATUS-DONE STATUS-FAILED)
+         (only-in "planning-paths.rkt" state-file wave-doc-file)
          (only-in "delivery-handoff.rkt"
                   delivery-handoff-path
                   delivery-handoff-status
@@ -50,7 +51,7 @@
 
 ;; Update STATE.md table row for a wave (e.g. "| W1 | ... | PENDING |" → "| W1 | ... | DONE |")
 (define (update-state-table! base-dir wave-idx new-status)
-  (define state-path (build-path base-dir ".planning" "STATE.md"))
+  (define state-path (state-file base-dir))
   (when (file-exists? state-path)
     (define content (call-with-input-file state-path port->string))
     (define lines (string-split content "\n"))
@@ -327,8 +328,7 @@
 ;; wave doc is left untouched (the FAILED status projection already ran).
 (define (record-wave-failure! base-dir wave-idx slug-of reason)
   (define slug (and slug-of (slug-of wave-idx)))
-  (define doc-path
-    (and slug (build-path base-dir ".planning" "waves" (format "W~a-~a.md" wave-idx slug))))
+  (define doc-path (and slug (wave-doc-file base-dir wave-idx slug)))
   (cond
     [(or (not doc-path) (not (file-exists? doc-path))) (void)]
     [(or (not (string? reason)) (string=? (string-trim reason) "")) (void)]
@@ -397,8 +397,14 @@
       (call-with-input-file p read)
       '()))
 
+;; Write the outbox through the shared projection atomic shell: it allocates a
+;; UNIQUE same-directory temp per write and, on failure, removes exactly the
+;; temps it created. No fixed ".tmp" sibling exists for two writers to share.
+(define (publish-outbox! path ids)
+  (apply-atomic-files! (list (cons path (format "~s" ids)))))
+
 ;; Append event ID to outbox with deduplication.
-;; Uses atomic write (write-to-tmp + rename) for crash safety.
+;; Uses the shared atomic writer for crash safety.
 (define (append-completion-event! base-dir rec event-id)
   (define plan-id (campaign-plan-id rec))
   (define p (outbox-path base-dir plan-id))
@@ -406,11 +412,7 @@
   ;; Dedup: skip if event-id already present
   (unless (member event-id existing)
     (define updated (append existing (list event-id)))
-    (define dir (path-only p))
-    (make-directory* dir)
-    (define tmp (path-replace-extension p ".tmp"))
-    (call-with-output-file tmp #:exists 'truncate (lambda (out) (write updated out)))
-    (rename-file-or-directory tmp p #t)))
+    (publish-outbox! p updated)))
 
 (define (count-completion-events base-dir rec)
   (length (load-outbox base-dir (campaign-plan-id rec))))
@@ -436,11 +438,8 @@
      (when (file-exists? p)
        (delete-file p))]
     [else
-     (define dir (path-only p))
-     (make-directory* dir)
-     (define tmp (path-replace-extension p ".tmp"))
-     (call-with-output-file tmp #:exists 'truncate (lambda (out) (write ids out)))
-     (rename-file-or-directory tmp p #t)]))
+     ;; Same shared atomic writer as append-completion-event!.
+     (publish-outbox! p ids)]))
 
 (define (reconcile-completion-outbox! base-dir rec)
   (define pid (campaign-plan-id rec))
@@ -472,16 +471,6 @@
         #f)
       'ok
       'outbox-leads-record))
-
-;; ============================================================
-;; Path helper
-;; ============================================================
-
-(define (path-only p)
-  (define-values (base name must-be-dir?) (split-path p))
-  (if (path? base)
-      base
-      (current-directory)))
 
 ;; ============================================================
 ;; Provide

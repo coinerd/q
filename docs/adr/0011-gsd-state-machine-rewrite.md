@@ -12,7 +12,7 @@ An architecture audit (v0.24.x) identified 8 findings (F1–F8) across state man
 ## Decision
 
 ### State Machine Core (v0.25.3 → v0.25.3)
-Rewrote the GSD wave executor as an explicit state machine with defined states (idle, exploring, plan-written, executing, verifying) and validated transitions. States: idle → exploring → plan-written → executing → verifying → idle.
+Rewrote the GSD wave executor as an explicit state machine with defined states (idle, exploring, plan-written, executing, verifying) and validated transitions. The planning/execution mode machine (`idle`, `exploring`, `plan-written`, `executing`, `verifying`, with `/replan` back to `exploring`) is separate from the campaign lifecycle: the single campaign-lifecycle diagram and the operator recovery table live in [the GSD user guide](../gsd-guide.md#campaign-lifecycle) and are not repeated here.
 
 ### v0.25.3 — State Unification & Command Contracts (F1, F2, F5)
 - **Canonical runtime state**: `gsd-runtime-state` struct in `runtime-state-types.rkt` replaces hash-table state. All consumers use struct accessors.
@@ -40,10 +40,44 @@ Rewrote the GSD wave executor as an explicit state machine with defined states (
 - **Write guard policy migration**: `gsd-write-guard` returns `policy-decision` directly instead of hasheq/#t. Consumers use `policy-allowed?`/`policy-blocked?` predicates.
 - **Event taxonomy expansion**: Added `gsd.mode.changed`, `gsd.plan.archived`, `gsd.archive.failed`, and pipeline events to stable taxonomy.
 
+### W5 (v1.00.31) — one owner per decision
+
+The simplification campaign removed parallel decision paths. Each contract now
+has exactly one owner; the operator surface (one lifecycle diagram, one
+recovery table, the precise Verify grammar with parser-tested examples) is
+published in [the GSD user guide](../gsd-guide.md#campaign-lifecycle) and the
+module responsibilities in [gsd-architecture.md](../gsd-architecture.md).
+
+| Contract | Single owner | Removed duplication |
+|----------|--------------|---------------------|
+| Campaign routing | `campaign-decision.rkt` (pure) + `go-orchestrator.rkt` (the only interpreter) | ready/coordinator routing copies and message-string branching |
+| Durable state | `campaign-state.rkt`, `campaign-repository.rkt` | status tables and ad-hoc writers elsewhere |
+| Wave status | `wave-status.rkt` | duplicate display/durable/marker tables |
+| Wave paths | `planning-paths.rkt` | three incompatible path regexps |
+| Wave-doc headers/sections | `wave-docs.rkt` (`WAVE-DOC-*`) — the prompt template is generated from the same constants | hand-maintained template vs validator drift |
+| Verify grammar + reasons | `verify-command-grammar.rkt` (via `verify-command-format.rkt`) | duplicate span/chain parsers and a second reason vocabulary |
+| Plan preflight | `planning-artifact-validation.rkt` (standalone validator + `/go`) | duplicate validation logic |
+| Scratch | `tools/scratch.rkt` — one trusted per-session root | separate prompt/bash/direct-write/worker roots |
+
+Two consequences worth recording:
+
+- **Unknown wave statuses are a typed rejection** (`exn:fail:wave-status`),
+  not a silent `pending` fallback. Documented legacy aliases are still read;
+  writers emit one canonical spelling; durable record schemas are unchanged.
+- **Compatibility wrappers delegate only** and carry a dated removal marker
+  (`TODO(#v1.00.40)` for `wave-docs.rkt`'s `wave-status-markers` and its
+  internal `status->symbol` alias). No wrapper keeps an old decision table or
+  safety exception.
+
+Measured before/after values for this campaign (inventory entry counts, routing
+authorities, module sizes and the honest LOC accounting) are recorded once in
+[the architecture document](../gsd-architecture.md#simplification-campaign-v10031-measured-beforeafter);
+this ADR does not restate them.
+
 ## Key Files
 | Module | Responsibility |
 |--------|---------------|
-| `extensions/gsd/state-machine.rkt` | State transitions, tool permissions (via policy) |
+| `extensions/gsd/state-machine.rkt` | Mode transitions, tool permissions (via policy) |
 | `extensions/gsd/runtime-state-types.rkt` | `gsd-runtime-state` struct definition |
 | `extensions/gsd/command-types.rkt` | `gsd-command-result`, `gsd-ok`, `gsd-err` |
 | `extensions/gsd/policy.rkt` | Unified policy decisions, `gsd-decide-action` |
@@ -52,7 +86,14 @@ Rewrote the GSD wave executor as an explicit state machine with defined states (
 | `extensions/gsd/plan-types.rkt` | Plan/wave types, normalized plan IR |
 | `extensions/gsd/plan-validator.rkt` | Plan validation (raw + normalized) |
 | `extensions/gsd/wave-executor.rkt` | Wave execution engine |
-| `extensions/gsd-planning-state.rkt` | DEPRECATED shim (pure delegation) |
+| `extensions/gsd/campaign-decision.rkt` | ONE pure campaign decision per `/go` pass |
+| `extensions/gsd/go-orchestrator.rkt` | The one `/go` effect interpreter |
+| `extensions/gsd/wave-status.rkt` | Wave-status vocabulary (canonical + legacy aliases) |
+| `extensions/gsd/wave-docs.rkt` | Required wave-doc header/section contract + lint |
+| `extensions/gsd/verify-command-grammar.rkt` | ONE Verify grammar and reason taxonomy |
+| `extensions/gsd/planning-artifact-validation.rkt` | Shared plan preflight kernel |
+| `tools/scratch.rkt` | One trusted per-session scratch root |
+| `extensions/gsd-planning.rkt` | Extension entry point (registers commands/tools) |
 
 ## Consequences
 - All wave state transitions are explicit and validated
@@ -61,4 +102,6 @@ Rewrote the GSD wave executor as an explicit state machine with defined states (
 - Transaction wrappers provide failure atomicity
 - Event telemetry enables observability without coupling
 - Normalized plan IR enables clean parse→validate→execute pipeline
+- One owner per contract (W5): status, path, Verify, preflight, decision, scratch
+- Unknown wave statuses refuse by name instead of defaulting to `pending`
 - Test coverage: 221 GSD tests across policy, state-machine, core, planning, events, fitness

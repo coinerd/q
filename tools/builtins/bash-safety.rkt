@@ -7,11 +7,14 @@
 ;;   - tools/builtins/bash.rkt   (main tool-bash path)
 ;;   - sandbox/worker-tools.rkt  (worker execute-bash / execute-git)
 ;;
-;; Pure functions only — no side effects, no parameters, no tool registry,
-;; no sandbox-config coupling. Safe for cross-layer import (worker isolation
-;; preserved). See STATE-v0.99.76-SECURITY-CRITICAL.md D1: import, do not
-;; duplicate. Adding a pattern here hardens BOTH the main tool and the worker
-;; (defense in depth, no relocation).
+;; Pure detection helpers: no mutating side effects, no tool registry, no
+;; sandbox-config coupling. The one filesystem access is READ-ONLY symlink
+;; resolution of an authorized scratch target (see sanctioned-scratch-target?);
+;; the one parameter is the per-execution armed scratch root. Safe for
+;; cross-layer import (worker isolation preserved). See
+;; STATE-v0.99.76-SECURITY-CRITICAL.md D1: import, do not duplicate. Adding a
+;; pattern here hardens BOTH the main tool and the worker (defense in depth,
+;; no relocation).
 ;;
 ;; BUG-0054 (v1.00.24 W3): classify behavior, not syntax shapes.
 ;; Command substitution, backticks, bounded loops, `pgrep`/`ps`/`tail`,
@@ -47,7 +50,11 @@
                   classify-shell-risks
                   shell-risk-finding-type
                   shell-risk-finding-severity
-                  shell-risk-finding-message))
+                  shell-risk-finding-message)
+         ;; The ONE containment helper the structured tools use. scratch.rkt is
+         ;; dependency-free (racket only), so the worker can share it without
+         ;; pulling the tool registry or runtime layer.
+         (only-in "../scratch.rkt" scratch-path-within?))
 
 (provide destructive-patterns
          destructive-command?
@@ -55,6 +62,8 @@
          destructive-diagnostic
          destructive-diagnostic-message
          sanctioned-scratch-root
+         current-sanctioned-scratch-root
+         scratch-redirection-guidance
          high-risk-patterns
          high-risk-command?
          structured-destructive-command?
@@ -230,10 +239,32 @@
 
 ;; BUG-0061: bash may capture disposable output only below one explicit
 ;; temporary root. Other filesystem redirections remain mutation evidence.
-;; Keeping the root fixed (rather than accepting arbitrary /tmp paths) makes
-;; the policy explainable and lets callers pre-create/clean one bounded area.
-(define sanctioned-scratch-root
-  (simplify-path (build-path (find-system-path 'temp-dir) "q-agent-scratch") #f))
+;; The root is the ONE scratch root of the executing session
+;; (tools/scratch.rkt): `current-sanctioned-scratch-root` is armed per
+;; execution from the session's trusted allocation.
+;;
+;; W2: there is NO process-wide default any more. The former fixed base
+;; directory (`<temp>/q-agent-scratch`) sanctioned every session's scratch at
+;; once, which defeated per-session isolation and let an unarmed caller write
+;; anywhere below the container. `sanctioned-scratch-root` is now #f: without a
+;; session allocation -- or an explicitly adopted one -- no redirection target
+;; is sanctioned at all (fail closed).
+(define sanctioned-scratch-root #f)
+
+(define current-sanctioned-scratch-root (make-parameter #f))
+
+(define (scratch-redirection-guidance)
+  (define root (current-sanctioned-scratch-root))
+  (if (and root (path? root))
+      (format (string-append
+               "Safer alternative: use the structured write/edit tools for file changes, or redirect "
+               "disposable output below this session's scratch root ~a; repository paths, the "
+               "scratch base itself, sibling sessions and arbitrary /tmp paths stay blocked")
+              (path->string root))
+      (string-append
+       "Safer alternative: use the structured write/edit tools for file changes. This session has "
+       "no trusted scratch root, so no redirection target is sanctioned; repository paths, the "
+       "scratch base itself, sibling sessions and arbitrary /tmp paths stay blocked")))
 
 (define (redirection-targets text)
   (define without-process-substitution (regexp-replace* #rx">\\([^)]*\\)" text ""))
@@ -241,13 +272,20 @@
                  (regexp-match* #px">+\\s*(\\S+)" without-process-substitution #:match-select cadr))])
     (strip-quote-chars (string-trim m))))
 
+;; W2: containment is a FILESYSTEM question, not a string question. The model
+;; can create a symlink inside its own root (`ln -s /etc root/escape`), and
+;; bash resolves it when the redirect is opened, so a lexical prefix check
+;; would sanction a write far outside the allocation. `scratch-path-within?`
+;; resolves the longest existing prefix of BOTH sides and compares canonical
+;; spellings: a link below the root (or at the target itself) is outside,
+;; while a spelling that reaches the same root through a symlinked temp
+;; ancestor (/var vs /private/var, or a `pwd` alias) still matches.
 (define (sanctioned-scratch-target? target)
   (and (not (string=? target ""))
        (absolute-path? (string->path target))
-       (let* ([candidate (path->string (simplify-path (string->path target) #f))]
-              [root (path->string sanctioned-scratch-root)]
-              [prefix (string-append root "/")])
-         (string-prefix? candidate prefix))))
+       (let ([armed (current-sanctioned-scratch-root)])
+         ;; No session root armed -> nothing is sanctioned (never the base).
+         (and armed (scratch-path-within? (string->path target) armed)))))
 
 ;; Redirection into a real file (anything other than /dev/null, an fd dup,
 ;; process substitution, or the sanctioned scratch root) is mutation evidence.

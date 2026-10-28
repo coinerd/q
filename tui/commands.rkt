@@ -97,8 +97,8 @@
          (only-in "../runtime/goal/goal-runner.rkt" current-repo-base-sha current-working-tree-hash)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
                   execute-campaign-token!
-                  campaign-result-status
-                  campaign-result-message)
+                  campaign-result-status)
+         (only-in "../extensions/gsd/campaign-result.rkt" render-campaign-stop-text)
          (only-in "../extensions/gsd/core.rkt"
                   call-with-gsd-campaign-ownership
                   call-with-gsd-owned-session-switch)
@@ -184,8 +184,7 @@
 (define (clear-foreground-verification! cctx)
   (define st (unbox (cmd-ctx-state-box cctx)))
   (when (ui-state-verification-progress st)
-    (set-box! (cmd-ctx-state-box cctx)
-              (set-status-message (set-verification-progress st #f) #f))
+    (set-box! (cmd-ctx-state-box cctx) (set-status-message (set-verification-progress st #f) #f))
     (set-box! (cmd-ctx-needs-redraw-box cctx) #t)))
 
 ;; Session RESTORE is a reattach, not a resume of cached UI clocks. The
@@ -201,8 +200,7 @@
 (define (reattach-verification-state state)
   (define progress (ui-state-verification-progress state))
   (define cleared
-    (bump-attachment-generation
-     (set-status-message (set-verification-progress state #f) #f)))
+    (bump-attachment-generation (set-status-message (set-verification-progress state #f) #f)))
   (define job-id (and (hash? progress) (hash-ref progress 'job-id #f)))
   (define incarnation (and (hash? progress) (hash-ref progress 'registry-incarnation #f)))
   (cond
@@ -215,11 +213,10 @@
      (cond
        [(not facts) cleared]
        [(eq? (verification-job-state facts) 'running)
-        (set-status-message
-         cleared
-         (format "W~a verify running (detached) · log ~a"
-                 (hash-ref progress 'wave "?")
-                 (verification-job-log-path facts)))]
+        (set-status-message cleared
+                            (format "W~a verify running (detached) · log ~a"
+                                    (hash-ref progress 'wave "?")
+                                    (verification-job-log-path facts)))]
        [else
         (add-transcript-entry
          cleared
@@ -289,7 +286,10 @@
       (set-box! (cmd-ctx-agent-session-box cctx) pre-campaign-sess))
     (define restored-sess
       (and pre-campaign-sess (agent-session? pre-campaign-sess) pre-campaign-sess))
-    (define restored-sid (if restored-sess pre-campaign-sid (ui-state-session-id (unbox (cmd-ctx-state-box cctx)))))
+    (define restored-sid
+      (if restored-sess
+          pre-campaign-sid
+          (ui-state-session-id (unbox (cmd-ctx-state-box cctx)))))
     (define cur-state (unbox (cmd-ctx-state-box cctx)))
     ;; R102: the restore is a REATTACH — this runs even when no saved session
     ;; exists (degenerate restore): cached verification elapsed is never
@@ -303,50 +303,46 @@
     (set-box! (cmd-ctx-needs-redraw-box cctx) #t))
   (if factory
       (let ([campaign-owner (gensym 'gsd-campaign)])
-        (thread
-         (lambda ()
-           (call-with-gsd-campaign-ownership
-            campaign-owner
-            (lambda ()
-              (dynamic-wind
-               void
-               (lambda ()
-                 (with-handlers ([exn:fail? (lambda (e)
-                                              ;; R102: the campaign terminal clears the
-                                              ;; foreground verification state before the
-                                              ;; error message lands.
-                                              (clear-foreground-verification! cctx)
-                                              (append-campaign-message!
-                                               cctx
-                                               (format "[ERROR] /go campaign failed: ~a"
-                                                       (exn-message e))))])
-                   (define result
-                     (execute-campaign-token! campaign-token
-                                              run-in-fresh-wave-session
-                                              ;; D4 (#9351): name the lease after the
-                                              ;; orchestrating TUI session.
-                                              #:lease-owner
-                                              (ui-state-session-id (unbox (cmd-ctx-state-box cctx)))))
-                   ;; R102: campaign terminal (complete OR stopped) — no
-                   ;; foreground verification outlives the campaign's own
-                   ;; terminal state; a still-running detached job stays
-                   ;; attributable via the registry-backed reattach path.
-                   (clear-foreground-verification! cctx)
-                   (when (eq? (campaign-result-status result) 'campaign-complete)
-                     (append-campaign-message! cctx "/go campaign complete."))
-                   (unless (eq? (campaign-result-status result) 'campaign-complete)
-                     ;; BUG-0017: include the campaign-result-message so a
-                     ;; wave-budget timeout is distinguishable from a
-                     ;; cancellation/stale stop at a glance.
-                     (let ([stop-msg (campaign-result-message result)])
-                       (append-campaign-message! cctx
-                                                 (if (and stop-msg (not (string=? stop-msg "")))
-                                                     (format "[ERROR] /go campaign stopped: ~a (~a)"
-                                                             (campaign-result-status result)
-                                                             stop-msg)
-                                                     (format "[ERROR] /go campaign stopped: ~a"
-                                                             (campaign-result-status result))))))))
-               restore-pre-campaign-session!))))))
+        (thread (lambda ()
+                  (call-with-gsd-campaign-ownership
+                   campaign-owner
+                   (lambda ()
+                     (dynamic-wind
+                      void
+                      (lambda ()
+                        (with-handlers ([exn:fail? (lambda (e)
+                                                     ;; R102: the campaign terminal clears the
+                                                     ;; foreground verification state before the
+                                                     ;; error message lands.
+                                                     (clear-foreground-verification! cctx)
+                                                     (append-campaign-message!
+                                                      cctx
+                                                      (format "[ERROR] /go campaign failed: ~a"
+                                                              (exn-message e))))])
+                          (define result
+                            (execute-campaign-token!
+                             campaign-token
+                             run-in-fresh-wave-session
+                             ;; D4 (#9351): name the lease after the
+                             ;; orchestrating TUI session.
+                             #:lease-owner (ui-state-session-id (unbox (cmd-ctx-state-box cctx)))))
+                          ;; R102: campaign terminal (complete OR stopped) — no
+                          ;; foreground verification outlives the campaign's own
+                          ;; terminal state; a still-running detached job stays
+                          ;; attributable via the registry-backed reattach path.
+                          (clear-foreground-verification! cctx)
+                          (when (eq? (campaign-result-status result) 'campaign-complete)
+                            (append-campaign-message! cctx "/go campaign complete."))
+                          (unless (eq? (campaign-result-status result) 'campaign-complete)
+                            ;; BUG-0017: the stop line must distinguish a wave-budget
+                            ;; timeout from a cancellation/stale stop at a glance.
+                            ;; W0: rendering goes through the single pure renderer
+                            ;; (campaign-result.rkt). Legacy text is preserved
+                            ;; byte-for-byte when no explicit diagnostic presentation
+                            ;; is needed; explicit next-action/detail survive so
+                            ;; actionable guidance is never dropped.
+                            (append-campaign-message! cctx (render-campaign-stop-text result)))))
+                      restore-pre-campaign-session!))))))
       (begin
         (append-campaign-message! cctx "[ERROR] No fresh session factory available for /go campaign.")
         (restore-pre-campaign-session!))))

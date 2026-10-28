@@ -27,52 +27,35 @@
 ;; rebuild, wave-completion.rkt update-state-table! row replace) — the W0
 ;; golden-trace oracle proves the equivalence.
 
-(require racket/string)
+(require racket/string
+         (only-in "wave-status.rkt"
+                  ALL-STATUSES
+                  WAVE-STATUS-MARKERS
+                  wave-status-marker
+                  wave-status-display-spelling
+                  wave-status-state-table-spelling))
 
 ;; ============================================================
 ;; Neutral status display data
 ;; ============================================================
 
-;; Wave status (campaign symbol) → display string used in PLAN.md index
-;; markers and wave-doc status headers (wave-status.rkt constants).
-(define (wave-status->projection-string s)
-  (cond
-    [(eq? s 'done) "DONE"]
-    [(eq? s 'deferred) "DEFERRED"]
-    [(eq? s 'failed) "FAILED"]
-    [else "Inbox"]))
-
-;; Wave status → display string used in STATE.md table rows.
-;; The legacy row writer writes "PENDING" for the initial state and
-;; DONE/FAILED/DEFERRED for terminal states; reconcile maps every other
-;; durable status back to the initial row text.
-(define (wave-status->state-string s)
-  (cond
-    [(eq? s 'done) "DONE"]
-    [(eq? s 'deferred) "DEFERRED"]
-    [(eq? s 'failed) "FAILED"]
-    [else "PENDING"]))
+;; W5: the display/state-row spelling tables are owned by wave-status.rkt.
+;; These are pure aliases so the kernel keeps its historical public names and
+;; byte-identical output while holding NO status table of its own.
+(define wave-status->projection-string wave-status-display-spelling)
+(define wave-status->state-string wave-status-state-table-spelling)
 
 ;; ============================================================
 ;; PLAN.md index marker data
 ;; ============================================================
 
+;; The projection vocabulary is the owner's five canonical display statuses
+;; (the legacy [COMPLETED]/[CANCELLED] markers stay owner-only extras).
 (define PROJECTION-STATUS-MARKERS
-  (list (cons "Inbox" "[Inbox]")
-        (cons "In-Progress" "[In-Progress]")
-        (cons "DONE" "[DONE]")
-        (cons "DEFERRED" "[DEFERRED]")
-        (cons "FAILED" "[FAILED]")))
+  (filter (lambda (entry) (member (car entry) ALL-STATUSES))
+          WAVE-STATUS-MARKERS))
 
-(define (status->marker status)
-  (cond
-    [(string? status)
-     (define entry (assoc status PROJECTION-STATUS-MARKERS))
-     (if entry
-         (cdr entry)
-         (format "[~a]" status))]
-    [(symbol? status) (status->marker (symbol->string status))]
-    [else "[Inbox]"]))
+(define status->marker wave-status-marker)
 
 ;; ============================================================
 ;; Pure projection transforms (text → text)

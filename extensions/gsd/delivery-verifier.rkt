@@ -48,6 +48,7 @@
          "verify-command-format.rkt"
          "supplemental-evidence-proof.rkt"
          "wave-docs.rkt"
+         (only-in "planning-paths.rkt" plan-file state-file)
          (only-in "review-proof-format.rkt" apply-verify-jobs)
          (only-in "plan-context-builder.rkt" find-git-root-dir)
          ;; R76 (BUG-0076): shared layout-aware root resolution + validation.
@@ -65,10 +66,23 @@
          delivery-verification-approved?
          delivery-verification-evidence
          delivery-verification-message
+         ;; GSD simplification W5: typed verdict carried by the verification
+         ;; VALUE (never by the human message). The code is the internal
+         ;; authority for retry decisions; the message stays operator text.
+         typed-delivery-verification
+         typed-delivery-verification?
+         typed-delivery-verification-typed
+         delivery-verification/typed
+         delivery-verification-code
+         delivery-verification-target-files
+         delivery-verification-no-change?
+         ;; Typed verdict codes (additive vocabulary; symbols are stable).
+         VERIFICATION-CODE-APPROVED
+         VERIFICATION-CODE-NO-CHANGE
+         VERIFICATION-CODE-REJECTED
          make-delivery-verifier
          run-delivery-verification
          changed-files-set
-         scratch-probe-path?
          current-gsd-delivery-verify-command
          current-gsd-delivery-verify-jobs
          current-gsd-delivery-verify-timeout-sec
@@ -132,6 +146,57 @@
 
 (struct delivery-verification (approved? evidence message) #:transparent)
 ;; evidence: list of (cons check-name (cons ok? detail))
+
+;; GSD simplification W5 — typed verdict rides an additive TRANSPARENT SUBTYPE
+;; (the same pattern campaign-result.rkt uses for diagnostics): the historical
+;; 3-field struct line above stays VERBATIM, every legacy constructor call site
+;; and accessor keeps working, and the typed hash is reachable only through the
+;; additive accessors below. `evidence` keeps its exact historical shape
+;; (list of (cons check-name (cons ok? detail))) because receipt evidence text
+;; is derived from it — no schema or evidence shape changes here.
+;;
+;; typed: hash carrying 'code plus check-specific facts ('target-files,
+;;        'failed-checks). Descriptive fields never replace the code as the
+;;        routing authority.
+(struct typed-delivery-verification delivery-verification (typed) #:transparent)
+
+;; Typed verdict codes. `no-change` is the ONLY code that authorizes the
+;; bounded zero-edit retry; any legacy/unclassified rejection is `rejected`.
+(define VERIFICATION-CODE-APPROVED 'approved)
+(define VERIFICATION-CODE-NO-CHANGE 'no-change)
+(define VERIFICATION-CODE-REJECTED 'rejected)
+
+;; Typed producer constructor (additive; legacy 3-argument construction is
+;; unchanged).
+(define (delivery-verification/typed approved? evidence message typed)
+  (typed-delivery-verification approved? evidence message typed))
+
+;; The typed verdict code. Legacy values (no typed hash) derive a stable code
+;; from the approval bit alone — never from the message text.
+(define (delivery-verification-code v)
+  (define typed (and (typed-delivery-verification? v) (typed-delivery-verification-typed v)))
+  (if (hash? typed)
+      (hash-ref
+       typed
+       'code
+       (if (delivery-verification-approved? v) VERIFICATION-CODE-APPROVED VERIFICATION-CODE-REJECTED))
+      (if (delivery-verification-approved? v) VERIFICATION-CODE-APPROVED VERIFICATION-CODE-REJECTED)))
+
+;; Typed retry predicate: TRUE only for a structured zero-delivery verdict.
+;; The bounded zero-edit retry keys on THIS (never on a message prefix).
+(define (delivery-verification-no-change? v)
+  (and (delivery-verification? v) (eq? (delivery-verification-code v) VERIFICATION-CODE-NO-CHANGE)))
+
+;; Declared target files of the verified wave (typed fact; '() when the
+;; producer did not record them). The no-change retry prompt uses THIS list,
+;; never a re-parse of the verifier message.
+(define (delivery-verification-target-files v)
+  (define typed (and (typed-delivery-verification? v) (typed-delivery-verification-typed v)))
+  (and (hash? typed)
+       (let ([files (hash-ref typed 'target-files '())])
+         (if (list? files)
+             files
+             '()))))
 
 ;; ============================================================
 ;; Policy knobs
@@ -376,8 +441,8 @@
   ;; only the arrowless fallback. An UNSAFE declared arrow yields no issue
   ;; mapping here — the verify check independently refuses the unresolvable
   ;; declared document by name, so delivery still fails loudly.
-  (define state-path (build-path base-dir ".planning" "STATE.md"))
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define state-path (state-file base-dir))
+  (define plan-path (plan-file base-dir))
   (define expected-doc
     (and (file-exists? plan-path)
          (let ([entry (for/first ([e (in-list (parse-plan-index (call-with-input-file plan-path
@@ -525,26 +590,16 @@
         (list 1 "" "")))
   (define paths
     (append (string-split (git-stdout diff-result) "\n")
-            ;; sandbox-write-scratch-parity W1: executor scratch probes are
-            ;; disposable, never delivery evidence — exclude them from the
-            ;; untracked-new collection so a probe cannot dirty a delivery
-            ;; verdict or leak into frozen artifacts. Tracked (committed)
-            ;; scratch WOULD appear in the committed/campaign diffs and stays
-            ;; visible: only uncommitted probe residue is exempt.
-            (for/list ([p (in-list (string-split (git-stdout untracked-result) "\n"))]
-                       #:unless (scratch-probe-path? p))
-              p)
+            ;; W2: executor scratch moved OUT of the repository (one trusted
+            ;; session root below the platform temp dir), so there is no
+            ;; in-tree scratch evidence exemption any more. Any untracked path
+            ;; inside the checkout is ordinary delivery evidence again.
+            (string-split (git-stdout untracked-result) "\n")
             (string-split (git-stdout committed-result) "\n")
             (string-split (git-stdout campaign-result) "\n")))
   (for/set ([p (in-list paths)]
             #:when (not (string=? (string-trim p) "")))
     (string-trim p)))
-
-;; sandbox-write-scratch-parity W1: git-relative path predicate for
-;; executor-session scratch probes. The trailing slash makes the boundary
-;; exact: `.planning/scratch-elsewhere/` is NOT exempt.
-(define (scratch-probe-path? git-relative-path)
-  (string-prefix? (string-trim git-relative-path) ".planning/scratch/"))
 
 ;; Does the changed-file set satisfy this wave target?
 ;; - exact path match (existing behavior): a wave target that is a concrete
@@ -598,7 +653,10 @@
     (define at-tip (and tip (git-blob root tip git-relative)))
     (and at-base at-tip (string=? at-base at-tip))))
 
-(define (check-wave-files-changed base-dir wave-idx plan [campaign-created-at #f])
+;; Internal typed check: returns (values legacy-check-pair code target-files).
+;; The legacy pair keeps the EXACT historical evidence shape; the code is the
+;; typed verdict the coordinator decides on.
+(define (check-wave-files-changed/typed base-dir wave-idx plan [campaign-created-at #f])
   (define wave (and plan (plan-wave-ref plan wave-idx)))
   (define files
     (if wave
@@ -611,9 +669,11 @@
         (map clean-file-path (gsd-wave-files wave))
         '()))
   (define root (evidence-git-root base-dir))
+  (define (verdict ok? code detail)
+    (values (cons "files" (cons ok? detail)) code files))
   (cond
-    [(not root) (cons "files" (cons #f "no git root"))]
-    [(null? files) (cons "files" (cons #f "wave declares no target files"))]
+    [(not root) (verdict #f 'no-git-root "no git root")]
+    [(null? files) (verdict #f 'no-targets "wave declares no target files")]
     [else
      ;; W7 (#9512b): under an active branch context the changed set is the
      ;; COMMITTED branch diff ONLY — uncommitted worktree dirt (shared
@@ -657,54 +717,68 @@
                               f))])
        (cond
          [repair-tail-head
-          (cons
-           "files"
-           (cond
-             [(not delta) (cons #f "repair-tail: git failure inspecting the tail; failing closed")]
-             [(set-empty? delta)
-              (cons #f
-                    "repair-tail: no repair content (branch tip equals the recorded receipt head)")]
-             [(pair? regressed)
-              (cons #f
-                    (format
-                     "repair-tail: declared target files regressed from the verified base content: ~a"
-                     (string-join regressed ", ")))]
-             [(pair? altered-tail)
-              (cons #f
-                    (format "repair-tail: target file changed after the recorded receipt: ~a"
-                            (string-join altered-tail ", ")))]
-             [else
-              (cons #t
-                    (format
-                     "repair-tail: targets intact (changed: ~a; base-identical: ~a); repair delta: ~a"
-                     (string-join (if (pair? delivered)
-                                      delivered
-                                      '("-"))
-                                  ", ")
-                     (string-join (for/list ([f (in-list files)]
-                                             [g (in-list git-relatives)]
-                                             #:when (and (not (member f delivered))
-                                                         (blob-intact? root ctx g)))
-                                    f)
-                                  ", ")
-                     (string-join (sort (set->list delta) string<?) ", ")))]))]
+          (cond
+            [(not delta)
+             (verdict #f
+                      'repair-refused
+                      "repair-tail: git failure inspecting the tail; failing closed")]
+            [(set-empty? delta)
+             (verdict #f
+                      'repair-no-content
+                      "repair-tail: no repair content (branch tip equals the recorded receipt head)")]
+            [(pair? regressed)
+             (verdict
+              #f
+              'repair-regressed
+              (format
+               "repair-tail: declared target files regressed from the verified base content: ~a"
+               (string-join regressed ", ")))]
+            [(pair? altered-tail)
+             (verdict #f
+                      'repair-altered
+                      (format "repair-tail: target file changed after the recorded receipt: ~a"
+                              (string-join altered-tail ", ")))]
+            [else
+             (verdict
+              #t
+              'changed
+              (format
+               "repair-tail: targets intact (changed: ~a; base-identical: ~a); repair delta: ~a"
+               (string-join (if (pair? delivered)
+                                delivered
+                                '("-"))
+                            ", ")
+               (string-join (for/list ([f (in-list files)]
+                                       [g (in-list git-relatives)]
+                                       #:when (and (not (member f delivered))
+                                                   (blob-intact? root ctx g)))
+                              f)
+                            ", ")
+               (string-join (sort (set->list delta) string<?) ", ")))])]
          [else
-          (cons "files"
-                (if (pair? delivered)
-                    (cons #t (format "changed: ~a" (string-join delivered ", ")))
-                    ;; BUG-0025 (v1.00.18 W1): show the computed git-relative
-                    ;; mapping per unmatched declared file so path mismatches
-                    ;; (e.g. annotation prose surviving into the declared path,
-                    ;; or a wrong path convention) are diagnosable from the
-                    ;; rejection message alone.
-                    (cons #f
-                          (format "no wave target files changed: ~a~a"
-                                  (string-join files ", ")
-                                  (string-append "\n"
-                                                 (string-join (for/list ([f (in-list files)]
-                                                                         [g (in-list git-relatives)])
-                                                                (format "  ~a -> ~a" f g))
-                                                              "\n"))))))]))]))
+          (if (pair? delivered)
+              (verdict #t 'changed (format "changed: ~a" (string-join delivered ", ")))
+              ;; BUG-0025 (v1.00.18 W1): show the computed git-relative
+              ;; mapping per unmatched declared file so path mismatches
+              ;; (e.g. annotation prose surviving into the declared path,
+              ;; or a wrong path convention) are diagnosable from the
+              ;; rejection message alone. The message stays byte-identical;
+              ;; the typed code is 'no-change.
+              (verdict #f
+                       'no-change
+                       (format "no wave target files changed: ~a~a"
+                               (string-join files ", ")
+                               (string-append "\n"
+                                              (string-join (for/list ([f (in-list files)]
+                                                                      [g (in-list git-relatives)])
+                                                             (format "  ~a -> ~a" f g))
+                                                           "\n")))))]))]))
+
+;; Legacy accessor: the historical check-pair shape only (evidence unchanged).
+(define (check-wave-files-changed base-dir wave-idx plan [campaign-created-at #f])
+  (call-with-values (lambda ()
+                      (check-wave-files-changed/typed base-dir wave-idx plan campaign-created-at))
+                    (lambda (check code files) check)))
 
 ;; ============================================================
 ;; Verify command (bounded)
@@ -1299,20 +1373,36 @@
 
 (define (run-delivery-verification base-dir plan wave-idx [campaign-created-at #f])
   ;; Run all evidence checks. A wave is approved only when every check passes.
+  (define-values (files-check files-code target-files)
+    (check-wave-files-changed/typed base-dir wave-idx plan campaign-created-at))
   (define checks
     (list (check-git-available base-dir)
           (check-branch-matches base-dir wave-idx)
-          (check-wave-files-changed base-dir wave-idx plan campaign-created-at)
+          files-check
           (check-verify-command base-dir wave-idx plan)))
   (define failed
     (for/list ([c (in-list checks)]
                #:when (not (car (cdr c))))
       (format "~a: ~a" (car c) (cdr (cdr c)))))
+  ;; Typed verdict: 'no-change ONLY when the zero-delivery files verdict is
+  ;; the SOLE failure (that is the verdict the bounded zero-edit retry was
+  ;; designed for). Message text never participates.
+  (define failed-names
+    (for/list ([c (in-list checks)]
+               #:when (not (car (cdr c))))
+      (car c)))
+  (define code
+    (cond
+      [(null? failed-names) VERIFICATION-CODE-APPROVED]
+      [(and (equal? failed-names '("files")) (eq? files-code 'no-change)) VERIFICATION-CODE-NO-CHANGE]
+      [else VERIFICATION-CODE-REJECTED]))
+  (define typed (hasheq 'code code 'failed-checks failed-names 'target-files target-files))
   (if (null? failed)
-      (delivery-verification #t checks "delivery verified")
-      (delivery-verification #f
-                             checks
-                             (string-join (cons "delivery verification failed:" failed) "\n"))))
+      (delivery-verification/typed #t checks "delivery verified" typed)
+      (delivery-verification/typed #f
+                                   checks
+                                   (string-join (cons "delivery verification failed:" failed) "\n")
+                                   typed)))
 
 ;; Verifier callback for the campaign coordinator: (lambda (wave-idx) ...)
 ;; returning a `delivery-verification` struct.

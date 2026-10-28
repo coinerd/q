@@ -52,9 +52,10 @@
          racket/string
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../define-tool.rkt" define-tool)
+         (only-in "../exec-context.rkt" exec-context-working-directory)
          (only-in "../../util/path/path-helpers.rkt" contains-null-bytes? expand-home-path)
          (only-in "../../util/truncation.rkt" MAX-OUTPUT-BYTES MAX-OUTPUT-LINES)
-         (only-in "builtin-helpers.rkt" require-safe-path!))
+         (only-in "builtin-helpers.rkt" require-safe-path! canonical-tool-path))
 
 ;; Format a single numbered line
 (define (format-line n text)
@@ -96,7 +97,14 @@
 
 (define (read-handler args [exec-ctx #f])
   (define raw-path (hash-ref args 'path #f))
-  (define path-str (and raw-path (expand-home-path raw-path)))
+  (define expanded (and raw-path (expand-home-path raw-path)))
+  ;; W2: one canonical path resolution shared with find/edit/write. The
+  ;; details 'path and all filesystem operations use the same absolute,
+  ;; symlink-resolved spelling, so find -> read -> edit round-trips.
+  (define path-str
+    (and expanded
+         (path->string
+          (canonical-tool-path expanded (and exec-ctx (exec-context-working-directory exec-ctx))))))
   (cond
     [(not path-str) (make-error-result "Missing required argument: path")]
     [else

@@ -199,9 +199,27 @@
     (define declared
       (string-append "- `bash -c 'test -s q/proof.rkt'` exists\n"
                      "- `grep -q required q/proof.rkt` present\n"))
+    (define rejection (car (hash-ref (verify-declaration-extraction declared) 'rejections)))
+    (define fragment (format "[~a] `~a`" (hash-ref rejection 'reason) (hash-ref rejection 'span)))
     (fixture (lambda (root repo wt rec)
-               (check-exn exn:fail? (lambda () (frozen-verify-binding root plan-id 2))))
+               (define frozen-msg
+                 (with-handlers ([exn:fail? exn-message])
+                   (frozen-verify-binding root plan-id 2)
+                   #f))
+               (check-true (string? frozen-msg))
+               ;; R-011 / W4: the frozen consumer renders the SAME structured
+               ;; extractor vocabulary as live execution — identical reason
+               ;; name and authored span — instead of collapsing the failure
+               ;; into a generic "no executable command" message.
+               (define live-msg (cddr (check-verify-command root 2 #f)))
+               (check-true (string? live-msg))
+               (check-true (string-contains? live-msg fragment)
+                           "the live refusal names the reason and span")
+               (check-true (string-contains? frozen-msg fragment)
+                           "the frozen refusal names the SAME reason and span")
+               (check-true (string-contains? frozen-msg "rejects 1 authored gate span(s)")))
              #:command declared))
+
   (test-case "fast operational jobs flag is preserved but partial/dry-run profiles cannot certify broad"
     (check-true (proof-verify-command-eligible? "racket scripts/run-tests.rkt fast --jobs 2"))
     (for ([flag '("--impact-dry-run" "--changed-base abc"

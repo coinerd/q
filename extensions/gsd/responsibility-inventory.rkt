@@ -4,10 +4,18 @@
 ;;
 ;; Each module entry: (entry module-file domain effects params deps)
 ;; domain ∈ (pure-planning campaign-state transition-logic ui-glue persistence
-;;            event-projection command-parsing compatibility-facade)
+;;            event-projection command-parsing compatibility-facade
+;;            external-ports)
 ;; effects ∈ (fs-write fs-read fs-rename fs-delete mkdir dir-list sha256 git
 ;;            subprocess parameterize make-param path-ops network github
 ;;            dynamic-require)
+;;
+;; W5 (v1.00.31 simplification): effects are the scanner-visible primitives a
+;; module's OWN source calls. A delegated effect (journal write, proof capture,
+;; scratch allocation) is declared by its owning module and shows up here as a
+;; dependency, never as a waiver: `open-output-file` is now measured as fs-write
+;; too, so a module that opens its own output port cannot hide behind an
+;; atomic-write helper in somebody else's namespace.
 
 (require racket/contract)
 
@@ -283,11 +291,9 @@
                         "scripts/gsd-evidence-probe-runner"))
    ;; pure planning
    (make-entry "shared.rkt" 'pure-planning '() '() '("racket/string" "racket/list"))
-   (make-entry "wave-status.rkt" 'pure-planning '() '() '())
-   ;; BUG-0077: the campaign terminal result struct, extracted from
-   ;; go-orchestrator so the delivery checkpoint modules can construct
-   ;; results without depending on the orchestrator (size pin).
-   (make-entry "campaign-result.rkt" 'pure-planning '() '() '())
+   (make-entry "wave-status.rkt" 'pure-planning '() '() '("racket/string"))
+   ;; Campaign terminal values, structured diagnostics, and pure stop text.
+   (make-entry "campaign-result.rkt" 'pure-planning '() '() '("racket/string"))
    (make-entry "stall-policy.rkt"
                'transition-logic
                '(parameterize make-param
@@ -312,6 +318,24 @@
                '()
                '()
                '("racket/string" "racket/list" "racket/format"))
+   (make-entry "planning-paths.rkt" 'pure-planning '() '() '("racket/path" "racket/string"))
+   (make-entry "planning-artifact-validation.rkt"
+               'command-parsing
+               '(fs-read dir-list path-ops)
+               '()
+               '("racket/file" "racket/list"
+                               "racket/path"
+                               "racket/port"
+                               "racket/string"
+                               "plan-types"
+                               "plan-validator"
+                               "wave-docs"
+                               "plan-snapshot"
+                               "planning-artifact-ownership"
+                               "planning-paths"
+                               "verify-command-format"
+                               "campaign-state"
+                               "campaign-repository"))
    (make-entry "plan-validator.rkt"
                'pure-planning
                '()
@@ -322,11 +346,25 @@
                '()
                '()
                '("racket/contract" "racket/string" "util/error"))
+   ;; W5: the authoring template is GENERATED from wave-docs' required
+   ;; header/section constants (R-003/R-015) and the executor scratch guidance
+   ;; renders the ONE trusted per-session root. `path->string` is a real
+   ;; marker effect of the rendered guidance; the scratch allocation ITSELF is a
+   ;; delegated effect owned by tools/scratch.rkt (session-scratch-root /
+   ;; ensure-scratch-root!), so it is a dependency here and never a second
+   ;; allocator. The module now imports racket/path, so it is no longer in the
+   ;; no-I/O pure sweep.
    (make-entry "prompts.rkt"
                'pure-planning
+               '(path-ops)
                '()
-               '()
-               '("racket/format" "racket/string" "plan-types" "wave-executor"))
+               '("racket/format" "racket/path"
+                                 "racket/string"
+                                 "supplemental-author-contract"
+                                 "plan-types"
+                                 "wave-executor"
+                                 "wave-docs"
+                                 "tools/scratch"))
    ;; R76 (BUG-0076): shared leaf delivery-root resolver — the root/layout
    ;; decision logic sits below every call site (plan-context-builder,
    ;; wave-executor, delivery-verifier, ... all import it). Like its caller
@@ -336,10 +374,7 @@
                'pure-planning
                '(git make-param path-ops parameterize)
                '(current-git-root-layout-run-git)
-               '("racket/file" "racket/path"
-                                "racket/port"
-                                "racket/string"
-                                "racket/system"))
+               '("racket/file" "racket/path" "racket/port" "racket/string" "racket/system"))
    (make-entry "plan-context-builder.rkt"
                'pure-planning
                '(git make-param path-ops fs-read parameterize)
@@ -369,6 +404,7 @@
                                "racket/format"
                                "racket/contract"
                                "wave-docs"
+                               "planning-paths"
                                "util/json/checksum"))
    ;; v0.99.90 W1: .rktd storage boundary owns persistence effects
    (make-entry "campaign-repository.rkt"
@@ -381,34 +417,95 @@
                                "racket/string"
                                "racket/contract"
                                "campaign-state"
+                               "planning-paths"
                                "plan-snapshot"))
+   ;; W3: the ONE /go effect interpreter. It performs what the pure
+   ;; campaign-decision decides and never reconstructs a route. The process-safe
+   ;; lease (OS advisory lock + mkdir of the campaign directory) moved OUT to
+   ;; campaign-lease.rkt, so this module no longer declares the mkdir effect and
+   ;; no longer imports sandbox/gateway-bridge. Routing reads typed kinds,
+   ;; routes and codes; operator text is carried, never parsed.
    (make-entry "go-orchestrator.rkt"
                'campaign-state
-               '(make-param mkdir parameterize)
+               '(make-param parameterize)
                '()
                '("racket/format" "racket/file"
                                  "racket/match"
+                                 "racket/os"
+                                 "racket/string"
+                                 "racket/system"
+                                 "util/version"
                                  "campaign-state"
                                  "campaign-repository"
+                                 "campaign-result"
+                                 "campaign-lease"
+                                 "campaign-request"
+                                 "campaign-decision"
+                                 "campaign-budgets"
                                  "stall-policy"
                                  "infra-retry-policy"
                                  "freshness"
                                  "attempt-artifacts"
-                                 "campaign-budgets"
                                  "wave-completion"
                                  "wave-runner-port"
                                  "wave-docs"
                                  "wave-status"
+                                 "wave-scope"
+                                 "wave-executor"
+                                 "wave-outcome-reporting"
                                  "projection-effects"
                                  "delivery-verifier"
                                  "delivery-handoff"
+                                 "delivery-receipt"
+                                 "delivery-publication"
+                                 "delivery-coordinator"
+                                 "delivery-finalize"
                                  "tracker-resume"
                                  "util/loop-result"
                                  "system-adapters"
-                                 "sandbox/gateway-bridge"
                                  "plan-context-builder"
+                                 "policy"
+                                 "prompts"
+                                 "verification-repair"
+                                 "owned-lane"
+                                 "author-checkpoint"
                                  "review-dispatch"
-                                 "review-worktree"))
+                                 "review-worktree"
+                                 "notify"
+                                 "runtime/iteration/step-executor"
+                                 "util/iteration/decision"
+                                 "runtime/provider-retry"
+                                 "agent/state"))
+   ;; W3: ONE pure campaign decision per /go pass — complete / launch / resume /
+   ;; finalize / block / cancel, with the lane route table. No I/O, no
+   ;; parameters, no journal writes, and no text matching: only typed kinds,
+   ;; statuses, wave indices and the route symbol choose behaviour.
+   (make-entry "campaign-decision.rkt" 'transition-logic '() '() '("campaign-state"))
+   ;; W3: the ONE process-safe campaign lease (OS advisory lock on a stable
+   ;; lock file, owner/pid diagnostics, busy-stop explanation). It only
+   ;; acquires/releases/describes; run-campaign! still owns the dynamic-wind that
+   ;; releases on every exit path. mkdir parent directories, opens its own
+   ;; output port (fs-write) and renders the lock path.
+   (make-entry
+    "campaign-lease.rkt"
+    'persistence
+    '(fs-write fs-read mkdir path-ops)
+    '()
+    '("racket/file" "racket/format" "racket/os" "racket/string" "campaign-result" "planning-paths"))
+   ;; W3: the interface-safe /go request VALUE plus its process-local token
+   ;; registry (one locked hash) and the ONE attempt-prompt wrapper. The struct
+   ;; carries durable campaign identity and the callbacks the interpreter needs,
+   ;; the registry maps an opaque token to a value so TUI/GUI/SDK hook payloads
+   ;; never carry higher-order values, and call-with-request-scratch-prompt turns
+   ;; the request's scratch token into THIS attempt's advertised root (its
+   ;; temporary registry entry is released when the attempt ends, leaving the
+   ;; adopted session's own binding intact). No durable
+   ;; write; the scratch allocation itself is delegated to tools/scratch.rkt.
+   (make-entry "campaign-request.rkt"
+               'campaign-state
+               '()
+               '()
+               '("racket/format" "racket/string" "campaign-state" "delivery-handoff" "tools/scratch"))
    ;; v1.00.30 (delivery runtime): the coordinator-owned authenticated
    ;; delivery handoff — loop decision, delivered-proof validation,
    ;; pending→delivered ledger, and the predecessor resolver. Factored
@@ -429,6 +526,11 @@
                         "racket/string"
                         "campaign-state"
                         "campaign-repository"
+                        "campaign-decision"
+                        "git-root-layout"
+                        "delivery-journal"
+                        "delivery-receipt"
+                        "planning-paths"
                         "sandbox/subprocess"))
    ;; JSON journal writes atomically; fs-write/fs-rename/mkdir are not visible
    ;; to the legacy effect marker scanner, as with delivery-handoff above.
@@ -457,8 +559,11 @@
              "racket/port"
              "racket/string"
              "review-proof-format"
+             "supplemental-evidence-proof"
+             "verify-command-format"
              "delivery-verifier"
              "verification-job"
+             "composition-root"
              "plan-snapshot"
              "plan-types"
              "wave-docs"
@@ -468,7 +573,12 @@
                '(sha256)
                '()
                '("racket/list" "racket/string" "util/json/checksum"))
-   (make-entry "verify-command-format.rkt" 'transition-logic '() '() '("racket/list" "racket/string"))
+   (make-entry "verify-command-grammar.rkt" 'pure-planning '() '() '("racket/list" "racket/string"))
+   (make-entry "verify-command-format.rkt"
+               'transition-logic
+               '()
+               '()
+               '("racket/string" "verify-command-grammar"))
    ;; Public promotion audit validation delegates to pure format modules.
    (make-entry "review-audit-promotion.rkt"
                'transition-logic
@@ -518,6 +628,7 @@
                                "delivery-journal"
                                "review-rejection"
                                "delivery-handoff"
+                               "planning-paths"
                                "wave-executor"
                                "sandbox/subprocess"))
    ;; Creates isolated runtime sessions; the extension owns runtime/tools
@@ -555,7 +666,8 @@
                         "runtime/provider/model-registry"
                         "runtime/auth/auth-store"
                         "util/hash-helpers"
-                        "review-worktree"))
+                        "review-worktree"
+                        "planning-paths"))
    (make-entry "review-usage.rkt"
                'campaign-state
                '()
@@ -616,25 +728,33 @@
                                  "delivery-receipt"
                                  "delivery-journal"
                                  "delivery-handoff"
+                                 "planning-paths"
                                  "sandbox/subprocess"))
    ;; v1.00.33 recovery continuation: supported same-attempt repair-tail
    ;; recovery entry. Strict precheck + journal restore + independent clone
    ;; candidate + production verify; effects are delegated to the trusted
    ;; modules (delivery-journal reconcile, attempt-artifacts provenance,
-   ;; delivery-handoff persist) — the module's own markers are the git
-   ;; subprocess resolver, path operations and the origin-policy parameter.
+   ;; delivery-handoff persist) — the module's own scanner-visible markers are
+   ;; the git subprocess resolver, path operations, and the origin-policy
+   ;; parameter. W3 review fix: the advisory lock now comes from
+   ;; campaign-lease.rkt (stable lock path, can-update open, OS lock, owner
+   ;; diagnostics), so this module no longer opens/writes the lock file. Its
+   ;; remaining atomic writes go through call-with-atomic-output-file (not
+   ;; visible to the legacy marker scanner, as with delivery-handoff).
    (make-entry "delivery-recovery.rkt"
                'campaign-state
-               '(git path-ops parameterize make-param fs-read fs-rename fs-delete mkdir dir-list)
+               '(fs-read fs-rename fs-delete mkdir dir-list git path-ops parameterize make-param)
                '()
                '("racket/path" "racket/string"
                                "racket/system"
                                "json"
                                "campaign-state"
+                               "campaign-lease"
                                "campaign-repository"
                                "delivery-journal"
                                "delivery-verifier"
                                "delivery-handoff"
+                               "planning-paths"
                                "attempt-artifacts"))
    ;; BUG-0077: honest-completion state machine extracted from
    ;; go-orchestrator (attempt delivery provenance, park/finalize
@@ -644,6 +764,10 @@
    ;; own source carries no marker-visible effects.
    ;; BUG-0084: declares the current-gsd-review-infra-retry-limit parameter
    ;; (audited in docs/architecture/parameter-inventory.rktd).
+   ;;
+   ;; W3: the campaign loop's checkpoints are now thin interpreters of the ONE
+   ;; pure decision (campaign-decision.rkt) and the authenticated readback
+   ;; adapter (delivery-handoff campaign-delivery-view-for-pass).
    (make-entry "delivery-finalize.rkt"
                'campaign-state
                '(make-param)
@@ -651,17 +775,21 @@
                '("racket/list" "racket/string"
                                "campaign-state"
                                "campaign-repository"
+                               "campaign-result"
+                               "campaign-decision"
                                "delivery-journal"
+                               "delivery-handoff"
                                "wave-completion"
                                "attempt-artifacts"
                                "delivery-verifier"
                                "delivery-coordinator"
-                               "campaign-result"
                                "reconciliation-checkpoint"
                                "tracker-production-wiring"
+                               "tracker-reconciliation"
                                "review-checkpoint"
                                "author-checkpoint"
-                               "author-session-recovery"))
+                               "author-session-recovery"
+                               "supplemental-evidence-controller"))
    ;; BUG-0074 wiring: the post-DONE checkpoint policy. Decides WHEN the
    ;; receipt-authoritative pass is attempted and swallows its failures into a
    ;; typed result, so a tracker outage can never move a delivered wave off
@@ -726,7 +854,12 @@
                                     "runtime/settings-query"))
    (make-entry "wave-completion.rkt"
                'campaign-state
-               '(fs-read fs-write fs-rename mkdir fs-delete)
+               ;; W3 review fix: the completion outbox now publishes through the
+               ;; shared projection atomic writer (unique temp + rename + owned
+               ;; cleanup), so this module no longer carries its own
+               ;; rename/mkdir markers; those effects live in
+               ;; projection-effects.rkt (a declared dependency).
+               '(fs-read fs-write fs-delete)
                '()
                '("racket/file" "racket/path"
                                "racket/format"
@@ -736,6 +869,7 @@
                                "campaign-state"
                                "wave-docs"
                                "wave-status"
+                               "planning-paths"
                                "projection-effects"))
    (make-entry "delivery-verifier.rkt"
                'campaign-state
@@ -751,7 +885,12 @@
                                  "events"
                                  "plan-types"
                                  "verification-job"
+                                 "verify-command-format"
+                                 "supplemental-evidence-proof"
+                                 "review-proof-format"
+                                 "git-root-layout"
                                  "wave-docs"
+                                 "planning-paths"
                                  "plan-context-builder"
                                  "sandbox/subprocess"))
    ;; BUG-0040 W6: terminal-transition notification sink adapter
@@ -774,13 +913,24 @@
                '()
                '("racket/match" "racket/string" "racket/path"))
    (make-entry "transition-kernel.rkt" 'transition-logic '() '() '("racket/match" "racket/set"))
-   (make-entry "projection-kernel.rkt" 'event-projection '() '() '("racket/base" "racket/string"))
-   (make-entry
-    "projection-effects.rkt"
-    'event-projection
-    '(fs-read fs-write fs-rename mkdir path-ops)
-    '()
-    '("racket/file" "racket/path" "racket/format" "racket/string" "racket/port" "projection-kernel"))
+   (make-entry "projection-kernel.rkt"
+               'event-projection
+               '()
+               '()
+               '("racket/base" "racket/string" "wave-status"))
+   ;; W4: temp names are unique/self-identifying and the shell deletes ONLY its
+   ;; own temp paths on failure, so fs-delete is a real effect of this module;
+   ;; path construction is build-path/format only (no path<->string marker).
+   (make-entry "projection-effects.rkt"
+               'event-projection
+               '(fs-read fs-write fs-rename fs-delete mkdir)
+               '()
+               '("racket/file" "racket/path"
+                               "racket/format"
+                               "racket/string"
+                               "racket/port"
+                               "projection-kernel"
+                               "planning-paths"))
    (make-entry "transition-logic.rkt"
                'transition-logic
                '()
@@ -800,14 +950,14 @@
                'campaign-state
                ;; W8/v1.00.17: worktree isolation (W1-W5) added git + fs-delete
                ;; + parameter/make-parameter + path ops to this module.
-               '(fs-read fs-delete git make-param parameterize path-ops)
+               '(fs-delete git make-param parameterize path-ops)
                '()
                '("racket/format" "racket/string"
                                  "racket/file"
                                  "racket/port"
                                  "plan-types"
                                  "wave-docs"
-                                 "shared"
+                                 "planning-artifact-validation"
                                  "state-machine"
                                  "campaign-state"))
    ;; UI/extension glue (3)
@@ -825,6 +975,7 @@
                                    "archive"
                                    "command-types"
                                    "wave-docs"
+                                   "planning-paths"
                                    "session-state"
                                    "runtime-state-types"
                                    "events"
@@ -853,11 +1004,18 @@
                'ui-glue
                ;; W8/v1.00.17: empty-response re-anchor (#9514) added parameterize.
                ;; BUG-0032 fix: waves-dir backup rotation added fs-rename + path-ops.
-               '(fs-delete mkdir parameterize fs-rename path-ops)
+               ;; W4: supersession keeps ONE owned, PROVABLY created backup and
+               ;; preserves unknown backups; the pre-plan rotation stays an
+               ;; fs-delete/mkdir effect owned here, and the ownership marker is
+               ;; written with call-with-output-file (fs-write).
+               '(fs-delete fs-write mkdir parameterize fs-rename path-ops)
                '()
                '("racket/contract" "racket/match"
                                    "racket/string"
+                                   "racket/format"
                                    "racket/set"
+                                   "racket/os"
+                                   "racket/path"
                                    "json"
                                    "define-extension"
                                    "ext-commands"
@@ -874,18 +1032,30 @@
                                    "prompts"
                                    "context-bundle"
                                    "wave-docs"
+                                   "planning-paths"
+                                   "planning-artifact-ownership"
+                                   "tools/scratch"
                                    "tool-handlers"
                                    "archive"
                                    "events"
                                    "event-structs"
                                    "session-state"
                                    "plan-context-builder"
-                                   "verifier-gate"
-                                   "verifier-core"
+                                   "agent/verification/verifier-gate"
+                                   "agent/verification/verifier-core"
                                    "racket/file"
                                    "campaign-state"
+                                   "campaign-repository"
                                    "go-orchestrator"
-                                   "review-session"))
+                                   "delivery-verifier"
+                                   "delivery-coordinator"
+                                   "delivery-handoff"
+                                   "delivery-journal"
+                                   "runtime/settings-core"
+                                   "policy"
+                                   "review-session"
+                                   "agent/state"
+                                   "supplemental-author-contract"))
    ;; persistence (2)
    (make-entry "archive.rkt"
                'persistence
@@ -903,19 +1073,28 @@
                                    "command-types"
                                    "shared"
                                    "wave-status"
+                                   "planning-paths"
+                                   "planning-artifact-ownership"
                                    "session-state"))
    (make-entry "wave-docs.rkt"
                'persistence
                '(fs-read fs-write mkdir dir-list path-ops)
                '()
-               '("racket/file" "racket/path"
-                               "racket/format"
-                               "racket/string"
-                               "racket/match"
-                               "shared"
-                               "wave-status"))
+               '("racket/contract" "racket/file"
+                                   "racket/format"
+                                   "racket/list"
+                                   "racket/path"
+                                   "racket/port"
+                                   "racket/string"
+                                   "util/version"
+                                   "shared"
+                                   "planning-paths"
+                                   "wave-status"))
    ;; BUG-0060: bounded same-wave verification repair policy + durable
    ;; retry transition (classification, no-progress guard, ledger/persist).
+   ;; W5: also owns the bounded zero-EDIT retry transition (authorized by the
+   ;; typed 'no-change verdict); it reads the shared attempt-identity predicate
+   ;; from delivery-receipt.
    (make-entry "verification-repair.rkt"
                'transition-logic
                '(parameterize)
@@ -923,6 +1102,7 @@
                '("racket/match" "attempt-artifacts"
                                 "campaign-repository"
                                 "campaign-state"
+                                "delivery-receipt"
                                 "delivery-verifier"
                                 "events"
                                 "policy"
@@ -954,14 +1134,25 @@
                '("racket/file" "racket/format"
                                "racket/list"
                                "racket/match"
+                               "racket/os"
                                "racket/path"
                                "racket/port"
                                "racket/string"
+                               "planning-artifact-ownership"
+                               "planning-paths"
                                "../../util/json/checksum"))
+   ;; W4 (GSD-SIMPLIFICATION-PLAN): the ONE authentic ownership-marker
+   ;; predicate. A pure READ shell by contract: it opens no output port, renames
+   ;; nothing and deletes nothing — every destructive consumer asks it first.
+   (make-entry "planning-artifact-ownership.rkt"
+               'persistence
+               '(fs-read)
+               '()
+               '("racket/file" "racket/path"))
    ;; v1.00.24 W3 (BUG-0053): owned singleton verification jobs
    (make-entry "verification-job.rkt"
                'external-ports
-               '(fs-read fs-delete dir-list sha256 subprocess parameterize path-ops)
+               '(fs-read fs-write fs-delete dir-list sha256 subprocess parameterize path-ops)
                '()
                '("racket/contract" "racket/file"
                                    "racket/format"
@@ -1112,13 +1303,12 @@
                'persistence
                '(fs-write fs-delete dir-list path-ops)
                '()
-               '("racket/file"
-                 "racket/path"
-                 "supplemental-evidence-store"
-                 "supplemental-evidence-store-core"
-                 "supplemental-disposition-claim"
-                 "supplemental-evidence-format"
-                 "supplemental-evidence-authority"))
+               '("racket/file" "racket/path"
+                               "supplemental-evidence-store"
+                               "supplemental-evidence-store-core"
+                               "supplemental-disposition-claim"
+                               "supplemental-evidence-format"
+                               "supplemental-evidence-authority"))
    ;; Effective C1 owned-Verify capture and private authority reload. Git,
    ;; verification capture and proof retention delegate to their owners.
    (make-entry "supplemental-evidence-proof.rkt"

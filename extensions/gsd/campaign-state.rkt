@@ -41,6 +41,8 @@
                   wave-index-entry-status
                   wave-index-entry-ref-path
                   unsafe-declared-path-refusal)
+         (prefix-in wave: "wave-status.rkt")
+         (only-in "planning-paths.rkt" plan-file planning-path state-file wave-doc-rel-path)
          (only-in "../../util/json/checksum.rkt" sha256-string)
          (only-in "plan-snapshot.rkt"
                   seed-and-bind-plan-snapshot!
@@ -503,38 +505,22 @@
   (set-campaign-record-fence-token! rec val))
 
 ;; ============================================================
-;; Canonical status mapping (D4)
+;; Canonical status vocabulary — owned by wave-status.rkt (D4)
 ;; ============================================================
+;; The durable vocabulary, alias spellings, and the disjoint status predicates
+;; live in ONE module (wave-status.rkt). These aliases keep the historical
+;; campaign-state API and contracts without a second table; `deferred` stays
+;; its own status (never completed, never actionable, never retryable).
 
-(define CANONICAL-WAVE-STATUSES
-  '(pending in-progress verifying awaiting-delivery done failed interrupted deferred))
-
+(define CANONICAL-WAVE-STATUSES wave:CANONICAL-WAVE-STATUSES)
 (define canonical-wave-statuses CANONICAL-WAVE-STATUSES)
 
 (define (canonical-wave-status s)
-  (define up
-    (string-upcase (if (symbol? s)
-                       (symbol->string s)
-                       s)))
-  (cond
-    [(or (string=? up "INBOX") (string=? up "PENDING") (string=? up "NOT STARTED")) 'pending]
-    [(or (string=? up "IN-PROGRESS") (string=? up "IN PROGRESS")) 'in-progress]
-    [(string=? up "VERIFYING") 'verifying]
-    [(string=? up "AWAITING-DELIVERY") 'awaiting-delivery]
-    [(or (string=? up "DONE") (string=? up "COMPLETED")) 'done]
-    [(string=? up "FAILED") 'failed]
-    [(string=? up "INTERRUPTED") 'interrupted]
-    [(string=? up "DEFERRED") 'deferred]
-    [else 'pending]))
+  (wave:wave-status-symbol s))
 
-(define (completed-status? s)
-  (eq? s 'done))
-
-(define (retryable-status? s)
-  (and (memq s '(failed interrupted)) #t))
-
-(define (actionable-status? s)
-  (and (memq s '(pending in-progress verifying failed interrupted)) #t))
+(define completed-status? wave:completed-status?)
+(define retryable-status? wave:retryable-status?)
+(define actionable-status? wave:actionable-status?)
 
 ;; ============================================================
 ;; Manifest identity (D2)
@@ -1000,7 +986,7 @@
     (raise (exn:fail:campaign-migration
             (format "declared wave document path refused: .planning/~a (~a)" rel-path refusal)
             (current-continuation-marks))))
-  (define p (build-path base-dir ".planning" rel-path))
+  (define p (planning-path base-dir rel-path))
   (if (file-exists? p)
       (sha256-string (normalize-wave-doc-content (call-with-input-file p port->string)))
       (raise
@@ -1014,13 +1000,13 @@
   ;; BUG-0082: identity consistency — when the plan index row for <idx>
   ;; declares an arrow path, that document is hashed, not the synthesized
   ;; W<idx>-<slug>.md twin. Arrowless rows keep the synthesized path.
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (define declared
     (and (file-exists? plan-path)
          (for/first ([e (in-list (parse-plan-index (call-with-input-file plan-path port->string)))]
                      #:when (= (wave-index-entry-idx e) idx))
            (wave-index-entry-ref-path e))))
-  (wave-doc-hash-at base-dir (or declared (format "waves/W~a-~a.md" idx slug))))
+  (wave-doc-hash-at base-dir (or declared (wave-doc-rel-path idx slug))))
 
 ;; v0.99.90 W5 (#9236): plan identity must remain stable across mutable
 ;; status/failure projections. plan-snapshot.rkt owns the shared normalization
@@ -1035,7 +1021,7 @@
       ;; is the fallback. The content hash covers that same file.
       (define doc-path
         (or (wave-index-entry-ref-path e)
-            (format "waves/W~a-~a.md" (wave-index-entry-idx e) (wave-index-entry-slug e))))
+            (wave-doc-rel-path (wave-index-entry-idx e) (wave-index-entry-slug e))))
       (make-campaign-wave-descriptor (wave-index-entry-idx e)
                                      (wave-index-entry-title e)
                                      doc-path
@@ -1088,8 +1074,8 @@
   record)
 
 (define (migrate-campaign! base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
-  (define state-path (build-path base-dir ".planning" "STATE.md"))
+  (define plan-path (plan-file base-dir))
+  (define state-path (state-file base-dir))
   (define plan-present? (file-exists? plan-path))
   (define state-present? (file-exists? state-path))
   (cond

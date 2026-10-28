@@ -413,7 +413,7 @@
     (check-true (allowed-path? "/tmp/test-scheduler-safe-mode/foo.rkt"))))
 
 (test-case "blocked-tools constant available"
-  (check-equal? blocked-tools '("bash" "edit" "write" "firecrawl")))
+  (check-equal? blocked-tools '("bash" "edit" "write" "delete-lines" "firecrawl")))
 
 (test-case "trust-level predicate works from util import"
   (parameterize ([current-safe-mode #t])

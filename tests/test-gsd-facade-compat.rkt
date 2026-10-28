@@ -209,15 +209,21 @@
       (check-true (pair? imports) (format "~a must have require forms (extraction broken?)" mod)))
     (define violations
       (for/list ([i (in-list imports)]
-                 #:when (member i forbidden-io-imports))
+                 ;; planning-paths uses only pure build-path/path-string
+                 ;; construction; keep the I/O ban for every other module.
+                 #:when (and (member i forbidden-io-imports)
+                             (not (and (string=? mod "planning-paths.rkt") (string=? i "path")))))
         i))
     (check-equal? violations '() (format "~a imports I/O modules: ~a" mod violations))))
 
 (test-case "purity: pure kernel dependency whitelists"
   (define whitelists
     '(("transition-kernel.rkt" "base" "match" "set")
-      ("projection-kernel.rkt" "base" "string")
-      ("command-parser.rkt" "base" "match" "string" "command-helpers" "command-types")))
+      ("projection-kernel.rkt" "base" "string" "wave-status")
+      ("command-parser.rkt" "base" "match" "string" "command-helpers" "command-types")
+      ;; W3: the ONE campaign decision may depend only on the campaign record it
+      ;; inspects - no I/O module can enter the routing authority.
+      ("campaign-decision.rkt" "campaign-state")))
   (for ([entry (in-list whitelists)])
     (match-define (list mod allowed ...) entry)
     (define path (build-path q-dir "extensions" "gsd" mod))
@@ -234,4 +240,9 @@
                (test-case "pure-domain sweep covers the three kernels"
                  (check-not-false (member "transition-kernel.rkt" pure-modules))
                  (check-not-false (member "projection-kernel.rkt" pure-modules))
-                 (check-not-false (member "command-parser.rkt" pure-modules))))))
+                 (check-not-false (member "command-parser.rkt" pure-modules)))
+               (test-case "pure-domain sweep covers the ONE campaign decision"
+                 ;; W3: routing is a pure kernel too. If it ever acquires a
+                 ;; marker effect it leaves this list and its whitelist row
+                 ;; fails, so routing cannot quietly become effectful.
+                 (check-not-false (member "campaign-decision.rkt" pure-modules))))))

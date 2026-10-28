@@ -34,6 +34,17 @@
          racket/port
          (only-in "../../util/version.rkt" q-version)
          (only-in "shared.rkt" slugify)
+         (only-in (rename-in "planning-paths.rkt" [waves-dir planning-waves-dir])
+                  campaign-lint-verdict-file
+                  plan-file
+                  planning-path
+                  planning-root
+                  planning-waves-dir
+                  unsafe-declared-path-refusal
+                  declared-wave-doc-reference
+                  canonical-snapshot-wave-doc-reference-rx
+                  wave-doc-file
+                  wave-doc-rel-path)
          (only-in "wave-status.rkt"
                   STATUS-INBOX
                   STATUS-DONE
@@ -41,7 +52,17 @@
                   STATUS-FAILED
                   done-or-deferred?
                   active-status?
-                  normalize-status!))
+                  normalize-status!
+                  WAVE-STATUS-MARKERS
+                  exn:fail:wave-status
+                  exn:fail:wave-status?
+                  exn:fail:wave-status-accepted
+                  exn:fail:wave-status-context
+                  exn:fail:wave-status-value
+                  wave-status-marker
+                  wave-status-recognized?
+                  wave-status-comparison-key
+                  wave-status-symbol))
 
 ;; Struct exports (plain)
 (provide wave-index-entry
@@ -108,6 +129,18 @@
           [compute-plan-overall-status (-> (listof wave-index-entry?) symbol?)]
           [wave-exists? (-> path-string? exact-nonnegative-integer? string? boolean?)]
           [wave-status-markers (-> (listof pair?))]
+          ;; W5: ONE required-header/section contract shared with the
+          ;; planning prompt template (no second copy in prompts.rkt).
+          [WAVE-DOC-HEADING-PREFIX string?]
+          [WAVE-DOC-STATUS-PREFIX string?]
+          [WAVE-DOC-FILE-LINE-PREFIX string?]
+          [WAVE-DOC-FILES-SECTION string?]
+          [WAVE-DOC-VERIFY-SECTION string?]
+          [WAVE-DOC-DONE-SECTION string?]
+          [WAVE-DOC-INITIAL-STATUS string?]
+          [WAVE-DOC-REQUIRED-SECTIONS
+           (listof (list/c string? symbol? symbol?))]
+          [wave-doc-required-section-names (-> (listof string?))]
           [count-inline-wave-sections (-> string? exact-nonnegative-integer?)]
           [index-entry-doc-display-path (-> wave-index-entry? string?)]
           [missing-index-doc-paths (-> path-string? (listof wave-index-entry?) (listof string?))]
@@ -132,22 +165,57 @@
 ;; Constants
 ;; ============================================================
 
-(define WAVE-STATUS-MARKERS
-  (list (cons STATUS-INBOX "[Inbox]")
-        (cons "In-Progress" "[In-Progress]")
-        (cons STATUS-DONE "[DONE]")
-        (cons STATUS-DEFERRED "[DEFERRED]")
-        (cons STATUS-FAILED "[FAILED]")))
-
+;; THE marker vocabulary is owned by wave-status.rkt (one table, including the
+;; verbatim legacy [COMPLETED]/[CANCELLED] spellings). This accessor keeps the
+;; historical wave-docs export shape.
+;; COMPATIBILITY WRAPPER (W5): pure delegation, no policy of its own.
+;; TODO(#v1.00.40): remove this accessor and have the remaining callers import
+;; WAVE-STATUS-MARKERS from wave-status.rkt directly.
 (define (wave-status-markers)
   WAVE-STATUS-MARKERS)
 
-;; Pre-compiled regex patterns (using #rx for proper \n handling)
-(define wave-header-rx #rx"^# Wave [0-9]+\nStatus: ([^\n]+)\n")
-(define wave-header-full-rx #rx"^# Wave [0-9]+\nStatus: [^\n]+\n\n(.*)$")
+;; THE required wave-doc contract (W5, R-003/R-015): ONE source for the lint
+;; and the authoring template.
+;;
+;; The machine-managed header (BUG-0041/BUG-0095) is exactly one
+;; `# Wave <N>` H1 followed by exactly one `Status: <status>` line, then one
+;; of each required section. `lint-wave-doc` below VALIDATES this contract and
+;; `extensions/gsd/prompts.rkt` GENERATES its fenced authoring template from
+;; the same constants, so template and validator cannot drift apart again.
+(define WAVE-DOC-HEADING-PREFIX "# Wave ")
+(define WAVE-DOC-STATUS-PREFIX "Status: ")
+(define WAVE-DOC-FILE-LINE-PREFIX "- File: ")
+
+(define WAVE-DOC-FILES-SECTION "Files")
+(define WAVE-DOC-VERIFY-SECTION "Verify")
+(define WAVE-DOC-DONE-SECTION "Done")
+
+;; (list section-name requirement violation-section)
+;;   'file-line — section needs at least one `- File: <path>` bullet
+;;   'nonempty  — section needs at least one non-blank body line
+(define WAVE-DOC-REQUIRED-SECTIONS
+  (list (list WAVE-DOC-FILES-SECTION 'file-line 'files)
+        (list WAVE-DOC-VERIFY-SECTION 'nonempty 'verify)
+        (list WAVE-DOC-DONE-SECTION 'nonempty 'done)))
+
+;; The status a new wave doc's machine header carries; the same value the
+;; parser substitutes when the header is absent.
+(define WAVE-DOC-INITIAL-STATUS STATUS-INBOX)
+
+(define (wave-doc-required-section-names)
+  (for/list ([entry (in-list WAVE-DOC-REQUIRED-SECTIONS)])
+    (car entry)))
+
+;; Pre-compiled regex patterns (using #rx for proper \n handling). The machine
+;; header is built from the shared prefix constants above.
+(define wave-header-rx
+  (regexp (string-append "^" (regexp-quote WAVE-DOC-HEADING-PREFIX) "[0-9]+\n"
+                         (regexp-quote WAVE-DOC-STATUS-PREFIX) "([^\n]+)\n")))
+(define wave-header-full-rx
+  (regexp (string-append "^" (regexp-quote WAVE-DOC-HEADING-PREFIX) "[0-9]+\n"
+                         (regexp-quote WAVE-DOC-STATUS-PREFIX) "[^\n]+\n\n(.*)$")))
 (define index-line-rx #rx"^[-*] +\\[([A-Za-z-]+)\\] +W([0-9]+): +(.+?)(?: +\u2192 +(.+))?$")
 (define relaxed-index-line-rx #rx"^[-*] +W([0-9]+): +(.+?)(?: +→ +(.+))?$")
-(define slug-from-target-rx #rx"waves/W[0-9]+-(.+?)\\.md")
 
 ;; BUG-0050 (W2): a line-anchored `Status:` at column 0 ANYWHERE in the
 ;; doc body is a second status marker (stale authored-template residue).
@@ -166,7 +234,7 @@
 ;; ============================================================
 
 (define (wave-doc-path base-dir idx slug)
-  (build-path base-dir ".planning" "waves" (format "W~a-~a.md" idx slug)))
+  (wave-doc-file base-dir idx slug))
 
 ;; ============================================================
 ;; Wave document I/O
@@ -223,7 +291,11 @@
     (make-directory* dir))
   ;; BUG-0050 (W2): the authoring path emits exactly ONE `Status:` line
   ;; (the machine header); any body `Status:` line is stripped.
-  (define header (format "# Wave ~a\nStatus: ~a\n\n" header-idx status))
+  (define header (format "~a~a\n~a~a\n\n"
+                         WAVE-DOC-HEADING-PREFIX
+                         header-idx
+                         WAVE-DOC-STATUS-PREFIX
+                         status))
   (define sanitized-body (strip-body-status-lines content))
   (call-with-output-file path
                          (lambda (out)
@@ -281,7 +353,7 @@
   (define m (regexp-match wave-header-rx text))
   (if m
       (string-trim (cadr m))
-      "Inbox"))
+      WAVE-DOC-INITIAL-STATUS))
 
 (define (strip-status-header text)
   (define m (regexp-match wave-header-full-rx text))
@@ -300,9 +372,9 @@
 ;; route a wave through another campaign's W-numbered carrier doc.
 
 ;; Extract the full declared doc path from an arrow target (or #f).
-(define (wave-ref-path-from-target target)
-  (and target
-       (let ([m (regexp-match #rx"waves/[A-Za-z0-9][A-Za-z0-9._/-]*\\.md" target)]) (and m (car m)))))
+;; W5: the ONE lenient lexical grammar lives in planning-paths.rkt; this is a
+;; pure alias (same procedure value), not a second parser/regexp.
+(define wave-ref-path-from-target declared-wave-doc-reference)
 
 ;; The wave's document path: the declared arrow path when present, else the
 ;; classic W<idx>-<slug>.md synthesis; #f when the wave is not in the index.
@@ -331,32 +403,8 @@
 ;; synthesized twin (waves/W2-….md) can never win, and a missing declared
 ;; target is refused BY NAME, never silently replaced.
 
-;; unsafe-declared-path-refusal : (or/c string? #f) -> (or/c string? #f)
-;; PURE syntactic validation of a declared doc path, run BEFORE any path
-;; resolution (the arrow target is whatever wave-ref-path-from-target
-;; extracted, so this re-checks the result instead of trusting it). #f when
-;; the path is safe; otherwise a refusal string naming the exact target.
-;; The path must be relative, anchored under waves/, and contain no
-;; traversal/empty/dot segments; every resolution stays inside
-;; .planning/waves.
-(define (unsafe-declared-path-refusal rel-path)
-  (cond
-    [(not rel-path) #f]
-    [(zero? (string-length rel-path)) "declared wave document path is empty"]
-    [(string-prefix? rel-path "/")
-     (format
-      "declared wave document path ~a is absolute; declare it relative to .planning (waves/….md)"
-      rel-path)]
-    [(not (string-prefix? rel-path "waves/"))
-     (format "declared wave document path ~a is not under waves/" rel-path)]
-    [else
-     (define segs (string-split rel-path "/"))
-     (cond
-       [(ormap (lambda (seg) (string=? seg "..")) segs)
-        (format "declared wave document path ~a escapes .planning/waves (.. segment)" rel-path)]
-       [(ormap (lambda (seg) (or (string=? seg "") (string=? seg "."))) segs)
-        (format "declared wave document path ~a contains an empty or `.` segment" rel-path)]
-       [else #f])]))
+;; unsafe-declared-path-refusal is re-exported from planning-paths.rkt; the
+;; resolver below adds the filesystem/no-follow half of the boundary.
 
 ;; wave-entry-effective-doc-rel-path : wave-index-entry? -> (values rel refusal)
 ;; PURE. The .planning-relative document path for one index entry and its
@@ -370,7 +418,7 @@
         (if refusal
             (values #f refusal)
             (values declared #f)))
-      (values (format "waves/W~a-~a.md" (wave-index-entry-idx e) (wave-index-entry-slug e)) #f)))
+      (values (wave-doc-rel-path (wave-index-entry-idx e) (wave-index-entry-slug e)) #f)))
 
 ;; declared-mapping-refusals : (listof wave-index-entry?) -> (listof string?)
 ;; PURE. Every AMBIGUOUS-mapping refusal for a whole index: duplicate wave
@@ -424,7 +472,7 @@
 ;; planning tree.
 (define (symlinked-declared-doc-refusal base-dir rel-path)
   (define chain
-    (let loop ([cur (build-path base-dir ".planning")]
+    (let loop ([cur (planning-root base-dir)]
                [segs (string-split rel-path "/")]
                [acc '()])
       (if (null? segs)
@@ -455,7 +503,7 @@
 ;; declared bytes deterministically; ambiguity is refused by
 ;; declared-mapping-refusals at validation/selection and pre-mutation.
 (define (declared-wave-doc-resolution base-dir idx [entries #f])
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) (values #f #f #f)]
     [else
@@ -474,7 +522,7 @@
            (values #f syntax-refusal (format ".planning/~a" (wave-index-entry-ref-path entry)))]
           [else
            (define display (format ".planning/~a" rel))
-           (define abs (build-path base-dir ".planning" rel))
+           (define abs (planning-path base-dir rel))
            (define link-refusal (symlinked-declared-doc-refusal base-dir rel))
            (cond
              [link-refusal (values #f link-refusal display)]
@@ -538,8 +586,8 @@
 ;; Previously this returned (slugify target), producing nonsense expected
 ;; paths like W0-wavesnotesmd.md in strict-validation errors.
 (define (extract-slug-from-target target)
-  (define m (regexp-match slug-from-target-rx target))
-  (and m (cadr m)))
+  (define m (regexp-match canonical-snapshot-wave-doc-reference-rx target))
+  (and m (caddr m)))
 
 ;; BUG-0082: an arrow target that the LENIENT wave-ref-path-from-target
 ;; extraction cannot turn into a conforming waves/….md path is still a
@@ -608,7 +656,7 @@
   (define-values (rel refusal) (wave-entry-effective-doc-rel-path e))
   (and rel
        (not (symlinked-declared-doc-refusal base-dir rel))
-       (file-exists? (build-path base-dir ".planning" rel))))
+       (file-exists? (planning-path base-dir rel))))
 
 ;; ============================================================
 ;; Dual-source status consistency & precedence (BUG-0034, W2)
@@ -636,31 +684,25 @@
 ;;                                     header is the single marker)
 (struct status-divergence (wave-idx plan-status doc-status plan-path doc-path kind) #:transparent)
 
-;; status->symbol : (or/c string? symbol?) -> symbol?
-;; Canonical comparison key. Mirrors campaign-state.rkt's
-;; canonical-wave-status vocabulary so semantically IDENTICAL statuses
-;; spelled differently ("Inbox" row vs "PENDING" doc header) compare
-;; equal: the same meaning is not a BUG-0034 divergence. Unrecognized
-;; values canonicalize to 'pending (same fallback as the campaign layer).
-(define STATUS-CONSIDERED-EQUAL
-  (list (list 'pending "INBOX" "PENDING" "NOT STARTED")
-        (list 'in-progress "IN-PROGRESS" "IN PROGRESS")
-        (list 'verifying "VERIFYING")
-        (list 'done "DONE" "COMPLETED")
-        (list 'failed "FAILED")
-        (list 'interrupted "INTERRUPTED")
-        (list 'deferred "DEFERRED")))
-
+;; status->symbol : (or/c string? symbol?) -> any/c
+;; COMPATIBILITY WRAPPER (W5): pure delegation to wave-status.rkt's
+;; `wave-status-comparison-key`; it holds no table and no fallback of its own.
+;; TODO(#v1.00.40): remove once the remaining wave-docs call sites name the
+;; wave-status function directly.
+;; Canonical COMPARISON key, DELEGATED to wave-status.rkt (the single
+;; vocabulary owner). Semantically IDENTICAL statuses spelled differently
+;; ("Inbox" row vs "PENDING" doc header) compare equal: the same meaning is
+;; not a BUG-0034 divergence.
+;;
+;; W5 (R-019): an unrecognized value is NO LONGER coerced to 'pending. A
+;; comparison has to describe both sides, so it uses the explicit unknown
+;; identity `(unknown <SPELLING>)`: `[CANCELLED]` vs `Status: CANCELLED` still
+;; compares equal (the same claim) while `[CANCELLED]` vs `Status: PENDING`
+;; now DIVERGES instead of silently agreeing on a `pending` fallback.
+;; Control-flow callers that must not guess use `wave-status-symbol` (typed
+;; rejection) instead of this key.
 (define (status->symbol s)
-  (define up
-    (string-upcase (string-trim (if (symbol? s)
-                                    (symbol->string s)
-                                    s))))
-  (define hit
-    (for/first ([group (in-list STATUS-CONSIDERED-EQUAL)]
-                #:when (member up (cdr group)))
-      (car group)))
-  (or hit 'pending))
+  (wave-status-comparison-key s))
 
 ;; check-status-consistency : path-string? -> (listof status-divergence?)
 ;; Pure read path: compares every PLAN.md index-row status against its
@@ -677,7 +719,7 @@
 ;; consistency concern. Never writes; callers turn divergences into
 ;; named warnings.
 (define (check-status-consistency base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (if (not (file-exists? plan-path))
       '()
       (for/fold ([divs '()]
@@ -762,6 +804,8 @@
 ;; Implemented as exactly one function so tests pin the decision.
 ;; Selection reads statuses through it; everything else (warnings)
 ;; reports both raw sides.
+;; Comparison goes through the explicit comparison key, so an unknown row
+;; status is described (and later rejected by selection), never coerced.
 (define (resolve-status-precedence plan-row-status doc-header-status)
   (if (eq? (status->symbol plan-row-status) 'deferred)
       STATUS-DEFERRED
@@ -780,6 +824,33 @@
   (if (and doc (not refusal))
       (resolve-status-precedence (wave-index-entry-status e) (hash-ref doc 'status))
       (wave-index-entry-status e)))
+
+;; selection-status-symbol : path-string? wave-index-entry? -> symbol?
+;; The EFFECTIVE status as a strict durable symbol for selection. Unknown
+;; values raise the typed `exn:fail:wave-status` rejection naming the wave and
+;; the offending spelling (W5, R-019) — a typo must never make a wave
+;; selectable (the historical `pending` fallback did exactly that) nor silently
+;; skip it.
+(define (selection-status-symbol base-dir e)
+  (define effective (effective-wave-status base-dir e))
+  (with-handlers ([exn:fail:wave-status?
+                   (lambda (ex)
+                     (raise (exn:fail:wave-status
+                             (string-append
+                              (format "wave selection refused: W~a declares unknown status ~s"
+                                      (wave-index-entry-idx e)
+                                      (exn:fail:wave-status-value ex))
+                              ". Accepted spellings are "
+                              (string-join (exn:fail:wave-status-accepted ex) ", ")
+                              ". Correct the PLAN.md row or the wave doc header; no wave is "
+                              "selected and nothing is dispatched.")
+                             (current-continuation-marks)
+                             (exn:fail:wave-status-value ex)
+                             (exn:fail:wave-status-accepted ex)
+                             (format "W~a (effective status ~s)"
+                                     (wave-index-entry-idx e)
+                                     effective))))])
+    (wave-status-symbol effective)))
 
 ;; ============================================================
 ;; Plan-format deprecation warnings (BUG-0035, W6)
@@ -832,7 +903,7 @@
 ;; for its text. No plan file → no warnings (nothing loaded, nothing
 ;; deprecated). Non-fatal: this never blocks a campaign.
 (define (plan-format-deprecation-warning-lines base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (if (not (file-exists? plan-path))
       '()
       (plan-format-deprecation-warnings (call-with-input-file plan-path port->string))))
@@ -881,21 +952,28 @@
            '()
            (cons (car lines) (loop (cdr lines) 'body)))])))
 
-;; wave-doc-section-nonempty? : string? string? -> boolean?
+;; wave-doc-required-section-satisfied? : string? (list/c string? symbol? symbol?) -> boolean?
+;; PURE. Does CONTENT satisfy one entry of WAVE-DOC-REQUIRED-SECTIONS?
+(define (wave-doc-required-section-satisfied? content entry)
+  (define name (first entry))
+  (case (second entry)
+    [(file-line)
+     (and (ormap (lambda (l) (regexp-match? wave-doc-file-line-rx l))
+                 (wave-doc-section-body content name))
+          #t)]
+    [(nonempty) (and (wave-doc-section-nonempty? content name) #t)]
+    [else #f]))
+
+;; wave-doc-required-section-nonempty? : string? string? -> boolean?
 ;; Section exists and has at least one non-blank body line.
 (define (wave-doc-section-nonempty? content name)
   (ormap (lambda (l) (not (string=? (string-trim l) ""))) (wave-doc-section-body content name)))
 
 ;; recognized-status? : (or/c string? symbol?) -> boolean?
-;; #t iff the status is in the STATUS-CONSIDERED-EQUAL vocabulary (i.e.
-;; status->symbol found a real group, not the 'pending fallback).
+;; #t iff the spelling is part of the shared vocabulary (a real canonical
+;; status, not an unknown spelling).
 (define (recognized-status? s)
-  (define up
-    (string-upcase (string-trim (if (symbol? s)
-                                    (symbol->string s)
-                                    s))))
-  (for/or ([group (in-list STATUS-CONSIDERED-EQUAL)])
-    (and (member up (cdr group)) #t)))
+  (wave-status-recognized? s))
 
 ;; lint-wave-doc : hash? -> (listof wave-doc-violation?)
 ;; PURE. Lints ONE parsed wave doc (the hash read-wave-doc /
@@ -923,7 +1001,7 @@
     (or (hash-ref doc 'path #f)
         (format ".planning/waves/W~a-~a.md" idx (hash-ref doc 'slug "unknown"))))
   (define content (hash-ref doc 'content ""))
-  (define status (hash-ref doc 'status "Inbox"))
+  (define status (hash-ref doc 'status WAVE-DOC-INITIAL-STATUS))
   (append (if (and (hash-ref doc 'status-header? #t) (recognized-status? status))
               '()
               (list (wave-doc-violation idx path-display 'status-header)))
@@ -932,23 +1010,19 @@
           (if (body-status-line content)
               (list (wave-doc-violation idx path-display 'duplicate-status))
               '())
-          (if (ormap (lambda (l) (regexp-match? wave-doc-file-line-rx l))
-                     (wave-doc-section-body content "Files"))
-              '()
-              (list (wave-doc-violation idx path-display 'files)))
-          (if (wave-doc-section-nonempty? content "Verify")
-              '()
-              (list (wave-doc-violation idx path-display 'verify)))
-          (if (wave-doc-section-nonempty? content "Done")
-              '()
-              (list (wave-doc-violation idx path-display 'done)))))
+          ;; W5: the required sections come from the ONE shared contract table
+          ;; (WAVE-DOC-REQUIRED-SECTIONS), which the planning prompt template
+          ;; is generated from as well.
+          (for*/list ([entry (in-list WAVE-DOC-REQUIRED-SECTIONS)]
+                      #:when (not (wave-doc-required-section-satisfied? content entry)))
+            (wave-doc-violation idx path-display (third entry)))))
 
 ;; lint-campaign-wave-docs : path-string? -> (listof wave-doc-violation?)
 ;; File-backed lint of every wave doc the PLAN.md index references. Docs
 ;; missing on disk are BUG-0023 strict-validation territory (/go errors
 ;; before lint), never lint violations.
 (define (lint-campaign-wave-docs base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (if (not (file-exists? plan-path))
       '()
       (let ([entries (parse-plan-index (call-with-input-file plan-path port->string))])
@@ -1023,11 +1097,11 @@
                                           plan-id
                                           (exn-message e))
                                #f)])
-    (define dest (build-path base-dir ".planning" "campaigns" plan-id "lint-verdict.rktd"))
+    (define dest (campaign-lint-verdict-file base-dir plan-id))
     (cond
       [(file-exists? dest) #f]
       [else
-       (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+       (define plan-path (plan-file base-dir))
        (define entries
          (if (file-exists? plan-path)
              (parse-plan-index (call-with-input-file plan-path port->string))
@@ -1107,14 +1181,14 @@
 ;; misnamed doc still reports, because then the arrow target is missing and the
 ;; only candidate carries a different slug.
 (define (check-slug-consistency base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (if (not (file-exists? plan-path))
       '()
       (append*
        (for/list ([e (in-list (parse-plan-index (call-with-input-file plan-path port->string)))])
          (define idx (wave-index-entry-idx e))
          (define idx-prefix-rx (regexp (format "^W~a-" idx)))
-         (define waves-dir (build-path base-dir ".planning" "waves"))
+         (define waves-dir (planning-waves-dir base-dir))
          (if (wave-exists? base-dir idx (wave-index-entry-slug e))
              '()
              (for/list ([f (in-list (if (directory-exists? waves-dir)
@@ -1153,11 +1227,11 @@
 ;; ============================================================
 
 (define (update-plan-index-text text wave-idx new-status)
-  (define marker (status->marker new-status))
+  (define marker (wave-status-marker new-status))
   (update-index-line text wave-idx marker))
 
 (define (update-wave-in-index! base-dir wave-idx new-status)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) #f]
     [else
@@ -1165,16 +1239,6 @@
      (define new-text (update-plan-index-text text wave-idx new-status))
      (call-with-output-file plan-path (lambda (out) (display new-text out)) #:exists 'truncate)
      #t]))
-
-(define (status->marker status)
-  (cond
-    [(string? status)
-     (define entry (assoc status WAVE-STATUS-MARKERS))
-     (if entry
-         (cdr entry)
-         (format "[~a]" status))]
-    [(symbol? status) (status->marker (symbol->string status))]
-    [else "[Inbox]"]))
 
 (define (update-index-line text wave-idx new-marker)
   (define lines (string-split text "\n"))
@@ -1198,8 +1262,12 @@
                          (string=? (wave-index-entry-status e) STATUS-FAILED)))
     e))
 
+;; next-inbox-wave : path-string? -> (or/c wave-index-entry? #f)
+;; First selectable (pending or failed) wave under the documented precedence.
+;; W5: an unknown EFFECTIVE status refuses selection with the typed
+;; `exn:fail:wave-status` rejection instead of acting like `pending`.
 (define (next-inbox-wave base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) #f]
     [else
@@ -1230,7 +1298,7 @@
         ;; doctored row can no longer silently steer next-wave selection.
         ;; BUG-0082: the header is the DECLARED document's header.
         (for/first ([e (in-list entries)]
-                    #:when (memq (status->symbol (effective-wave-status base-dir e))
+                    #:when (memq (selection-status-symbol base-dir e)
                                  '(pending failed)))
           e)])]))
 
@@ -1239,7 +1307,7 @@
 ;; ============================================================
 
 (define (mark-wave-status! base-dir wave-idx new-status)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) #f]
     [else
@@ -1281,7 +1349,7 @@
            (wave-status-refusal! base-dir wave-idx new-status (car mapping-refusals))
            #f]
           [else
-           (define wave-path (build-path base-dir ".planning" rel))
+           (define wave-path (planning-path base-dir rel))
            (when (file-exists? wave-path)
              (define wave-text (call-with-input-file wave-path port->string))
              (define content (strip-status-header wave-text))
@@ -1334,7 +1402,7 @@
        [else 'in-progress])]))
 
 (define (plan-overall-status base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) 'not-started]
     [else
@@ -1347,7 +1415,7 @@
 
 ;; Slug for one wave index, read from the PLAN.md index.
 (define (wave-slug base-dir wave-idx)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (cond
     [(not (file-exists? plan-path)) #f]
     [else
@@ -1360,7 +1428,7 @@
 
 ;; Whole-index slug map (idx → slug) from the PLAN.md index.
 (define (plan-slug-map base-dir)
-  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define plan-path (plan-file base-dir))
   (if (file-exists? plan-path)
       (for/hash ([e (parse-plan-index (call-with-input-file plan-path port->string))])
         (values (wave-index-entry-idx e) (wave-index-entry-slug e)))

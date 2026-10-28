@@ -58,6 +58,13 @@ is a compatibility name for bounded direct-argv read-only commands, not an
 unrestricted shell (`review-tools.rkt`). It cannot run the owner authorization
 CLI or use policy auto-approval to mint supplemental authority.
 
+Every stop described in this document is a typed, machine-readable outcome
+rendered by the CLI/TUI; the operator-facing next steps are collected in the
+single recovery table in
+[the GSD user guide](gsd-guide.md#recovery-table). Review never replaces
+merge authorization, and no stop is repaired by editing or deleting campaign
+state, receipts, grants or review evidence.
+
 ### Bounded missing-evidence recovery
 
 Before independent review, the evidence readiness boundary authenticates the
@@ -391,12 +398,17 @@ campaign mutation or live reviewer acceptance.
 
 The frozen document and snapshot digest remain immutable. Declared execution,
 owned-proof capture, offline audit and focused RED selection share the pure
-`verify-command-format.rkt` stage canonicalizer. Fenced multiline Verify commands
-are joined in document order with fail-fast ` && ` before expansion, jobs injection,
-identity hashing and execution. A terminal shell exit zero therefore cannot mask an
-earlier failed stage. Existing unambiguous single-line and `&&` declarations retain
-their command bytes. Legacy single-command shell contracts are not promoted to the
-strict five-gate audit grammar.
+`verify-command-format.rkt` stage canonicalizer, whose token-level decisions
+(span vocabulary, shell-chain splitter, closed rejection/refusal taxonomy) live
+in exactly one place, `verify-command-grammar.rkt`. The precise accept/reject
+grammar — including the examples parsed and asserted by
+`tests/test-gsd-docs-contracts.rkt` — is documented once in
+[the GSD guide](gsd-guide.md#verify-grammar-verify). Fenced multiline Verify
+commands are joined in document order with fail-fast ` && ` before expansion,
+jobs injection, identity hashing and execution. A terminal shell exit zero
+therefore cannot mask an earlier failed stage. Existing unambiguous single-line
+and `&&` declarations retain their command bytes. Legacy single-command shell
+contracts are not promoted to the strict five-gate audit grammar.
 
 Ambiguous chains (empty stages, dangling operators, continuations, quoted newlines
 or `&&`, shell control/substitution syntax) fail closed rather than being split as

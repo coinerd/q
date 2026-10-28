@@ -141,6 +141,17 @@
            "refused: remote requests may not carry a trusted working directory (no executor-local root mapping is authorized)"
            ;; String class: this response crosses the JSON wire.
            #:error-class "remote-trusted-root-refused")]
+         ;; W2: the trusted SCRATCH root is the second trusted producer channel
+         ;; and is refused for exactly the same reason. It is checked here,
+         ;; BEFORE process-ipc-request, because the worker would happily accept
+         ;; a root shape it could validate locally — the peer has no authority
+         ;; to name an executor-local scratch root, so the request never
+         ;; reaches dispatch.
+         [(ipc-request-trusted-scratch-root request)
+          (make-error-response
+           (ipc-request-request-id request)
+           "refused: remote requests may not carry a trusted scratch root (no executor-local scratch mapping is authorized)"
+           #:error-class "remote-trusted-root-refused")]
          [else
           ;; F-10 fix: Strip capability token from arguments before dispatch
           ;; so it's not passed to the worker tool.

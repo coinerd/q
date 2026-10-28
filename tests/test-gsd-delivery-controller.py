@@ -1981,21 +1981,25 @@ class DeliveryTests(unittest.TestCase):
             m.sync(w['subject'], 'main')
         self.assertIn('dirty', str(caught.exception))
 
-    def test_sync_tolerates_executor_scratch_probes(self):
-        # sandbox-write-scratch-parity W1: untracked files under
-        # .planning/scratch/ are disposable executor probes — they must not
-        # block delivery synchronization. Real edits still refuse.
+    def test_sync_refuses_in_tree_scratch_probes(self):
+        # W2 retirement (mirrors extensions/gsd/delivery-verifier.rkt):
+        # executor scratch moved to one trusted session root BELOW the platform
+        # temporary directory, so a leftover in-tree `.planning/scratch/`
+        # directory is ordinary working-tree dirt again — there is no evidence
+        # exemption that a stale probe could hide behind.
         w = self.world()
         self.advance_origin(w)
         scratch = w['subject'] / '.planning' / 'scratch' / 'tok1234567890ab'
         scratch.mkdir(parents=True)
         write_file(scratch / 'probe.rkt', '#lang racket/base\n')
-        result = m.sync(w['subject'], 'main')
-        self.assertEqual(result['status'], 'synchronized')
+        with self.assertRaises(m.Pending) as caught:
+            m.sync(w['subject'], 'main')
+        self.assertIn('dirty', str(caught.exception))
 
     def test_sync_refuses_committed_scratch_edit(self):
         # A COMMITTED scratch file's local modification is real working-tree
-        # dirt: only untracked probe residue is exempt.
+        # dirt. It refused under the retired W1 exemption and still refuses:
+        # nothing inside the checkout is exempt from the sync dirt check.
         w = self.world()
         self.advance_origin(w)
         scratch = w['subject'] / '.planning' / 'scratch' / 'tok1234567890ab'
@@ -2009,8 +2013,9 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn('dirty', str(caught.exception))
 
     def test_sync_refuses_dirty_checkout_outside_scratch(self):
-        # A tracked-file edit plus a scratch probe still refuses: the scratch
-        # tolerance never widens into a general dirty-checkout allowance.
+        # A tracked-file edit plus a scratch probe still refuses: with the W1
+        # scratch exemption retired there is no scratch-shaped allowance left
+        # to widen into a general dirty-checkout tolerance.
         w = self.world()
         self.advance_origin(w)
         scratch = w['subject'] / '.planning' / 'scratch' / 'tok1234567890ab'
@@ -3225,7 +3230,13 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(result['head'], w['head'])
         self.assertEqual(result['status'], 'green')
 
-    def test_scratch_exempt_porcelain_does_not_split_untracked_arrow_names(self):
+    def test_scratch_exempt_porcelain_is_retired(self):
+        # W2 retirement guard: the in-tree `.planning/scratch/` porcelain
+        # exemption must not come back. Sync reports ordinary dirt; an
+        # untracked in-tree scratch probe (even one whose literal name contains
+        # " -> ") can never be filtered out of the refusal.
+        self.assertFalse(hasattr(m, 'scratch_exempt_porcelain'),
+                         'the retired .planning/scratch porcelain exemption must stay gone')
         w = self.open_impl_world()
         scratch = w['subject'] / '.planning' / 'scratch' / 'probe'
         scratch.parent.mkdir(parents=True, exist_ok=True)
@@ -3233,8 +3244,8 @@ class DeliveryTests(unittest.TestCase):
         foreign_name = w['subject'] / 'src' / 'x -> .planning/scratch/y'
         foreign_name.parent.mkdir(parents=True, exist_ok=True)
         foreign_name.write_text('foreign\n')
-        kept = m.scratch_exempt_porcelain(w['subject'])
-        self.assertNotIn('.planning/scratch/probe', kept)
+        kept = m.porcelain(w['subject'])
+        self.assertIn('.planning/scratch/probe', kept)
         self.assertIn('src/x -> .planning/scratch/y', kept)
 
     def test_resolve_pr_rejects_rename_from_source_to_evidence(self):

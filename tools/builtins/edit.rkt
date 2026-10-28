@@ -15,8 +15,13 @@
          (only-in "../../util/racket-source-validation.rkt"
                   validate-proposed-racket-source
                   racket-edit-balance-warning)
-         (only-in "builtin-helpers.rkt" require-safe-path! check-utf8-file? validate-utf8-bytes)
+         (only-in "builtin-helpers.rkt"
+                  require-safe-path!
+                  check-utf8-file?
+                  validate-utf8-bytes
+                  canonical-tool-path)
          "edit-contract.rkt"
+         "edit-mismatch.rkt"
          "atomic-file-replace.rkt"
          "../../util/config-paths.rkt")
 
@@ -86,162 +91,6 @@
         (delete-file (build-path dir f))))))
 
 ;; --------------------------------------------------
-;; Enhanced not-found diagnostics
-;; --------------------------------------------------
-
-(define (first-differing-offset a b)
-  (define len (min (string-length a) (string-length b)))
-  (let loop ([i 0])
-    (cond
-      [(>= i len)
-       (if (= (string-length a) (string-length b))
-           (values #f #f #f)
-           (values len #f #f))]
-      [(char=? (string-ref a i) (string-ref b i)) (loop (add1 i))]
-      [else (values i (string-ref a i) (string-ref b i))])))
-
-(define (escape-char c)
-  (format "U+~X" (char->integer c)))
-
-(define (escaped-context s offset [context-radius 6])
-  (define start (max 0 (- offset context-radius)))
-  (define end (min (string-length s) (+ offset context-radius)))
-  (define parts
-    (for/list ([i (in-range start end)])
-      (escape-char (string-ref s i))))
-  (format "[~a]" (string-join parts " ")))
-
-(define (count-leading-spaces s)
-  (for/fold ([count 0])
-            ([ch (in-string s)]
-             #:break (not (char=? ch #\space)))
-    (add1 count)))
-
-(define (make-not-found-error path-str old-text content)
-  (define-values (line-num line-text) (find-nearest-match content old-text))
-  ;; Compare old-text against the nearest matching region, not the file start.
-  ;; Otherwise an indented snippet in a Racket file misleadingly differs from
-  ;; the leading `#lang` at offset zero.
-  (define old-lines (string-split old-text "\n" #:trim? #f))
-  (define comparison-lines
-    (if line-num
-        (let* ([content-lines (string-split content "\n" #:trim? #f)]
-               [region-start (sub1 line-num)]
-               [region-end (min (length content-lines) (+ region-start (length old-lines)))])
-          (for/list ([i (in-range region-start region-end)])
-            (list-ref content-lines i)))
-        (string-split content "\n" #:trim? #f)))
-  (define comparison-region (string-join comparison-lines "\n"))
-  (define-values (diff-offset content-char old-char)
-    (first-differing-offset comparison-region old-text))
-  (define diff-detail
-    (cond
-      [(and diff-offset content-char old-char)
-       (format
-        "First differing offset: ~a (~a vs ~a)\nContext around mismatch in file:  ~a\nContext around mismatch in old-text: ~a"
-        diff-offset
-        (escape-char content-char)
-        (escape-char old-char)
-        (escaped-context comparison-region diff-offset)
-        (escaped-context old-text diff-offset))]
-      [diff-offset
-       (format "First differing offset: ~a (nearest region has ~a chars, old-text has ~a chars)\n"
-               diff-offset
-               (string-length comparison-region)
-               (string-length old-text))]
-      [else ""]))
-  (define ws-info
-    (if line-num
-        (let ([diff-lines
-               (for/list ([c (in-list comparison-lines)]
-                          [o (in-list old-lines)]
-                          #:when (not (equal? c o)))
-                 (define c-spaces (count-leading-spaces c))
-                 (define o-spaces (count-leading-spaces o))
-                 (format "  file line has ~a leading spaces, old-text has ~a" c-spaces o-spaces))])
-          (if (pair? diff-lines)
-              (string-append "Whitespace differences near line "
-                             (number->string line-num)
-                             ":\n"
-                             (string-join diff-lines "\n"))
-              ""))
-        ""))
-  (define hint
-    (match old-text
-      [(? (lambda (s) (and (string? s) (regexp-match? #rx"^ +" s))))
-       "Hint: old-text has leading whitespace -- check indentation."]
-      [(? (lambda (s)
-            (and (string? s) (> (string-length s) 200) (< (length (string-split s "\n")) 2))))
-       "Hint: old-text is very long and single-line -- try a smaller unique snippet."]
-      [_ ""]))
-  (define base
-    (match line-num
-      [#f
-       (format "old-text not found in ~a (appears 0 times). Read the file first to get exact text.\n"
-               path-str)]
-      [_
-       (string-append
-        (format "old-text not found in ~a.\nNearest match at line ~a:\n  \"" path-str line-num)
-        (string-trim line-text)
-        "\"\n")]))
-  (string-append base
-                 (if (equal? diff-detail "")
-                     ""
-                     (string-append diff-detail "\n"))
-                 ws-info
-                 (if (and (not (equal? ws-info "")) (not (equal? hint ""))) "\n" "")
-                 hint))
-
-;; --------------------------------------------------
-;; Near-match helper
-;; --------------------------------------------------
-
-(define (longest-common-substring-len a b)
-  (define la (string-length a))
-  (define lb (string-length b))
-  (cond
-    [(or (zero? la) (zero? lb)) 0]
-    [else
-     (for/fold ([best 0]) ([i (in-range la)])
-       (for/fold ([best best]) ([j (in-range lb)])
-         (let loop ([di 0]
-                    [dj 0]
-                    [len 0])
-           (match (list (+ i di) (+ j dj))
-             [(list (? (lambda (x) (or (>= x la))) _) _) (max best len)]
-             [(list _ (? (lambda (x) (>= x lb)))) (max best len)]
-             [(list (? (lambda (x) (char=? (string-ref a x) (string-ref b (+ j dj))))) _)
-              (loop (add1 di) (add1 dj) (add1 len))]
-             [_ (max best len)]))))]))
-
-(define (extract-search-key old-text)
-  (define trimmed (string-trim old-text))
-  (if (<= (string-length trimmed) 60)
-      trimmed
-      (substring trimmed 0 60)))
-
-(define (find-nearest-match content old-text)
-  (define lines (string-split content "\n" #:trim? #f))
-  (define key (extract-search-key old-text))
-  (define key-len (string-length key))
-  (match key-len
-    [0 (values #f #f)]
-    [_
-     (for/fold ([best-line #f]
-                [best-num #f]
-                [best-score 0]
-                #:result (if (> best-score (* key-len 0.4))
-                             (values best-num best-line)
-                             (values #f #f)))
-               ([line (in-list lines)]
-                [idx (in-naturals 1)])
-       (define trimmed (string-trim line))
-       (define lcs (longest-common-substring-len key trimmed))
-       (if (> lcs best-score)
-           (values line idx lcs)
-           (values best-line best-num best-score)))]))
-
-;; --------------------------------------------------
 ;; Main tool function
 ;; --------------------------------------------------
 
@@ -249,26 +98,15 @@
   (define raw-path (hash-ref args 'path #f))
   (define expanded (and raw-path (expand-home-path raw-path)))
   (define wd (and exec-ctx (exec-context-working-directory exec-ctx)))
-  (define path-str
-    (and expanded
-         (parameterize ([current-directory (or wd (current-directory))])
-           (let ([p (if (string? expanded)
-                        expanded
-                        (path->string expanded))])
-             (with-handlers ([exn:fail? (lambda (e)
-                                          (log-warning "edit: canonicalize failed: ~a"
-                                                       (exn-message e))
-                                          p)])
-               (path->string (simplify-path (resolve-path (path->complete-path p)))))))))
+  ;; W2: one canonical path resolution shared with find/read/write.
+  (define path-str (and expanded (path->string (canonical-tool-path expanded wd))))
   ;; W4: Path identity hardening
   (define identity-ok?
     (and path-str
          expanded
          (with-handlers ([exn:fail:filesystem? (lambda (_) #f)])
            (let ([direct-id (file-or-directory-identity path-str)])
-             (define re-resolved
-               (parameterize ([current-directory (or wd (current-directory))])
-                 (path->string (simplify-path (resolve-path (path->complete-path expanded))))))
+             (define re-resolved (path->string (canonical-tool-path expanded wd)))
              (and (file-exists? re-resolved)
                   (= direct-id (file-or-directory-identity re-resolved)))))))
   (match (list path-str (hash-ref args 'old-text #f) (hash-ref args 'new-text #f))
@@ -329,7 +167,7 @@
                    (string-length old-text)
                    max-old-text-len
                    SAFE-MAX-OLD-TEXT-LEN))]
-                ['not-found (make-error-result (make-not-found-error path old-text content))]
+                ['not-found (make-error-result (format-not-found-diagnostic path old-text content))]
                 ['duplicate
                  (make-error-result
                   (format "old-text appears ~a times in ~a; provide one unique exact snippet"

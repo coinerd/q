@@ -52,7 +52,16 @@
                   qpm-manifest-version
                   qpm-manifest-checksum
                   qpm-manifest-files)
-         (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx gsd-session-ctx?))
+         (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx gsd-session-ctx?)
+         ;; W2: the per-session trusted scratch allocation (tools/scratch.rkt).
+         ;; The runtime session owner allocates/binds exactly one root per agent
+         ;; session; the tool coordinator stamps it onto the exec-context.
+         (only-in "../tools/scratch.rkt"
+                  allocate-session-scratch-root!
+                  allocated-session-scratch-root
+                  bind-session-scratch-root!
+                  release-session-scratch-root!
+                  take-adopted-session-scratch-root!))
 
 ;; Tool schema assembly
 (provide list-tools-jsexpr
@@ -83,6 +92,12 @@
          ;; GSD session context
          current-gsd-ctx
          gsd-session-ctx?
+         ;; W2 per-session trusted scratch allocation
+         allocate-session-scratch-root!
+         allocated-session-scratch-root
+         bind-session-scratch-root!
+         release-session-scratch-root!
+         take-adopted-session-scratch-root!
          extension-name
          extension-version
          get-extension-name-from-path

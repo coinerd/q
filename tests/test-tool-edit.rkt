@@ -218,10 +218,20 @@
 
 ;; v0.21.2 W3: Enhanced edit error messages with common-cause hints
 (test-case "edit.rkt contains enhanced error hints"
+  ;; W2: the readable diagnostic lives in the shared edit-mismatch module so
+  ;; the direct and sandboxed planes render identical bytes; it is still the
+  ;; edit tool's own contract.
   (define source
-    (file->string (if (file-exists? "tools/builtins/edit.rkt")
-                      "tools/builtins/edit.rkt"
-                      "../tools/builtins/edit.rkt")))
+    (for/fold ([acc ""])
+              ([relative (in-list '("tools/builtins/edit.rkt" "tools/builtins/edit-mismatch.rkt"))])
+      (define candidate
+        (if (file-exists? relative)
+            relative
+            (string-append "../" relative)))
+      (string-append acc
+                     (if (file-exists? candidate)
+                         (file->string candidate)
+                         ""))))
   (check-not-false (regexp-match? #rx"leading whitespace" source)
                    "should hint about leading whitespace")
   (check-not-false (regexp-match? #rx"smaller unique snippet" source)
