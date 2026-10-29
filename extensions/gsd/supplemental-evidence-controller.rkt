@@ -58,6 +58,8 @@
          (only-in "evidence-repair-format.rkt" canonical-evidence-json canonical-evidence-digest)
          (only-in "supplemental-preserved-candidate.rkt"
                   preserved-candidate-binding
+                  preserved-candidate-admission-terminal
+                  validate-preserved-candidate-claim-binding!
                   validate-preserved-candidate!)
          "effective-verify-binding.rkt"
          "supplemental-evidence-format.rkt"
@@ -95,6 +97,7 @@
          supplemental-discover
          supplemental-author-pending?
          supplemental-approved-entry-context
+         supplemental-approved-entry-parent-allocation
          supplemental-operation-live?
          supplemental-resumable?
          supplemental-operation-summary
@@ -734,11 +737,12 @@
                 (or (not operation)
                     (member (hash-ref operation 'state) '("proposal-approved" "reserved"))))))
        #t))
-;; Pure admission for an unallocated parked entry. Never initialize an
-;; operation here: a reserved allocation belongs to its original attempt and
+;; Shared entry authentication for an unallocated parked checkpoint: the exact
+;; live task approval must validate, its protected operation must be absent or
+;; still "proposal-approved", and the sealed task is returned. Never initialize
+;; an operation here: a reserved allocation belongs to its original attempt and
 ;; cannot acquire a successor through this checkpoint after a crash.
-;; The caller holds the authority lock through its campaign status commit.
-(define (supplemental-approved-entry-context base plan wave)
+(define (supplemental-approved-entry-task base plan wave)
   (define pointer (load-supplemental-pointer base plan wave))
   (unless (and pointer
                (validate-supplemental-approval (hash-ref pointer 'task-approval)
@@ -748,7 +752,11 @@
   (unless (or (not operation) (equal? (hash-ref operation 'state) "proposal-approved"))
     (refuse "supplemental checkpoint cannot reallocate a reserved or spent task"))
   (define proposal (load-supplemental-record (hash-ref pointer 'task-proposal)))
-  (define task (hash-ref (hash-ref proposal 'payload) 'task))
+  (hash-ref (hash-ref proposal 'payload) 'task))
+;; Pure admission for an unallocated parked entry. The caller holds the
+;; authority lock through its campaign status commit.
+(define (supplemental-approved-entry-context base plan wave)
+  (define task (supplemental-approved-entry-task base plan wave))
   (define context (hash-ref task 'context))
   ;; control-plane-head is sealed proposal-time provenance, not an execution
   ;; equality pin. Separately authorized engineering may upgrade the trusted
@@ -766,6 +774,31 @@
      (unless (equal? context (current-evidence-context base plan wave))
        (refuse "supplemental checkpoint task context drifted"))])
   context)
+;; ADDITIVE parked-parent allocation accessor (preserved candidates only).
+;; The immutable E_old receipt context keeps its original attempt/fence
+;; (attempt-2/fence-5), but a preserved entry is parked on the fixed
+;; third-generation terminal allocation (attempt-6/fence-9). Comparing the
+;; parked attempt to E_old therefore always refused and /go never reached the
+;; zero-model adoption. This accessor authenticates the SAME live child
+;; T/pointer as the entry context (exact approval, operation absent or still
+;; "proposal-approved") and derives the allocation from the fully validated
+;; fixed amendment-3 terminal, whose facts the disposition claim owner already
+;; asserted equal to the amendment allocation. It deliberately uses the claim
+;; binding layer only: the retained E_old receipt/context equality is the
+;; entry-context accessor's layer, and the parked-entry caller always runs
+;; that accessor first (and again before committing). Ordinary tasks return #f
+;; so the caller keeps its exact context attempt/fence comparison. Nothing is
+;; allocated, reserved, proposed, approved or mutated here.
+(define (supplemental-approved-entry-parent-allocation base plan wave)
+  (define task (supplemental-approved-entry-task base plan wave))
+  (define preserved (task-preserved-candidate task))
+  (and preserved
+       (let* ([admission (validate-preserved-candidate-claim-binding! task)]
+              [terminal (preserved-candidate-admission-terminal admission)]
+              [allocation (allocation-of terminal)])
+         (unless allocation
+           (refuse "preserved entry terminal lost its authenticated allocation"))
+         allocation)))
 
 ;; The supplemental task OWNS the retained receipt checkout while a pointer
 ;; exists (even malformed), or its permanent private recovery claim survives:

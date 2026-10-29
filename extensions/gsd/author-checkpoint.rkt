@@ -14,6 +14,7 @@
          (only-in "supplemental-evidence-controller.rkt"
                   supplemental-author-pending?
                   supplemental-approved-entry-context
+                  supplemental-approved-entry-parent-allocation
                   supplemental-operation-live?
                   supplemental-pointer-retained?
                   supplemental-verify-route!)
@@ -56,6 +57,18 @@
 ;; Full campaign entry calls this BEFORE the legacy coordinator, under the
 ;; campaign lease. The authority lock serializes approval revocation with the
 ;; status-only commit. No marker, receipt, task, approval or allocation changes.
+;;
+;; PARKED PARENT ALLOCATION (preserved candidates). The ordinary entry is
+;; parked on the exact attempt/fence of the immutable E_old receipt context.
+;; A preserved entry is deliberately parked on the fixed third-generation
+;; terminal allocation (attempt-6/fence-9), which is DISTINCT from E_old
+;; (attempt-2/fence-5). The additive controller accessor authenticates the
+;; same live child T/pointer and returns that fully validated terminal
+;; allocation for preserved tasks only, so the parked attempt is compared to
+;; the allocation that actually owns it. Ordinary entries keep the exact
+;; context attempt/fence comparison; every cancellation, pause, status,
+;; coordinator-fence and spent-operation guard below is unchanged and is
+;; re-read immediately before the pending status commit.
 (define (resolve-supplemental-author-checkpoint! root plan wave)
   (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
     (call-with-supplemental-authority-lock
@@ -68,18 +81,31 @@
                 w)))
        (define attempt (and w (campaign-wave-current-attempt w)))
        (define context (supplemental-approved-entry-context root plan wave))
+       (define parent-allocation (supplemental-approved-entry-parent-allocation root plan wave))
+       (define expected
+         (or parent-allocation
+             (hasheq 'attempt-id
+                     (hash-ref context 'attempt-id)
+                     'attempt-fence
+                     (hash-ref context 'attempt-fence)
+                     'coordinator-fence
+                     (hash-ref context 'attempt-fence))))
        (unless (and record
                     w
                     attempt
                     (not (campaign-record-cancellation record))
                     (not (campaign-record-budget-pause record))
-                    (>= (campaign-fence-token record) (hash-ref context 'attempt-fence))
+                    (>= (campaign-fence-token record) (hash-ref expected 'coordinator-fence))
                     (eq? (campaign-wave-status w) 'awaiting-delivery)
-                    (equal? (campaign-attempt-id attempt) (hash-ref context 'attempt-id))
-                    (equal? (campaign-attempt-fence-token attempt) (hash-ref context 'attempt-fence)))
+                    (equal? (campaign-attempt-id attempt) (hash-ref expected 'attempt-id))
+                    (equal? (campaign-attempt-fence-token attempt)
+                            (hash-ref expected 'attempt-fence)))
          (error 'author-checkpoint "stale, cancelled or paused supplemental checkpoint"))
-       ;; Re-read after proof/context validation, immediately before persisting.
+       ;; Re-read the authenticated helper, context and campaign after
+       ;; validation, immediately before persisting.
        (unless (and (equal? context (supplemental-approved-entry-context root plan wave))
+                    (equal? parent-allocation
+                            (supplemental-approved-entry-parent-allocation root plan wave))
                     (equal? record (load-campaign-record root plan)))
          (error 'author-checkpoint "supplemental checkpoint changed before record transition"))
        (set-campaign-wave-status! w 'pending)

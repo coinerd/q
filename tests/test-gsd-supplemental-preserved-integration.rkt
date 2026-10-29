@@ -4,10 +4,11 @@
 ;; @boundary integration
 ;; @mutates repo
 ;; @isolation temp-dir
-;; @timeout 900
+;; @timeout 1800
 ;; @covers extensions/gsd/supplemental-preserved-candidate.rkt
 ;; @covers extensions/gsd/supplemental-evidence-disposition.rkt
 ;; @covers extensions/gsd/supplemental-evidence-controller.rkt
+;; @covers extensions/gsd/author-checkpoint.rkt
 ;; INTEGRATION lane for candidate-preserving recovery.
 ;;
 ;; A genuine temp campaign is built by the existing supplemental-go fixture:
@@ -60,6 +61,12 @@
          "../extensions/gsd/supplemental-disposition-claim.rkt"
          "../extensions/gsd/supplemental-evidence-controller.rkt"
          (only-in "../extensions/gsd/wave-runner-port.rkt" wave-execution-outcome-kind)
+         (only-in "../extensions/gsd/campaign-result.rkt"
+                  campaign-result-status
+                  campaign-result-message)
+         (only-in "../extensions/gsd/go-orchestrator.rkt" run-campaign!)
+         (only-in "../extensions/gsd/author-checkpoint.rkt" resolve-supplemental-author-checkpoint!)
+         (only-in "helpers/honest-delivery-fixture.rkt" test-delivered-reader)
          (only-in "../util/json/checksum.rkt" sha256-string))
 
 (define branch "campaign/w1")
@@ -217,6 +224,9 @@
 ;; approved test/harness paths. Capture a REAL owned receipt BEFORE the author
 ;; commit, then retain E_old unchanged while K adds exactly those two paths.
 ;; K must be a strict descendant of E_old, as in the live campaign.
+;; The retained E_old receipt is attempt-2/fence-5 exactly like the live report,
+;; so it is GENUINELY DISTINCT from the parked parent allocation
+;; attempt-6/fence-9 (a fixture alias would let the regression pass by accident).
 ;; ---------------------------------------------------------------------------
 (define (prepare-candidate-source! fx)
   (define root (supplemental-fixture-root fx))
@@ -237,8 +247,8 @@
                                      plan
                                      wave
                                      before
-                                     "candidate-attempt"
-                                     6
+                                     "attempt-2"
+                                     5
                                      (lambda () (check-verify-command root wave #f))
                                      #:cwd repo)))
   (unless capture
@@ -246,9 +256,9 @@
   (define receipt
     (hash-set* before
                'attempt-id
-               "candidate-attempt"
+               "attempt-2"
                'attempt-fence
-               6
+               5
                'verified-at
                (current-seconds)
                'evidence
@@ -468,9 +478,17 @@
   (for/first ([w (in-list (campaign-record-waves rec))]
               #:when (= wave (campaign-wave-index w)))
     w))
-(define (retarget-campaign! root plan wave attempt-id fence #:status [status 'awaiting-delivery])
+(define (retarget-campaign! root
+                            plan
+                            wave
+                            attempt-id
+                            fence
+                            #:status [status 'awaiting-delivery]
+                            #:attempt-count [count #f])
   (define rec (load-campaign-record root plan))
   (define w (wave-of rec wave))
+  (when count
+    (set-campaign-wave-attempt-count! w count))
   (set-campaign-wave-status! w status)
   (set-campaign-wave-current-attempt! w (campaign-attempt attempt-id fence 0))
   (set-campaign-fence-token! rec fence)
@@ -531,6 +549,109 @@
 
 (define (expect-refusal pattern thunk)
   (check-exn pattern thunk))
+
+;; A parked checkpoint resolution refusal must be a pure denial: the wave stays
+;; in the status the guard observed, no operation is initialized and no fresh
+;; candidate appears.
+(define (expect-stale-parked-refusal! root plan wave expected-status approval)
+  (check-equal? (resolve-supplemental-author-checkpoint! root plan wave)
+                "author-checkpoint: stale, cancelled or paused supplemental checkpoint")
+  (define w (wave-of (load-campaign-record root plan) wave))
+  (check-eq? (campaign-wave-status w) expected-status)
+  (check-false (load-supplemental-operation approval)))
+
+;; ---------------------------------------------------------------------------
+;; Production /go entry from the parked parent (also usable as a standalone
+;; focused case): the real resolver proves the fixed-a3
+;; allocation attempt-6/fence-9, the orchestrator allocates a fresh monotonic
+;; attempt-7/fence-10, the zero-model adoption seals fresh K' from M, and /go
+;; stops at the HUMAN K' wait. The source runner must never run and the
+;; immutable E_old receipt context stays attempt-2/fence-5.
+;; ---------------------------------------------------------------------------
+(define (full-campaign-case! chain #:installed [installed #f])
+  (define root (hash-ref chain 'root))
+  (define plan (hash-ref chain 'plan))
+  (define wave (hash-ref chain 'wave))
+  (define repo (hash-ref chain 'repo))
+  (define ctx (hash-ref chain 'ctx))
+  (define m (hash-ref chain 'm))
+  (define installed*
+    (or installed
+        (begin
+          (retarget-campaign! root plan wave "attempt-6" 9)
+          (install-preserved! chain))))
+  (define p (hash-ref installed* 'proposal))
+  (define g (hash-ref installed* 'approval))
+  (define task (hash-ref installed* 'task))
+  (check-equal? (hash-ref ctx 'attempt-id) "attempt-2")
+  (check-equal? (hash-ref ctx 'attempt-fence) 5)
+  (retarget-campaign! root plan wave "attempt-6" 9 #:attempt-count 6)
+  (define model-calls (box 0))
+  (define channel (current-approval-channel))
+  (define result
+    (dynamic-wind void
+                  (lambda ()
+                    (set-approval-channel! #f)
+                    (parameterize ([current-directory repo])
+                      (run-campaign! root
+                                     (load-campaign-record root plan)
+                                     #:isolate? #f
+                                     ;; The preserved entry re-authenticates the fixed-a3
+                                     ;; terminal at every journal transition, so the owned
+                                     ;; phase needs a realistic budget (never 120s).
+                                     #:timeout-sec 600
+                                     #:delivery-reader (test-delivered-reader)
+                                     #:runner (lambda (_)
+                                                (set-box! model-calls (add1 (unbox model-calls)))
+                                                'unexpected-model-author-response)
+                                     #:delivery-coordinator
+                                     (lambda (_plan _idx)
+                                       (error 'preserved-integration
+                                              "ordinary coordinator forbidden"))
+                                     #:verifier (lambda (_) #f))))
+                  (lambda ()
+                    (when channel
+                      (set-approval-channel! channel)))))
+  (check-eq? (campaign-result-status result) 'wave-blocked)
+  (check-regexp-match #rx"operator candidate approval unavailable" (campaign-result-message result))
+  (check-equal? (unbox model-calls) 0 "no model author callback may run")
+  (define operation (load-supplemental-operation g))
+  (check-equal? (hash-ref operation 'state) "candidate-sealed")
+  (check-true (hash-ref operation 'launch-consumed))
+  (define facts (hash-ref operation 'facts))
+  (check-equal? (hash-ref facts 'dispatch-id) "adoption:attempt-7")
+  (check-equal? (hash-ref facts 'dispatch-kind) "preserved-candidate-adoption")
+  (check-equal? (hash-ref facts 'allocation) (allocation "attempt-7" 10))
+  (define after (load-campaign-record root plan))
+  (define parked (wave-of after wave))
+  (check-eq? (campaign-wave-status parked) 'awaiting-delivery)
+  (check-equal? (campaign-attempt-id (campaign-wave-current-attempt parked)) "attempt-7")
+  (check-equal? (campaign-attempt-fence-token (campaign-wave-current-attempt parked)) 10)
+  (check-equal? (campaign-fence-token after) 10)
+  (define fresh-ref (hash-ref facts 'candidate-ref))
+  (check-not-equal? (hash-ref fresh-ref 'sha256) (hash-ref (hash-ref chain 'kref) 'sha256))
+  (define fresh (hash-ref (load-supplemental-record fresh-ref) 'payload))
+  (check-equal? (hash-ref fresh 'task-proposal) p)
+  (check-equal? (hash-ref fresh 'task-approval) g)
+  (check-equal? (hash-ref fresh 'task-sha256) (hash-ref task 'sha256))
+  (check-equal? (hash-ref fresh 'context) ctx)
+  (check-equal? (hash-ref fresh 'source) (committed-delivery-snapshot repo))
+  (check-equal? (hash-ref (hash-ref fresh 'source) 'head) (hash-ref m 'head))
+  (check-equal? (hash-ref (hash-ref fresh 'source) 'tree) (hash-ref m 'tree))
+  (check-equal? (hash-ref fresh 'execution-cwd) (hash-ref ctx 'repo))
+  (check-equal? (map (lambda (e) (hash-ref e 'path)) (hash-ref fresh 'manifest))
+                (append (list (supplemental-fixture-test-path (hash-ref chain 'fx))
+                              (supplemental-fixture-harness-path (hash-ref chain 'fx)))
+                        (supplemental-fixture-owner-paths (hash-ref chain 'fx))))
+  ;; Fresh K' is NOT approved: only its own future broker decision can do that.
+  (check-false (hash-ref facts 'candidate-approval-ref #f))
+  ;; The stop is the HUMAN K' wait with zero model callbacks, and exactly one
+  ;; fresh K' exists for the installed T.
+  (check-equal? (unbox model-calls) 0)
+  (check-equal? (hash-ref (load-supplemental-operation g) 'state) "candidate-sealed")
+  (check-false
+   (hash-ref (hash-ref (load-supplemental-operation g) 'facts) 'candidate-approval-ref #f))
+  (check-equal? (length (fresh-candidates-for p)) 1))
 
 ;; ---------------------------------------------------------------------------
 ;; Success: inert proposal, exact T install (single claim), zero-model
@@ -634,6 +755,44 @@
   (check-equal? (parameterize ([current-directory repo])
                   (supplemental-approved-entry-context root plan wave))
                 ctx)
+  ;; 2b. PARKED RESOLUTION REGRESSION (red-first): the preserved entry is
+  ;; parked on the authenticated fixed-a3 terminal allocation
+  ;; attempt-6/fence-9, which is GENUINELY DISTINCT from the immutable E_old
+  ;; receipt context attempt-2/fence-5. Every wrong parent identity, status,
+  ;; cancellation or pause must refuse with the exact stale error and commit
+  ;; nothing (no pending status, no operation).
+  (check-equal? (hash-ref ctx 'attempt-id) "attempt-2")
+  (check-equal? (hash-ref ctx 'attempt-fence) 5)
+  (retarget-campaign! root plan wave "attempt-5" 9)
+  (expect-stale-parked-refusal! root plan wave 'awaiting-delivery g)
+  (retarget-campaign! root plan wave "attempt-6" 8)
+  (expect-stale-parked-refusal! root plan wave 'awaiting-delivery g)
+  (retarget-campaign! root plan wave "attempt-6" 9)
+  (mutate-campaign! root plan (lambda (rec) (set-campaign-fence-token! rec 8)))
+  (expect-stale-parked-refusal! root plan wave 'awaiting-delivery g)
+  (retarget-campaign! root plan wave "attempt-6" 9 #:status 'in-progress)
+  (expect-stale-parked-refusal! root plan wave 'in-progress g)
+  (retarget-campaign! root plan wave "attempt-6" 9)
+  (mutate-campaign! root
+                    plan
+                    (lambda (rec)
+                      (set-campaign-cancellation! rec (make-campaign-cancellation "stop" 0))))
+  (expect-stale-parked-refusal! root plan wave 'awaiting-delivery g)
+  (retarget-campaign! root plan wave "attempt-6" 9)
+  (mutate-campaign!
+   root
+   plan
+   (lambda (rec)
+     (set-campaign-record-budget-pause!
+      rec
+      (campaign-budget-pause 'max-cost 1.0 2.0 "fixture ceiling crossed" (current-seconds)))))
+  (expect-stale-parked-refusal! root plan wave 'awaiting-delivery g)
+  (retarget-campaign! root plan wave "attempt-6" 9)
+  ;; The GENUINE parked resolution accepts the fixed-a3 allocation and only
+  ;; flips status to pending: it allocates nothing and never consumes T.
+  (check-eq? (resolve-supplemental-author-checkpoint! root plan wave) #t)
+  (check-eq? (campaign-wave-status (wave-of (load-campaign-record root plan) wave)) 'pending)
+  (check-false (load-supplemental-operation g) "resolution never allocates")
   ;; 3. Adoption fail-closed while the fresh permission is NOT consumed.
   (prepare-go! chain)
   (define (no-operation!)
@@ -684,54 +843,9 @@
   (check-equal? dirty-calls 0)
   (delete-file (build-path repo "scratch.txt"))
   (no-operation!)
-  ;; 4. Successful zero-model adoption on the exact attempt/source M.
-  (define m (hash-ref chain 'm))
-  (define-values (outcome model-calls) (attempt-adoption! chain))
-  (check-eq? (wave-execution-outcome-kind outcome) 'done)
-  (check-equal? model-calls 0 "no model author callback may run")
-  (define operation (load-supplemental-operation g))
-  (check-equal? (hash-ref operation 'state) "candidate-sealed")
-  (check-true (hash-ref operation 'launch-consumed))
-  (define facts (hash-ref operation 'facts))
-  (check-equal? (hash-ref facts 'dispatch-id) "adoption:attempt-7")
-  (check-equal? (hash-ref facts 'dispatch-kind) "preserved-candidate-adoption")
-  (check-equal? (hash-ref facts 'allocation) (allocation "attempt-7" 11))
-  (define fresh-ref (hash-ref facts 'candidate-ref))
-  (check-not-equal? (hash-ref fresh-ref 'sha256) (hash-ref (hash-ref chain 'kref) 'sha256))
-  (define fresh (hash-ref (load-supplemental-record fresh-ref) 'payload))
-  (check-equal? (hash-ref fresh 'task-proposal) p)
-  (check-equal? (hash-ref fresh 'task-approval) g)
-  (check-equal? (hash-ref fresh 'task-sha256) (hash-ref task 'sha256))
-  (check-equal? (hash-ref fresh 'context) ctx)
-  (check-equal? (hash-ref fresh 'source) (committed-delivery-snapshot repo))
-  (check-equal? (hash-ref (hash-ref fresh 'source) 'head) (hash-ref m 'head))
-  (check-equal? (hash-ref (hash-ref fresh 'source) 'tree) (hash-ref m 'tree))
-  (check-equal? (hash-ref fresh 'execution-cwd) (hash-ref ctx 'repo))
-  (check-equal? (map (lambda (e) (hash-ref e 'path)) (hash-ref fresh 'manifest))
-                (append (list (supplemental-fixture-test-path (hash-ref chain 'fx))
-                              (supplemental-fixture-harness-path (hash-ref chain 'fx)))
-                        (supplemental-fixture-owner-paths (hash-ref chain 'fx))))
-  ;; Fresh K' is NOT approved: only its own future broker decision can do that.
-  (check-false (hash-ref facts 'candidate-approval-ref #f))
-  ;; 5. /go continues to the HUMAN K' wait with zero model callbacks. The
-  ;; channel is temporarily absent so the controller reports the honest typed
-  ;; pause instead of blocking a test on an operator decision.
-  (define channel (current-approval-channel))
-  (dynamic-wind void
-                (lambda ()
-                  (set-approval-channel! #f)
-                  (parameterize ([current-directory repo])
-                    (define-values (kind detail) (advance-supplemental-evidence! root plan wave))
-                    (check-eq? kind 'paused)
-                    (check-regexp-match #rx"operator candidate approval unavailable" detail)))
-                (lambda ()
-                  (when channel
-                    (set-approval-channel! channel))))
-  (check-equal? model-calls 0)
-  (check-equal? (hash-ref (load-supplemental-operation g) 'state) "candidate-sealed")
-  (check-false
-   (hash-ref (hash-ref (load-supplemental-operation g) 'facts) 'candidate-approval-ref #f))
-  (check-equal? (length (fresh-candidates-for p)) 1))
+  ;; 4. Production /go entry from the parked parent, reusing the exact
+  ;; installed T/proposal from this case.
+  (full-campaign-case! chain #:installed (hasheq 'proposal p 'approval g 'task task)))
 
 ;; ---------------------------------------------------------------------------
 ;; Fail-closed proposal and entry: tamper/drift/cancel/pause/fence/revocation
@@ -838,10 +952,40 @@
   (check-equal? (hash-ref (load-supplemental-operation g) 'sha256) (hash-ref operation 'sha256))
   (check-equal? (length (fresh-candidates-for p)) 0))
 
+;; ---------------------------------------------------------------------------
+;; Revocation of the fresh one-shot T authority: the parked resolver refuses
+;; with no status commit and no operation, even for the genuine allocation.
+;; ---------------------------------------------------------------------------
+(define (parked-revocation-case! chain)
+  (define root (hash-ref chain 'root))
+  (define plan (hash-ref chain 'plan))
+  (define wave (hash-ref chain 'wave))
+  (retarget-campaign! root plan wave "attempt-6" 9)
+  (define installed (install-preserved! chain))
+  (define p (hash-ref installed 'proposal))
+  (define g (hash-ref installed 'approval))
+  ;; The genuine parked resolution works before revocation...
+  (check-eq? (resolve-supplemental-author-checkpoint! root plan wave) #t)
+  (check-eq? (campaign-wave-status (wave-of (load-campaign-record root plan) wave)) 'pending)
+  (check-false (load-supplemental-operation g))
+  ;; ...and a revoked T can never authorize a second park/commit.
+  (retarget-campaign! root plan wave "attempt-6" 9)
+  (revoke-approval! g)
+  (check-regexp-match #rx"exact live task approval|revoked|absent|foreign"
+                      (resolve-supplemental-author-checkpoint! root plan wave))
+  (check-eq? (campaign-wave-status (wave-of (load-campaign-record root plan) wave))
+             'awaiting-delivery)
+  (check-false (with-handlers ([exn:fail? (lambda (_) #f)])
+                 (load-supplemental-operation g)))
+  (check-equal? (load-supplemental-pointer root plan wave) (disposition-pointer p g))
+  (check-equal? (length (fresh-candidates-for p)) 0))
+
 (module+ test
   (test-case "inert proposal, single exact T claim, zero-model K->M adoption, fresh K' then human K' wait"
     (with-chain success-case!))
   (test-case "tamper, source drift, cancellation, pause, fence loss and old K revocation fail closed"
     (with-chain tamper-case!))
   (test-case "crash cut after adoption launch neither reallocates nor reseals a conflicting K'"
-    (with-chain crash-cut-case!)))
+    (with-chain crash-cut-case!))
+  (test-case "revoked fresh T authority refuses the parked checkpoint without commit or allocation"
+    (with-chain parked-revocation-case!)))
