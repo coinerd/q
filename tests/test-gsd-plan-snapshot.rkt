@@ -3,6 +3,7 @@
 ;; @speed fast  ;; @suite extensions
 
 (require racket/path
+         racket/runtime-path
          racket/list
          racket/string
          rackunit
@@ -39,9 +40,9 @@
 ;; existence is not proof of ownership.
 (define (write-ownership-marker! dir kind)
   (call-with-output-file (build-path dir (planning-artifact-marker-filename kind))
-    (lambda (out)
-      (write (hasheq 'schema-version 1 'kind kind 'pid 1 'created-at 0) out))
-    #:exists 'truncate))
+                         (lambda (out)
+                           (write (hasheq 'schema-version 1 'kind kind 'pid 1 'created-at 0) out))
+                         #:exists 'truncate))
 
 (define (make-plan-tree)
   (define dir (make-temporary-file "plan-snapshot-~a" 'directory))
@@ -50,6 +51,125 @@
   (write-text! (build-path dir ".planning" "waves" "W1-beta.md") wave-1)
   dir)
 
+;; ── v1 (d5bf128b) snapshot digest scheme, transcribed VERBATIM ─────────
+;; Independent of the module under test: a later refactor of
+;; normalize-wave-doc-content must not silently redefine what "legacy" means.
+(define legacy-wave-doc-status-header-rx #rx"^(# Wave [0-9]+\n)Status: [^\n]+\n")
+(define legacy-plan-index-status-rx #px"(?m:^([-*] +)\\[[A-Za-z-]+\\]( +W[0-9]+:.*)$)")
+
+(define (legacy-canonical-lines text)
+  (string-join (string-split text "\n") "\n"))
+
+(define (legacy-normalize-wave-doc-content text)
+  (define without-status (regexp-replace legacy-wave-doc-status-header-rx text "\\1"))
+  (define lines (string-split without-status "\n" #:trim? #f))
+  (define first-heading (and (pair? lines) (regexp-match #rx"^# Wave ([0-9]+)(?::.*)?$" (car lines))))
+  (define authored-heading
+    (and (>= (length lines) 3) (regexp-match #rx"^#+ Wave ([0-9]+)(?::.*)?$" (caddr lines))))
+  (define without-generated-prefix
+    (if (and first-heading
+             authored-heading
+             (string=? (cadr lines) "")
+             (equal? (cadr first-heading) (cadr authored-heading)))
+        (cddr lines)
+        lines))
+  (define normalized (legacy-canonical-lines (string-join without-generated-prefix "\n")))
+  (define failure-marker (regexp-match-positions #rx"\n+## Last Failure\n" normalized))
+  (if failure-marker
+      (substring normalized 0 (caar failure-marker))
+      normalized))
+
+(define (legacy-normalized-file-hash rel-path raw-text)
+  (sha256-string (cond
+                   [(string-prefix? rel-path "waves/") (legacy-normalize-wave-doc-content raw-text)]
+                   [(equal? rel-path "PLAN.md")
+                    (legacy-canonical-lines
+                     (regexp-replace* legacy-plan-index-status-rx raw-text "\\1[STATUS]\\2"))]
+                   [else raw-text])))
+
+(define (current-normalized-file-hash rel-path raw-text)
+  (cond
+    [(string-prefix? rel-path "waves/") (sha256-string (normalize-wave-doc-content raw-text))]
+    [(equal? rel-path "PLAN.md") (plan-body-normalized-hash raw-text)]
+    [else (sha256-string raw-text)]))
+
+;; ── Authentic v1 baseline fixture ───────────────────────────────────────
+;;
+;; Campaign 79a69b42 (this repository) captured
+;; `waves/W0-tracker-reconciliation-wiring.md` with the v1 writer at
+;; d5bf128b. `tests/fixtures/plan-snapshot-legacy-v1/` holds those captured
+;; bytes verbatim (SIZE below), and LEGACY-V1-W0-DIGEST is the digest that
+;; campaign's manifest recorded for them. Hashing the SAME bytes with the
+;; 4ac41abc normalizer yields a DIFFERENT digest
+;; (LEGACY-V1-W0-CURRENT-DIGEST): that divergence, with no persisted
+;; schema/version change, made an authentic capture read as
+;; "partial/corrupt". Both facts are pinned below, so this fixture fails
+;; loudly if either transcription or normalizer drifts.
+(define legacy-v1-w0-rel "waves/W0-tracker-reconciliation-wiring.md")
+(define legacy-v1-w0-digest "3b7a40404b84efa40343feedc6081692454bcc504eead643124d8907ba0b43d5")
+;; What commit 4ac41abc's normalizer produced for the SAME captured bytes.
+(define legacy-v1-w0-current-digest
+  "7dd8b79de08b65c7d382ea12e98e0a88e6c8176b697c7e77852df4b55dc8955f")
+(define legacy-v1-w0-size 4584)
+(define-runtime-path legacy-v1-w0-fixture
+                     "fixtures/plan-snapshot-legacy-v1/waves/W0-tracker-reconciliation-wiring.md")
+(define legacy-v1-plan-text
+  (string-append "# Plan\n\n" "- [Inbox] W0: Tracker reconciliation -> " legacy-v1-w0-rel "\n"))
+
+;; A digest as the named enumerable scheme would have rendered it. Used to
+;; install captures of DIFFERENT historical writers into the same
+;; schema-version-1 manifest shape.
+(define (scheme-normalized-file-hash rel-path raw-text digest-scheme)
+  (case digest-scheme
+    [(1) (legacy-normalized-file-hash rel-path raw-text)]
+    [(2) (current-normalized-file-hash rel-path raw-text)]
+    [else (error 'scheme-normalized-file-hash "unknown digest scheme ~s" digest-scheme)]))
+
+(define (legacy-v1-file-entry rel frozen-path #:digest-scheme [digest-scheme 1])
+  `#hasheq((path . ,rel)
+           (size . ,(file-size frozen-path))
+           (sha256 . ,(scheme-normalized-file-hash rel (file->string frozen-path) digest-scheme))))
+
+;; Install a capture in the schema-version-1 manifest shape — NO `hash-scheme`
+;; datum, exactly what every writer up to and including 4ac41abc persisted.
+;; Live and frozen bytes are identical. `#:digest-scheme` selects WHICH known
+;; writer produced the recorded digests: 1 = the authentic capture of campaign
+;; 79a69b42 (d5bf128b), 2 = a 4ac41abc capture with the same unrecorded shape.
+;; `#:manifest-scheme` deliberately mislabels the digests, for the strict-verify
+;; cases.
+(define (install-v1-capture! dir
+                             #:manifest-scheme [manifest-scheme #f]
+                             #:digest-scheme [digest-scheme 1]
+                             #:captured [captured-text (file->string legacy-v1-w0-fixture)])
+  (define frozen-plan (build-path (snapshot-dir dir campaign-id) "PLAN.md"))
+  (define frozen-wave (build-path (snapshot-dir dir campaign-id) legacy-v1-w0-rel))
+  (write-text! (build-path dir ".planning" "PLAN.md") legacy-v1-plan-text)
+  (write-text! (build-path dir ".planning" legacy-v1-w0-rel) captured-text)
+  (write-text! frozen-plan legacy-v1-plan-text)
+  (write-text! frozen-wave captured-text)
+  (define base
+    `#hasheq((schema-version . 1)
+             (campaign . ,campaign-id)
+             (created-at . 0)
+             (plan-id . ,campaign-id)
+             (files
+              .
+              (#hasheq((path . "PLAN.md")
+                       (size . ,(file-size frozen-plan))
+                       (sha256
+                        . ,(scheme-normalized-file-hash "PLAN.md" legacy-v1-plan-text digest-scheme)))
+               ,(legacy-v1-file-entry legacy-v1-w0-rel frozen-wave #:digest-scheme digest-scheme)))))
+  (call-with-output-file (build-path (snapshot-dir dir campaign-id) "snapshot-manifest.rktd")
+                         (lambda (out)
+                           (write (if manifest-scheme
+                                      (hash-set base 'hash-scheme manifest-scheme)
+                                      base)
+                                  out))
+                         #:exists 'truncate)
+  dir)
+
+(define (make-legacy-v1-tree)
+  (install-v1-capture! (make-temporary-file "plan-snapshot-legacy-~a" 'directory)))
 (define plan-snapshot-suite
   (test-suite "gsd-plan-snapshot"
 
@@ -304,8 +424,7 @@
       (check-true (string? refusal-message))
       (check-true (string-contains? refusal-message "symlink")
                   "the refusal names the non-overridable class")
-      (check-true (string-contains? refusal-message "PLAN.md")
-                  "the refusal names the path")
+      (check-true (string-contains? refusal-message "PLAN.md") "the refusal names the path")
       (check-false (file-exists? outside))
       (delete-directory/files dir))
 
@@ -322,12 +441,13 @@
 
     (test-case "W4: leading generated header blocks are projection state (multiline header)"
       (define authored "# Wave 0\n\nGoal: alpha\n\n## Verify\n\nraco test .\n")
-      (check-equal? (normalize-wave-doc-content (string-append "# Wave 0\nStatus: Inbox\n\n" authored))
+      (check-equal? (normalize-wave-doc-content (string-append "# Wave 0\nStatus: Inbox\n\n"
+                                                               authored))
                     (normalize-wave-doc-content authored)
                     "one generated header block is projection state")
       (check-equal? (normalize-wave-doc-content (string-append "# Wave 0\nStatus: Inbox\n\n"
-                                                              "# Wave 0\nStatus: DONE\n\n"
-                                                              authored))
+                                                               "# Wave 0\nStatus: DONE\n\n"
+                                                               authored))
                     (normalize-wave-doc-content authored)
                     "repeated generated header blocks are projection state too"))
 
@@ -348,23 +468,25 @@
                       (format "status-only projection of ~s must not drift" authored)))
       ;; CHARACTERIZED mechanism: extra authored header lines defeat the
       ;; header REWRITE, so the managed block is PREPENDED (two headings).
-      (check-equal? (regexp-match* #px"(?m:^# Wave 0$)"
-                                   (project-wave-doc-update
-                                    "# Wave 0\nStatus: PENDING\nStatus: STALE\n\nbody\n"
-                                    0 "DONE"))
-                    '("# Wave 0" "# Wave 0")
-                    "the projection prepends its multiline managed block"))
+      (check-equal?
+       (regexp-match*
+        #px"(?m:^# Wave 0$)"
+        (project-wave-doc-update "# Wave 0\nStatus: PENDING\nStatus: STALE\n\nbody\n" 0 "DONE"))
+       '("# Wave 0" "# Wave 0")
+       "the projection prepends its multiline managed block"))
 
     (test-case "W4: an authored `## Last Failure` only hides its own section"
       ;; `record-wave-failure!` rewrites the failure section in place. The
       ;; normalization may ignore that section, but never the authored
       ;; content that follows it.
-      (define authored (string-append "# Wave 0\nStatus: DONE\n\nbody\n\n"
-                                      "## Last Failure\nold reason\n\n"
-                                      "## Verify\n\nraco test .\n"))
-      (define replayed (string-append "# Wave 0\nStatus: DONE\n\nbody\n\n"
-                                      "## Last Failure\nnew reason\n\n"
-                                      "## Verify\n\nraco test .\n"))
+      (define authored
+        (string-append "# Wave 0\nStatus: DONE\n\nbody\n\n"
+                       "## Last Failure\nold reason\n\n"
+                       "## Verify\n\nraco test .\n"))
+      (define replayed
+        (string-append "# Wave 0\nStatus: DONE\n\nbody\n\n"
+                       "## Last Failure\nnew reason\n\n"
+                       "## Verify\n\nraco test .\n"))
       (check-equal? (normalize-wave-doc-content replayed)
                     (normalize-wave-doc-content authored)
                     "the failure section body is projection state")
@@ -377,18 +499,21 @@
                         "authored content after the failure section is still compared"))
 
     (test-case "W4: PLAN index status markers are the only normalized PLAN bytes"
-      (define base (string-append "# Plan\n\n"
-                                  "- [Inbox] W0: Alpha -> waves/W0-a.md\n"
-                                  "* [Inbox] W1: Beta -> waves/W1-b.md\n"))
-      (define progressed (string-append "# Plan\n\n"
-                                        "- [DONE] W0: Alpha -> waves/W0-a.md\n"
-                                        "* [FAILED] W1: Beta -> waves/W1-b.md\n"))
-      (check-equal? (plan-body-normalized-hash progressed) (plan-body-normalized-hash base)
+      (define base
+        (string-append "# Plan\n\n"
+                       "- [Inbox] W0: Alpha -> waves/W0-a.md\n"
+                       "* [Inbox] W1: Beta -> waves/W1-b.md\n"))
+      (define progressed
+        (string-append "# Plan\n\n"
+                       "- [DONE] W0: Alpha -> waves/W0-a.md\n"
+                       "* [FAILED] W1: Beta -> waves/W1-b.md\n"))
+      (check-equal? (plan-body-normalized-hash progressed)
+                    (plan-body-normalized-hash base)
                     "index status markers are projection state")
-      (check-not-equal? (plan-body-normalized-hash
-                         (string-append base "\n## Notes\n\nauthored addition\n"))
-                        (plan-body-normalized-hash base)
-                        "authored PLAN bytes still count as identity"))
+      (check-not-equal?
+       (plan-body-normalized-hash (string-append base "\n## Notes\n\nauthored addition\n"))
+       (plan-body-normalized-hash base)
+       "authored PLAN bytes still count as identity"))
 
     (test-case "W4: replaying status projections changes no bound identity"
       (define dir (make-plan-tree))
@@ -398,14 +523,14 @@
       ;; Exactly what the projection shell writes on completion/reconcile.
       (write-text! plan-path (project-plan-index-update (file->string plan-path) 0 "DONE"))
       (write-text! doc-path (project-wave-doc-update (file->string doc-path) 0 "DONE"))
-      (check-equal? (snapshot-drift? dir campaign-id) '()
+      (check-equal? (snapshot-drift? dir campaign-id)
+                    '()
                     "status-only projection replay is informational non-drift")
       (check-equal? (snapshot-manifest-digest (load-snapshot-manifest dir campaign-id)) digest)
       (delete-directory/files dir))
 
     (test-case "W4: drift taxonomy is explicit and only overridable classes are overridable"
-      (check-equal? (snapshot-drift-classes)
-                    '(symlink missing content-drift frozen-contract-stale))
+      (check-equal? (snapshot-drift-classes) '(symlink missing content-drift frozen-contract-stale))
       (check-false (snapshot-drift-class-overridable? 'symlink)
                    "the trust-boundary class is never overridable")
       (for ([kind (in-list '(missing content-drift frozen-contract-stale))])
@@ -414,14 +539,14 @@
                     "every class names itself for the operator"))
       ;; The classes stay DISTINCT: no smaller ambiguous `structural` bucket.
       (check-equal? (length (remove-duplicates (map snapshot-drift-class-description
-                                                    (snapshot-drift-classes)) string=?))
+                                                    (snapshot-drift-classes))
+                                               string=?))
                     4))
 
     (test-case "W4: a malformed stored manifest is storage corruption, not a drift class"
       (define dir (make-plan-tree))
       (seed-and-bind-plan-snapshot! dir campaign-id)
-      (define manifest-path (build-path (snapshot-dir dir campaign-id)
-                                        "snapshot-manifest.rktd"))
+      (define manifest-path (build-path (snapshot-dir dir campaign-id) "snapshot-manifest.rktd"))
       (write-text! manifest-path "not-a-manifest\n")
       (check-exn exn:fail? (lambda () (classify-snapshot-drift dir campaign-id)))
       (delete-directory/files dir))
@@ -473,6 +598,271 @@
         (check-true (directory-exists? d)
                     (format "~a must survive an impostor marker" (path->string d)))
         (check-true (file-exists? (build-path d "payload.md"))))
+      (delete-directory/files dir))
+
+    ;; ── Snapshot digest-scheme compatibility (legacy v1 ↔ current) ──────
+    ;;
+    ;; BUG (RED before this fix): campaign 79a69b42 captured its waves with the
+    ;; v1 normalizer at d5bf128b. When 4ac41abc changed the wave normalization
+    ;; without changing the manifest schema, `load-snapshot-manifest` re-hashed
+    ;; the AUTHENTIC captured bytes with the NEW scheme, compared them to the
+    ;; recorded v1 digest, and reported "partial/corrupt snapshot entry" — the
+    ;; live campaign became unresumable. Authentic bytes were never wrong; the
+    ;; READER only knew one rendering.
+
+    (test-case "legacy v1 baseline fixture reproduces the authentic capture digests"
+      (define captured (file->string legacy-v1-w0-fixture))
+      (check-equal? (file-size legacy-v1-w0-fixture)
+                    legacy-v1-w0-size
+                    "the fixture is a byte-exact copy of the authentic capture")
+      (check-equal? (legacy-normalized-file-hash legacy-v1-w0-rel captured)
+                    legacy-v1-w0-digest
+                    "the v1 transcription reproduces the digest the campaign recorded")
+      (check-not-equal? (current-normalized-file-hash legacy-v1-w0-rel captured)
+                        legacy-v1-w0-digest
+                        "the 4ac41abc normalization disagrees on the same bytes")
+      (check-equal? (current-normalized-file-hash legacy-v1-w0-rel captured)
+                    legacy-v1-w0-current-digest
+                    "4ac41abc's rendering of the same bytes is pinned")
+      (check-equal? (plan-body-normalized-hash legacy-v1-plan-text)
+                    (legacy-normalized-file-hash "PLAN.md" legacy-v1-plan-text)
+                    "PLAN.md normalization is scheme-invariant"))
+
+    (test-case "a scheme-2 capture that never recorded a scheme is accepted and digest-stable"
+      ;; 4ac41abc's writer produced scheme-2 digests into the SAME
+      ;; schema-version-1 manifest shape with NO `hash-scheme` datum. The loader
+      ;; must authenticate that shape against the ENUMERATED schemes (current
+      ;; matches by exact digest), report no drift, and leave the stored datum —
+      ;; whose digest the durable campaign record binds — byte-identical across
+      ;; reuse. Without the enumerated-scheme check this capture would look
+      ;; "partial/corrupt", which is the compat regression itself.
+      (define dir (make-temporary-file "plan-snapshot-unrecorded-scheme2-~a" 'directory))
+      (install-v1-capture! dir #:digest-scheme 2)
+      (check-false (hash-has-key? (call-with-input-file (build-path (snapshot-dir dir campaign-id)
+                                                                    "snapshot-manifest.rktd")
+                                                        read)
+                                  'hash-scheme)
+                   "the fixture records no digest scheme")
+      (define manifest (load-snapshot-manifest dir campaign-id))
+      (check-true (plan-snapshot-manifest? manifest)
+                  "a scheme-2 digest with no declared scheme is accepted")
+      (check-false (plan-snapshot-manifest-hash-scheme manifest)
+                   "loading never invents a recorded scheme")
+      (check-equal? (for/first ([f (in-list (plan-snapshot-manifest-files manifest))]
+                                #:when (equal? (snapshot-file-path f) legacy-v1-w0-rel))
+                      (snapshot-file-sha256 f))
+                    legacy-v1-w0-current-digest
+                    "the recorded digest is 4ac41abc's scheme-2 rendering")
+      (check-equal? (classify-snapshot-drift dir campaign-id) '())
+      (check-equal? (snapshot-drift? dir campaign-id) '())
+      ;; Digest stability: the manifest digest is the digest of the stored datum
+      ;; and reuse binds the same value without rewriting the frozen bytes.
+      (define stored
+        (call-with-input-file (build-path (snapshot-dir dir campaign-id) "snapshot-manifest.rktd")
+                              read))
+      (check-equal? (snapshot-manifest-digest manifest) (sha256-string (format "~s" stored)))
+      (define manifest-file (build-path (snapshot-dir dir campaign-id) "snapshot-manifest.rktd"))
+      (define before (file->bytes manifest-file))
+      (define-values (_path digest) (seed-and-bind-plan-snapshot! dir campaign-id))
+      (check-equal? digest (snapshot-manifest-digest manifest) "reuse binds the same manifest digest")
+      (check-equal? (file->bytes manifest-file) before "reuse never rewrites the frozen manifest")
+      (check-equal? (call-with-input-file manifest-file read) stored)
+      (delete-directory/files dir))
+
+    (test-case "legacy v1 capture loads and reports no drift (baseline fail->pass)"
+      (define dir (make-legacy-v1-tree))
+      (define manifest (load-snapshot-manifest dir campaign-id))
+      (check-true (plan-snapshot-manifest? manifest)
+                  "an authentic v1 capture is readable, not partial/corrupt")
+      (check-false (plan-snapshot-manifest-hash-scheme manifest)
+                   "a legacy manifest records no scheme")
+      (check-equal? (classify-snapshot-drift dir campaign-id) '())
+      (check-equal? (snapshot-drift? dir campaign-id) '())
+      ;; Digest stability: the durable campaign record binds this digest, so a
+      ;; legacy manifest must re-serialize to the exact datum it was stored as.
+      (define stored
+        (call-with-input-file (build-path (snapshot-dir dir campaign-id) "snapshot-manifest.rktd")
+                              read))
+      (check-false (hash-has-key? stored 'hash-scheme))
+      (check-equal? (snapshot-manifest-digest manifest) (sha256-string (format "~s" stored)))
+      (delete-directory/files dir))
+
+    (test-case "legacy v1 capture: status projections stay non-drift"
+      (define dir (make-legacy-v1-tree))
+      (define live-path (build-path dir ".planning" legacy-v1-w0-rel))
+      (define captured (file->string legacy-v1-w0-fixture))
+      ;; MULTILINE on purpose: `Status:` is the SECOND line of every wave doc,
+      ;; so an anchored `^Status:` without `(?m:` matches nothing and would make
+      ;; this case assert on unchanged bytes. The replacement is checked to have
+      ;; actually happened before drift is classified.
+      (define projected (regexp-replace #rx"(?m:^Status: [^\n]*$)" captured "Status: DONE"))
+      (check-not-equal? projected captured "the status projection must change the live bytes")
+      (check-true (regexp-match? #rx"(?m:^Status: DONE$)" projected))
+      (write-text! live-path projected)
+      (check-equal? (classify-snapshot-drift dir campaign-id) '())
+      (delete-directory/files dir))
+
+    (test-case "legacy v1 capture: an authored change after the failure section is refused"
+      ;; Scheme 1 truncated the document at its FIRST `## Last Failure` heading,
+      ;; through end of file. Dropping the failure BODY is intentional (that
+      ;; section is projection-owned), but the same truncation also discards the
+      ;; AUTHORED `## Verify` section that follows it — a scheme-1 over-ignore.
+      ;; So a legacy digest CANNOT see this edit. Integrity keeps accepting the
+      ;; recorded digest (that is what it was), and the semantic drift gate —
+      ;; live projection vs AUTHENTIC snapshot projection under the CURRENT
+      ;; scheme — refuses it. Neither path may resume silently.
+      (define dir (make-legacy-v1-tree))
+      (define authored
+        (string-append (file->string legacy-v1-w0-fixture)
+                       "\n## Last Failure\n\nacceptance failed\n\n"
+                       "## Verify\n\nraco test EDITED.rkt\n"))
+      (check-equal? (legacy-normalized-file-hash legacy-v1-w0-rel authored)
+                    legacy-v1-w0-digest
+                    "the legacy scheme cannot see content after the failure section")
+      (check-not-equal? (current-normalized-file-hash legacy-v1-w0-rel authored) legacy-v1-w0-digest)
+      (write-text! (build-path dir ".planning" legacy-v1-w0-rel) authored)
+      (check-not-false (member (list legacy-v1-w0-rel 'content-drift)
+                               (classify-snapshot-drift dir campaign-id))
+                       "an authored change the legacy scheme hid is still drift")
+      (check-exn exn:fail?
+                 (lambda () (restore-plan-from-snapshot! dir campaign-id))
+                 "drift is not overwritten without the explicit override")
+      (check-equal? (file->string (build-path dir ".planning" legacy-v1-w0-rel)) authored)
+      (delete-directory/files dir))
+
+    (test-case "legacy v1 capture: corrupt snapshot bytes are never accepted"
+      (define dir (make-legacy-v1-tree))
+      (define frozen (build-path (snapshot-dir dir campaign-id) legacy-v1-w0-rel))
+      ;; A same-length edit visible to BOTH schemes: refused by the loader on the
+      ;; digest alone (the recorded size still matches).
+      (write-text! frozen (regexp-replace #rx"## Goal" (file->string frozen) "## GOAL"))
+      (check-equal? (file-size frozen) legacy-v1-w0-size)
+      (check-exn exn:fail? (lambda () (load-snapshot-manifest dir campaign-id)))
+      (check-exn exn:fail? (lambda () (classify-snapshot-drift dir campaign-id)))
+      (delete-directory/files dir))
+
+    (test-case "legacy v1 capture: a tail its scheme cannot see still fails closed"
+      ;; The documented limit of a v1 manifest: its digest authenticates only the
+      ;; v1 projection, which truncates at the FIRST `## Last Failure`. A
+      ;; same-length in-place edit after that section keeps the recorded size and
+      ;; the recorded v1 digest, so the loader cannot see it — but the semantic
+      ;; drift gate compares live against the frozen bytes under the CURRENT
+      ;; scheme and refuses, and restore never overwrites live content.
+      (define captured
+        (string-append (file->string legacy-v1-w0-fixture)
+                       "\n## Last Failure\n\nreason\n\n## Verify\n\nORIGINAL-TAIL\n"))
+      (define dir (make-temporary-file "plan-snapshot-legacy-tail-~a" 'directory))
+      (install-v1-capture! dir #:captured captured)
+      (check-true (plan-snapshot-manifest? (load-snapshot-manifest dir campaign-id))
+                  "the v1 digest cannot cover what its scheme discards")
+      (define frozen (build-path (snapshot-dir dir campaign-id) legacy-v1-w0-rel))
+      (define size-before (file-size frozen))
+      (write-text! frozen (regexp-replace #rx"ORIGINAL-TAIL" (file->string frozen) "MODIFIED-TAIL"))
+      (check-equal? (file-size frozen) size-before "the unauthenticated tail is edited in place")
+      (check-true (plan-snapshot-manifest? (load-snapshot-manifest dir campaign-id)))
+      (check-not-false (member (list legacy-v1-w0-rel 'content-drift)
+                               (classify-snapshot-drift dir campaign-id))
+                       "the drift gate refuses the unauthenticated tail")
+      (check-exn exn:fail? (lambda () (restore-plan-from-snapshot! dir campaign-id)))
+      (delete-directory/files dir))
+
+    (test-case "legacy v1 capture: symlink boundaries are still refused"
+      (define dir (make-legacy-v1-tree))
+      (define frozen (build-path (snapshot-dir dir campaign-id) legacy-v1-w0-rel))
+      (define outside (build-path dir "outside-wave.md"))
+      (write-text! outside (file->string frozen))
+      (delete-file frozen)
+      (make-file-or-directory-link outside frozen)
+      (check-exn exn:fail? (lambda () (load-snapshot-manifest dir campaign-id)))
+      (delete-directory/files dir))
+
+    ;; Intermediate-directory links: a symlinked `waves/` (live or frozen) is the
+    ;; same trust-boundary crossing as a symlinked leaf, but `file-exists?` on
+    ;; `waves/<doc>` happily resolves THROUGH it. Both directions are guarded and
+    ;; pinned here because the no-follow predicate must be applied to every
+    ;; component, not just the last one.
+    (test-case "a symlinked live waves/ directory is a symlink boundary, not content"
+      (define dir (make-plan-tree))
+      (seed-and-bind-plan-snapshot! dir campaign-id)
+      (define live-waves (build-path dir ".planning" "waves"))
+      (define outside (build-path dir "outside-live-waves"))
+      (rename-file-or-directory live-waves outside)
+      (make-file-or-directory-link outside live-waves)
+      ;; The leaf docs are regular files, reachable only THROUGH the link.
+      (check-true (file-exists? (build-path live-waves "W0-alpha.md")))
+      (check-equal? (classify-snapshot-drift dir campaign-id)
+                    (list (list "waves/W0-alpha.md" 'symlink) (list "waves/W1-beta.md" 'symlink))
+                    "every doc below the linked directory is symlink-classified")
+      (check-exn exn:fail? (lambda () (restore-plan-from-snapshot! dir campaign-id)))
+      (check-exn exn:fail?
+                 (lambda ()
+                   (restore-plan-from-snapshot! dir campaign-id #:override-existing-drift? #t))
+                 "the symlink boundary is not overridable")
+      (delete-directory/files dir))
+
+    (test-case "a symlinked intermediate snapshot waves/ directory is refused"
+      (define dir (make-legacy-v1-tree))
+      (define frozen-waves (build-path (snapshot-dir dir campaign-id) "waves"))
+      (define outside (build-path dir "outside-frozen-waves"))
+      (rename-file-or-directory frozen-waves outside)
+      (make-file-or-directory-link outside frozen-waves)
+      (define frozen-leaf (build-path frozen-waves (file-name-from-path legacy-v1-w0-rel)))
+      ;; The leaf still resolves to the exact captured bytes under the recorded
+      ;; size and digest; only the intermediate directory is a link.
+      (check-equal? (file-size frozen-leaf) legacy-v1-w0-size)
+      (check-equal? (current-normalized-file-hash legacy-v1-w0-rel (file->string frozen-leaf))
+                    legacy-v1-w0-current-digest)
+      (check-exn exn:fail?
+                 (lambda () (load-snapshot-manifest dir campaign-id))
+                 "an intermediate link in the frozen tree is never resolved")
+      (check-exn exn:fail? (lambda () (classify-snapshot-drift dir campaign-id)))
+      (delete-directory/files dir))
+
+    (test-case "new captures record the current scheme and verify it strictly"
+      (define dir (make-plan-tree))
+      (seed-and-bind-plan-snapshot! dir campaign-id)
+      (define manifest (load-snapshot-manifest dir campaign-id))
+      (check-equal? snapshot-hash-scheme-current 2)
+      (check-equal? (plan-snapshot-manifest-hash-scheme manifest)
+                    snapshot-hash-scheme-current
+                    "a new capture documents its digest scheme")
+      (check-equal? snapshot-hash-scheme-versions '(1 2))
+      ;; The recorded wave digest is the current-scheme digest of the bytes.
+      (define frozen (build-path (snapshot-dir dir campaign-id) "waves" "W0-alpha.md"))
+      (check-equal? (for/first ([f (in-list (plan-snapshot-manifest-files manifest))]
+                                #:when (equal? (snapshot-file-path f) "waves/W0-alpha.md"))
+                      (snapshot-file-sha256 f))
+                    (current-normalized-file-hash "waves/W0-alpha.md" (file->string frozen)))
+      (delete-directory/files dir))
+
+    (test-case "a declared scheme is verified strictly, with no other-scheme fallback"
+      ;; The same legacy capture, but the manifest DECLARES the current scheme:
+      ;; the legacy digest must then be refused instead of silently accepted.
+      (define dir (make-temporary-file "plan-snapshot-strict-~a" 'directory))
+      (install-v1-capture! dir #:manifest-scheme 2)
+      (check-exn exn:fail? (lambda () (load-snapshot-manifest dir campaign-id)))
+      (delete-directory/files dir))
+
+    (test-case "an unsupported declared digest scheme is refused"
+      (define dir (make-temporary-file "plan-snapshot-scheme-~a" 'directory))
+      (install-v1-capture! dir #:manifest-scheme 3)
+      (check-exn exn:fail? (lambda () (load-snapshot-manifest dir campaign-id)))
+      (delete-directory/files dir))
+
+    (test-case "seed-and-bind reuses a legacy v1 capture without re-freezing it"
+      ;; Resume path: the authentic v1 snapshot is reused verbatim (never
+      ;; rewritten, never re-snapshotted) and the frozen-contract check still
+      ;; compares live against the frozen bytes.
+      (define dir (make-legacy-v1-tree))
+      (define-values (_path digest) (seed-and-bind-plan-snapshot! dir campaign-id))
+      (check-equal? (plan-snapshot-manifest-hash-scheme (load-snapshot-manifest dir campaign-id))
+                    #f
+                    "an existing legacy capture keeps its recorded (absent) scheme")
+      (check-equal? digest (snapshot-manifest-digest (load-snapshot-manifest dir campaign-id)))
+      (write-text! (build-path dir ".planning" "PLAN.md")
+                   (string-append legacy-v1-plan-text "\nAmended contract clause\n"))
+      (check-exn exn:fail:gsd-frozen-contract-stale?
+                 (lambda () (seed-and-bind-plan-snapshot! dir campaign-id)))
       (delete-directory/files dir))))
 
 (void (run-tests plan-snapshot-suite))

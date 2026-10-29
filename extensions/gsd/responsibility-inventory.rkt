@@ -1271,9 +1271,28 @@
                                "supplemental-evidence-format"
                                "supplemental-evidence-authority"
                                "supplemental-disposition-policy"
+                               "supplemental-preserved-candidate"
                                "../../util/json/checksum"
                                "evidence-repair-format"
                                "supplemental-evidence-store-core"))
+   ;; Candidate-preserving metadata settlement validator leaf. Static policy/
+   ;; format/authority imports are pure/known-source; the fixed-a3 claim owner
+   ;; and the strict retained-receipt loader are reached only through their
+   ;; existing known-source lazy loads (cycle-breaking, never caller auth).
+   (make-entry "supplemental-preserved-candidate.rkt"
+               'transition-logic
+               '(git parameterize path-ops sha256 dynamic-require)
+               '()
+               '("racket/list" "racket/path"
+                               "racket/runtime-path"
+                               "racket/string"
+                               "racket/system"
+                               "supplemental-evidence-format"
+                               "supplemental-disposition-policy"
+                               "supplemental-evidence-authority"
+                               "../../util/json/checksum"
+                               "supplemental-disposition-claim"
+                               "evidence-readiness"))
    (make-entry "supplemental-evidence-disposition.rkt"
                'campaign-state
                '(git parameterize dynamic-require sha256)

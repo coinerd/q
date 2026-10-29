@@ -359,6 +359,40 @@
          (check-equal? (file->bytes pointer) initial-pointer)
          (check-equal? (file->bytes campaign-path) initial-campaign)
          (check-no-operation!)
+         ;; The live late checkpoint parks the spent attempt at
+         ;; `awaiting-delivery`. That status is admitted ONLY for the exact
+         ;; authenticated fixed third-generation late terminal already bound
+         ;; above (blocked/revision-6; the amendment's attempt and fences are
+         ;; the campaign's current ones). Admission never mutates the status.
+         (with-file-change
+          campaign-path
+          (lambda (_)
+            (define rec (load-campaign-record base plan))
+            (set-campaign-wave-status! (wave rec) 'awaiting-delivery)
+            (persist-campaign! base rec))
+          (lambda ()
+            (define awaiting-before (file->bytes campaign-path))
+            (define-values (_awaiting-ref awaiting-task) (propose))
+            (check-equal? awaiting-task task)
+            (check-equal? (file->bytes campaign-path) awaiting-before)
+            (check-equal? (campaign-wave-status (wave (load-campaign-record base plan)))
+                          'awaiting-delivery)
+            ;; Every other eligibility guard still applies under
+            ;; awaiting-delivery: a changed current attempt
+            ;; fence refuses before any retention or claim.
+            (with-file-change campaign-path
+                              (lambda (_)
+                                (define rec (load-campaign-record base plan))
+                                (define w (wave rec))
+                                (define old (campaign-wave-current-attempt w))
+                                (set-campaign-wave-current-attempt!
+                                 w
+                                 (campaign-attempt (campaign-attempt-id old)
+                                                   (add1 (campaign-attempt-fence-token old))
+                                                   0))
+                                (persist-campaign! base rec))
+                              (lambda () (check-exn exn:fail? (lambda () (propose)))))
+            (check-equal? (file->bytes campaign-path) awaiting-before)))
          (check-equal? (campaign-usage-summary (load-campaign-record base plan))
                        (campaign-usage-summary initial-rec)))
        #:third? #t))))

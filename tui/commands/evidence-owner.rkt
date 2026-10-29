@@ -47,6 +47,8 @@
    "/evidence-replan authorize-disposition PLAN WAVE NEW-T-SHA256\n"
    "/evidence-replan revoke KIND APPROVAL-SHA256\n"
    "Propose using the installed CLI first. Inspect exact retained bytes; authorization does not run /go.\n"
+   "A preserved-candidate disposition (propose-disposition --preserved-candidate FILE) adopts the\n"
+   "authenticated K->M metadata descendant on /go with NO model dispatch, then waits for fresh K' approval.\n"
    "After task approval use /go; the governed controller requests exact candidate and supersession approval in this UI."))
 
 (define (digest? s)
@@ -197,7 +199,11 @@
                       ctx
                       (cond
                         [disposition?
-                         "Exact disposition task/v3 approved and installed. No work launched; K and S require separate decisions."]
+                         (string-append
+                          "Exact disposition task/v3 approved and installed. No work launched. "
+                          "A preserved-candidate task re-seals fresh K' from the authenticated metadata "
+                          "descendant with NO model dispatch, then waits for its own K' decision; "
+                          "S requires a separate decision.")]
                         [recovery?
                          (string-append
                           "Exact recovery task approved and installed for one NEW additional dispatch; old task stays spent. "

@@ -24,7 +24,13 @@
 ;;              Retain one inert recovery child; never move the spent pointer.
 ;;   propose-disposition --campaign-root R --plan ID --wave N --sha256 PARENT-T
 ;;                       --expires-at UNIX-SECONDS
+;;                       [--preserved-candidate FILE]
 ;;              Sole fixed amendment; inherit scope, retain inert v3 only.
+;;              --preserved-candidate reads an exact
+;;              supplemental-preserved-candidate/v1 JSON binding. It is DATA
+;;              only: no authorization is read or injected from the file, and
+;;              the disposition owner re-authenticates the exact source, old
+;;              candidate and K->M settlement before retaining anything.
 ;;   authorize  --stage task|candidate|supersession (plus the common args)
 ;;              Register the exact pending proposal digest + full immutable
 ;;              presentation on the active interactive channel, await a REAL
@@ -33,7 +39,8 @@
 ;;   inspect    --kind K --sha256 X   Print a retained record (public bytes).
 ;;   status     Print the public typed status of the campaign's task.
 ;;   revoke     --sha256 X            Retain + authorize a revocation.
-(require racket/cmdline
+(require json
+         racket/cmdline
          racket/file
          racket/format
          racket/path
@@ -49,6 +56,7 @@
          (submod "../extensions/gsd/supplemental-evidence-authority.rkt" owner-frontend)
          "../extensions/gsd/supplemental-evidence-journal.rkt"
          "../extensions/gsd/supplemental-evidence-operator.rkt"
+         (only-in "../extensions/gsd/supplemental-evidence-format.rkt" valid-preserved-candidate?)
          (only-in "../extensions/gsd/supplemental-evidence-controller.rkt"
                   build-supplemental-task-proposal!
                   propose-supplemental-recovery!
@@ -56,7 +64,6 @@
                   load-supplemental-pointer
                   supplemental-operation-summary
                   write-supplemental-pointer!))
-
 (define (refuse! message)
   (fprintf (current-error-port) "gsd-evidence-replan: ~a\n" message)
   (exit 2))
@@ -81,6 +88,32 @@
   n)
 (define (absolute-dir! key)
   (simplify-path (string->path (need args key)) #f))
+(define (immutable-json v)
+  (cond
+    [(hash? v)
+     (for/hasheq ([(k x) (in-hash v)])
+       (values k (immutable-json x)))]
+    [(list? v) (map immutable-json v)]
+    [(string? v) (string->immutable-string v)]
+    [else v]))
+;; The preserved-candidate binding is untrusted DATA from an operator file:
+;; this parser validates the exact public shape only and never mints, injects
+;; or reads authority. The disposition leaf authenticates every fact later.
+(define (preserved-candidate-file!)
+  (define raw (string->path (need args 'preserved-candidate)))
+  (unless (complete-path? raw)
+    (refuse! "--preserved-candidate must be an absolute path"))
+  (unless (and (file-exists? raw) (not (link-exists? raw)))
+    (refuse! "--preserved-candidate must be a regular readable file"))
+  (define value
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (refuse! (format "--preserved-candidate is not valid JSON: ~a"
+                                                  (exn-message e))))])
+      (call-with-input-file raw read-json)))
+  (define frozen (immutable-json value))
+  (unless (valid-preserved-candidate? frozen)
+    (refuse! "--preserved-candidate must be an exact supplemental-preserved-candidate/v1 binding"))
+  frozen)
 
 ;; Common arguments. The default is shared with the trusted-user /go process.
 ;; An explicit override is for embeddings/tests that bind the runtime likewise;
@@ -108,6 +141,10 @@
   (hash-set! args 'owner-paths p)]
  [("--baseline-head") h "pinned baseline head (40-hex)" (hash-set! args 'baseline-head h)]
  [("--baseline-tree") t "pinned baseline tree (40-hex)" (hash-set! args 'baseline-tree t)]
+ [("--preserved-candidate")
+  p
+  "absolute JSON preserved-candidate binding (propose-disposition)"
+  (hash-set! args 'preserved-candidate p)]
  [("--kind") k "record kind (inspect)" (hash-set! args 'kind k)]
  [("--sha256")
   s
@@ -166,6 +203,8 @@
 (case (need args 'verb)
   [("propose")
    (define-values (base plan wave) (campaign!))
+   (when (hash-has-key? args 'preserved-candidate)
+     (refuse! "propose does not accept --preserved-candidate; only propose-disposition binds one"))
    (unless (need args 'repo)
      (refuse! "propose requires --repo"))
    (define owner-paths
@@ -187,11 +226,16 @@
 
   [("propose-recovery" "propose-disposition")
    (define-values (base plan wave) (campaign!))
+   (define disposition? (equal? (need args 'verb) "propose-disposition"))
    (for ([key '(repo test-path harness-path owner-paths baseline-head baseline-tree)])
      (when (hash-has-key? args key)
        (refuse! (format "~a does not accept --~a; scope is inherited from the parent"
                         (need args 'verb)
                         key))))
+   (when (and (hash-has-key? args 'preserved-candidate) (not disposition?))
+     (refuse! "propose-recovery does not accept --preserved-candidate"))
+   (define preserved
+     (and disposition? (hash-has-key? args 'preserved-candidate) (preserved-candidate-file!)))
    (define expected-parent (sha-arg args "sha256"))
    (define expires-at (string->number (need args 'expires-at)))
    (unless (and (exact-positive-integer? expires-at) (> expires-at (current-seconds)))
@@ -200,14 +244,14 @@
    ;; In particular, do NOT point ordinary task authorization at this child.
    (define-values (tref task)
      (parameterize ([current-supplemental-authority-root (authority-root!)])
-       ((if (equal? (need args 'verb) "propose-disposition")
-            propose-supplemental-disposition!
-            propose-supplemental-recovery!)
-        base
-        plan
-        wave
-        expected-parent
-        expires-at)))
+       (if disposition?
+           (propose-supplemental-disposition! base
+                                              plan
+                                              wave
+                                              expected-parent
+                                              expires-at
+                                              #:preserved-candidate preserved)
+           (propose-supplemental-recovery! base plan wave expected-parent expires-at))))
    (emit
     (hasheq
      'retained
@@ -215,9 +259,16 @@
      'sha256
      (hash-ref tref 'sha256)
      'notice
-     (if (equal? (need args 'verb) "propose-disposition")
-         "Sole fixed disposition task/v3 requires exact keyboard authorization; root and parent stay spent."
-         "One NEW additional dispatch requires exact recovery approval; old task stays spent.")
+     (cond
+       [(equal? (need args 'verb) "propose-recovery")
+        "One NEW additional dispatch requires exact recovery approval; old task stays spent."]
+       [preserved
+        (string-append
+         "Sole fixed disposition task/v3 with a preserved candidate binding: requires exact keyboard authorization; "
+         "root and parent stay spent. /go adopts the metadata descendant with NO model dispatch "
+         "and then waits for fresh K' approval.")]
+       [else
+        "Sole fixed disposition task/v3 requires exact keyboard authorization; root and parent stay spent."])
      'provider
      "Operator-selected; not pinned and not an availability or quota guarantee."))]
 

@@ -760,6 +760,51 @@
        (check-false (file-exists? (operation-path f ".intent.json")))
        (check-false (supplemental-terminal-observation grant)))))
 
+  (test-case "terminalizer seals a late verifying-prefix operation blocked/revision-6 under the current lease"
+    ;; The live attempt-6 shape: the expired operation had already traversed
+    ;; candidate/verify stages when the operator deadline passed. The same
+    ;; supported terminal writer must seal exactly that shape, deriving the
+    ;; typed block-reason rather than accepting caller text.
+    (with-obs-fixture
+     (lambda (f plan)
+       (define grant (fixture-grant f))
+       ;; with-obs-fixture already started the operation and reserved it.
+       (step! f 'launched (hasheq 'dispatch-id "fixture-late-dispatch"))
+       (step! f 'candidate-sealed)
+       (step! f 'candidate-approved)
+       (step! f 'verifying)
+       (define before (op-record f))
+       (check-equal? (hash-ref before 'state) "verifying")
+       (check-equal? (hash-ref before 'revision) 5)
+       (check-true (hash-ref before 'launch-consumed))
+       (sleep 11)
+       (define sealed (terminalize! f plan #:sha (hash-ref before 'sha256)))
+       (check-equal? (hash-ref sealed 'state) "blocked")
+       (check-equal? (hash-ref sealed 'revision) 6 "verifying(5) + 1")
+       (check-true (hash-ref sealed 'launch-consumed))
+       (check-equal? (hash-ref (hash-ref sealed 'facts) 'allocation)
+                     (hasheq 'attempt-id "fixture-new-attempt" 'attempt-fence 4 'coordinator-fence 8))
+       (check-equal? (hash-ref (hash-ref sealed 'facts) 'block-reason) "operator deadline expired")
+       ;; Exactly the six verifying-prefix facts the fixed amendment binds.
+       (check-equal?
+        (sort (hash-keys (hash-ref sealed 'facts)) symbol<?)
+        '(allocation block-reason candidate-approval-ref candidate-ref dispatch-id verify-job))
+       (check-equal? (hash-ref (hash-ref sealed 'facts) 'candidate-ref)
+                     (hash-ref (hash-ref before 'facts) 'candidate-ref))
+       (check-equal? (hash-ref (hash-ref sealed 'facts) 'candidate-approval-ref)
+                     (hash-ref (hash-ref before 'facts) 'candidate-approval-ref))
+       (check-equal? (hash-ref (hash-ref sealed 'facts) 'verify-job)
+                     (hash-ref (hash-ref before 'facts) 'verify-job))
+       ;; The two amendment-3 digest namespaces remain derivable from this
+       ;; authentic sealed record.
+       (check-equal? (file->bytes (operation-path f)) (bytes-for sealed))
+       (check-equal? (sha256-string (bytes->string/utf-8 (file->bytes (operation-path f))))
+                     (sha256-string (canonical-evidence-json sealed)))
+       (check-equal? (op-record f) sealed)
+       (check-false (file-exists? (operation-path f ".intent.json")))
+       (check-false (supplemental-terminal-observation grant)))
+     #:payload (hasheq 'task task 'expires-at (+ (current-seconds) 10))))
+
   (test-case "already-blocked replay is an idempotent no-op; a stale sha refuses"
     (expired-obs-fixture
      (lambda (f plan)

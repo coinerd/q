@@ -10,6 +10,9 @@
          "../../extensions/gsd/delivery-publication.rkt"
          "../../extensions/gsd/supplemental-evidence-controller.rkt"
          "../../extensions/gsd/supplemental-evidence-format.rkt"
+         (only-in "../../extensions/gsd/supplemental-evidence-authority.rkt"
+                  load-supplemental-record
+                  propose-retain!)
          "../../extensions/gsd/supplemental-evidence-journal.rkt"
          "../../extensions/gsd/supplemental-disposition-policy.rkt"
          (only-in "../../extensions/gsd/evidence-repair-format.rkt" canonical-evidence-json)
@@ -39,8 +42,46 @@
                (hash-ref op 'launch-consumed))
     (error 'disposition-fixture "real no-edit launch did not produce blocked revision 3"))
   op)
-(define (call-with-disposition-fixture proc #:second? [second? #f] #:third? [third? #f])
-  (when third? (set! second? #t))
+;; Genuine late-stage terminal for the fixed third generation. The operation
+;; is driven through the production journal transitions (never a rewritten or
+;; hand-built record): reserved -> launched -> candidate-sealed ->
+;; candidate-approved -> verifying -> blocked/revision 6, with the real
+;; candidate proposal/approval records and the campaign's own current
+;; attempt/fences as the bound allocation. The expired attempt-6 operation in
+;; production reached the same shape before the supported terminal writer
+;; sealed it.
+(define (spend-late! base plan grant proposal-ref attempt-id attempt-fence coordinator-fence)
+  (define task (hash-ref (hash-ref (load-supplemental-record proposal-ref) 'payload) 'task))
+  (define allocation
+    (hasheq 'attempt-id attempt-id 'attempt-fence attempt-fence 'coordinator-fence coordinator-fence))
+  (void (start-supplemental-operation!
+         grant
+         (hasheq 'context (hash-ref task 'context) 'coordinator-fence coordinator-fence)))
+  (define (step! from to facts)
+    (define op (load-supplemental-operation grant))
+    (transition-supplemental-operation! grant (hash-ref op 'revision) from to facts))
+  (step! "proposal-approved" "reserved" (hasheq 'allocation allocation))
+  (step! "reserved" "launched" (hasheq 'dispatch-id "supplemental-author-late"))
+  (define retained (load-supplemental-operation grant))
+  (define candidate-ref
+    (propose-retain! "candidate-proposal"
+                     (hasheq 'task (hash-ref retained 'proposal-ref))
+                     (list (hash-ref retained 'proposal-ref))))
+  (step! "launched" "candidate-sealed" (hasheq 'candidate-ref candidate-ref))
+  (step! "candidate-sealed"
+         "candidate-approved"
+         (hasheq 'candidate-approval-ref (fixture-approve! candidate-ref)))
+  (step! "candidate-approved"
+         "verifying"
+         (hasheq 'verify-job (hasheq 'id "fixture-verify-job" 'owner "fixture-controller")))
+  (step! "verifying" "blocked" (hasheq 'block-reason "operator deadline expired"))
+  (load-supplemental-operation grant))
+(define (call-with-disposition-fixture proc
+                                       #:second? [second? #f]
+                                       #:third? [third? #f]
+                                       #:late-terminal? [late-terminal? #t])
+  (when third?
+    (set! second? #t))
   (call-with-supplemental-fixture
    (lambda (fx)
      (define base (supplemental-fixture-root fx))
@@ -118,25 +159,23 @@
        (define v3 (load-supplemental-pointer base plan 1))
        (consume! fx)
        (define v3-op (terminal! (hash-ref v3 'task-approval)))
-       (values
-        v3
-        v3-op
-        (seal-supplemental-record
-         (hash-set* amendment
-                    'v2-proposal
-                    (hash-ref parent 'task-proposal)
-                    'v2-approval
-                    (hash-ref parent 'task-approval)
-                    'parent-proposal
-                    (hash-ref v3 'task-proposal)
-                    'parent-approval
-                    (hash-ref v3 'task-approval)
-                    'terminal-body-sha256
-                    (hash-ref v3-op 'sha256)
-                    'terminal-record-sha256
-                    (sha256-string (canonical-evidence-json v3-op))
-                    'allocation
-                    (hash-ref (hash-ref v3-op 'facts) 'allocation)))))
+       (values v3
+               v3-op
+               (seal-supplemental-record (hash-set* amendment
+                                                    'v2-proposal
+                                                    (hash-ref parent 'task-proposal)
+                                                    'v2-approval
+                                                    (hash-ref parent 'task-approval)
+                                                    'parent-proposal
+                                                    (hash-ref v3 'task-proposal)
+                                                    'parent-approval
+                                                    (hash-ref v3 'task-approval)
+                                                    'terminal-body-sha256
+                                                    (hash-ref v3-op 'sha256)
+                                                    'terminal-record-sha256
+                                                    (sha256-string (canonical-evidence-json v3-op))
+                                                    'allocation
+                                                    (hash-ref (hash-ref v3-op 'facts) 'allocation)))))
      ((dynamic-require `(submod ,policy test-support) 'call-with-test-disposition-amendment)
       amendment
       (lambda ()
@@ -144,7 +183,9 @@
           [(and second? third?)
            ;; Third bounded generation: the amendment-2 disposition child (the
            ;; production 15e68c8b/ccf20bc9 analogue) is installed, genuinely
-           ;; consumed into a spent blocked revision-3 terminal, and the
+           ;; spent into the late blocked/revision-6 verifying-prefix terminal
+           ;; (the live attempt-6 shape; `#:late-terminal? #f` keeps the
+           ;; exhausted revision-3 shape for negative tests), and the
            ;; immutable amendment-3 fixture binds that exact pair, both real
            ;; terminal digest namespaces and its failed allocation — never
            ;; fabricated digests and never a fourth successor grant. Each
@@ -155,33 +196,49 @@
             second
             (lambda ()
               (define-values (sref _stask)
-                (propose-supplemental-disposition!
-                 base
-                 plan
-                 1
-                 (hash-ref (hash-ref v3 'task-proposal) 'sha256)
-                 (+ (current-seconds) 14400)))
+                (propose-supplemental-disposition! base
+                                                   plan
+                                                   1
+                                                   (hash-ref (hash-ref v3 'task-proposal) 'sha256)
+                                                   (+ (current-seconds) 14400)))
               (install-supplemental-disposition! base plan 1 sref (fixture-approve! sref))
               (define v4 (load-supplemental-pointer base plan 1))
-              (consume! fx)
-              (define v4-op (terminal! (hash-ref v4 'task-approval)))
+              (define v4-op
+                (if late-terminal?
+                    (let* ([rec (load-campaign-record base plan)]
+                           [w (for/first ([candidate (in-list (campaign-record-waves rec))]
+                                          #:when (= 1 (campaign-wave-index candidate)))
+                                candidate)]
+                           [attempt (and w (campaign-wave-current-attempt w))])
+                      (unless (and rec w attempt)
+                        (error 'disposition-fixture
+                               "campaign attempt for the late terminal is absent"))
+                      (spend-late! base
+                                   plan
+                                   (hash-ref v4 'task-approval)
+                                   (hash-ref v4 'task-proposal)
+                                   (campaign-attempt-id attempt)
+                                   (campaign-attempt-fence-token attempt)
+                                   (campaign-fence-token rec)))
+                    (begin
+                      (consume! fx)
+                      (terminal! (hash-ref v4 'task-approval)))))
               (define third
-                (seal-supplemental-record
-                 (hash-set* second
-                            'prior-parent-proposal
-                            (hash-ref second 'parent-proposal)
-                            'prior-parent-approval
-                            (hash-ref second 'parent-approval)
-                            'parent-proposal
-                            (hash-ref v4 'task-proposal)
-                            'parent-approval
-                            (hash-ref v4 'task-approval)
-                            'terminal-body-sha256
-                            (hash-ref v4-op 'sha256)
-                            'terminal-record-sha256
-                            (sha256-string (canonical-evidence-json v4-op))
-                            'allocation
-                            (hash-ref (hash-ref v4-op 'facts) 'allocation))))
+                (seal-supplemental-record (hash-set* second
+                                                     'prior-parent-proposal
+                                                     (hash-ref second 'parent-proposal)
+                                                     'prior-parent-approval
+                                                     (hash-ref second 'parent-approval)
+                                                     'parent-proposal
+                                                     (hash-ref v4 'task-proposal)
+                                                     'parent-approval
+                                                     (hash-ref v4 'task-approval)
+                                                     'terminal-body-sha256
+                                                     (hash-ref v4-op 'sha256)
+                                                     'terminal-record-sha256
+                                                     (sha256-string (canonical-evidence-json v4-op))
+                                                     'allocation
+                                                     (hash-ref (hash-ref v4-op 'facts) 'allocation))))
               ((dynamic-require `(submod ,policy test-support) 'call-with-test-disposition-amendment)
                third
                (lambda () (proc (disposition-fixture fx root v4 root-op v4-op third)))

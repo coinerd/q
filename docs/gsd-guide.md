@@ -397,10 +397,10 @@ no old grant reuse, auto-authorization, retry, budget reset or ordinary fallback
 One permanent claim admits only one winner, including after expiry, revocation or failure.
 The ordinary v1→v2 rules are unchanged; no generic v3 successor is permitted.
 
-#### Amendment-2 (active fixed disposition)
+#### Amendment-2 (exhausted fixed disposition)
 
 Amendment-1 above is exhausted and retained only for provenance; its permanent claim
-is never rewritten. The sole active amendment-2 ID is
+is never rewritten. The exhausted amendment-2 ID is
 `645a6a88de529fa239edbda468b8c12e64df1c0c1fbff859db4a9f284e242505`.
 It binds spent v3 proposal
 `f4238535e291e23062926f698c922da75fd3caadcd2de160e8b3ca68b33ba764` / approval
@@ -416,10 +416,60 @@ route is unchanged and still requires fresh genuine exact-T consent before a sep
 `/go`. The task remains kind/v3 with unchanged recovery ancestry and bounds
 1/14400/600/86400; only the disposition binding and engine provenance change.
 A separate amendment-keyed permanent claim permits one winner and one dispatch,
-not a retry, generic chain, fourth-generation schema or third amendment.
+not a retry, generic chain, fourth-generation schema or fourth amendment.
 Old amendment proposals refuse; K and S remain separate decisions, with full
 C1/G1, baseline RED/candidate GREEN R1 and P/registration/readiness mandatory.
 BUG-0089 must be merged and installed before any live author attempt.
+
+#### Amendment-3 (active fixed late disposition)
+
+Amendment-2 is exhausted and retained only for provenance; its permanent claim is
+never rewritten. The active amendment-3 ID is derived by the policy module from its
+public fields (it is never hardcoded). It binds spent v3 proposal
+`15e68c8b1ddd822a969b18ebfb7e22c425a0f74e0a68ec48a2b712d1cd05e49d` / approval
+`ccf20bc98f7688b4bb5fa69226c54a876038c88fd28a8fe476dcad9ae7e1f9ac`, its consumed
+attempt-6 / attempt-fence-9 / coordinator-fence-9 lineage, and the spent
+amendment-2 parent pair as immutable prior ancestry. The live attempt-6 operation
+expired after reaching `verifying`, so the owner-deadline terminal writer sealed it
+`blocked` at revision 6 with exactly the verifying-prefix facts
+`allocation dispatch-id candidate-ref candidate-approval-ref verify-job block-reason`.
+The terminal BODY digest is
+`758d653547879fe5204785af73acf1f7850810ad61e72bc9664532fd3d7068b1`; the COMPLETE
+canonical-record digest is
+`837710077fec71c156ac65ee86075d2c1d847270617056cbf34a1a7e1a7160c4`.
+
+Admission is generation-fixed: only this fixed third amendment may accept that
+late blocked/revision-6 shape, while amendment-1/2 retain the blocked/revision-3
+launch-spent shape. It is not a generic late-terminal recovery, and no fourth
+successor (`successor-permitted` #f), retry, reallocation, budget reset or second
+dispatch is authorized. The owner disposition route additionally admits a wave
+parked at `awaiting-delivery` only when that exact authenticated late terminal and
+the amendment's own current attempt/fences match; every cancellation, budget-pause,
+snapshot, receipt, clean-source and owned-proof check still applies, and admission
+never mutates the live wave status.
+
+#### Candidate-preserving mode (amendment-3 only)
+
+An explicitly authorized metadata-only descendant M may preserve the model-authored
+candidate K without rerunning its author. The optional sealed
+`disposition.preserved-candidate` binding names the genuine historical K and its
+live approval, original Git source, exact direct descendant M, and each changed
+inherited owner path with before/after Git blob and SHA-256 identities. All other
+Git tree entries must remain unchanged. Metadata settlement is not verification
+or approval; the original K, receipt, terminal operation and spent claims remain
+immutable. Ordinary `current-evidence-context` still refuses source drift.
+
+The owner CLI accepts `--preserved-candidate /absolute/binding.json` only with
+`--verb propose-disposition`; it validates the binding against authentic ancestry,
+old receipt context, candidate approval and the actual clean linked checkout
+before retaining an inert proposal. No caller-provided validator grants authority.
+The exact-T keyboard decision remains required to install the sole amendment-3
+claim. Then `/go` consumes that authorization with an explicit adoption marker,
+**zero new author-model calls**, and a fresh candidate K' bound to M, the new T and
+new monotonic allocation. Historical K approval is provenance, never approval of
+M or K'. A separate genuine K' decision precedes fresh C1/probe verification;
+S remains a later human decision. There is no ordinary-author fallback, fourth
+successor, reused verification result or reset of old accounting on any failure.
 
 ## Campaign lifecycle
 
