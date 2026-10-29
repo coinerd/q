@@ -95,7 +95,9 @@
                     attempt
                     (not (campaign-record-cancellation record))
                     (not (campaign-record-budget-pause record))
-                    (>= (campaign-fence-token record) (hash-ref expected 'coordinator-fence))
+                    (if parent-allocation
+                        (= (campaign-fence-token record) (hash-ref expected 'coordinator-fence))
+                        (>= (campaign-fence-token record) (hash-ref expected 'coordinator-fence)))
                     (eq? (campaign-wave-status w) 'awaiting-delivery)
                     (equal? (campaign-attempt-id attempt) (hash-ref expected 'attempt-id))
                     (equal? (campaign-attempt-fence-token attempt)
