@@ -40,6 +40,7 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/async-channel
          racket/string
          racket/match
          racket/file
@@ -88,6 +89,25 @@
   (path->string (build-path (find-system-path 'temp-dir)
                             (format "~a-~a-~a.txt" base (current-milliseconds) (random 1000000)))))
 
+;; Bounded file-marker wait: poll every 10ms until the marker appears or the
+;; deadline passes. This is the handshake primitive that replaces fixed
+;; sleeps: the fixture signals progress with marker files, the test waits on
+;; observable state with a deadline instead of guessing a duration.
+(define (wait-for-file path [timeout-ms 60000])
+  (define deadline (+ (current-inexact-milliseconds) timeout-ms))
+  (let loop ()
+    (cond
+      [(file-exists? path) #t]
+      [(>= (current-inexact-milliseconds) deadline) #f]
+      [else
+       (sync/timeout 0.01 never-evt)
+       (loop)])))
+
+;; Release a held fixture: the marker file's mere existence is the release
+;; signal; content is irrelevant.
+(define (release-fixture! path)
+  (call-with-output-file path #:exists 'replace void))
+
 (define (capture-stdout thunk)
   (define out (open-output-string))
   (parameterize ([current-output-port out])
@@ -108,10 +128,22 @@
 
 (define fixture-slow
   (string-append "#lang racket/base\n"
+                 "(define slow-started (getenv \"W0_SCHED_SLOW_STARTED\"))\n"
+                 "(define slow-release (getenv \"W0_SCHED_SLOW_RELEASE\"))\n"
                  "(define slow-done (getenv \"W0_SCHED_SLOW_DONE\"))\n"
-                 "(unless slow-done (error \"W0_SCHED_SLOW_DONE unset\"))\n"
-                 ";; Deliberately exceed loaded subprocess startup variance.\n"
-                 "(sleep 10)\n"
+                 "(unless (and slow-started slow-release slow-done)\n"
+                 "  (error \"W0 scheduler handshake env unset\"))\n"
+                 "(call-with-output-file slow-started\n"
+                 "  #:exists 'replace\n"
+                 "  (lambda (o) (display \"started\" o)))\n"
+                 ";; Hold until the test releases this fixture; bounded so a lost\n"
+                 ";; release surfaces as a named error before the runner's 120s kill.\n"
+                 "(define release-deadline (+ (current-inexact-milliseconds) 100000))\n"
+                 "(let wait-for-release ()\n"
+                 "  (unless (file-exists? slow-release)\n"
+                 "    (if (> (current-inexact-milliseconds) release-deadline)\n"
+                 "        (error \"W0 scheduler slow fixture: release marker never arrived\")\n"
+                 "        (begin (sync/timeout 0.01 never-evt) (wait-for-release)))))\n"
                  "(call-with-output-file slow-done\n"
                  "  #:exists 'append\n"
                  "  (lambda (o) (display \"done\" o)))\n"))
@@ -138,6 +170,130 @@
                  "(call-with-output-file probe-out\n"
                  "  #:exists 'replace\n"
                  "  (lambda (o) (display probe-content o)))\n"))
+
+;; ---------------------------------------------------------------------------
+;; W2/W2r shared harness
+;; ---------------------------------------------------------------------------
+
+;; Drive run-all-files for (slow quick probe) under `scheduler` exactly the way
+;; the W2 barrier pin needs: the run executes on a dedicated runner thread so
+;; the test can observe the held fixture before releasing it, the slow fixture
+;; writes a start marker and HOLDS until the release marker exists, and a
+;; runner-thread exception is delivered through the channel and re-raised by
+;; the caller instead of being silently lost.
+;;
+;; mode selects the harness flow:
+;;  - 'normal               … W2: wait for the handshake, release, receive the
+;;                            result, and return (values 'completed results
+;;                            quick-done slow-done probe-out).
+;;  - 'abort-before-receive … W2r: escape the body BEFORE the release and
+;;                            BEFORE the receive, exactly the way a failing
+;;                            rackunit check aborts a test-case body; the
+;;                            dynamic-wind post thunk must still leave nothing
+;;                            behind. Returns (values 'aborted runner-thread
+;;                            result-channel).
+(define (scheduler-run-once scheduler mode slow quick probe)
+  (define slow-started (unique-tmp-path "w2-sched-slow-started"))
+  (define slow-release (unique-tmp-path "w2-sched-slow-release"))
+  (define quick-done (unique-tmp-path "w2-sched-quick-done"))
+  (define slow-done (unique-tmp-path "w2-sched-slow-done"))
+  (define probe-out (unique-tmp-path "w2-sched-probe-out"))
+  (putenv "W0_SCHED_SLOW_STARTED" slow-started)
+  (putenv "W0_SCHED_SLOW_RELEASE" slow-release)
+  (putenv "W0_SCHED_QUICK_DONE" quick-done)
+  (putenv "W0_SCHED_SLOW_DONE" slow-done)
+  (putenv "W0_SCHED_PROBE_OUT" probe-out)
+  ;; Delivery goes over an UNBOUNDED async channel, and the runner — with
+  ;; every subprocess run-all-files spawns — lives in an owned child
+  ;; custodian. Together these close the receiver-abort hole: `make-channel`
+  ;; is a synchronous rendezvous, so a plain channel-put sender whose receiver
+  ;; aborted would block FOREVER (an orphaned runner); an async-channel put
+  ;; never blocks, so the runner can always quiesce, and if the bounded join
+  ;; in the post thunk below ever fails, the custodian force-shutdown kills
+  ;; the runner thread AND every subprocess run-all-files spawned:
+  ;; [current-subprocess-custodian-mode 'kill] registers those subprocesses
+  ;; with the owned custodian, so shutdown kills them too (probed on racket
+  ;; 8.10: RED default survives shutdown-all, GREEN 'kill dies — including
+  ;; through the runner's process*/ports spawn path).
+  (define result-channel (make-async-channel #f))
+  (define runner-custodian (make-custodian))
+  (define runner-thread
+    (parameterize ([current-custodian runner-custodian]
+                   [current-subprocess-custodian-mode 'kill])
+      (thread (lambda ()
+                (async-channel-put
+                 result-channel
+                 (with-handlers ([exn? (lambda (e) (list 'error e))])
+                   (list 'ok (run-all-files (list slow quick probe) 2 #f #:scheduler scheduler))))))))
+  (define body-outcome
+    (call-with-continuation-prompt
+     (lambda ()
+       (dynamic-wind
+        void
+        (lambda ()
+          (if (eq? mode 'abort-before-receive)
+              (abort-current-continuation (default-continuation-prompt-tag) 'aborted)
+              (let ()
+                (define started? (wait-for-file slow-started))
+                (define quick-completed? (wait-for-file quick-done))
+                (check-true
+                 started?
+                 (format "~a mode: slow fixture reached its start marker and is held for release"
+                         scheduler))
+                (check-true
+                 quick-completed?
+                 (format "~a mode: quick fixture completed while the slow fixture was still held"
+                         scheduler))
+                (when (eq? scheduler 'queue)
+                  (check-true
+                   (wait-for-file probe-out)
+                   "queue mode: probe observes the freed worker before the slow fixture is released"))
+                (when (eq? scheduler 'batch)
+                  (check-false
+                   (file-exists? probe-out)
+                   "batch mode: probe cannot start before the whole first batch finished (fixed-batch barrier)"))
+                (release-fixture! slow-release)
+                (define outcome (sync/timeout 60 result-channel))
+                (unless outcome
+                  (fail
+                   (format
+                    "~a mode: scheduler run did not complete within the bounded post-release wait"
+                    scheduler)))
+                (when (and outcome (eq? (car outcome) 'error))
+                  ;; Propagate the runner thread's exception: never hide a runner crash.
+                  (raise (cadr outcome)))
+                (check-not-false (sync/timeout 5 runner-thread)
+                                 (format "~a mode: runner thread terminated after release" scheduler))
+                (list (if outcome
+                          (cadr outcome)
+                          '())
+                      quick-done
+                      slow-done
+                      probe-out))))
+        (lambda ()
+          ;; Cleanup ordering is load-bearing: (1) release the held fixture
+          ;; so an in-flight run can finish; (2) join the runner with a bound
+          ;; — the env vars must stay INTACT until the runner quiesced, or any
+          ;; fixture it spawns later reads reset env and fails; (3) only if
+          ;; the join times out, force-shutdown the owned custodian (kills
+          ;; the runner thread and its registered subprocesses; confirmed by
+          ;; probe) and confirm its death;
+          ;; (4) reset the env LAST, after quiescence — never before.
+          (release-fixture! slow-release)
+          (define quiesced? (sync/timeout 30 runner-thread))
+          (unless quiesced?
+            (custodian-shutdown-all runner-custodian)
+            (sync/timeout 5 runner-thread))
+          (putenv "W0_SCHED_SLOW_STARTED" "")
+          (putenv "W0_SCHED_SLOW_RELEASE" "")
+          (putenv "W0_SCHED_QUICK_DONE" "")
+          (putenv "W0_SCHED_SLOW_DONE" "")
+          (putenv "W0_SCHED_PROBE_OUT" ""))))
+     (default-continuation-prompt-tag)
+     (lambda (v) v)))
+  (if (eq? body-outcome 'aborted)
+      (values 'aborted runner-thread result-channel)
+      (apply values 'completed body-outcome)))
 
 (define fixture-serial
   (string-append "#lang racket/base\n"
@@ -193,19 +349,8 @@
       (define slow (write-fixture! dir "batch-slow.rkt" fixture-slow))
       (define quick (write-fixture! dir "batch-quick.rkt" fixture-quick))
       (define probe (write-fixture! dir "batch-probe.rkt" fixture-probe))
-      (define (run-once scheduler)
-        (define quick-done (unique-tmp-path "w2-sched-quick-done"))
-        (define slow-done (unique-tmp-path "w2-sched-slow-done"))
-        (define probe-out (unique-tmp-path "w2-sched-probe-out"))
-        (putenv "W0_SCHED_QUICK_DONE" quick-done)
-        (putenv "W0_SCHED_SLOW_DONE" slow-done)
-        (putenv "W0_SCHED_PROBE_OUT" probe-out)
-        (define results (run-all-files (list slow quick probe) 2 #f #:scheduler scheduler))
-        (putenv "W0_SCHED_QUICK_DONE" "")
-        (putenv "W0_SCHED_SLOW_DONE" "")
-        (putenv "W0_SCHED_PROBE_OUT" "")
-        (values results quick-done slow-done probe-out))
-      (define-values (queue-results q-quick q-slow q-probe) (run-once 'queue))
+      (define-values (_q-tag queue-results q-quick q-slow q-probe)
+        (scheduler-run-once 'queue 'normal slow quick probe))
       (check-equal? (map classify-test-result queue-results)
                     (list 'ZERO_PARSED 'ZERO_PARSED 'ZERO_PARSED)
                     "queue mode: all three fixtures exit 0 with zero parsed tests")
@@ -215,7 +360,8 @@
        (file->string q-probe)
        "early"
        "queue mode: probe starts when an initial worker frees, before the long file completes (work-conserving)")
-      (define-values (batch-results b-quick b-slow b-probe) (run-once 'batch))
+      (define-values (_b-tag batch-results b-quick b-slow b-probe)
+        (scheduler-run-once 'batch 'normal slow quick probe))
       (check-equal? (map classify-test-result batch-results)
                     (list 'ZERO_PARSED 'ZERO_PARSED 'ZERO_PARSED)
                     "batch mode: all three fixtures exit 0 with zero parsed tests")
@@ -226,6 +372,59 @@
        "after-full-batch"
        "batch mode: probe waits for BOTH first-batch files (rollback path reproduces old scheduling)")
       (delete-dir/safe dir))
+
+    (test-case "W2r receiver-abort cleanup: aborted receiver leaves no orphan sender/runner and no env-reset race"
+      ;; make-channel is a SYNCHRONOUS rendezvous: if the harness body aborts
+      ;; before reading the result channel, a plain channel-put sender blocks
+      ;; forever, and the post thunk's immediate env reset races fixtures the
+      ;; runner has not spawned yet. This pin drives the shared W2 harness with
+      ;; a simulated check-failure abort (an escape BEFORE the release and
+      ;; BEFORE the receive) and demands that cleanup still leaves: a runner
+      ;; thread that quiesces on its own, a result that survives cleanup, and
+      ;; fixtures that all ran with intact env (i.e. the env reset waited for
+      ;; quiescence). The case-local custodian is the last-resort orphan
+      ;; killer — and since the harness now registers runner subprocesses
+      ;; for kill, it kills those too (runner-custodian is its descendant):
+      ;; even when the checks below fail, nothing this case started
+      ;; outlives it.
+      (define dir (make-temporary-file "w2r-abort-~a" 'directory))
+      (define slow (write-fixture! dir "abort-slow.rkt" fixture-slow))
+      (define quick (write-fixture! dir "abort-quick.rkt" fixture-quick))
+      (define probe (write-fixture! dir "abort-probe.rkt" fixture-probe))
+      (define test-custodian (make-custodian))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define-values (tag runner-thread result-channel)
+           (parameterize ([current-custodian test-custodian])
+             (scheduler-run-once 'queue 'abort-before-receive slow quick probe)))
+         ;; Compute all evidence BEFORE the first check so one red run shows
+         ;; every failing signal, and so the orphan kill happens before any
+         ;; failing check can escape the body.
+         (define quiesced? (sync/timeout 30 runner-thread))
+         (unless quiesced?
+           (custodian-shutdown-all test-custodian))
+         (define joined-after-net? (sync/timeout 5 runner-thread))
+         (define outcome (sync/timeout 5 result-channel))
+         (check-eq? tag 'aborted "harness reports the simulated abort")
+         ;; NB: sync/timeout returns the thread object (truthy, not #t) —
+         ;; hence check-not-false, not check-true.
+         (check-not-false
+          quiesced?
+          "aborted receiver: runner thread quiesced on its own (never blocked in channel-put)")
+         (check-not-false joined-after-net?
+                          "no orphan sender/runner: runner thread is dead (joined or force-shutdown)")
+         (check-not-false outcome
+                          "aborted receiver: the runner's result is still deliverable after cleanup")
+         (when outcome
+           (check-equal? (car outcome) 'ok "runner itself completed without an exception")
+           (check-equal?
+            (map classify-test-result (cadr outcome))
+            (list 'ZERO_PARSED 'ZERO_PARSED 'ZERO_PARSED)
+            "aborted receiver: all fixtures ran with intact env (env reset waited for quiescence)")))
+       (lambda ()
+         (custodian-shutdown-all test-custodian)
+         (delete-dir/safe dir))))
 
     (test-case "result order equals input file order, never completion order"
       (define dir (make-temporary-file "w0-order-~a" 'directory))

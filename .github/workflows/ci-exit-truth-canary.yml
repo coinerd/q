@@ -69,7 +69,7 @@ jobs:
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: '8.10'
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: exit-truth-${{ matrix.outcome }}
           path: evidence
