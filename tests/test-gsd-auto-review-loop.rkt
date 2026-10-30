@@ -25,8 +25,7 @@
          racket/system
          json
          (only-in "helpers/private-fixture-templates.rkt" git-quiet! hermetic-identity!)
-         (only-in "helpers/auto-review-owned-fixture.rkt"
-                  precompile-delivery-controller-scripts!)
+         (only-in "helpers/auto-review-owned-fixture.rkt" precompile-delivery-controller-scripts!)
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
          "../extensions/gsd/delivery-journal.rkt"
@@ -41,8 +40,7 @@
          (only-in "../extensions/gsd-planning/execution-policy.rkt" current-gsd-author-phase)
          (only-in "../extensions/gsd/wave-executor.rkt" current-gsd-worktree-isolation)
          (only-in "../extensions/gsd/review-proof.rkt" current-owned-proof-root)
-         (only-in "../extensions/gsd/delivery-finalize.rkt"
-                  current-gsd-review-infra-retry-limit)
+         (only-in "../extensions/gsd/delivery-finalize.rkt" current-gsd-review-infra-retry-limit)
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../util/message/message.rkt" message-content)
@@ -169,20 +167,21 @@ TEST-EOF
     ;; subprocesses, which resolve the same default from their HOME.
     ;; The fixture-local HOME keeps the owned-proof store out of the real
     ;; user home while the controller subprocesses resolve the same trusted
-    ;; root from their HOME. The real Racket user scope is linked in so the
-    ;; fixture toolchain (raco fmt) behaves exactly as on the dev host.
+    ;; root from their HOME. Subprocesses keep READ-ONLY access to the
+    ;; existing toolchain (e.g. raco fmt in the real Racket user scope)
+    ;; through an explicit PLTADDONDIR pin: nothing is installed, nothing is
+    ;; linked, and the scope location always comes from find-system-path,
+    ;; never a hard-coded ~/.racket or arbitrary XDG path.
     (define fake-home (build-path root "fake-home"))
     (make-directory* fake-home)
-    (define real-racket-scope (build-path (find-system-path 'home-dir) ".racket"))
-    (when (directory-exists? real-racket-scope)
-      (with-handlers ([exn:fail? void])
-        (make-file-or-directory-link real-racket-scope (build-path fake-home ".racket"))))
+    (define real-addon-dir (path->directory-path (find-system-path 'addon-dir)))
     (define fake-env (make-environment-variables))
     (for ([name (in-list (environment-variables-names (current-environment-variables)))])
       (environment-variables-set! fake-env
                                   name
                                   (environment-variables-ref (current-environment-variables) name)))
     (environment-variables-set! fake-env #"HOME" (path->bytes fake-home))
+    (environment-variables-set! fake-env #"PLTADDONDIR" (path->bytes real-addon-dir))
     (dynamic-wind
      void
      (lambda ()
@@ -342,8 +341,7 @@ TEST-EOF
               ;; BUG-0084: the reviewer thread must NEVER inherit an author
               ;; phase binding — it would make the tool-call-pre guard deny
               ;; the reviewer's own read/bash tools (live W1 incident).
-              (check-false (current-gsd-author-phase)
-                           "reviewer session ran inside an author phase")
+              (check-false (current-gsd-author-phase) "reviewer session ran inside an author phase")
               (make-model-response (list (hasheq 'type "text" 'text (response-text request)))
                                    (hasheq 'prompt_tokens 3 'completion_tokens 4 'total_tokens 7)
                                    "glm-5.3"

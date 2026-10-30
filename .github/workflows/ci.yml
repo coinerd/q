@@ -569,7 +569,7 @@ jobs:
           prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
       - name: Download shard restore records
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: prepared-env-records-${{ github.run_id }}-*
           path: records-raw
@@ -625,7 +625,7 @@ jobs:
       # test-results-fast-<shard> (one file per artifact, so no
       # merge-multiple: artifacts land in per-artifact subdirectories).
       - name: Download fast-suite shard results
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           path: shard-results
           pattern: test-results-fast-*

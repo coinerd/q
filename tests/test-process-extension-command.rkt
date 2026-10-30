@@ -22,7 +22,8 @@
          (only-in "../tui/commands/runtime-control.rkt" handle-retry-command)
          (only-in "../extensions/gsd/campaign-state.rkt"
                   [migrate-campaign! migrate-owned-campaign!]
-                  set-campaign-record-execution-policy! campaign-plan-id)
+                  set-campaign-record-execution-policy!
+                  campaign-plan-id)
          (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign!)
          (only-in "helpers/gsd-test-helpers.rkt" bind-test-wave-merge-sha!)
          (only-in "../extensions/gsd/go-orchestrator.rkt"
@@ -166,6 +167,9 @@
   ;; A wave that fails with a structured message must surface that message in
   ;; the TUI transcript instead of an opaque status-only stop line.
   (define dir (make-temporary-file "tui-campaign-msg-~a" 'directory))
+  ;; Test-owned custodian: the campaign thread spawned below is created under
+  ;; it, so no background campaign can outlive fixture deletion.
+  (define test-custodian (make-custodian))
   (dynamic-wind
    void
    (lambda ()
@@ -192,18 +196,24 @@
                                    (lambda (_)
                                      (values 'updated-session
                                              (make-loop-result '() 'completed (hasheq)))))))
-     (execute-extension-command
-      cctx
-      (unbox (cmd-ctx-state-box cctx))
-      (hasheq 'campaign-token token 'new-session "msg-all" 'text "starting"))
-     ;; Let the campaign thread finish and append its stop line.
-     (let loop ([n 0])
-       (unless (or (> n 50)
-                   (for/or ([e (ui-state-transcript (unbox (cmd-ctx-state-box cctx)))])
-                     (and (eq? (transcript-entry-kind e) 'error)
-                          (string-contains? (transcript-entry-text e) "campaign stopped"))))
-         (sleep 0.02)
-         (loop (add1 n))))
+     ;; The campaign branch of execute-extension-command returns the live
+     ;; campaign thread (execute-campaign-command's factory branch). Create it
+     ;; under the test custodian.
+     (define campaign-thread
+       (parameterize ([current-custodian test-custodian])
+         (execute-extension-command
+          cctx
+          (unbox (cmd-ctx-state-box cctx))
+          (hasheq 'campaign-token token 'new-session "msg-all" 'text "starting"))))
+     ;; Completion signal instead of a blind duration sample: sync/timeout
+     ;; fires as soon as the campaign thread terminates. The stop line is
+     ;; appended via append-campaign-message! (a system entry) before the
+     ;; thread's restore epilogue runs, so no transcript polling — and no
+     ;; wrong-kind predicate — is needed.
+     (define finished?
+       (and (thread? campaign-thread)
+            (sync/timeout 10 (handle-evt campaign-thread (lambda (_thread-result) #t)))))
+     (check-true finished? "campaign thread did not terminate within the bounded join window")
      (define texts (map transcript-entry-text (ui-state-transcript (unbox (cmd-ctx-state-box cctx)))))
      (check-true
       (ormap (lambda (text)
@@ -212,7 +222,11 @@
                 "[ERROR] /go campaign stopped: wave-failed (verifier rejected: bad metadata)"))
              texts)
       (format "expected message-bearing stop line, got: ~s" texts)))
-   (lambda () (delete-directory/files dir #:must-exist? #f))))
+   (lambda ()
+     ;; Kill any campaign thread that ignored the bounded join before the
+     ;; fixture directory disappears.
+     (custodian-shutdown-all test-custodian)
+     (delete-directory/files dir #:must-exist? #f))))
 
 ;; v0.99.97 regression: after a /go campaign fails, /retry must be able to
 ;; resubmit the last wave prompt. Root cause: make-campaign-runner runs wave
