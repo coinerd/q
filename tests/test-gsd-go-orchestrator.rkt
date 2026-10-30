@@ -172,7 +172,7 @@
 
 ;; W1: the supplemental disposition's lease owner under test.
 (define-runtime-path disposition-module-path
-  "../extensions/gsd/supplemental-evidence-disposition.rkt")
+                     "../extensions/gsd/supplemental-evidence-disposition.rkt")
 
 (define (wave-status* rec idx)
   (for/first ([w (campaign-record-waves rec)]
@@ -853,9 +853,11 @@ check-equal? actual 14 expected 12")
         (for*/list ([phase+mods (in-list (module->imports `(file ,(path->string dispo))))]
                     [mod (in-list (cdr phase+mods))])
           (format "~s" mod)))
-      (check-true (for/or ([imp (in-list imports)]) (string-contains? imp "campaign-lease.rkt"))
+      (check-true (for/or ([imp (in-list imports)])
+                    (string-contains? imp "campaign-lease.rkt"))
                   "the disposition must import the campaign-lease owner statically")
-      (check-false (for/or ([imp (in-list imports)]) (string-contains? imp "go-orchestrator.rkt"))
+      (check-false (for/or ([imp (in-list imports)])
+                     (string-contains? imp "go-orchestrator.rkt"))
                    "no static orchestrator back-edge")
       ;; Runtime lease path in an isolated namespace: the refusal after
       ;; acquiring the campaign lease still releases it, so a fresh acquire
@@ -867,17 +869,25 @@ check-equal? actual 14 expected 12")
        (lambda ()
          (parameterize ([current-namespace ns])
            (dynamic-require dispo #f)
-           (define propose
-             (dynamic-require dispo 'propose-supplemental-disposition!))
-           (check-exn
-            (lambda (e) (and (exn:fail? e)
-                             (regexp-match? #rx"missing parent pointer" (exn-message e))))
-            (lambda ()
-              (propose dir
-                       "0123456789abcdef0123456789abcdef01234567"
-                       0
-                       (make-string 64 #\a)
-                       (+ (current-seconds) 60))))
+           (define propose (dynamic-require dispo 'propose-supplemental-disposition!))
+           ;; Bind the SAME namespace's authority parameter to an isolated
+           ;; private directory; the runner's HOME is not fixture authority.
+           (define authority-root
+             (dynamic-require (build-path (path-only dispo) "supplemental-evidence-authority.rkt")
+                              'current-supplemental-authority-root))
+           (define private-root (build-path dir "private-authority"))
+           (make-directory private-root)
+           (file-or-directory-permissions private-root #o700)
+           (parameterize ([authority-root private-root])
+             (check-exn (lambda (e)
+                          (and (exn:fail? e)
+                               (regexp-match? #rx"missing parent pointer" (exn-message e))))
+                        (lambda ()
+                          (propose dir
+                                   "0123456789abcdef0123456789abcdef01234567"
+                                   0
+                                   (make-string 64 #\a)
+                                   (+ (current-seconds) 60)))))
            ;; The disposition's under-lease released the campaign lease.
            (define re-acquired (acquire-lease dir "0123456789abcdef0123456789abcdef01234567"))
            (check-true (campaign-lease? re-acquired) "the disposition lease was released")
