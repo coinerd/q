@@ -20,6 +20,7 @@
          racket/file
          racket/port
          racket/path
+         racket/runtime-path
          racket/string
          racket/system
          (only-in "../extensions/gsd/git-root-layout.rkt" exn:fail:git-root?)
@@ -168,6 +169,10 @@
 
 (define (cleanup-tmp dir)
   (delete-directory/files dir #:must-exist? #f))
+
+;; W1: the supplemental disposition's lease owner under test.
+(define-runtime-path disposition-module-path
+                     "../extensions/gsd/supplemental-evidence-disposition.rkt")
 
 (define (wave-status* rec idx)
   (for/first ([w (campaign-record-waves rec)]
@@ -782,6 +787,112 @@ check-equal? actual 14 expected 12")
       (check-true (campaign-lease? lease))
       (release-lease! lease)
       (cleanup-tmp dir))
+
+    ;; ── W1: the tracker resume sweep is a production effect and belongs
+    ;; INSIDE the successful lease scope, after the authoritative reload.
+    ;; A lease contender (busy stop) performs zero tracker callbacks; the
+    ;; winner reconciles DONE waves from the reloaded durable record, never
+    ;; the caller's stale copy. ──
+    (test-case "lease contender performs zero tracker resume effects"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      (define sweep-calls 0)
+      (define (counting-sweep _base _rec #:delivery-reader [_reader #f])
+        (set! sweep-calls (add1 sweep-calls))
+        '())
+      (define lease (acquire-lease dir (campaign-plan-id rec) #:session-id "holder"))
+      (check-true (campaign-lease? lease))
+      (define result
+        (run-campaign! dir
+                       rec
+                       #:runner (lambda (_) (error 'runner "must not run without the lease"))
+                       #:tracker-resume-sweep counting-sweep))
+      (check-eq? (campaign-result-status result) 'busy)
+      (check-equal? sweep-calls 0 "the lease loser must not run tracker effects")
+      (release-lease! lease)
+      (cleanup-tmp dir))
+
+    (test-case "lease winner sweeps DONE waves from the authoritative reload"
+      (define dir (make-tmp-campaign-dir 1))
+      (define rec (load-or-migrate dir))
+      ;; The migration seed lives on disk before the request starts.
+      (persist-campaign! dir rec)
+      ;; Another process completes wave 0 durably while the /go request
+      ;; waits behind the lease. The winner must sweep the reloaded record
+      ;; (wave 0 done), not the stale caller copy (wave 0 pending).
+      (define durable (load-campaign-record dir (campaign-plan-id rec)))
+      (check-not-false durable)
+      (set-campaign-wave-status! (car (campaign-record-waves durable)) 'done)
+      (persist-campaign! dir durable)
+      (define sweep-records '())
+      (define (recording-sweep _base r #:delivery-reader [_reader #f])
+        (set! sweep-records (cons r sweep-records))
+        '())
+      (define result
+        (run-campaign! dir
+                       rec
+                       #:runner (lambda (_) (error 'runner "a complete campaign never launches"))
+                       #:delivery-reader (make-delivered-reader)
+                       #:tracker-resume-sweep recording-sweep))
+      (check-eq? (campaign-result-status result) 'campaign-complete)
+      (check-equal? (length sweep-records) 1 "exactly one post-lease resume sweep")
+      (check-eq? (campaign-wave-status (car (campaign-record-waves (car sweep-records))))
+                 'done
+                 "the sweep saw the authoritative reload, not the stale caller record")
+      (cleanup-tmp dir))
+
+    ;; ── W1: the supplemental disposition lease owner is campaign-lease —
+    ;; the SAME acquire/release the orchestrator itself uses — never a
+    ;; dynamic back-edge into go-orchestrator. Same owner, no recursion. ──
+    (test-case "disposition leases through campaign-lease without an orchestrator back-edge"
+      (define dispo disposition-module-path)
+      ;; Static import graph: campaign-lease IS the imported lease owner and
+      ;; go-orchestrator is not an import at all.
+      (dynamic-require dispo #f)
+      (define imports
+        (for*/list ([phase+mods (in-list (module->imports `(file ,(path->string dispo))))]
+                    [mod (in-list (cdr phase+mods))])
+          (format "~s" mod)))
+      (check-true (for/or ([imp (in-list imports)])
+                    (string-contains? imp "campaign-lease.rkt"))
+                  "the disposition must import the campaign-lease owner statically")
+      (check-false (for/or ([imp (in-list imports)])
+                     (string-contains? imp "go-orchestrator.rkt"))
+                   "no static orchestrator back-edge")
+      ;; Runtime lease path in an isolated namespace: the refusal after
+      ;; acquiring the campaign lease still releases it, so a fresh acquire
+      ;; succeeds — same owner, no recursion, no deadlock.
+      (define dir (make-tmp-campaign-dir 1))
+      (define ns (make-base-empty-namespace))
+      (dynamic-wind
+       void
+       (lambda ()
+         (parameterize ([current-namespace ns])
+           (dynamic-require dispo #f)
+           (define propose (dynamic-require dispo 'propose-supplemental-disposition!))
+           ;; Bind the SAME namespace's authority parameter to an isolated
+           ;; private directory; the runner's HOME is not fixture authority.
+           (define authority-root
+             (dynamic-require (build-path (path-only dispo) "supplemental-evidence-authority.rkt")
+                              'current-supplemental-authority-root))
+           (define private-root (build-path dir "private-authority"))
+           (make-directory private-root)
+           (file-or-directory-permissions private-root #o700)
+           (parameterize ([authority-root private-root])
+             (check-exn (lambda (e)
+                          (and (exn:fail? e)
+                               (regexp-match? #rx"missing parent pointer" (exn-message e))))
+                        (lambda ()
+                          (propose dir
+                                   "0123456789abcdef0123456789abcdef01234567"
+                                   0
+                                   (make-string 64 #\a)
+                                   (+ (current-seconds) 60)))))
+           ;; The disposition's under-lease released the campaign lease.
+           (define re-acquired (acquire-lease dir "0123456789abcdef0123456789abcdef01234567"))
+           (check-true (campaign-lease? re-acquired) "the disposition lease was released")
+           (release-lease! re-acquired)))
+       (lambda () (cleanup-tmp dir))))
 
     (test-case "lease records owner session-id and pid (D4, issue #9351)"
       ;; Incident 81f9be4b: the lock file named owner "unknown" and no pid,

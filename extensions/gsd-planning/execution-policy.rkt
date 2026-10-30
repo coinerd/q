@@ -126,8 +126,17 @@
 (define protected-planning-path-rx
   #px"(?:^|/)\\.planning/(?:PLAN|STATE|VALIDATION)(?:-[^/]*)?\\.md$|(?:^|/)\\.planning/HANDOFF\\.json$")
 
+;; W1 generic-mutator inventory: the installed generic file-mutation tools
+;; with a 'path payload are exactly write, edit and delete-lines
+;; (tools/registry-table.rkt mutates-filesystem-tool-names). bash is shell
+;; and is never granted a planning write; planning-write has its own
+;; executing-mode guard. delete-lines was the one omission from this target
+;; guard; its payload carries the same 'path argument (sandbox/worker-tools
+;; execute-delete-lines), so the same protected-path semantics apply
+;; unchanged: relative, absolute and hook-rewritten separators are matched
+;; identically, in executing mode only.
 (define (generic-mutation-targets-planning-artifact? tool-name payload)
-  (and (member tool-name '("write" "edit"))
+  (and (member tool-name '("write" "edit" "delete-lines"))
        (let* ([args (hash-ref payload 'tool-arguments (hasheq))]
               [raw-path (and (hash? args) (hash-ref args 'path #f))]
               [path-string (cond

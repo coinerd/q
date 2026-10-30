@@ -323,6 +323,10 @@
         .
         "GSD planning core with wave execution, state machine dispatch, and high co-change coupling")
        (owner . "extensions"))
+      ("extensions/gsd/delivery-coordinator.rkt"
+       (risk
+        . "Delivery orchestration has high dependency fan-in; retain authenticated proof/review boundaries and production-entry regression coverage when decomposing")
+       (owner . "extensions"))
       ("extensions/gsd/wave-docs.rkt"
        (risk
         . "Wave document I/O and PLAN.md index management: parsing, dual-write status transitions, consistency and lint surfaces; crossed the block threshold with declared-arrow-path identity (BUG-0081)")

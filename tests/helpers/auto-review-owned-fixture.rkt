@@ -11,7 +11,9 @@
          racket/format
          racket/list
          racket/path
+         racket/runtime-path
          racket/string
+         racket/system
          "../../extensions/gsd/review-proof.rkt"
          "../../extensions/gsd/verification-job.rkt"
          "../../extensions/gsd/composition-root.rkt"
@@ -19,6 +21,29 @@
          "../../extensions/gsd/plan-snapshot.rkt"
          "../../extensions/gsd/delivery-verifier.rkt"
          "../../extensions/gsd/delivery-receipt.rkt")
+;; The production controller (scripts/gsd-delivery.py) clamps every racket
+;; subprocess to a hard 60 s per-command cap. Under a loaded runner the COLD
+;; compile of those entry points alone can exceed the cap before any delivery
+;; work starts, surfacing as a spurious typed review-infra outcome. Fixture
+;; setup precompiles exactly the controller's racket entry points into the
+;; repository compile cache: production deadlines and budgets are unchanged,
+;; and warm runs make this an incremental no-op.
+(define-runtime-path controller-script-root "../..")
+(define controller-entry-points
+  '("scripts/gsd-binding-data.rkt"
+    "scripts/gsd-wave-gate.rkt"
+    "scripts/gsd-evidence-bind.rkt"))
+(define (precompile-delivery-controller-scripts!)
+  (define code
+    (apply system*/exit-code
+           (find-executable-path "raco")
+           "make"
+           (for/list ([entry (in-list controller-entry-points)])
+             (path->string (build-path controller-script-root entry)))))
+  (unless (zero? code)
+    (error 'auto-review-owned-fixture "controller script precompile failed: ~a" code)))
+(provide precompile-delivery-controller-scripts!)
+
 (module+ main
   (define args (vector->list (current-command-line-arguments)))
   (unless (and (= 5 (length args)) (equal? (first args) "verify"))

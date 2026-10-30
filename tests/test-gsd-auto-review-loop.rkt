@@ -25,6 +25,8 @@
          racket/system
          json
          (only-in "helpers/private-fixture-templates.rkt" git-quiet! hermetic-identity!)
+         (only-in "helpers/auto-review-owned-fixture.rkt"
+                  precompile-delivery-controller-scripts!)
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
          "../extensions/gsd/delivery-journal.rkt"
@@ -155,6 +157,11 @@ TEST-EOF
   )
 (module+ test
   (test-case "production /go review rejection -> ordinary fenced retry -> real superset Verify -> r1 fresh review"
+    ;; Fixture setup precompile: the real controller shells out to racket
+    ;; entry points capped at 60 s per command; their closure must already be
+    ;; zo-warm before the coordinator runs even on a cold loaded runner (see
+    ;; helpers/auto-review-owned-fixture.rkt).
+    (precompile-delivery-controller-scripts!)
     (define root (make-temporary-file "auto-review-loop-~a" 'directory))
     ;; The owned proof store is deliberately placed under a fixture-local
     ;; HOME so BOTH sides agree on the trusted root: the in-process capture

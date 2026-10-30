@@ -13,8 +13,7 @@
          (only-in "supplemental-evidence-authority.rkt" call-with-supplemental-authority-lock)
          (only-in "supplemental-evidence-controller.rkt"
                   supplemental-author-pending?
-                  supplemental-approved-entry-context
-                  supplemental-approved-entry-parent-allocation
+                  supplemental-approved-entry-view
                   supplemental-operation-live?
                   supplemental-pointer-retained?
                   supplemental-verify-route!)
@@ -58,17 +57,19 @@
 ;; campaign lease. The authority lock serializes approval revocation with the
 ;; status-only commit. No marker, receipt, task, approval or allocation changes.
 ;;
-;; PARKED PARENT ALLOCATION (preserved candidates). The ordinary entry is
-;; parked on the exact attempt/fence of the immutable E_old receipt context.
-;; A preserved entry is deliberately parked on the fixed third-generation
-;; terminal allocation (attempt-6/fence-9), which is DISTINCT from E_old
-;; (attempt-2/fence-5). The additive controller accessor authenticates the
-;; same live child T/pointer and returns that fully validated terminal
-;; allocation for preserved tasks only, so the parked attempt is compared to
-;; the allocation that actually owns it. Ordinary entries keep the exact
-;; context attempt/fence comparison; every cancellation, pause, status,
-;; coordinator-fence and spent-operation guard below is unchanged and is
-;; re-read immediately before the pending status commit.
+;; ONE AUTHENTICATED ENTRY VIEW (W3b). Each load of the fused controller view
+;; authenticates the exact live child T/pointer ONCE and returns the task,
+;; its entry context and the OPTIONAL preserved parent allocation together.
+;; The ordinary entry is parked on the exact attempt/fence of the immutable
+;; E_old receipt context; a preserved entry is deliberately parked on the
+;; fixed third-generation terminal allocation (attempt-6/fence-9), which is
+;; DISTINCT from E_old (attempt-2/fence-5), so the parked attempt is compared
+;; to the allocation that actually owns it. The view is loaded exactly TWICE:
+;; once for the guards and once freshly re-read immediately before the
+;; pending status commit — never a cached view, no cross-call/lock cache.
+;; Ordinary entries keep the exact context attempt/fence comparison; every
+;; cancellation, pause, status, coordinator-fence and spent-operation guard
+;; below is unchanged.
 (define (resolve-supplemental-author-checkpoint! root plan wave)
   (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
     (call-with-supplemental-authority-lock
@@ -80,8 +81,9 @@
                           #:when (= wave (campaign-wave-index w)))
                 w)))
        (define attempt (and w (campaign-wave-current-attempt w)))
-       (define context (supplemental-approved-entry-context root plan wave))
-       (define parent-allocation (supplemental-approved-entry-parent-allocation root plan wave))
+       (define view (supplemental-approved-entry-view root plan wave))
+       (define context (hash-ref view 'context))
+       (define parent-allocation (hash-ref view 'parent-allocation))
        (define expected
          (or parent-allocation
              (hasheq 'attempt-id
@@ -103,11 +105,10 @@
                     (equal? (campaign-attempt-fence-token attempt)
                             (hash-ref expected 'attempt-fence)))
          (error 'author-checkpoint "stale, cancelled or paused supplemental checkpoint"))
-       ;; Re-read the authenticated helper, context and campaign after
-       ;; validation, immediately before persisting.
-       (unless (and (equal? context (supplemental-approved-entry-context root plan wave))
-                    (equal? parent-allocation
-                            (supplemental-approved-entry-parent-allocation root plan wave))
+       ;; Re-read the authenticated entry view (a FRESH second load: the whole
+       ;; admission conjunction runs again) and the campaign after validation,
+       ;; immediately before persisting.
+       (unless (and (equal? view (supplemental-approved-entry-view root plan wave))
                     (equal? record (load-campaign-record root plan)))
          (error 'author-checkpoint "supplemental checkpoint changed before record transition"))
        (set-campaign-wave-status! w 'pending)

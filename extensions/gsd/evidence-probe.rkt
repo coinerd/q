@@ -150,11 +150,24 @@
                 (map (lambda (e) (hash-ref e 'path)) (hash-ref s 'test-files)))
         "test selection mismatch")
   (need (= (length (hash-ref s 'test-paths)) 1) "first slice requires one test module")
-  (need (regression-command-covered? base
-                                     (hash-ref c 'head)
-                                     (hash-ref s 'focused-normalized-command)
-                                     (car (hash-ref s 'test-paths)))
-        "unapproved frozen regression coverage")
+  (define coverage
+    (regression-command-coverage-refusal base
+                                         (hash-ref c 'head)
+                                         (hash-ref s 'focused-normalized-command)
+                                         (car (hash-ref s 'test-paths))))
+  ;; `need` is a function: every argument is evaluated eagerly, so the
+  ;; named refusal format below must only be constructed when a refusal
+  ;; exists (coverage is #f when the runner stage IS covered).
+  (when coverage
+    (need #f
+          (format "unapproved frozen regression coverage [~a/~a~a]: ~a"
+                  (hash-ref coverage 'code "unknown")
+                  (hash-ref coverage 'phase "unknown")
+                  (let ([p (hash-ref coverage 'path #f)])
+                    (if p
+                        (format "; path ~a" p)
+                        ""))
+                  (or (hash-ref coverage 'detail #f) "coverage refused"))))
   (manifest base files)
   (git base "merge-base" "--is-ancestor" (hash-ref s 'baseline-head) (hash-ref c 'head))
   (need (equal? (git base "rev-parse" (string-append (hash-ref s 'baseline-head) "^{tree}"))
@@ -364,11 +377,23 @@
   (define s (reload (hash-ref m 'spec)))
   (need (valid-probe-spec? s) "invalid retained spec")
   (need (equal? c (hash-ref s 'context)) "spec context mismatch")
-  (need (regression-command-covered? root
-                                     (hash-ref c 'head)
-                                     (hash-ref s 'focused-normalized-command)
-                                     (car (hash-ref s 'test-paths)))
-        "unapproved frozen regression coverage")
+  (define coverage
+    (regression-command-coverage-refusal root
+                                         (hash-ref c 'head)
+                                         (hash-ref s 'focused-normalized-command)
+                                         (car (hash-ref s 'test-paths))))
+  ;; Same eager-argument discipline as check-spec above: build the named
+  ;; refusal format only when coverage actually refused.
+  (when coverage
+    (need #f
+          (format "unapproved frozen regression coverage [~a/~a~a]: ~a"
+                  (hash-ref coverage 'code "unknown")
+                  (hash-ref coverage 'phase "unknown")
+                  (let ([p (hash-ref coverage 'path #f)])
+                    (if p
+                        (format "; path ~a" p)
+                        ""))
+                  (or (hash-ref coverage 'detail #f) "coverage refused"))))
   (unless bundle
     (need (equal? (sha256-file (find-executable-path "racket")) (hash-ref m 'racket-sha256))
           "runtime executable digest mismatch"))
@@ -680,7 +705,8 @@
   (need (= (length (hash-ref journal 'receipt-history '())) (hash-ref record 'old-generation))
         "the journal generation changed under the staged probe")
   (define frozen (frozen-verify-binding base plan wave))
-  (define E (predict-supplemental-context journal (hash-ref record 'receipt) frozen plan wave #:base base))
+  (define E
+    (predict-supplemental-context journal (hash-ref record 'receipt) frozen plan wave #:base base))
   (need (equal? E (hash-ref record 'context)) "the staged predicted context drifted")
   (define before ((dynamic-require receipt-module 'committed-delivery-snapshot) cwd))
   (need before "staged probe requires a clean execution checkout")
@@ -692,8 +718,7 @@
   (need (equal? (hash-ref before 'repo) (hash-ref (hash-ref record 'receipt) 'repo))
         "the staged logical repository drifted")
   (for ([k '(branch origin head tree)])
-    (need (equal? (hash-ref before k #f) (hash-ref E k #f))
-          "the staged checkout drifted"))
+    (need (equal? (hash-ref before k #f) (hash-ref E k #f)) "the staged checkout drifted"))
   (values E task candidate-record))
 (define (run-staged-supplemental-probe! base plan wave cwd staged id #:guard live-guard)
   (id! id)
@@ -703,14 +728,28 @@
         "operation mismatch")
   (define-values (E task candidate-record) (staged-supplemental-context! base plan wave cwd staged))
   (define record (supplemental-staged-evidence-record staged))
-  (define spec
-    (discover-evidence-probe-spec cwd
-                                  E
-                                  (hash-ref task 'effective-command)
-                                  #:harness-files (hash-ref record 'harness-files)
-                                  #:baseline-head (hash-ref record 'baseline-head)
-                                  #:test-path (hash-ref record 'test-path)))
-  (need spec "staged probe discovery refused")
+  ;; Reasoned discovery: the same one static parser runs against the
+  ;; authenticated staged E context, and a refusal is NAMED (code, phase,
+  ;; path, bounded detail) instead of collapsing to "discovery refused".
+  ;; A refusal never mints evidence and never loosens the literal grammar.
+  (define discovery
+    (discover-evidence-probe-outcome cwd
+                                     E
+                                     (hash-ref task 'effective-command)
+                                     #:harness-files (hash-ref record 'harness-files)
+                                     #:baseline-head (hash-ref record 'baseline-head)
+                                     #:test-path (hash-ref record 'test-path)))
+  (unless (equal? (hash-ref discovery 'status #f) "admitted")
+    (need #f
+          (format "staged probe discovery refused [~a/~a~a]: ~a"
+                  (hash-ref discovery 'code "unknown")
+                  (hash-ref discovery 'phase "unknown")
+                  (let ([p (hash-ref discovery 'path #f)])
+                    (if p
+                        (format "; path ~a" p)
+                        ""))
+                  (or (hash-ref discovery 'detail #f) "static admission failed"))))
+  (define spec (hash-ref discovery 'spec))
   (need (equal? (hash-ref spec 'context #f) E) "discovered spec context drift")
   (need (equal? (hash-ref (hash-ref spec 'target #f) 'test-path #f) (hash-ref record 'test-path))
         "discovered probe target drift")

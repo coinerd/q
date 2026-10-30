@@ -19,6 +19,11 @@
 ;;   context.repo (a linked worktree sharing git-common-dir with the logical
 ;;   candidate source), never a substituted repo/head.
 ;;
+;; Git work is bounded per invocation: a fresh per-call context enumerates
+;; each distinct old/K/M recursive tree index exactly once and hashes each
+;; unique raw blob exactly once. Nothing is cached across calls, so waits,
+;; mutation and revocation between validations still refuse.
+;;
 ;; The optional retained-receipt authentication is a SECOND layer
 ;; (validate-preserved-candidate!): it loads the authenticated E_old context
 ;; through evidence-readiness's factored strict receipt loader and requires it
@@ -29,7 +34,10 @@
 ;; Module graph: claim -> this leaf is static; this leaf reaches claim and
 ;; evidence-readiness only through their existing known-source lazy loads, so
 ;; first use cannot re-enter a partially instantiated module and no caller
-;; supplies an authentication procedure.
+;; supplies an authentication procedure. Within one preserved claim check the
+;; claim owner consumes THIS leaf's self-authenticated
+;; parent/terminal/amendment admission instead of re-inspecting the same
+;; ancestry; ordinary mode never loads this leaf.
 (require racket/list
          racket/path
          racket/runtime-path
@@ -44,6 +52,7 @@
          valid-preserved-candidate?
          preserved-candidate-admission?
          preserved-candidate-admission-amendment
+         preserved-candidate-admission-parent-proposal
          preserved-candidate-admission-parent-task
          preserved-candidate-admission-old-context
          preserved-candidate-admission-terminal
@@ -58,9 +67,14 @@
 (define-runtime-path claim-module "supplemental-disposition-claim.rkt")
 (define-runtime-path readiness-module "evidence-readiness.rkt")
 ;; Returned immutable facts for the integration lane. Data only: the
-;; constructor is NOT provided, so callers cannot mint an admission.
+;; constructor is NOT provided, so callers cannot mint an admission. The
+;; parent-proposal/parent-task/terminal fields are the leaf's OWN
+;; self-authenticated ancestry result: the fixed-a3 claim owner reuses them
+;; within one claim check instead of re-inspecting the same ancestry, and no
+;; ancestry object is ever accepted FROM a caller.
 (struct preserved-candidate-admission
-        (amendment parent-task
+        (amendment parent-proposal
+                   parent-task
                    old-context
                    terminal
                    candidate
@@ -142,13 +156,31 @@
 (define (index-entries entries)
   (for/hash ([e (in-list entries)])
     (values (hash-ref e 'path) e)))
+;; Per-invocation Git fact context. Recursive tree indexes and raw blob
+;; digests are memoized ONLY for the lifetime of ONE leaf validation call:
+;; every admission constructs a fresh context and nothing survives the call,
+;; so cross-call freshness, revocation and current-source re-checks are
+;; unchanged. Each distinct old/K/M tree is enumerated exactly once and each
+;; unique raw blob is hashed exactly once per invocation.
+(struct invocation-git (repo tree-indexes blob-digests) #:transparent)
+(define (make-invocation-git repo)
+  (invocation-git repo (make-hash) (make-hash)))
+(define (invocation-tree-index g commit-id)
+  (hash-ref! (invocation-git-tree-indexes g)
+             commit-id
+             (lambda () (index-entries (tree-entries (invocation-git-repo g) commit-id)))))
+;; Byte-exact raw blob digest, hashed once per unique blob per invocation.
+(define (invocation-blob-digest g oid)
+  (hash-ref! (invocation-git-blob-digests g)
+             oid
+             (lambda ()
+               (bytes->hex-string
+                (sha256-bytes (open-input-bytes (git-run-bytes (invocation-git-repo g)
+                                                               (list "cat-file" "blob" oid))))))))
 (define (same-entry? a b)
   (and (equal? (hash-ref a 'mode) (hash-ref b 'mode))
        (equal? (hash-ref a 'type) (hash-ref b 'type))
        (equal? (hash-ref a 'oid) (hash-ref b 'oid))))
-(define (blob-sha256 repo oid)
-  (bytes->hex-string (sha256-bytes (open-input-bytes (git-run-bytes repo
-                                                                    (list "cat-file" "blob" oid))))))
 (define (check-single-parent! repo k m)
   (define line (git repo "rev-list" "--parents" "-n" "1" m))
   (define parts (string-split line))
@@ -175,9 +207,9 @@
                (equal? (git (hash-ref source 'repo) "config" "--get" "remote.origin.url")
                        (hash-ref source 'origin)))
     (refuse "original source branch/origin is not the authenticated old context")))
-(define (changed-paths repo a b)
-  (define ta (index-entries (tree-entries repo a)))
-  (define tb (index-entries (tree-entries repo b)))
+(define (changed-paths g a b)
+  (define ta (invocation-tree-index g a))
+  (define tb (invocation-tree-index g b))
   (for/list ([path (in-list (sort (remove-duplicates (append (hash-keys ta) (hash-keys tb)))
                                   string<?))]
              #:unless (and (hash-ref ta path #f)
@@ -187,12 +219,12 @@
 ;; The old authenticated receipt context must be a STRICT ancestor of the
 ;; original candidate K. Only the task's two model-authorable paths may differ;
 ;; production/source and owner metadata are not silently rewritten.
-(define (check-old-ancestor! repo old-head k-head allowed)
+(define (check-old-ancestor! g old-head k-head allowed)
   (when (equal? old-head k-head)
     (refuse "original K must be a strict descendant of the authenticated old E context"))
-  (unless (git-succeeds? repo "merge-base" "--is-ancestor" old-head k-head)
+  (unless (git-succeeds? (invocation-git-repo g) "merge-base" "--is-ancestor" old-head k-head)
     (refuse "original K is not a descendant of the authenticated old E context"))
-  (define changed (changed-paths repo old-head k-head))
+  (define changed (changed-paths g old-head k-head))
   (unless (and (pair? changed)
                (for/and ([path (in-list changed)])
                  (member path allowed)))
@@ -237,13 +269,13 @@
 (define manifest-entry-fields '(path mode blob sha256))
 (define (manifest-path-set entries)
   (map (lambda (e) (hash-ref e 'path)) entries))
-(define (validate-manifest! repo k-commit expected entries)
+(define (validate-manifest! g k-commit expected entries)
   (unless (and (list? entries)
                (= (length entries) (length expected))
                (equal? (sort (manifest-path-set entries) string<?) (sort expected string<?))
                (= (length expected) (length (remove-duplicates expected))))
     (refuse "candidate manifest path set changed"))
-  (define trees (index-entries (tree-entries repo k-commit)))
+  (define trees (invocation-tree-index g k-commit))
   (for ([entry (in-list entries)])
     (unless (exact-keys? entry manifest-entry-fields)
       (refuse "candidate manifest entry is malformed"))
@@ -256,7 +288,7 @@
                  (equal? (hash-ref entry 'mode) "100644")
                  (equal? (hash-ref tree 'mode) "100644")
                  (equal? (hash-ref entry 'blob) (hash-ref tree 'oid))
-                 (equal? (hash-ref entry 'sha256) (blob-sha256 repo (hash-ref tree 'oid))))
+                 (equal? (hash-ref entry 'sha256) (invocation-blob-digest g (hash-ref tree 'oid))))
       (refuse "candidate manifest does not match the ORIGINAL K Git tree"))))
 (define (authenticate-candidate! binding parent-task a)
   (define candidate-ref (hash-ref binding 'candidate))
@@ -300,10 +332,10 @@
     (equal? value (hash-ref task key #f))))
 (define (entry-for map path what)
   (or (hash-ref map path #f) (refuse (format "missing ~a tree entry ~s" what path))))
-(define (check-owner-entries! binding repo k-commit m-commit inherited-paths)
+(define (check-owner-entries! g binding k-commit m-commit inherited-paths)
   (define entries (hash-ref binding 'owner-paths))
-  (define k (index-entries (tree-entries repo k-commit)))
-  (define m (index-entries (tree-entries repo m-commit)))
+  (define k (invocation-tree-index g k-commit))
+  (define m (invocation-tree-index g m-commit))
   (define changed
     (begin
       (unless (equal? (sort (hash-keys k) string<?) (sort (hash-keys m) string<?))
@@ -328,8 +360,10 @@
                  (not (equal? (hash-ref before 'oid) (hash-ref after 'oid)))
                  (equal? (hash-ref entry 'before-blob) (hash-ref before 'oid))
                  (equal? (hash-ref entry 'after-blob) (hash-ref after 'oid))
-                 (equal? (hash-ref entry 'before-sha256) (blob-sha256 repo (hash-ref before 'oid)))
-                 (equal? (hash-ref entry 'after-sha256) (blob-sha256 repo (hash-ref after 'oid))))
+                 (equal? (hash-ref entry 'before-sha256)
+                         (invocation-blob-digest g (hash-ref before 'oid)))
+                 (equal? (hash-ref entry 'after-sha256)
+                         (invocation-blob-digest g (hash-ref after 'oid))))
       (refuse "owner path blob/sha256/mode before/after mismatch"))))
 (define (validate-preserved-candidate-claim-binding! task)
   (define a (disposition-amendment))
@@ -369,6 +403,7 @@
   (define-values (candidate-ref approval-ref payload) (authenticate-candidate! binding parent-task a))
   (define physical (hash-ref context 'repo))
   (check-shared-repository! source context)
+  (define g (make-invocation-git physical))
   (define old-commit (commit-id physical (hash-ref context 'head) "authenticated old E context"))
   (define k-commit (commit-id physical (hash-ref source 'head) "original K"))
   (define m-commit (commit-id physical (hash-ref descendant 'head) "metadata descendant M"))
@@ -378,14 +413,14 @@
     (refuse "original K tree identity changed"))
   (unless (equal? (tree-id physical m-commit) (hash-ref descendant 'tree))
     (refuse "metadata descendant M tree identity changed"))
-  (check-old-ancestor! physical
+  (check-old-ancestor! g
                        old-commit
                        k-commit
                        (list (hash-ref parent-task 'test-path) (hash-ref parent-task 'harness-path)))
   (check-single-parent! physical k-commit m-commit)
   (check-clean-current! physical context descendant (hash-ref descendant 'tree))
-  (check-owner-entries! binding physical k-commit m-commit (hash-ref parent-task 'owner-paths))
-  (validate-manifest! physical
+  (check-owner-entries! g binding k-commit m-commit (hash-ref parent-task 'owner-paths))
+  (validate-manifest! g
                       k-commit
                       (append (list (hash-ref parent-task 'test-path)
                                     (hash-ref parent-task 'harness-path))
@@ -406,6 +441,7 @@
             'tree
             (hash-ref descendant 'tree)))
   (preserved-candidate-admission a
+                                 parent-proposal
                                  parent-task
                                  context
                                  terminal

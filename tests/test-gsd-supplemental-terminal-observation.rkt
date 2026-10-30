@@ -168,31 +168,42 @@
   (make-parent-directory* p)
   (display-to-file text p #:exists 'truncate))
 
-(define harness-text
-  "#lang racket/base\n(require \"../../runtime/local.rkt\")\n(provide witness)\n(define (witness) (= answer 42))\n")
+;; The scenario's wait lives ONLY in the approved literal helper body: the
+;; shared static grammar admits exactly one literal single-assertion
+;; test-case in the candidate test module (and no extra top-level defines
+;; there), so an expiry-overshooting scenario waits inside (witness) itself.
+;; Helper top-level forms stay in the approved require/provide/define set and
+;; the helper never contains a check form; the manifest digest is computed
+;; from these committed bytes at candidate seal time.
+(define (harness-text #:sleep-until [sleep-until #f])
+  (string-append
+   "#lang racket/base\n"
+   "(require \"../../runtime/local.rkt\")\n"
+   "(provide witness)\n"
+   (if sleep-until
+       (format
+        "(define (witness)\n  (let loop ()\n    (unless (>= (current-seconds) ~a)\n      (sleep 1)\n      (loop)))\n  (= answer 42))\n"
+        sleep-until)
+       "(define (witness) (= answer 42))\n")))
 (define (witness-text #:red? [red? #f] #:sleep-until [sleep-until #f])
+  ;; The evidence-suite candidate is a literal single assertion in every
+  ;; scenario; only the helper body and the runner timeout differ.
   (string-append
    "#lang racket\n"
    ";; @speed fast\n;; @suite extensions\n;; @boundary unit\n;; @timeout "
    (if sleep-until "360" "120")
    "\n"
    "(require rackunit \"helpers/witness.rkt\")\n(provide evidence-suite)\n"
-   (if sleep-until
-       (format
-        "(define (wait-for-expiry)\n  (let loop ()\n    (unless (>= (current-seconds) ~a)\n      (sleep 1)\n      (loop))))\n"
-        sleep-until)
-       "")
    "(define evidence-suite\n  (test-suite \"witness\"\n    (test-case \"new regression\"\n"
-   (if sleep-until "      (wait-for-expiry)\n" "")
    (if red? "      (check-equal? (witness) #f))))\n" "      (check-true (witness)))))\n")
    "(module+ test (require rackunit/text-ui) (exit (run-tests evidence-suite)))\n"))
 
 (define ((author-runner fx #:red? [red? #f] #:sleep-until [sleep-until #f]) _)
   (define repo (current-directory))
-  (put-text repo "tests/helpers/witness.rkt" harness-text)
   (put-text repo
-            "tests/test-witness.rkt"
-            (witness-text #:red? red? #:sleep-until (and sleep-until (+ (task-expires-at fx) 1))))
+            "tests/helpers/witness.rkt"
+            (harness-text #:sleep-until (and sleep-until (+ (task-expires-at fx) 1))))
+  (put-text repo "tests/test-witness.rkt" (witness-text #:red? red? #:sleep-until sleep-until))
   'ok)
 
 (define (task-expires-at fx)
@@ -352,11 +363,19 @@
     (with-obs-fixture
      (lambda (f plan)
        (define grant (fixture-grant f))
+       ;; Replay the SAME captured evidence, not a new wall-clock observation.
+       (define terminal (terminal-evidence-fixture))
        (define first
-         (observe! f plan #:usage (hasheq 'input-tokens 7 'output-tokens 3 'total-tokens 10)))
+         (observe! f
+                   plan
+                   #:terminal terminal
+                   #:usage (hasheq 'input-tokens 7 'output-tokens 3 'total-tokens 10)))
        (define bytes (file->bytes (observation-path f)))
        (define second
-         (observe! f plan #:usage (hasheq 'input-tokens 7 'output-tokens 3 'total-tokens 10)))
+         (observe! f
+                   plan
+                   #:terminal terminal
+                   #:usage (hasheq 'input-tokens 7 'output-tokens 3 'total-tokens 10)))
        (check-equal? second first)
        (check-equal? (file->bytes (observation-path f)) bytes)
        (check-equal? (length (observation-entries second)) 1)

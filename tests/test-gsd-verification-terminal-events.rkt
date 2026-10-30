@@ -61,12 +61,18 @@
                   simulate-lost-process!
                   verification-close-registry!)
          (only-in "../extensions/gsd/events.rkt" set-gsd-event-bus!)
+         ;; W4: the registry-backed reattach route (consumer side of the R102
+         ;; identity contract) — foreign incarnation, unknown job and
+         ;; replaced-job tombstone attribution.
+         (only-in "../tui/commands.rkt" reattach-verification-state)
          (only-in "../tui/state-events.rkt" apply-event-to-state)
          (only-in "../tui/state-types.rkt"
                   initial-ui-state
                   ui-state-verification-progress
+                  ui-state-status-message
                   ui-state-transcript
-                  transcript-entry-meta)
+                  transcript-entry-meta
+                  transcript-entry-text)
          (only-in "../util/event/event.rkt" event))
 
 ;; Typed pause exception used as a raising "observer rejection" (the shape a
@@ -152,6 +158,32 @@
           state-box
           (and (= (length completed) 1) (event-data (car completed)))
           events))
+
+;; W4: seed an IDENTIFIED foreground verification progress through the REAL
+;; reducer (the consumer half of the R102 identity contract) so the reattach
+;; route under test sees exactly the production state shape.
+(define (seed-foreground-progress! state-box job-id incarnation)
+  (set-box!
+   state-box
+   (apply-event-to-state
+    (unbox state-box)
+    (event 1
+           'gsd.verification.started
+           (current-inexact-milliseconds)
+           "test-session"
+           "turn"
+           (hasheq 'wave
+                   4
+                   'timeout-sec
+                   60
+                   'start-ms
+                   1000.0
+                   'job-id
+                   job-id
+                   'registry-incarnation
+                   incarnation
+                   'verify-identity-key
+                   "idkey-w4")))))
 
 (define (terminal-events-suite)
   (test-suite "R102 terminal event identity contract (producer, public routes)"
@@ -450,7 +482,97 @@
       (check-not-equal? (verification-registry-incarnation reg1)
                         (verification-registry-incarnation reg2)
                         "each registry carries its own incarnation")
-      (check-false (verification-job-facts reg1 'vj-999) "unknown job yields #f, never an error"))))
+      (check-false (verification-job-facts reg1 'vj-999) "unknown job yields #f, never an error"))
+
+    ;; -------------------------------------------------- W4 reattach route
+    ;; The restore path drops cached UI clocks and consults ONLY the ambient
+    ;; registry. W4: every outcome names its attribution explicitly — a
+    ;; foreign incarnation (process restart) or an unknown job is an explicit
+    ;; unknown, never a silent clear, and never a relaunch: this route only
+    ;; renders observed registry facts. The shared foreground-progress seeder
+    ;; is defined at module level (seed-foreground-progress!) because test-suite
+    ;; bodies are expressions, not definition contexts.
+    (test-case "reattach: a foreign-incarnation job is attributed explicitly, not silently cleared"
+      (define base (make-tmp-git-repo))
+      (define reg (make-verification-registry))
+      (define state-box (box (initial-ui-state #:session-id "test-session")))
+      (seed-foreground-progress! state-box 'vj-old 'vjreg-dead)
+      (check-true (hash? (ui-state-verification-progress (unbox state-box))))
+      (define restored
+        (parameterize ([current-gsd-verification-registry reg])
+          (reattach-verification-state (unbox state-box))))
+      (check-false (ui-state-verification-progress restored) "cached clocks are dropped")
+      (define text (ui-state-status-message restored))
+      (check-true (string? text) "an explicit attribution replaces the silent clear")
+      (check-true (string-contains? text "foreign") text)
+      (check-true (string-contains? text "vj-old") "the registry job-id stays correlatable")
+      (check-true (string-contains? text "not relaunched") text)
+      (cleanup-tmp base))
+
+    (test-case "reattach: an unknown job in the same incarnation is explicit too"
+      (define base (make-tmp-git-repo))
+      (define reg (make-verification-registry))
+      (define state-box (box (initial-ui-state #:session-id "test-session")))
+      (seed-foreground-progress! state-box 'vj-424242 (verification-registry-incarnation reg))
+      (define restored
+        (parameterize ([current-gsd-verification-registry reg])
+          (reattach-verification-state (unbox state-box))))
+      (check-false (ui-state-verification-progress restored))
+      (define text (ui-state-status-message restored))
+      (check-true (string? text) "no silent clear")
+      (check-true (string-contains? text "unknown") text)
+      (check-true (string-contains? text "not relaunched") text)
+      (cleanup-tmp base))
+
+    (test-case "reattach: a replaced job's tombstone yields a truthful verdict, no crash"
+      (define base (make-tmp-git-repo))
+      (define reg (make-verification-registry))
+      (define ident (delivery-verify-identity base 0 (fixture-run-cwd base) "( exit 0 )"))
+      (define r1 (verification-start! reg ident "/bin/sh" (list "-c" "( sleep 30 )")))
+      (verification-cancel! reg (start-result-job-id r1))
+      (verification-start! reg ident "/bin/sh" (list "-c" "( exit 0 )"))
+      (define state-box (box (initial-ui-state #:session-id "test-session")))
+      (seed-foreground-progress!
+       state-box (start-result-job-id r1) (verification-registry-incarnation reg))
+      (define restored
+        (parameterize ([current-gsd-verification-registry reg])
+          (reattach-verification-state (unbox state-box))))
+      (define entries
+        (for/list ([entry (in-list (ui-state-transcript restored))]
+                   #:when (hash-ref (transcript-entry-meta entry) 'detached #f))
+          entry))
+      (check-equal? (length entries) 1 "the captured tombstone is attributed truthfully")
+      (check-true (string-contains? (transcript-entry-text (car entries)) "cancelled")
+                  (transcript-entry-text (car entries)))
+      (with-handlers ([exn:fail? void])
+        (verification-close-registry! reg))
+      (cleanup-tmp base))
+
+    (test-case "reattach keeps the registry-backed detached and terminal routes"
+      (define base (make-tmp-git-repo))
+      (define reg (make-verification-registry))
+      (define ident (delivery-verify-identity base 0 (fixture-run-cwd base) "( exit 0 )"))
+      (define r (verification-start! reg ident "/bin/sh" (list "-c" "( sleep 30 )")))
+      (define state-box (box (initial-ui-state #:session-id "test-session")))
+      (seed-foreground-progress!
+       state-box (start-result-job-id r) (verification-registry-incarnation reg))
+      (define detached
+        (parameterize ([current-gsd-verification-registry reg])
+          (reattach-verification-state (unbox state-box))))
+      (check-true (string-contains? (ui-state-status-message detached) "running (detached)")
+                  (ui-state-status-message detached))
+      (verification-cancel! reg (start-result-job-id r))
+      (define terminal
+        (parameterize ([current-gsd-verification-registry reg])
+          (reattach-verification-state (unbox state-box))))
+      (check-true
+       (for/or ([entry (in-list (ui-state-transcript terminal))]
+                #:when (hash-ref (transcript-entry-meta entry) 'detached #f))
+         (string-contains? (transcript-entry-text entry) "state cancelled"))
+       "the terminal registry record is rendered after the wait")
+      (with-handlers ([exn:fail? void])
+        (verification-close-registry! reg))
+      (cleanup-tmp base))))
 
 (module+ main
   (exit (call-with-private-git-environment (lambda () (run-tests (terminal-events-suite))))))

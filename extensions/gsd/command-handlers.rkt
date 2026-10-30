@@ -445,6 +445,45 @@
   (values augmented-text display-text))
 
 ;; ============================================================
+;; W4: durable entry text for /go
+;; ============================================================
+
+;; The /go hook has a short dispatch deadline: it must not run the
+;; authenticated delivery readback or the leased lane probes (the delivery
+;; controller readback alone can take 240 seconds). The entry text therefore
+;; reports the DURABLE RECORD facts only — the anchor wave's durable status
+;; symbol (the canonical record vocabulary, distinct from the legacy
+;; projection spellings) and the count facts — and states the delivery
+;; re-check as SCHEDULED, never as a claim about which route the leased
+;; checkpoint will select.
+(define (durable-campaign-facts rec)
+  (define waves (campaign-record-waves rec))
+  (values (length waves)
+          (for/sum ([w (in-list waves)] #:when (eq? (campaign-wave-status w) 'done)) 1)))
+
+(define (durable-wave-status-symbol rec wave-idx)
+  (define w
+    (for/first ([wave (in-list (campaign-record-waves rec))]
+                #:when (= (campaign-wave-index wave) wave-idx))
+      wave))
+  (and w (campaign-wave-status w)))
+
+(define (campaign-entry-text rec delivery-pending? anchor-wave-idx)
+  (if delivery-pending?
+      ;; Delivery-only pass: every implementation wave is durable-terminal;
+      ;; the leased checkpoint drives authenticated delivery first.
+      (let ([status (durable-wave-status-symbol rec anchor-wave-idx)])
+        (if status
+            (format "Executing final delivery (durable status: ~a)..." status)
+            "Executing final delivery..."))
+      (let-values ([(total done) (durable-campaign-facts rec)])
+        (format "Campaign W~a durable status: ~a (~a/~a waves done). Delivery is re-checked inside the campaign before any wave prompt."
+                anchor-wave-idx
+                (or (durable-wave-status-symbol rec anchor-wave-idx) "unknown")
+                done
+                total))))
+
+;; ============================================================
 ;; /go command handler
 ;; ============================================================
 
@@ -811,10 +850,11 @@
                                 ;; per-session root in each wave prompt it runs.
                                 (build-single-wave-prompt base-dir plan anchor-wave-idx)
                                 'text
+                                ;; W4: the entry text names the durable record
+                                ;; decision inputs — never a PLAN-derived
+                                ;; “Executing from WN” execution claim.
                                 (append-divergence-warnings
-                                 (if delivery-pending
-                                     "Executing final delivery..."
-                                     (format "Executing campaign from W~a..." anchor-wave-idx))
+                                 (campaign-entry-text rec delivery-pending anchor-wave-idx)
                                  warnings))))])])))
 
 (define (handle-go-command base-dir input-text)
@@ -907,11 +947,27 @@
       (if (null? staged-delivery)
           '()
           (cons "Delivery:" staged-delivery))))
+  ;; W4: the DURABLE campaign status is exposed separately from the legacy
+  ;; projection count above. Each wave shows its canonical record status
+  ;; symbol (pending/in-progress/verifying/awaiting-delivery/done/failed/
+  ;; interrupted/deferred) — the durable vocabulary, never rewritten into a
+  ;; legacy markdown projection spelling, and no reconciliation is skipped or
+  ;; implied here: this is a read-only view of the durable record.
+  (define durable-status-lines
+    (with-handlers ([exn:fail? (lambda (e) '())])
+      (define rec (load-or-migrate-campaign! base-dir))
+      (define wave-lines
+        (for/list ([w (in-list (campaign-record-waves rec))])
+          (format "W~a: ~a" (campaign-wave-index w) (campaign-wave-status w))))
+      (if (null? wave-lines)
+          '()
+          (cons "Durable status:" wave-lines))))
   (define parts
     (append (list (format "Mode: ~a" (or mode "inactive"))
                   (if (> tw 0)
                       (format "Waves: ~a/~a complete" (set-count cw) tw)
                       "Waves: not set"))
+            durable-status-lines
             delivery-lines
             spend-lines))
   ;; BUG-0034 (W2): /gsd surfaces wave-status dual-source divergences  ;; (PLAN.md index row vs wave-doc `Status:` header) alongside the normal

@@ -206,6 +206,32 @@ fences at protected boundaries and after waits. Owned jobs must be confirmed
 quiescent before releasing admission. No automatic regrant, phase redispatch,
 accounting reset or unknown-cost-as-zero shortcut is permitted.
 
+#### Static admission before candidate approval
+
+The owner applies the same read-only probe-admissibility parser before candidate
+sealing, again before C1, and against authenticated staged E before R1. Early
+acceptance grants nothing and cannot replace source/approval/fence revalidation,
+owned C1 GREEN, or the actual baseline RED/candidate GREEN assertion pair.
+
+Discovery reports a bounded code/phase/path instead of collapsing every failure
+into an unsupported-harness boolean. In particular, the candidate must carry the
+trusted runner closure, and its probe/helper must use the existing literal import
+and suite grammar. Structured `only-in` imports remain unsupported. A successful
+Verify command does not certify that separate probe grammar. Fix future authoring
+inputs before sealing; never edit an already approved candidate to satisfy it.
+
+Preserved validation reuses immutable Git tree/blob work only within one loader
+invocation. The entry checkpoint obtains a fresh authenticated task/context/parent
+allocation view initially and immediately before its status commit. Revocation,
+expiry, source checks, lock-boundary revalidation and exact preserved fences are
+not cached away. Captured-effect recovery remains limited to authenticated work;
+a blocked operation or consumed probe without R1 is not a retry allowance.
+
+Owned verification progress and finalization diagnostics use the existing event
+and result surfaces. Detached/unknown registry identity is shown honestly and
+never implies permission to relaunch. See the [campaign recovery table](gsd-guide.md#recovery-table)
+for the distinction between lawful continuation, owner wait and terminal refusal.
+
 #### Operator runtime and trusted TUI handoff
 
 Authority lives outside project/execution/control repositories in the trusted-user

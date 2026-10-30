@@ -4,9 +4,7 @@
          racket/path
          racket/string
          racket/system
-         (only-in "delivery-journal.rkt"
-                  load-delivery-journal
-                  load-supplemental-promotion-intent)
+         (only-in "delivery-journal.rkt" load-delivery-journal load-supplemental-promotion-intent)
          "review-proof.rkt"
          "evidence-repair-format.rkt"
          "evidence-repair-ledger.rkt"
@@ -118,8 +116,7 @@
       (define prior (load-evidence-repair base plan wave g))
       (when (and (hash? (hash-ref prior 'operation #f))
                  (not (equal? (hash-ref (hash-ref prior 'operation) 'state #f) "registered")))
-        (error 'evidence-readiness
-               "prior evidence operation is not terminal; refusing rotation")))
+        (error 'evidence-readiness "prior evidence operation is not terminal; refusing rotation")))
     (define ledger (load-evidence-repair base plan wave generation))
     (define registrations (hash-ref ledger 'registrations))
     (define registration (and (pair? registrations) (last registrations)))
@@ -142,14 +139,10 @@
                      (hash? (hash-ref intent 'promotion #f))
                      (equal? (hash-ref promoted 'promotion #f)
                              (hash-ref (hash-ref intent 'promotion) 'sha256 #f))
-                     (equal? (hash-ref promoted 'generation #f)
-                             (hash-ref intent 'generation #f))
-                     (equal? (hash-ref intent 'generation #f)
-                             (hash-ref context 'receipt-generation))
-                     (equal? (hash-ref intent 'receipt-sha256 #f)
-                             (hash-ref context 'receipt-sha256))
-                     (equal? (hash-ref intent 'context-digest #f)
-                             (evidence-context-digest context))
+                     (equal? (hash-ref promoted 'generation #f) (hash-ref intent 'generation #f))
+                     (equal? (hash-ref intent 'generation #f) (hash-ref context 'receipt-generation))
+                     (equal? (hash-ref intent 'receipt-sha256 #f) (hash-ref context 'receipt-sha256))
+                     (equal? (hash-ref intent 'context-digest #f) (evidence-context-digest context))
                      (equal? (hash-ref intent 'operation-id #f)
                              (hash-ref (hash-ref ledger 'operation) 'id #f)))
           (error 'evidence-readiness "unattested-promoted-registration"))))
@@ -187,10 +180,18 @@
                    'null
                    'red-reference
                    (first linked))
-           (let ([spec (discover-evidence-probe-spec (hash-ref context 'repo)
-                                                     context
-                                                     (hash-ref (frozen-verify-binding base plan wave)
-                                                               'normalized-command))])
+           (let ()
+             ;; Reasoned discovery: the repair-required code selection is
+             ;; unchanged, and the static refusal is carried additively so
+             ;; author repair sees WHY the harness is unsupported — stable
+             ;; code, failing phase/path and bounded detail, never a dump.
+             (define discovery
+               (discover-evidence-probe-outcome (hash-ref context 'repo)
+                                                context
+                                                (hash-ref (frozen-verify-binding base plan wave)
+                                                          'normalized-command)))
+             (define spec
+               (and (equal? (hash-ref discovery 'status #f) "admitted") (hash-ref discovery 'spec)))
              (hasheq
               'status
               "repair-required"
@@ -203,4 +204,15 @@
               'message
               (if spec
                   "Authenticated regression probe ready for bounded execution"
-                  "No compatible frozen regression suite: author repair requires a separate source/test attempt and full Verify."))))])))
+                  "No compatible frozen regression suite: author repair requires a separate source/test attempt and full Verify.")
+              'discovery-refusal
+              (if spec
+                  'null
+                  (hasheq 'code
+                          (hash-ref discovery 'code "unknown")
+                          'phase
+                          (hash-ref discovery 'phase "unknown")
+                          'path
+                          (or (hash-ref discovery 'path #f) 'null)
+                          'detail
+                          (or (hash-ref discovery 'detail #f) 'null))))))])))
