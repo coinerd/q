@@ -6,6 +6,12 @@
          racket/system
          "campaign-state.rkt"
          "campaign-repository.rkt"
+         ;; W1: the SAME process-safe campaign lease owner the orchestrator
+         ;; uses — imported directly instead of dynamically re-importing
+         ;; go-orchestrator.rkt, which re-provides these exact bindings.
+         ;; Same owner, same lock file, no orchestrator back-edge, no
+         ;; recursive lease acquisition.
+         (only-in "campaign-lease.rkt" acquire-lease release-lease!)
          "delivery-journal.rkt"
          (only-in "evidence-repair-format.rkt" canonical-evidence-json)
          (only-in "../../util/json/checksum.rkt" sha256-string)
@@ -29,7 +35,6 @@
          (only-in "../gsd-planning/execution-policy.rkt" current-gsd-author-phase))
 (provide propose-supplemental-disposition!
          install-supplemental-disposition!)
-(define-runtime-path orchestrator "go-orchestrator.rkt")
 (define-runtime-path control-root "../..")
 (define (refuse text)
   (error 'supplemental-evidence-disposition "~a" text))
@@ -38,12 +43,10 @@
 (define (under-lease base plan proc)
   (when (current-gsd-author-phase)
     (refuse "author phase cannot dispose tasks"))
-  (define acquire (dynamic-require orchestrator 'acquire-lease))
-  (define release (dynamic-require orchestrator 'release-lease!))
-  (define lease (acquire base plan #:session-id "supplemental-owner-disposition"))
+  (define lease (acquire-lease base plan #:session-id "supplemental-owner-disposition"))
   (unless lease
     (refuse "campaign lease busy"))
-  (dynamic-wind void proc (lambda () (release lease))))
+  (dynamic-wind void proc (lambda () (release-lease! lease))))
 (define (control-head)
   (define out (open-output-string))
   (unless (zero? (parameterize ([current-directory control-root]

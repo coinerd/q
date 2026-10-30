@@ -496,10 +496,24 @@
 ;; belongs to a DIFFERENT session (the reducer-side guarantee backing the
 ;; commands.rkt lifecycle). Same-session resumes keep it: reattachment is
 ;; handled by the registry-facts route, not by dropping the state here.
+;; W4: IDENTIFIED progress — carrying the trusted registry identity bound at
+;; producer entry (job-id + registry incarnation) — is process-owned, not
+;; display-session-owned: a long Verify outlives wave-session switches, so a
+;; foreign-session attach may not silently drop it. The identity-matched
+;; terminal still clears it and the stale-generation checks still guard
+;; bound-generation flows. Unidentified (legacy) progress keeps the exact
+;; historical clearing, so no unrelated unidentified progress is preserved.
 (define (clear-foreign-session-verification state sid)
   (define progress (ui-state-verification-progress state))
   (define progress-sid (and (hash? progress) (hash-ref progress 'session-id #f)))
-  (if (and progress-sid sid (not (equal? progress-sid sid)))
+  (define identified?
+    (and (hash? progress)
+         (hash-ref progress 'job-id #f)
+         (hash-ref progress 'registry-incarnation #f)))
+  (if (and progress-sid
+           sid
+           (not (equal? progress-sid sid))
+           (not identified?))
       (set-status-message (set-verification-progress state #f) #f)
       state))
 

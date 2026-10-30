@@ -4,7 +4,7 @@
 ;; @boundary integration
 ;; @mutates repo
 ;; @isolation temp-dir
-;; @timeout 1800
+;; @timeout 3600
 ;; @covers extensions/gsd/supplemental-preserved-candidate.rkt
 ;; @covers extensions/gsd/supplemental-evidence-disposition.rkt
 ;; @covers extensions/gsd/supplemental-evidence-controller.rkt
@@ -23,9 +23,17 @@
 ;; controller entry/source gate accepts only the authenticated E_old + K->M
 ;; pair; /go adopts M with ZERO model dispatch callbacks, consumes the fresh
 ;; permission once (launch-consumed), seals fresh K' for the new
-;; allocation/source M and then waits at the human K' approval. Tamper, source
-;; drift, cancellation, budget pause, fence loss, an old-candidate revocation
-;; and a crash cut after launch all fail closed with no ordinary fallback.
+;; allocation/source M and then waits at the human K' approval. BEYOND that
+;; wait, the SAME chain resumes through the normal campaign entry with one
+;; isolated genuine broker decision per owner gate: actual C1/G1 on M, the
+;; staged wrapper, the real baseline-overlay R1, the typed S authorization
+;; wait, then S approval and the protected publication/promotion to a
+;; registered full delivery — zero model dispatch, with the immutable E_old
+;; receipt context (attempt-2/fence-5) distinct from the parked parent
+;; allocation (attempt-6/fence-9) and the fresh allocation (attempt-7/fence-10)
+;; at every step. Tamper, source drift, cancellation, budget pause, fence
+;; loss, an old-candidate revocation and a crash cut after launch all fail
+;; closed with no ordinary fallback.
 (require rackunit
          json
          racket/file
@@ -38,6 +46,11 @@
          "helpers/supplemental-go-fixture.rkt"
          (only-in "test-gsd-supplemental-evidence-journal.rkt" revoke-approval!)
          "../runtime/approval/broker.rkt"
+         (only-in "../extensions/gsd/supplemental-evidence-operator.rkt"
+                  current-supplemental-operator-publisher)
+         (only-in "../extensions/gsd/delivery-publication.rkt"
+                  current-gsd-approved-head-publisher
+                  publish-approved-head!)
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
          "../extensions/gsd/delivery-receipt.rkt"
@@ -60,6 +73,8 @@
          (submod "../extensions/gsd/supplemental-disposition-policy.rkt" ancestry-support)
          "../extensions/gsd/supplemental-disposition-claim.rkt"
          "../extensions/gsd/supplemental-evidence-controller.rkt"
+         (only-in "../extensions/gsd/supplemental-preserved-candidate.rkt"
+                  validate-preserved-candidate!)
          (only-in "../extensions/gsd/wave-runner-port.rkt" wave-execution-outcome-kind)
          (only-in "../extensions/gsd/campaign-result.rkt"
                   campaign-result-status
@@ -111,6 +126,41 @@
                          (equal? (hash-ref (hash-ref record 'payload (hasheq)) 'task-proposal #f)
                                  task-proposal)))
     record))
+;; Deterministic Git-call counting seam (W3b): a PATH shim executable appends
+;; one byte per real `git` invocation and then execs the genuine git, so every
+;; counted call keeps its exact behavior and refusal semantics. Counts are
+;; process counts, never wall time, and the shim lives only inside the call.
+(define (call-counting-git proc)
+  (define real-git (find-executable-path "git"))
+  (define shim-dir (make-temporary-file "entry-view-git-shim-~a" 'directory))
+  (define counter (make-temporary-file "entry-view-git-count-~a"))
+  (delete-file counter)
+  (define shim (build-path shim-dir "git"))
+  (call-with-output-file shim
+                         (lambda (out)
+                           (fprintf out
+                                    "#!/bin/sh\nprintf x >> ~s\nexec ~s \"$@\"\n"
+                                    (path->string counter)
+                                    (path->string real-git)))
+                         #:exists 'truncate)
+  (file-or-directory-permissions shim #o755)
+  (define shim-env (make-environment-variables))
+  (for ([name (in-list (environment-variables-names (current-environment-variables)))])
+    (environment-variables-set! shim-env
+                                name
+                                (environment-variables-ref (current-environment-variables) name)))
+  (environment-variables-set! shim-env #"PATH" (string->bytes/utf-8 (path->string shim-dir)))
+  (dynamic-wind void
+                (lambda ()
+                  (parameterize ([current-environment-variables shim-env])
+                    (proc (lambda ()
+                            (if (file-exists? counter)
+                                (file-size counter)
+                                0)))))
+                (lambda ()
+                  (delete-directory/files shim-dir)
+                  (when (file-exists? counter)
+                    (delete-file counter)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Chain: genuine spent third-generation journal ancestry
@@ -279,6 +329,42 @@
     (authenticated-evidence-receipt-context (load-authenticated-evidence-receipt root plan wave)))
   (unless (equal? (hash-ref ctx 'head) (hash-ref before 'head))
     (error 'preserved-integration "derived old receipt context head mismatch"))
+  ;; Retain the genuine PRIOR publication of the immutable E_old receipt
+  ;; through the ordinary production API; only the remote effect is isolated
+  ;; (the disposition-fixture precedent). The protected supplemental
+  ;; supersession publication later requires exactly this retained confirmed
+  ;; predecessor record, matched on the immutable receipt binding. The E_old
+  ;; receipt is pinned to the historical attempt-2/fence-5 that captured it,
+  ;; so publication authorization re-binds the wave record to exactly that
+  ;; attempt for the ordinary publish and restores the parked predecessor
+  ;; attempt afterwards; fences and every other record field stay untouched.
+  (define restore-attempt
+    (campaign-wave-current-attempt (wave-of (load-campaign-record root plan) wave)))
+  (define (install-attempt! attempt)
+    (mutate-campaign! root
+                      plan
+                      (lambda (rec) (set-campaign-wave-current-attempt! (wave-of rec wave) attempt))))
+  (install-attempt! (campaign-attempt "attempt-2" 5 0))
+  (parameterize ([current-gsd-approved-head-publisher
+                  (lambda (_base _plan _wave source _attempt _fence _coord _evidence)
+                    (hasheq 'status
+                            "published"
+                            'branch
+                            (hash-ref source 'branch)
+                            'head
+                            (hash-ref source 'head)))])
+    (publish-approved-head! root
+                            plan
+                            wave
+                            (for/hasheq ([key '(repo origin branch head tree)])
+                              (values key (hash-ref receipt key)))
+                            (hash-ref receipt 'attempt-id)
+                            (hash-ref receipt 'attempt-fence)
+                            #f
+                            (hash-ref receipt 'evidence)
+                            (lambda () (load-campaign-record root plan))
+                            #:owned-proof (hash-ref receipt 'owned-proof)))
+  (install-attempt! restore-attempt)
   (fixture-author-commit! repo)
   (git-text repo "add" (supplemental-fixture-test-path fx) (supplemental-fixture-harness-path fx))
   (git-text repo "commit" "-q" "-m" "old candidate test evidence")
@@ -651,7 +737,137 @@
   (check-equal? (hash-ref (load-supplemental-operation g) 'state) "candidate-sealed")
   (check-false
    (hash-ref (hash-ref (load-supplemental-operation g) 'facts) 'candidate-approval-ref #f))
-  (check-equal? (length (fresh-candidates-for p)) 1))
+  (check-equal? (length (fresh-candidates-for p)) 1)
+  ;; ------------------------------------------------------------------
+  ;; BEYOND the K' wait (same chain, same installed T — no second fixture):
+  ;; the campaign resumes through the NORMAL run-campaign! entry, and every
+  ;; owner gate is ONE isolated genuine broker decision made by the trusted
+  ;; test frontend through the REAL active channel (register → decide →
+  ;; await, exactly like any operator approval). Everything between the
+  ;; decisions is the real protected ladder — actual C1/G1 on the descendant
+  ;; M, the staged r*/E wrapper, the real baseline-overlay R1 probe, the
+  ;; typed S authorization wait, then S approval and the protected
+  ;; publication/promotion to a registered delivery. The model-author
+  ;; callback and the ordinary coordinator stay forbidden; no prior GREEN,
+  ;; approval or admission is ever reused; the immutable identities hold:
+  ;; E_old receipt context attempt-2/fence-5, parked parent
+  ;; attempt-6/fence-9, fresh allocation attempt-7/fence-10.
+  ;; ------------------------------------------------------------------
+  (define decisions (box '()))
+  (define (genuine-decider! kind)
+    ;; Test-support only: decide the exact registered digest for ONE proposal
+    ;; kind; any other owner request stays genuinely undecided (typed wait).
+    (lambda (event payload)
+      (when (equal? event "supplemental-evidence.approval-requested")
+        (define requested (hash-ref payload 'proposal-kind))
+        (set-box! decisions (append (unbox decisions) (list requested)))
+        (when (equal? kind requested)
+          (unless (approval-decide! (hash-ref payload 'request-id)
+                                    (hash-ref payload 'commitment-digest)
+                                    #t)
+            (error 'preserved-integration "genuine broker decision failed"))))))
+  (define (resume-run! kind #:publish? [publish? #f])
+    (parameterize ([current-supplemental-operator-publisher (genuine-decider! kind)]
+                   [current-gsd-approved-head-publisher
+                    (if publish?
+                        (lambda (_base _plan _wave source _attempt _fence _coord _evidence)
+                          (hasheq 'status
+                                  "published"
+                                  'branch
+                                  (hash-ref source 'branch)
+                                  'head
+                                  (hash-ref source 'head)))
+                        current-gsd-approved-head-publisher)]
+                   [current-directory repo])
+      (run-campaign! root
+                     (load-campaign-record root plan)
+                     #:isolate? #f
+                     #:timeout-sec 600
+                     #:delivery-reader (test-delivered-reader)
+                     #:runner (lambda (_)
+                                (set-box! model-calls (add1 (unbox model-calls)))
+                                'unexpected-model-author-response)
+                     #:delivery-coordinator
+                     (lambda (_plan _idx)
+                       (error 'preserved-integration "ordinary coordinator forbidden"))
+                     #:verifier (lambda (_) #f))))
+  ;; Phase 2 — ONLY the fresh K' is approved: real C1/G1, staged wrapper, the
+  ;; real R1 baseline-overlay probe, then the typed S authorization wait.
+  (define result2 (resume-run! "candidate-proposal"))
+  (check-eq? (campaign-result-status result2) 'wave-blocked)
+  (check-true (string-contains? (campaign-result-message result2)
+                                "operator supersession authorization unavailable")
+              (campaign-result-message result2))
+  (check-equal? (unbox model-calls) 0 "zero model dispatch across real C1/G1/R1")
+  (define op2 (load-supplemental-operation g))
+  (check-equal? (hash-ref op2 'state) "probe-captured")
+  (define facts2 (hash-ref op2 'facts))
+  (define green2 (hash-ref facts2 'green-proof-ref #f))
+  (define red2 (hash-ref facts2 'probe-proof-ref #f))
+  (check-equal? (and (hash? green2) (hash-ref green2 'kind #f))
+                "supplemental-declared-verify-green/v1")
+  ;; The staged R1 is a content-addressed retained reference (sha256+path).
+  (check-true (and (hash? red2)
+                   (string? (hash-ref red2 'path #f))
+                   (string? (hash-ref red2 'sha256 #f))
+                   (regexp-match? #px"^[0-9a-f]{64}$" (hash-ref red2 'sha256))))
+  (check-true (and (string? (hash-ref green2 'sha256 #f))
+                   (regexp-match? #px"^[0-9a-f]{64}$" (hash-ref green2 'sha256))))
+  (check-not-equal? (hash-ref green2 'sha256) (hash-ref red2 'sha256))
+  (check-equal? (hash-ref facts2 'allocation) (allocation "attempt-7" 10))
+  (check-equal? (unbox decisions)
+                '("candidate-proposal" "supersession-proposal" "supersession-proposal"))
+  (check-equal? (hash-ref ctx 'attempt-id) "attempt-2")
+  (check-equal? (hash-ref ctx 'attempt-fence) 5)
+  (define after2 (load-campaign-record root plan))
+  (check-equal? (campaign-attempt-id (campaign-wave-current-attempt (wave-of after2 wave)))
+                "attempt-7")
+  (check-equal? (campaign-attempt-fence-token (campaign-wave-current-attempt (wave-of after2 wave)))
+                10)
+  (check-equal? (campaign-fence-token after2) 10)
+  ;; Phase 3 — the ONE remaining owner gate: S authorization. The protected
+  ;; publication tail (published → receipt-certified) and the promotion
+  ;; (registered → completed) run through their existing production owners
+  ;; with the same captured G1/R1 — never a recapture, never a re-approval.
+  (define generation2 (length (hash-ref (load-delivery-journal root plan wave) 'receipt-history '())))
+  (define result3 (resume-run! "supersession-proposal" #:publish? #t))
+  (check-eq? (campaign-result-status result3) 'wave-blocked)
+  ;; The truthful completed stop: readiness is owned by the registered
+  ;; receipt, never claimed from the result alone.
+  (check-true (string-prefix? (campaign-result-message result3)
+                              "supplemental evidence task completed;")
+              (campaign-result-message result3))
+  (check-true (string-contains? (campaign-result-message result3)
+                                "readiness owned by the registered receipt")
+              (campaign-result-message result3))
+  (check-equal? (unbox model-calls) 0 "zero model dispatch across publication/promotion")
+  (define op3 (load-supplemental-operation g))
+  (check-equal? (hash-ref op3 'state) "completed")
+  (define facts3 (hash-ref op3 'facts))
+  (check-equal? (hash-ref facts3 'green-proof-ref) green2 "captured G1 is never re-run")
+  (check-equal? (hash-ref facts3 'probe-proof-ref) red2 "captured R1 is never re-run")
+  (check-true (hash? (hash-ref facts3 'supersession-approval-ref #f)))
+  (check-equal? (hash-ref facts3 'allocation) (allocation "attempt-7" 10))
+  (check-equal?
+   (unbox decisions)
+   '("candidate-proposal" "supersession-proposal" "supersession-proposal" "supersession-proposal"))
+  (define journal3 (load-delivery-journal root plan wave))
+  (check-equal? (length (hash-ref journal3 'receipt-history '())) (add1 generation2))
+  (define receipt3 (hash-ref journal3 'receipt))
+  (check-equal? (hash-ref receipt3 'attempt-id) "attempt-7")
+  (check-equal? (hash-ref receipt3 'attempt-fence) 10)
+  (check-equal? (hash-ref receipt3 'head) (hash-ref m 'head))
+  (define readiness3 (evidence-readiness root plan wave))
+  (check-equal? (hash-ref readiness3 'status) "ready")
+  (check-equal? (hash-ref readiness3 'code) "registered-probe-ready")
+  (check-equal? (hash-ref ctx 'attempt-id) "attempt-2")
+  (check-equal? (hash-ref ctx 'attempt-fence) 5)
+  (define after3 (load-campaign-record root plan))
+  (check-equal? (campaign-attempt-id (campaign-wave-current-attempt (wave-of after3 wave)))
+                "attempt-7")
+  (check-equal? (campaign-attempt-fence-token (campaign-wave-current-attempt (wave-of after3 wave)))
+                10)
+  (check-equal? (campaign-fence-token after3) 10))
 
 ;; ---------------------------------------------------------------------------
 ;; Success: inert proposal, exact T install (single claim), zero-model
@@ -751,10 +967,15 @@
    #rx"outside the fixed disposition amendment|already permanently claimed|claim|pointer"
    (lambda () (install-supplemental-disposition! root plan wave fp fg)))
   (check-equal? (file->bytes claim) claim-bytes)
-  ;; Entry context is the authenticated E_old context (byte-equal), never M.
-  (check-equal? (parameterize ([current-directory repo])
-                  (supplemental-approved-entry-context root plan wave))
-                ctx)
+  ;; The fused entry view carries the authenticated E_old context
+  ;; (byte-equal, never M), the exact installed task and the fixed-a3 parked
+  ;; parent allocation in ONE trusted load.
+  (define entry-view
+    (parameterize ([current-directory repo])
+      (supplemental-approved-entry-view root plan wave)))
+  (check-equal? (hash-ref entry-view 'context) ctx)
+  (check-equal? (hash-ref entry-view 'task) task)
+  (check-equal? (hash-ref entry-view 'parent-allocation) (allocation "attempt-6" 9))
   ;; 2b. PARKED RESOLUTION REGRESSION (red-first): the preserved entry is
   ;; parked on the authenticated fixed-a3 terminal allocation
   ;; attempt-6/fence-9, which is GENUINELY DISTINCT from the immutable E_old
@@ -991,4 +1212,65 @@
   (test-case "crash cut after adoption launch neither reallocates nor reseals a conflicting K'"
     (with-chain crash-cut-case!))
   (test-case "revoked fresh T authority refuses the parked checkpoint without commit or allocation"
-    (with-chain parked-revocation-case!)))
+    (with-chain parked-revocation-case!))
+  (test-case "parked preserved resolution loads the fused entry view exactly twice"
+    ;; Deterministic Git-call counting regression (W3b): the parked
+    ;; checkpoint fetches ONE fused authenticated entry view initially and
+    ;; freshly again pre-commit. Each view load costs exactly TWO full leaf
+    ;; admissions — the authenticated task load revalidates the fixed-a3
+    ;; disposition claim through the journal, then the view runs its own
+    ;; complete preserved admission (claim binding + retained E_old
+    ;; receipt/context equality + parent allocation) — so a genuine resolve
+    ;; costs exactly four admissions where the historical two-accessor
+    ;; resolve cost eight (four accessor loads, two admissions each).
+    ;; Process counts only; nothing is cached across calls: every later
+    ;; load still costs a full fresh admission after an earlier one
+    ;; succeeded.
+    (with-chain
+     (lambda (chain)
+       (define root (hash-ref chain 'root))
+       (define plan (hash-ref chain 'plan))
+       (define wave (hash-ref chain 'wave))
+       (define repo (hash-ref chain 'repo))
+       (retarget-campaign! root plan wave "attempt-6" 9)
+       (define installed (install-preserved! chain))
+       (define g (hash-ref installed 'approval))
+       (define task (hash-ref installed 'task))
+       ;; One full leaf admission is the unit of view cost.
+       (define leaf-calls
+         (call-counting-git (lambda (git-calls)
+                              (parameterize ([current-directory repo])
+                                (validate-preserved-candidate! root plan wave task))
+                              (git-calls))))
+       (check-true (> leaf-calls 0))
+       (define view1-calls
+         (call-counting-git (lambda (git-calls)
+                              (parameterize ([current-directory repo])
+                                (supplemental-approved-entry-view root plan wave))
+                              (git-calls))))
+       (check-equal? view1-calls (* 2 leaf-calls))
+       ;; The genuine parked resolution: exactly two view loads.
+       (define resolve-calls
+         (call-counting-git (lambda (git-calls)
+                              (check-eq? (resolve-supplemental-author-checkpoint! root plan wave) #t)
+                              (git-calls))))
+       (printf "entry-view counts: leaf=~a view=~a resolve=~a (resolve = exactly 2 views)\n"
+               leaf-calls
+               view1-calls
+               resolve-calls)
+       (check-equal? resolve-calls (* 2 view1-calls))
+       (check-eq? (campaign-wave-status (wave-of (load-campaign-record root plan) wave)) 'pending)
+       ;; No cross-call cache: a later view load re-runs the whole admission
+       ;; and still carries task/context/parent-allocation in one result.
+       (define view-calls
+         (call-counting-git (lambda (git-calls)
+                              (define view
+                                (parameterize ([current-directory repo])
+                                  (supplemental-approved-entry-view root plan wave)))
+                              (check-equal? (hash-ref view 'context) (hash-ref chain 'ctx))
+                              (check-equal? (hash-ref view 'task) task)
+                              (check-equal? (hash-ref view 'parent-allocation)
+                                            (allocation "attempt-6" 9))
+                              (git-calls))))
+       (check-equal? view-calls view1-calls)
+       (check-false (load-supplemental-operation g) "resolution never allocates")))))

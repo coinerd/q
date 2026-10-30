@@ -16,6 +16,7 @@
          "../tui/state-types.rkt"
          "../tui/render/status-line.rkt"
          "../util/message/protocol-types.rkt"
+         (only-in "../util/event/event.rkt" event)
          (only-in "../tui/render/message-layout.rkt" styled-line->text))
 
 ;; ── Helpers ──
@@ -870,6 +871,86 @@
                   5))))
       (check-false (ui-state-verification-progress st2))
       (check-false (ui-state-status-message st2))
-      (check-true (= 1 (length (ui-state-transcript st2)))))))
+      (check-true (= 1 (length (ui-state-transcript st2)))))
+
+    ;; ── W4: session resets cannot drop an owned Verify (started survives) ──
+
+    (test-case "W4: a foreign-session attach keeps identified verification progress"
+      ;; The trusted registry identity (bound at producer entry) makes the
+      ;; progress process-owned: a long Verify outlives wave-session switches.
+      (define st0 (initial-ui-state))
+      (define started
+        (event 1
+               'gsd.verification.started
+               1000.0
+               "session-A"
+               "turn"
+               (hasheq 'wave
+                       4
+                       'timeout-sec
+                       60
+                       'start-ms
+                       1000.0
+                       'job-id
+                       'vj-9
+                       'registry-incarnation
+                       'vjreg-77
+                       'verify-identity-key
+                       "idkey-9")))
+      (define st1 (apply-event-to-state st0 started))
+      (check-true (hash? (ui-state-verification-progress st1)))
+      (define attach
+        (event 1 'session.started 1001.0 "session-B" "turn" (hasheq 'session-id "session-B")))
+      (define st2 (apply-event-to-state st1 attach))
+      (check-equal? (ui-state-session-id st2) "session-B")
+      (define progress (ui-state-verification-progress st2))
+      (check-true (hash? progress) "identified progress is not silently dropped")
+      (check-equal? (and (hash? progress) (hash-ref progress 'job-id #f)) 'vj-9)
+      ;; the identity-matched terminal still clears the preserved progress
+      (define terminal
+        (event 1
+               'gsd.verification.completed
+               1002.0
+               "session-B"
+               "turn"
+               (hasheq 'wave
+                       4
+                       'state
+                       'completed
+                       'exit-code
+                       0
+                       'approved?
+                       #t
+                       'verdict
+                       "approve"
+                       'elapsed-sec
+                       2.0
+                       'job-id
+                       'vj-9
+                       'registry-incarnation
+                       'vjreg-77
+                       'verify-identity-key
+                       "idkey-9")))
+      (define st3 (apply-event-to-state st2 terminal))
+      (check-false (ui-state-verification-progress st3)
+                   "the identity-matched terminal still clears"))
+
+    (test-case "W4: an identity-less legacy foreground is unaffected by session switches"
+      ;; unchanged legacy behavior: unidentified progress was never session-keyed
+      (define st0 (initial-ui-state))
+      (define started
+        (event 1
+               'gsd.verification.started
+               1000.0
+               "session-A"
+               "turn"
+               (hasheq 'wave 4 'timeout-sec 60 'start-ms 1000.0)))
+      (define st1 (apply-event-to-state st0 started))
+      (check-true (hash? (ui-state-verification-progress st1)))
+      (define attach
+        (event 1 'session.started 1001.0 "session-B" "turn" (hasheq 'session-id "session-B")))
+      (define st2 (apply-event-to-state st1 attach))
+      (check-true (hash? (ui-state-verification-progress st2))
+                  "legacy behavior preserved"))))
 
 (run-tests suite)

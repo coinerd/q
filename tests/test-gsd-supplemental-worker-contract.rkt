@@ -21,7 +21,8 @@
          "../extensions/gsd/delivery-receipt.rkt"
          "../extensions/gsd/supplemental-evidence-controller.rkt"
          "../extensions/gsd/supplemental-evidence-authority.rkt"
-         "../extensions/gsd/supplemental-evidence-journal.rkt")
+         "../extensions/gsd/supplemental-evidence-journal.rkt"
+         "../extensions/gsd/wave-runner-port.rkt")
 
 (define wrong-file "tests/test-gsd-wave-executor-isolation.rkt")
 (define (go fx factory)
@@ -106,6 +107,8 @@
                 "The exported answer from runtime/local.rkt is 42 on candidate; the pinned baseline answer is 7."
                 "The helper reads the exported production answer."
                 "The witness expects answer 42, not baseline 7."
+                "Structured import forms such as (only-in ...)"
+                "the owner refuses them statically before any expensive execution"
                 "never as commands or write authority")])
          (check-true (string-contains? text criterion)
                      (format "missing frozen behavioral criterion: ~a" criterion)))
@@ -257,7 +260,54 @@
     (test-case "v1 provider-driven writes and owner candidate seal"
       (exercise 1))
     (test-case "v2 provider-driven recovery preserves parent"
-      (exercise 2))))
+      (exercise 2))
+    (test-case "candidate seal refuses statically inadmissible author output before approval"
+      (call-with-supplemental-fixture
+       (lambda (fx)
+         (define root (supplemental-fixture-root fx))
+         (define plan (supplemental-fixture-plan fx))
+         (define repo (supplemental-fixture-repo fx))
+         (define grant (hash-ref (load-supplemental-pointer root plan 1) 'task-approval))
+         ;; Simulated author output whose helper uses a structured (only-in)
+         ;; import: the owner's static candidate check must refuse the seal
+         ;; BEFORE operator approval or any expensive C1 work.
+         (define (author-output!)
+           (define harness (build-path repo (supplemental-fixture-harness-path fx)))
+           (make-parent-directory* harness)
+           (display-to-file
+            (string-append
+             "#lang racket/base\n(require (only-in \"../../runtime/local.rkt\" answer))\n"
+             "(provide witness)\n(define (witness) (= answer 42))\n")
+            harness
+            #:exists 'truncate)
+           (display-to-file
+            (string-append
+             "#lang racket\n(require rackunit \"helpers/witness.rkt\")\n(provide evidence-suite)\n"
+             "(define evidence-suite (test-suite \"witness\" (test-case \"new regression\" "
+             "(check-true (witness)))))\n"
+             "(module+ test (require rackunit/text-ui) (exit (run-tests evidence-suite)))\n")
+            (build-path repo (supplemental-fixture-test-path fx))
+            #:exists 'truncate)
+           (wave-execution-outcome 'done "authored"))
+         (define outcome
+           (parameterize ([current-directory repo])
+             (run-supplemental-author-phases! root
+                                              plan
+                                              1
+                                              "physical"
+                                              8
+                                              author-output!
+                                              #:guard (lambda () #t))))
+         (check-equal? (wave-execution-outcome-kind outcome) 'failed)
+         (check-true (string-contains? (wave-execution-outcome-message outcome)
+                                       "candidate probe admissibility refused")
+                     (wave-execution-outcome-message outcome))
+         (check-true (string-contains? (wave-execution-outcome-message outcome) "only-in"))
+         (define blocked (load-supplemental-operation grant))
+         (check-equal? (hash-ref blocked 'state) "blocked")
+         (check-true (hash-ref blocked 'launch-consumed))
+         (check-true (string-contains? (hash-ref (hash-ref blocked 'facts) 'block-reason) "only-in")))
+       #:physical-worktree? #t))))
 (provide evidence-suite)
 (module+ test
   (check-equal? (run-tests evidence-suite) 0))

@@ -2,10 +2,13 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary integration
-;; @timeout 900
+;; @timeout 1500
 ;; @covers extensions/gsd/delivery-coordinator.rkt
 ;; Real default coordinator + Python controller + local Git remote. Only the
 ;; independent model response is deterministic; no controller status is faked.
+;; 1500 matches the sibling auto-review-loop fixture: both run full real
+;; owned-Verify generations, which a loaded 4-CPU runner stretches past the
+;; previous 900 s fixture budget (production deadlines are unchanged).
 (require rackunit
          racket/file
          racket/runtime-path
@@ -17,10 +20,16 @@
          "../extensions/gsd/delivery-journal.rkt"
          "../extensions/gsd/delivery-coordinator.rkt"
          "../extensions/gsd/delivery-finalize.rkt"
-         "../extensions/gsd/review-dispatch.rkt")
+         "../extensions/gsd/review-dispatch.rkt"
+         (only-in "helpers/auto-review-owned-fixture.rkt"
+                  precompile-delivery-controller-scripts!))
 (define-runtime-path fixture-python "helpers/production-owned-review-fixture.py")
 (module+ test
   (test-case "default production coordinator invokes installed independent runner at exact head/generation and replays remote rejection"
+    ;; Fixture setup precompile: the controller's racket subprocesses are
+    ;; capped at 60 s per command, so their closure must already be zo-warm
+    ;; before the coordinator runs (see helpers/auto-review-owned-fixture.rkt).
+    (precompile-delivery-controller-scripts!)
     (for ([generation '(0 1)])
       (define temp (make-temporary-file "production-review-~a" 'directory))
       (dynamic-wind

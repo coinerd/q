@@ -169,6 +169,15 @@
       (and operation
            (let ([a (hash-ref (hash-ref operation 'facts) 'allocation #f)])
              (and (exact-keys? a '(attempt-id attempt-fence coordinator-fence)) a))))
+    ;; W4 (read-only operation summary): the EXACT pending K/S references the
+    ;; validated operation has durably bound, exposed additively for operator
+    ;; surfaces. Each is the sealed {kind sha256} reference hash from the
+    ;; operation's own facts — content digests, never private material — and
+    ;; #f while that stage's reference is not yet bound. Purely derived from
+    ;; the record already validated above: no lock, auth or store change.
+    (define (bound-stage-ref key)
+      (define r (and operation (hash-ref (hash-ref operation 'facts) key #f)))
+      (and (hash? r) (hash-ref r 'kind #f) (hash-ref r 'sha256 #f) r))
     (hasheq 'status
             status
             'cause
@@ -194,7 +203,15 @@
             'attempt-fence
             (and allocation (hash-ref allocation 'attempt-fence))
             'coordinator-fence
-            (and allocation (hash-ref allocation 'coordinator-fence))))
+            (and allocation (hash-ref allocation 'coordinator-fence))
+            'candidate-ref
+            (bound-stage-ref 'candidate-ref)
+            'candidate-approval-ref
+            (bound-stage-ref 'candidate-approval-ref)
+            'supersession-proposal-ref
+            (bound-stage-ref 'supersession-proposal-ref)
+            'supersession-approval-ref
+            (bound-stage-ref 'supersession-approval-ref)))
   (call/ec
    (lambda (done)
      (when (current-gsd-author-phase)

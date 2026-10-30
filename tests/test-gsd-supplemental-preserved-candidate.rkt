@@ -510,6 +510,38 @@
   (preserved-task (hash-ref fx 'parent-task) descriptor))
 (define (expect-refusal pattern thunk)
   (check-exn pattern thunk))
+;; Deterministic Git-call counting seam: a PATH shim executable appends one
+;; byte per real `git` invocation and then execs the genuine git, so every
+;; counted call keeps its exact behavior and refusal semantics. Counts are
+;; process counts, never wall time, and the shim lives only inside the call.
+(define (call-counting-git proc)
+  (define real-git (find-executable-path "git"))
+  (define shim-dir (make-temporary-file "preserved-git-shim-~a" 'directory))
+  (define counter (make-temporary-file "preserved-git-count-~a"))
+  (delete-file counter)
+  (define shim (build-path shim-dir "git"))
+  (call-with-output-file shim
+                         (lambda (out)
+                           (fprintf out
+                                    "#!/bin/sh\nprintf x >> ~s\nexec ~s \"$@\"\n"
+                                    (path->string counter)
+                                    (path->string real-git)))
+                         #:exists 'truncate)
+  (file-or-directory-permissions shim #o755)
+  (define shim-env (make-environment-variables))
+  (for ([name (in-list (environment-variables-names (current-environment-variables)))])
+    (environment-variables-set! shim-env
+                                name
+                                (environment-variables-ref (current-environment-variables) name)))
+  (environment-variables-set! shim-env #"PATH" (string->bytes/utf-8 (path->string shim-dir)))
+  (dynamic-wind void
+                (lambda ()
+                  (parameterize ([current-environment-variables shim-env])
+                    (proc (lambda () (file-size counter)))))
+                (lambda ()
+                  (delete-directory/files shim-dir)
+                  (when (file-exists? counter)
+                    (delete-file counter)))))
 (module+ test
   (test-case "ordinary current-evidence-context and receipt loader stay strict without a receipt"
     (define base (make-temporary-file "preserved-empty-~a" 'directory))
@@ -730,6 +762,49 @@
                                                     (task-with-binding fx binding))))
        (revoke-approval! (hash-ref fx 'capref))
        (refuse-binding binding #rx"approval"))))
+  (test-case "git facts are indexed once per tree and hashed once per unique blob per leaf invocation"
+    ;; Deterministic count/equivalence regression (W3): one leaf admission
+    ;; must enumerate each distinct old/K/M tree exactly once and hash each
+    ;; unique raw blob exactly once, and the preserved claim owner (install +
+    ;; final revalidation + explicit revalidation) must run exactly the leaf
+    ;; validations with no extra Git work of its own, reusing the leaf's
+    ;; self-authenticated ancestry instead of a second inspection. Exact
+    ;; process counts; admission facts must stay identical.
+    (define counts
+      (call-counting-git
+       (lambda (git-calls)
+         (with-preserved-fixture
+          (lambda (fx)
+            ;; Fixture/binding construction itself runs git: snapshot the
+            ;; counter first so both windows measure validation work only.
+            (define binding (make-binding fx))
+            (define task (task-with-binding fx binding))
+            (define admission-window-start (git-calls))
+            (define admission (validate-preserved-candidate-claim-binding! task))
+            (check-true (preserved-candidate-admission? admission))
+            (check-equal? (preserved-candidate-admission-parent-proposal admission)
+                          (hash-ref (hash-ref fx 'parent-pointer) 'task-proposal))
+            (check-equal? (preserved-candidate-admission-parent-task admission)
+                          (hash-ref fx 'parent-task))
+            (check-equal? (hash-ref (hash-ref (preserved-candidate-admission-terminal admission)
+                                              'facts)
+                                    'candidate-ref)
+                          (hash-ref fx 'kref))
+            (define after-leaf (git-calls))
+            (define leaf-count (- after-leaf admission-window-start))
+            (define p
+              (propose-retain! "task-proposal"
+                               (hasheq 'task task 'expires-at (+ (current-seconds) 1700))))
+            (define g (approve! p))
+            (install-supplemental-disposition-claim! (hash-ref fx 'path)
+                                                     (hash-ref fx 'parent-pointer)
+                                                     (pointer p g)
+                                                     p
+                                                     g)
+            (validate-disposition-claim! g p task)
+            (hasheq 'leaf leaf-count 'claim (- (git-calls) after-leaf)))))))
+    (check-equal? (hash-ref counts 'leaf) 33)
+    (check-equal? (hash-ref counts 'claim) 99))
   (test-case "module graph loads from a cold (no compiled cache) source"
     ;; The leaf's claim/readiness lazy loads must not create a static cycle.
     (define module-path (path->string candidate-module))

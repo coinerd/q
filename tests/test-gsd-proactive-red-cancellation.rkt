@@ -82,7 +82,17 @@
             record
             0
             #:fence-token 1
-            #:timeout-sec 25
+            ;; Fixture budget within production limits: the outer deadline
+            ;; must stay BELOW the structured adapter child's own 60 s cap so
+            ;; the timeout reaps a LIVE child (its regression module sleeps
+            ;; 120 s). 25 s was measured too tight under a loaded 4-CPU
+            ;; runner: the adapter child never reached the module body before
+            ;; reaping, so the reach-adapter proof fired spuriously. 45 s
+            ;; keeps the contract identical (outer cancel of a live child,
+            ;; ambient registry untouched) while absorbing cold-start/load
+            ;; jitter; owned lanes never consume #:timeout-retries, so the
+            ;; window runs once and the file stays inside its 90 s budget.
+            #:timeout-sec 45
             #:timeout-retries 1
             #:no-change-retries 1
             #:isolate? #t

@@ -1314,13 +1314,14 @@
                        ;; resolve-worktree-isolation in wave-executor.rkt).
                        #:isolate? [isolate-arg 'auto]
                        #:delivery-reader [delivery-reader delivery-readback]
-                       #:delivery-coordinator [delivery-coordinator #f])
+                       #:delivery-coordinator [delivery-coordinator #f]
+                       ;; Observable existing tracker effect; invoked only by the lease owner.
+                       #:tracker-resume-sweep [tracker-resume-sweep resume-tracker-reconciliation!])
   ;; Resolve ONCE at campaign start so every downstream reader (including
   ;; the pre-wave isolation log) sees the effective flag, settings included.
   (define project-settings (load-project-settings-silently base-dir))
   (define isolate? (apply-worktree-isolation-setting! project-settings #:isolate? isolate-arg))
   (define plan-id (campaign-plan-id rec))
-  (resume-tracker-reconciliation! base-dir rec #:delivery-reader delivery-reader)
   ;; v1.00.22 W6 (BUG-0040): resolve the notification sinks ONCE from
   ;; project settings (gsd.notify.* keys; silent default outside tmux
   ;; with no keys — then the fan-out below is a no-op). Wave-level
@@ -1348,6 +1349,8 @@
          ;; A request may have waited behind another process. Reload only after
          ;; owning the lease, then carry durable state between waves.
          (define authoritative (or (load-campaign-record base-dir plan-id) rec))
+         ;; Tracker effects use owned, fresh state; lease contenders never reach this call.
+         (tracker-resume-sweep base-dir authoritative #:delivery-reader delivery-reader)
          ;; v0.99.89 W2: repair stale projections left by a crash between the
          ;; durable commit and the projection apply (golden-trace oracle
          ;; finding #2). The durable record is the source of truth; reconcile

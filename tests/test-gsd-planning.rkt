@@ -632,7 +632,11 @@
           (check-false (string-contains? first-wave-text "future-only.rkt"))
           (check-false (string-contains? first-wave-text "SECRET-LATER-INSTRUCTION"))
           (check-false (string-contains? first-wave-text "SECRET-CROSS-WAVE-W1"))
-          (check-true (string-contains? (hash-ref payload 'text) "Executing campaign"))))))))
+          ;; W4: the entry text names the DURABLE decision inputs (anchor
+          ;; wave + canonical record status), not a PLAN-derived execution
+          ;; claim.
+          (check-true (string-contains? (hash-ref payload 'text)
+                                        "Campaign W0 durable status"))))))))
 
 ;; ============================================================
 ;; W1 (#1867): /go anti-exploration tests

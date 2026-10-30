@@ -52,6 +52,8 @@
                   campaign-record-cancellation
                   campaign-wave?
                   campaign-wave-attempt-context
+                  ;; W4: the durable gate reason the completion gate stamped.
+                  campaign-wave-failure-reason
                   set-campaign-wave-attempt-context!)
          (only-in "campaign-repository.rkt" load-campaign-record persist-campaign!)
          (only-in "delivery-journal.rkt" load-delivery-journal record-verification-context!)
@@ -78,14 +80,21 @@
                   campaign-result?
                   campaign-result-status
                   campaign-result-message
-                  campaign-result-with-findings)
+                  campaign-result-with-findings
+                  ;; W4: the additive diagnostics envelope for non-DONE stops.
+                  campaign-diagnostics
+                  campaign-result-with-diagnostics)
          ;; W3: the ONE pure campaign decision + the authenticated delivery
          ;; readback adapter that feeds it.
          "campaign-decision.rkt"
          (only-in "delivery-handoff.rkt"
                   delivery-readback
                   campaign-delivery-view-for-pass
-                  pending-delivery-message)
+                  pending-delivery-message
+                  ;; W4: read-only handoff/journal facts for stop enrichment.
+                  delivery-handoff-status
+                  delivery-handoff-path
+                  delivery-action-hint)
          (only-in "reconciliation-checkpoint.rkt"
                   run-tracker-reconciliation!
                   reconciliation-checkpoint-result-status
@@ -212,19 +221,18 @@
 ;; Checkpoint decisions (the loop cases stay thin in the orchestrator)
 ;; ============================================================
 
-;; Finalize one delivered wave and classify the outcome for the loop:
-;;   'done   — durable DONE + completion event committed
-;;   'stale  — cancellation / stale fence / invalid state; ignore
-;;   'failed — the release gate refused; the wave is failed
-;;   'paused — provenance did not authorize DONE; stay resumable
-(define (finalize-checkpoint-decision base-dir rec wave-idx merge-sha release-check)
-  (define result
-    (finalize-delivered-wave! base-dir rec wave-idx merge-sha #:release-check release-check))
+;; W4: classify an ALREADY-OBTAINED completion result. The effect runs
+;; exactly once; classification never re-invokes it.
+(define (delivery-finalization-class result)
   (cond
     [(delivery-finalization-done? result) 'done]
     [(delivery-finalization-stale? result) 'stale]
     [(delivery-finalization-failed? result) 'failed]
     [else 'paused]))
+
+(define (finalize-checkpoint-decision base-dir rec wave-idx merge-sha release-check)
+  (delivery-finalization-class
+   (finalize-delivered-wave! base-dir rec wave-idx merge-sha #:release-check release-check)))
 
 ;; Classify one coordinator step:
 ;;   'advance   — durable journal moved; re-enter the loop
@@ -292,6 +300,112 @@
     (load-delivery-journal base-dir plan-id wave-idx)))
 
 ;; ============================================================
+;; W4: durable facts for the finalization's OWN non-DONE stops
+;; ============================================================
+
+;; All enrichment is READ-ONLY and additive: the legacy status, completed
+;; list and message of every stop stay byte-identical, and the diagnostics
+;; envelope rides the existing campaign-result subtype. The 'done branch is
+;; deliberately untouched — on-delivered may recursively run later campaign
+;; iterations, and wrapping ITS result with THIS finalization's decision
+;; would misattribute a later wave's diagnostics (plan §1 correction 1).
+
+;; The durable gate reason the completion gate stamped on the FRESH record
+;; (wave-failure-reason carries the release/verify refusal verbatim). #f when
+;; absent or blank — a blank reason is never presented as a cause.
+(define (durable-wave-failure-reason base-dir plan-id wave-idx)
+  (define fresh
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (load-campaign-record base-dir plan-id)))
+  (define wave
+    (and fresh
+         (for/first ([w (in-list (campaign-record-waves fresh))]
+                     #:when (= (campaign-wave-index w) wave-idx))
+           w)))
+  (define reason (and wave (campaign-wave-failure-reason wave)))
+  (and (string? reason) (positive? (string-length (string-trim reason))) reason))
+
+;; Read-only delivery-fact summary for one wave: the durable journal stage and
+;; the durable handoff status. Absent artifacts are named "absent" — never
+;; guessed as delivered or pending.
+(define (durable-delivery-fact-lines base-dir plan-id wave-idx)
+  (define journal (delivery-journal-snapshot base-dir plan-id wave-idx))
+  (define handoff
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (delivery-handoff-status base-dir plan-id wave-idx)))
+  (values (if journal
+              (format "durable journal stage: ~a" (or (hash-ref journal 'stage #f) "unset"))
+              "durable delivery journal: absent")
+          (format "delivery handoff: ~a" (or handoff "absent"))))
+
+;; Machine-checkable artifact references for a stop: the wave's durable
+;; handoff record when it exists, plus the wave identity itself.
+(define (finalization-artifacts base-dir plan-id wave-idx)
+  (define handoff-path
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (define p (delivery-handoff-path base-dir plan-id wave-idx))
+      (and (file-exists? p) (path->string p))))
+  (append (list (format "wave W~a" wave-idx))
+          (if handoff-path (list handoff-path) '())))
+
+;; The paused branch's honest detail, keyed by the ACTUAL completion status.
+(define (paused-finalization-detail base-dir plan-id wave-idx actual-status)
+  (define-values (journal-line handoff-line)
+    (durable-delivery-fact-lines base-dir plan-id wave-idx))
+  (case actual-status
+    [(delivery-pending-cannot-complete)
+     (string-join
+      (list "finalization authorization refused; durable delivery facts:" journal-line handoff-line)
+      "; ")]
+    [(invalid-wave) (format "durable record has no wave W~a; nothing was finalized" wave-idx)]
+    [(already-done) "wave is already done or deferred; finalization had nothing to commit"]
+    [(awaiting-delivery)
+     "verifier approval is parked; protected delivery has not produced an authenticated proof"]
+    [else (format "completion stopped with status ~a" actual-status)]))
+
+;; The paused branch's explicit next action. A delivery-authorization refusal
+;; maps to the protected-delivery controller hint; human waits stay explicit
+;; waits and are never spelled as ordinary execution success.
+(define (paused-finalization-next-action plan-id wave-idx actual-status)
+  (case actual-status
+    [(delivery-pending-cannot-complete awaiting-delivery)
+     (string-append
+      "complete protected delivery, then re-run /go (do not rerun implementation). "
+      (delivery-action-hint plan-id wave-idx))]
+    [(invalid-wave already-done) "re-run /go; the durable record decides the next route"]
+    [else "inspect the durable campaign record, then re-run /go"]))
+
+(define (finalize-checkpoint-result base-dir plan-id wave-idx completed class result)
+  (case class
+    [(stale)
+     (campaign-result-with-diagnostics
+      (campaign-result 'wave-cancelled completed "stale delivery completion ignored")
+      (campaign-diagnostics
+       'delivery-finalization-stale
+       #:detail (format "finalization completion status: ~a" (completion-result-status result))
+       #:next-action "re-run /go; the durable record decides the next route"
+       #:artifacts (finalization-artifacts base-dir plan-id wave-idx)))]
+    [(failed)
+     (campaign-result-with-diagnostics
+      (campaign-result 'wave-failed completed "release verification failed")
+      (campaign-diagnostics
+       'delivery-finalization-failed
+       #:detail (or (durable-wave-failure-reason base-dir plan-id wave-idx)
+                    "release gate refused without a durable failure reason")
+       #:next-action
+       "fix the reported gate failure; the wave stays failed until a fresh verified attempt delivers"
+       #:artifacts (finalization-artifacts base-dir plan-id wave-idx)))]
+    [else
+     (define actual-status (completion-result-status result))
+     (campaign-result-with-diagnostics
+      (campaign-result 'wave-blocked completed "delivery provenance changed during finalization")
+      (campaign-diagnostics
+       'delivery-finalization-pending
+       #:detail (paused-finalization-detail base-dir plan-id wave-idx actual-status)
+       #:next-action (paused-finalization-next-action plan-id wave-idx actual-status)
+       #:artifacts (finalization-artifacts base-dir plan-id wave-idx)))]))
+
+;; ============================================================
 ;; Checkpoint drivers (loop bookkeeping stays in the orchestrator)
 ;; ============================================================
 
@@ -299,6 +413,12 @@
 ;; on-delivered performs the durable DONE bookkeeping (mirror, notify, loop);
 ;; every non-delivered outcome is returned as a campaign result here so the
 ;; orchestrator's case body stays three lines.
+;;
+;; W4: the non-DONE results are enriched AT THEIR CONSTRUCTION POINT with the
+;; durable gate reason, typed code, next action and artifact references. The
+;; completion effect runs exactly once and its result classifies this
+;; finalization only; the 'done continuation's return value (which may be a
+;; later campaign iteration's result) is passed through untouched.
 (define (run-delivery-finalization base-dir
                                    plan-id
                                    rec
@@ -309,7 +429,9 @@
                                    #:on-delivered [on-delivered (lambda () #f)]
                                    #:tracker-reconciler [tracker-reconciler #f]
                                    #:delivery-reader [delivery-reader delivery-readback])
-  (case (finalize-checkpoint-decision base-dir rec wave-idx merge-sha release-check)
+  (define result
+    (finalize-delivered-wave! base-dir rec wave-idx merge-sha #:release-check release-check))
+  (case (delivery-finalization-class result)
     [(done)
      ;; v1.00.33 W0 (BUG-0074): the wave is provably `done` NOW, so the
      ;; tracker may be reconciled from its receipt. Deliberately BEFORE
@@ -334,12 +456,26 @@
         (length (reconciliation-checkpoint-result-actions tracker-result))))
      (on-delivered)]
     [(stale)
-     (campaign-result 'wave-cancelled (reverse completed) "stale delivery completion ignored")]
-    [(failed) (campaign-result 'wave-failed (reverse completed) "release verification failed")]
+     (finalize-checkpoint-result base-dir
+                                 plan-id
+                                 wave-idx
+                                 (reverse completed)
+                                 'stale
+                                 result)]
+    [(failed)
+     (finalize-checkpoint-result base-dir
+                                 plan-id
+                                 wave-idx
+                                 (reverse completed)
+                                 'failed
+                                 result)]
     [else
-     (campaign-result 'wave-blocked
-                      (reverse completed)
-                      "delivery provenance changed during finalization")]))
+     (finalize-checkpoint-result base-dir
+                                 plan-id
+                                 wave-idx
+                                 (reverse completed)
+                                 'paused
+                                 result)]))
 
 ;; ============================================================
 ;; W3: lane facts, the resume effect interpreter, and the block
@@ -523,16 +659,26 @@
                [else outcome]))
            outcome))
      (define after (and idx (delivery-journal-snapshot dir plan-id idx)))
-     (classify-lane-effect! dir
-                            plan-id
-                            idx
-                            before
-                            after
-                            outcome*
-                            (and rec
-                                 (campaign-record-cancellation (load-campaign-record dir plan-id)))
-                            message
-                            author-session-live?)]))
+     ;; W1: the post-effect campaign read is FRESH and possibly absent (the
+     ;; durable record can disappear mid-effect). The raw accessor on #f used
+     ;; to raise a contract violation instead of stopping. Classify the
+     ;; absence honestly with the orchestrator's existing typed stop: a
+     ;; blocked outcome naming the disappearance — no invented cancellation,
+     ;; no next launch, no reuse of the caller's stale pre-effect record.
+     (define post-effect-record (load-campaign-record dir plan-id))
+     (cond
+       [(not post-effect-record)
+        (campaign-outcome 'blocked "campaign record disappeared" #f)]
+       [else
+        (classify-lane-effect! dir
+                               plan-id
+                               idx
+                               before
+                               after
+                               outcome*
+                               (campaign-record-cancellation post-effect-record)
+                               message
+                               author-session-live?)])]))
 
 ;; Execute the ONE decided resume route. Returns a campaign-outcome; the caller
 ;; owns the loop continuation and the campaign result. The route was chosen from

@@ -499,6 +499,36 @@ are projections. One pass yields exactly one of `complete`, `launch`,
 typed kinds, statuses, wave indices and one route symbol — never from a
 human-readable message.
 
+### Execution admission and observability
+
+Tracker resume effects run only after `/go` owns the campaign lease and reloads
+its durable record. A contender performs no tracker reconciliation. Entry/status
+messages report durable wave/attempt facts rather than treating a live PLAN row
+as proof that a particular wave is executing. Historical markdown projection
+spellings remain compatible; they do not replace the durable execution status.
+
+Supplemental candidates undergo the same read-only static probe-admissibility
+check before sealing and before C1, then again against the authenticated staged
+context before R1. Acceptance is advisory, never an approval or a GREEN/RED proof.
+Refusals name their code, phase and offending path: for example,
+`runner-closure-mismatch` identifies an installed trusted runner file that differs
+from the candidate's committed runner; `unsupported-require` identifies an
+unsupported import in the test or helper. A passing Verify command alone cannot
+establish that the separate regression-probe harness is admissible.
+
+The bounded probe grammar remains literal: structured `only-in`, `prefix-in` and
+other transformed imports are not newly permitted. Use the documented literal
+helper imports and plain exports. Neither correcting diagnostics nor installing
+a newer engine rewrites a sealed candidate, grants a successor, or replays a
+consumed launch. Inspect the named failure instead of editing authority records.
+
+Verification events identify the owned job and its log. Identified progress
+survives unrelated session lifecycle messages; a foreign/unknown registry on
+reattach is shown as detached/unknown, not silently treated as completed or as
+permission to start another job. Finalization failures retain their primary
+reason and journal/handoff references. Read-only supplemental operation views
+also expose the exact bound candidate/supersession references when available.
+
 ### Recovery table
 
 | Condition | What q does | What you may safely do |
@@ -509,7 +539,8 @@ human-readable message.
 | Malformed `## Verify` in a frozen wave | Named reason with the offending span, identical for live and frozen consumers | Correct the wave doc in a NEW scope; frozen evidence is never rewritten. |
 | Lease held by another live session | No launch. The OS advisory lock is authoritative; a lock FILE on disk alone proves nothing | Wait for the owner, or stop that session. There is no force-release command, by design. |
 | Interrupted attempt (crash, kill, timeout) | Replay from the durable journal/fences; an in-flight author, review, verification or supplemental attempt is never duplicated | Run `/go` again. Do not delete journal, receipt or fence files. |
-| Retained supplemental evidence blocks the wave | The secondary/idempotent seal runs first, then a typed denial; no ordinary author/coordinator fallback | Complete the owner T/K/S decisions (`/evidence-replan …`) or leave it retained. Never invent approvals. |
+| Retained supplemental evidence awaits an owner decision | The exact bound K/S reference is inspectable; the genuine broker decision remains separate from execution | Inspect and decide in the owner UI, then resume only if the operation is still eligible. Never invent approvals. |
+| Supplemental operation is blocked or a probe launch was consumed without retained R1 | Terminal/ambiguous work stays spent; secondary idempotent sealing never permits ordinary author/coordinator fallback | Inspect the named refusal. Installing a repair does not authorize replay, claim deletion, a new amendment or reused approval. |
 | Review rejection | One durable retry with the findings by default; the new attempt gets a fresh session, attempt and fence | Let the retry run, or `/replan`. Do not rewrite review evidence. |
 | Delivery/merge proof missing or stale | `block`/`cancel` with the concrete reason; the wave is never marked DONE | Complete external delivery (merge authorization is operator-owned), then `/go`. |
 | Cancelled campaign | `cancel`: terminal, nothing is dispatched | Start a new campaign. `/reset` only changes planning mode; it does not rewrite durable state. |

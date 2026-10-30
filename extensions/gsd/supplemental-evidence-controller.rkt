@@ -55,11 +55,11 @@
          (only-in "review-proof.rkt" frozen-verify-binding load-receipt-owned-proof)
          (only-in "evidence-readiness.rkt" current-evidence-context evidence-readiness)
          (only-in "evidence-probe.rkt" run-staged-supplemental-probe! validate-baseline-probe!)
+         (only-in "evidence-discovery.rkt" static-probe-admission)
          (only-in "evidence-repair-format.rkt" canonical-evidence-json canonical-evidence-digest)
          (only-in "supplemental-preserved-candidate.rkt"
                   preserved-candidate-binding
                   preserved-candidate-admission-terminal
-                  validate-preserved-candidate-claim-binding!
                   validate-preserved-candidate!)
          "effective-verify-binding.rkt"
          "supplemental-evidence-format.rkt"
@@ -96,8 +96,7 @@
          supplemental-active-operation
          supplemental-discover
          supplemental-author-pending?
-         supplemental-approved-entry-context
-         supplemental-approved-entry-parent-allocation
+         supplemental-approved-entry-view
          supplemental-operation-live?
          supplemental-resumable?
          supplemental-operation-summary
@@ -753,52 +752,48 @@
     (refuse "supplemental checkpoint cannot reallocate a reserved or spent task"))
   (define proposal (load-supplemental-record (hash-ref pointer 'task-proposal)))
   (hash-ref (hash-ref proposal 'payload) 'task))
-;; Pure admission for an unallocated parked entry. The caller holds the
-;; authority lock through its campaign status commit.
-(define (supplemental-approved-entry-context base plan wave)
+;; ONE trusted authenticated entry view for an unallocated parked checkpoint
+;; (W3b). A single load of the exact live child T/pointer yields the sealed
+;; task, its authenticated entry context and the OPTIONAL preserved parent
+;; allocation. The view is an ephemeral result of this trusted loader: it is
+;; never cached across calls or locks, never serialized and never a grant,
+;; and it carries no caller-supplied authenticated flag — every load re-runs
+;; the FULL admission conjunction, so a view captured before a wait, mutation
+;; or revocation refuses on the next load.
+;;
+;; control-plane-head is sealed proposal-time provenance, not an execution
+;; equality pin. Separately authorized engineering may upgrade the trusted
+;; installed process without reapproving unchanged T. Caller-supplied code
+;; is not admitted here; HEAD equality would not authenticate loaded bytes
+;; (nor a dirty engine) within the same-uid/trusted-process boundary. Live
+;; source/receipt context must still match exactly — EXCEPT for an optional
+;; preserved-candidate task, whose authenticated E_old receipt context must
+;; match byte-for-byte while the live checkout is the exact metadata
+;; descendant M proved by the preserved-candidate leaf. The ordinary strict
+;; current-evidence-context gate is never weakened.
+;;
+;; Preserved tasks run the COMPLETE leaf admission ONCE per view load (the
+;; fixed-a3 claim binding AND the retained E_old receipt/context equality)
+;; and take the parked parent allocation from the SAME self-authenticated
+;; terminal, instead of re-inspecting that ancestry through a second
+;; accessor. Ordinary tasks keep parent-allocation #f so the caller keeps
+;; its exact context attempt/fence comparison. Nothing is allocated,
+;; reserved, proposed, approved or mutated here.
+(define (supplemental-approved-entry-view base plan wave)
   (define task (supplemental-approved-entry-task base plan wave))
   (define context (hash-ref task 'context))
-  ;; control-plane-head is sealed proposal-time provenance, not an execution
-  ;; equality pin. Separately authorized engineering may upgrade the trusted
-  ;; installed process without reapproving unchanged T. Caller-supplied code
-  ;; is not admitted here; HEAD equality would not authenticate loaded bytes
-  ;; (nor a dirty engine) within the same-uid/trusted-process boundary.
-  ;; Live source/receipt context must still match exactly — EXCEPT for an
-  ;; optional preserved-candidate task, whose authenticated E_old receipt
-  ;; context must match byte-for-byte while the live checkout is the exact
-  ;; metadata descendant M proved by the preserved-candidate leaf. The
-  ;; ordinary strict current-evidence-context gate is never weakened.
   (cond
-    [(preserved-candidate-binding task) (preserved-admission! base plan wave task)]
+    [(preserved-candidate-binding task)
+     (define admission (preserved-admission! base plan wave task))
+     (define terminal (preserved-candidate-admission-terminal admission))
+     (define allocation (allocation-of terminal))
+     (unless allocation
+       (refuse "preserved entry terminal lost its authenticated allocation"))
+     (hasheq 'task task 'context context 'parent-allocation allocation)]
     [else
      (unless (equal? context (current-evidence-context base plan wave))
-       (refuse "supplemental checkpoint task context drifted"))])
-  context)
-;; ADDITIVE parked-parent allocation accessor (preserved candidates only).
-;; The immutable E_old receipt context keeps its original attempt/fence
-;; (attempt-2/fence-5), but a preserved entry is parked on the fixed
-;; third-generation terminal allocation (attempt-6/fence-9). Comparing the
-;; parked attempt to E_old therefore always refused and /go never reached the
-;; zero-model adoption. This accessor authenticates the SAME live child
-;; T/pointer as the entry context (exact approval, operation absent or still
-;; "proposal-approved") and derives the allocation from the fully validated
-;; fixed amendment-3 terminal, whose facts the disposition claim owner already
-;; asserted equal to the amendment allocation. It deliberately uses the claim
-;; binding layer only: the retained E_old receipt/context equality is the
-;; entry-context accessor's layer, and the parked-entry caller always runs
-;; that accessor first (and again before committing). Ordinary tasks return #f
-;; so the caller keeps its exact context attempt/fence comparison. Nothing is
-;; allocated, reserved, proposed, approved or mutated here.
-(define (supplemental-approved-entry-parent-allocation base plan wave)
-  (define task (supplemental-approved-entry-task base plan wave))
-  (define preserved (task-preserved-candidate task))
-  (and preserved
-       (let* ([admission (validate-preserved-candidate-claim-binding! task)]
-              [terminal (preserved-candidate-admission-terminal admission)]
-              [allocation (allocation-of terminal)])
-         (unless allocation
-           (refuse "preserved entry terminal lost its authenticated allocation"))
-         allocation)))
+       (refuse "supplemental checkpoint task context drifted"))
+     (hasheq 'task task 'context context 'parent-allocation #f)]))
 
 ;; The supplemental task OWNS the retained receipt checkout while a pointer
 ;; exists (even malformed), or its permanent private recovery claim survives:
@@ -932,6 +927,42 @@
           (git repo "rev-parse" (string-append "HEAD:" path))
           'sha256
           (sha256-file (build-path repo path))))
+;; The named static-admission refusal message shared by the early candidate
+;; seal and the pre-C1 re-check: stable code, failing phase and path, bounded
+;; detail — actionable without any raw exception dump.
+(define (admission-refusal-message what admission)
+  (format "~a [~a/~a~a]: ~a"
+          what
+          (hash-ref admission 'code "unknown")
+          (hash-ref admission 'phase "unknown")
+          (let ([p (hash-ref admission 'path #f)])
+            (if p
+                (format "; path ~a" p)
+                ""))
+          (or (hash-ref admission 'detail #f) "static admission failed")))
+;; Early static admissibility of the FRESH candidate (W2): the SAME pure
+;; parser that discovery runs against authenticated staged E runs here
+;; BEFORE the candidate is sealed, so statically invalid test/helper output
+;; is refused with a named reason before operator approval or expensive C1.
+;; The harness entry is exactly the one the staged wrapper will carry (the
+;; K' manifest entry for the task harness path, {path sha256}). Advisory
+;; data only: passing this check never grants proof, approval or evidence.
+(define (check-candidate-admission! repo head task manifest)
+  (define harness-entry
+    (for/first ([e (in-list manifest)]
+                #:when (equal? (hash-ref e 'path #f) (hash-ref task 'harness-path)))
+      e))
+  (unless harness-entry
+    (refuse "candidate manifest lacks the approved harness entry"))
+  (define admission
+    (static-probe-admission
+     repo
+     head
+     (hash-ref task 'effective-command)
+     (hash-ref task 'test-path)
+     (list (hasheq 'path (hash-ref harness-entry 'path) 'sha256 (hash-ref harness-entry 'sha256)))))
+  (unless (hash-ref admission 'admitted?)
+    (refuse (admission-refusal-message "candidate probe admissibility refused" admission))))
 ;; Every commit between the approved context head and the candidate must be
 ;; single-purpose: only exact task paths, additions/modifications only.
 (define (validate-commit-chain! repo context task)
@@ -969,6 +1000,7 @@
   (define manifest
     (for/list ([path (in-list (task-expected-paths task))])
       (manifest-entry repo path)))
+  (check-candidate-admission! repo (hash-ref committed 'head) task manifest)
   (define candidate
     (seal-supplemental-record (hasheq 'kind
                                       "supplemental-evidence-candidate/v1"
@@ -1221,6 +1253,20 @@
   (define context (hash-ref task 'context))
   (define cwd (hash-ref context 'repo))
   (define c1 (hash-ref task 'effective-command))
+  ;; Before durably consuming verification admission (W2): re-run the SAME
+  ;; pure static admissibility against the SEALED candidate K' manifest, so
+  ;; approval-window drift or an inadmissible sealed candidate stops BEFORE
+  ;; expensive C1 work — named, without minting any evidence or consuming
+  ;; the fresh C1 admission.
+  (check-candidate-admission!
+   cwd
+   (git cwd "rev-parse" "HEAD")
+   task
+   (hash-ref (hash-ref (load-supplemental-record (hash-ref (hash-ref operation 'facts)
+                                                           'candidate-ref))
+                       'payload)
+             'manifest
+             '()))
   (define verify-bound (hash-ref (hash-ref task 'bounds) 'verify-timeout-sec))
   (define jobs (current-gsd-delivery-verify-jobs))
   (define command-sha

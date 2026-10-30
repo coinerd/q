@@ -2,7 +2,8 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary unit
-;; @timeout 120
+;; @timeout 600
+;; Real Git/authority fixtures take ~81s warm and exceeded 120s under the fast gate's cold parallel load.
 (require rackunit
          racket/file
          racket/runtime-path

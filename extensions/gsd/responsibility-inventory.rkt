@@ -770,7 +770,7 @@
    ;; adapter (delivery-handoff campaign-delivery-view-for-pass).
    (make-entry "delivery-finalize.rkt"
                'campaign-state
-               '(make-param)
+               '(make-param path-ops)
                '()
                '("racket/list" "racket/string"
                                "campaign-state"
@@ -1295,9 +1295,9 @@
                                "evidence-readiness"))
    (make-entry "supplemental-evidence-disposition.rkt"
                'campaign-state
-               '(git parameterize dynamic-require sha256)
+               '(git parameterize sha256)
                '()
-               '("racket/list" "racket/runtime-path"
+               '("racket/list" "campaign-lease"
                                "racket/string"
                                "racket/system"
                                "campaign-state"

@@ -116,10 +116,14 @@
 ;; other bounded verification-failure transitions; the orchestrator keeps the
 ;; guarded call site only. 1696 -> 1689 lines, defines unchanged at 11, below
 ;; the unchanged 1700 target.
+;; Execution robustness: the existing tracker sweep moved inside lease scope,
+;; using the fresh authoritative record. Its observable keyword delegates to
+;; the same sweep; no policy/transition was inlined. Repeated explanatory
+;; comments were consolidated. 1692 lines / 11 defines, below unchanged 1700.
 ((file . "extensions/gsd/go-orchestrator.rkt")
  (recorded-at
   .
-  "GSD simplification W5: typed no-change verdict + extracted retry transition; 1689 lines / 11 defines; below 1700")
- (line-count . 1689)
+  "GSD execution robustness: lease-owned tracker sweep; 1692 lines / 11 defines; below 1700")
+ (line-count . 1692)
  (top-level-define-count . 11)
  (w7-target-max-lines . 1700))

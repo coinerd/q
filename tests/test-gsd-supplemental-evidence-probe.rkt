@@ -2,10 +2,13 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary integration
-;; @timeout 600
+;; @timeout 1200
+;; Seven owned real-probe fixtures take ~399s warm; cold parallel runs exceeded the former 600s file budget.
 (require rackunit
          json
+         racket/file
          racket/runtime-path
+         racket/string
          "helpers/supplemental-evidence-fixture.rkt"
          "../extensions/gsd/evidence-discovery.rkt"
          "../extensions/gsd/evidence-repair-format.rkt"
@@ -276,6 +279,39 @@
                 (check-equal? (hash-ref telemetry 'failures) 0)
                 (check-equal? (hash-ref (car (hash-ref telemetry 'cases)) 'status) "error")))))
         (lambda () (delete-directory/files proofs))))))
+  (test-case "coverage gate proceeds on success and names refusals by name"
+    (call-with-supplemental-fixture
+     (lambda (repo baseline)
+       (define s (discover repo baseline))
+       (check-true (and s (valid-probe-spec? s)))
+       (when s
+         (define proofs (make-temporary-file "coverage-gate-~a" 'directory))
+         (dynamic-wind
+          void
+          (lambda ()
+            (parameterize ([current-owned-proof-root (build-path proofs "owned")])
+              ;; Success: coverage is #f here. The refusal message must never
+              ;; be built eagerly (regression: a hash-ref contract error on
+              ;; the #f success value broke every check-spec/validate-core
+              ;; pass, failing even the supplemental lock-order ladder).
+              (define prepared
+                (prepare-baseline-probe! repo (hash-set s 'timeout-sec 120) "coverage-gate"))
+              (check-equal? (hash-ref prepared 'kind) "prepared-probe/v1")
+              ;; Refusal: an unapproved focused stage is refused BY NAME.
+              (define message
+                (with-handlers ([exn:fail? exn-message])
+                  (prepare-baseline-probe!
+                   repo
+                   (hash-set s 'focused-normalized-command "racket tests/probe.rkt")
+                   "coverage-refused")
+                  #f))
+              (check-true (and message #t))
+              (when message
+                (check-true
+                 (string-contains? message "unapproved frozen regression coverage [unapproved-runner")
+                 message)
+                (check-false (string-contains? message "contract violation") message))))
+          (lambda () (delete-directory/files proofs)))))))
   (test-case "extended focused prefix authenticates the installed runner dependency closure"
     (define repo (make-temporary-file "supplemental-coverage-~a" 'directory))
     (dynamic-wind
@@ -322,4 +358,59 @@
                       "-m"
                       "tampered dependency"))
        (check-false (regression-command-covered? repo altered c1 fixture-test-path)))
-     (lambda () (delete-directory/files repo)))))
+     (lambda () (delete-directory/files repo))))
+
+  (test-case "reasoned supplemental discovery names harness refusals identically"
+    (call-with-supplemental-fixture
+     (lambda (repo baseline)
+       (define (discover-outcome [approved (manifest repo)])
+         (discover-evidence-probe-outcome repo
+                                          (fixture-context repo)
+                                          command
+                                          #:harness-files approved
+                                          #:baseline-head baseline
+                                          #:test-path fixture-test-path))
+       (define (refused? o code phase path)
+         (check-equal? (hash-ref o 'status) "refused")
+         (check-equal? (hash-ref o 'code) code)
+         (check-equal? (hash-ref o 'phase) phase)
+         (check-equal? (hash-ref o 'path) path)
+         (check-false (hash-ref o 'admitted? #t)))
+       ;; The reasoned admitted spec is byte-identical to the legacy wrapper.
+       (check-equal? (hash-ref (discover-outcome) 'status) "admitted")
+       (check-equal? (hash-ref (discover-outcome) 'spec) (discover repo baseline))
+       ;; Undeclared helper import: named, still refused.
+       (refused? (discover-outcome '())
+                 "helper-dependency-unapproved"
+                 "test-module"
+                 fixture-helper-path)
+       ;; Malformed digest and non-helper manifest paths are named.
+       (refused?
+        (discover-outcome (list (hash-set (car (manifest repo)) 'sha256 (make-string 64 #\0))))
+        "harness-digest-mismatch"
+        "helper-manifest"
+        fixture-helper-path)
+       (refused? (discover-outcome
+                  (list (hasheq 'path
+                                "runtime/settings-query.rkt"
+                                'sha256
+                                (sha256-file (build-path repo "runtime/settings-query.rkt")))))
+                 "invalid-harness-path"
+                 "helper-manifest"
+                 "runtime/settings-query.rkt")
+       ;; A helper transitive import that was never imported stays named.
+       (fixture-put repo
+                    "tests/helpers/unused.rkt"
+                    "#lang racket/base\n(provide unused)\n(define unused 1)\n")
+       (fixture-git repo "add" "tests/helpers/unused.rkt")
+       (fixture-git repo "commit" "-qm" "unused helper")
+       (define unused
+         (hasheq 'path
+                 "tests/helpers/unused.rkt"
+                 'sha256
+                 (sha256-file (build-path repo "tests/helpers/unused.rkt"))))
+       (refused? (discover-outcome (append (manifest repo) (list unused)))
+                 "unused-approved-helper"
+                 "helper-manifest"
+                 "tests/helpers/unused.rkt")
+       (check-false (discover repo baseline (append (manifest repo) (list unused))))))))

@@ -120,15 +120,16 @@
        (define-values (pp pt po)
          (inspect-parent (hash-ref predecessor 'parent-approval) predecessor rest))
        (define previous (read-disposition-claim! (claim-path (hash-ref predecessor 'sha256))))
-       (unless (and (equal? (hash-ref a (car prior-keys)) pp)
-                    (equal? (hash-ref a (cadr prior-keys)) (hash-ref predecessor 'parent-approval))
-                    (equal? (hash-ref previous 'amendment) predecessor)
-                    (equal? (hash-ref previous 'target) (pointer proposal grant))
-                    (equal? (hash-ref previous 'lineage) (hash-ref task 'disposition))
-                    (equal? (hash-ref task 'disposition)
-                            (disposition-descriptor predecessor
-                                                    (pointer pp (hash-ref predecessor 'parent-approval))))
-                    (inherited? pt task))
+       (unless (and
+                (equal? (hash-ref a (car prior-keys)) pp)
+                (equal? (hash-ref a (cadr prior-keys)) (hash-ref predecessor 'parent-approval))
+                (equal? (hash-ref previous 'amendment) predecessor)
+                (equal? (hash-ref previous 'target) (pointer proposal grant))
+                (equal? (hash-ref previous 'lineage) (hash-ref task 'disposition))
+                (equal? (hash-ref task 'disposition)
+                        (disposition-descriptor predecessor
+                                                (pointer pp (hash-ref predecessor 'parent-approval))))
+                (inherited? pt task))
          (refuse "historical disposition claim or scope mismatch")))
      (define r (hash-ref task 'recovery))
      (unless (and (equal? (hash-ref r 'parent-proposal) (hash-ref a 'root-proposal))
@@ -178,19 +179,28 @@
                 (valid-preserved-candidate? (hash-ref d 'preserved-candidate #f))))))
 (define (check-lineage! task)
   (define a (disposition-amendment))
-  (define-values (p parent terminal)
-    (inspect-supplemental-disposition-parent (hash-ref a 'parent-approval)))
-  (define old (pointer p (hash-ref a 'parent-approval)))
   (define d (hash-ref task 'disposition #f))
   (define preserved? (and (hash? d) (hash-has-key? d 'preserved-candidate)))
+  ;; Preserved mode: the leaf self-authenticates the fixed third-generation
+  ;; ancestry ONCE (same-thread reentrant authority lock) and its immutable
+  ;; admission carries the authenticated parent proposal/task/terminal. This
+  ;; claim owner reuses that result below instead of independently
+  ;; re-inspecting the same ancestry; the admission can only come from the
+  ;; leaf's own validation, never from a caller. Ordinary mode keeps its
+  ;; existing inspection path and never loads the preserved leaf.
+  (define-values (p parent terminal)
+    (if preserved?
+        (let ([admission (validate-preserved-candidate-claim-binding! task)])
+          (values (preserved-candidate-admission-parent-proposal admission)
+                  (preserved-candidate-admission-parent-task admission)
+                  (preserved-candidate-admission-terminal admission)))
+        (inspect-supplemental-disposition-parent (hash-ref a 'parent-approval))))
+  (define old (pointer p (hash-ref a 'parent-approval)))
   (unless (and (equal? (hash-ref task 'kind) "supplemental-evidence-task/v3")
                (descriptor-base-matches? d a old)
-               ;; Preserved mode revalidates candidate/approval identity, the
-               ;; exact K->M settlement and the fixed a3 ancestry on every
-               ;; admission. Ordinary mode never loads the preserved leaf.
-               (if preserved?
-                   (validate-preserved-candidate-claim-binding! task)
-                   #t)
+               ;; Preserved mode already ran the full leaf validation above
+               ;; (the leaf self-authenticates ancestry once). Ordinary mode
+               ;; never loads the preserved leaf, exactly as before.
                (inherited? parent task))
     (refuse "disposition changed fixed amendment or inherited scope"))
   (define old-claim (read-recovery-claim! (recovery-claim-path (hash-ref a 'root-approval))))

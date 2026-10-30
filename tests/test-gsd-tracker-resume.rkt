@@ -9,6 +9,7 @@
          racket/logging
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
+         (only-in "../extensions/gsd/planning-paths.rkt" campaign-record-file)
          "../extensions/gsd/delivery-handoff.rkt"
          "../extensions/gsd/delivery-journal.rkt"
          "../extensions/gsd/gh-cli-tracker-adapter.rkt"
@@ -81,6 +82,24 @@
      (persist-campaign! dir rec)
      (check-equal?
       (resume-tracker-reconciliation! dir rec #:target? (lambda _ #f) #:resolver unexpected)
+      '()))
+   (lambda () (delete-directory/files dir))))
+
+;; W1 pin: the sweep is a production effect, so an absent durable record is
+;; zero callbacks — never a reconcile attempt against the caller's stale copy.
+;; (The orchestrator additionally runs this sweep only inside the successful
+;; campaign lease, after the authoritative reload.)
+(test-case "an absent durable campaign record performs zero tracker callbacks"
+  (define dir (make-temporary-file "tracker-resume~a" 'directory))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define rec (seed-wave! dir 'done))
+     (delete-file (campaign-record-file dir (campaign-plan-id rec)))
+     (define (unexpected . _)
+       (error 'test "tracker called without a durable record"))
+     (check-equal?
+      (resume-tracker-reconciliation! dir rec #:target? (lambda _ #t) #:resolver unexpected)
       '()))
    (lambda () (delete-directory/files dir))))
 

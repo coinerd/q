@@ -117,7 +117,13 @@
                   verification-job?
                   verification-job-state
                   verification-job-exit-code
-                  verification-job-log-path))
+                  verification-job-log-path
+                  ;; W4: a replaced job's facts is a captured tombstone — the
+                  ;; reattach path reads its terminal facts shape-aware.
+                  verification-terminal-tombstone?
+                  verification-terminal-tombstone-state
+                  verification-terminal-tombstone-exit-code
+                  verification-terminal-tombstone-log-path))
 
 ;; Re-export all public APIs
 (provide cmd-ctx
@@ -139,7 +145,11 @@
          process-extension-command
          execute-extension-command
          cmd-ctx-session-factory-runner
-         cmd-ctx-goal-cancel-box)
+         cmd-ctx-goal-cancel-box
+         ;; W4: the registry-backed reattach route, exported for the R102
+         ;; consumer-side identity tests (foreign incarnation / unknown job /
+         ;; tombstone attribution).
+         reattach-verification-state)
 
 ;; ============================================================
 ;; Extension command dispatch (extracted W-09)
@@ -192,11 +202,20 @@
 ;; still-truthful facts come from the trusted registry:
 ;;   - a job still running stays attributable with an EXPLICIT detached
 ;;     status (never falsely completed/cancelled, no cached elapsed);
-;;   - a job terminal in the registry gets a durable, truthful verdict entry;
-;;   - a foreign-incarnation or unknown job simply clears (registry
-;;     recreation loses the window by design; nothing is guessed).
+;;   - a job terminal in the registry (live record or captured tombstone of
+;;     a replaced handle) gets a durable, truthful verdict entry;
+;;   - W4: a foreign-incarnation job (process restart / registry recreation)
+;;     or a job this registry does not know gets an EXPLICIT unknown
+;;     attribution naming the identity — never a silent clear that pretends
+;;     no verification ran, and never a relaunch: this path only renders
+;;     observed facts, so C1/R1 are never restarted from display state.
 ;; The foreground attachment generation is always bumped so queued events
 ;; from the detached session can neither set nor clear the restored state.
+(define (reattach-verification-facts-ref facts key tombstone-ref)
+  (if (verification-job? facts)
+      (key facts)
+      (tombstone-ref facts)))
+
 (define (reattach-verification-state state)
   (define progress (ui-state-verification-progress state))
   (define cleared
@@ -207,26 +226,51 @@
     [(not (and job-id incarnation)) cleared]
     [else
      (define reg (current-gsd-verification-registry))
+     (define same-incarnation? (equal? incarnation (verification-registry-incarnation reg)))
      (define facts
-       (and (equal? incarnation (verification-registry-incarnation reg))
-            (verification-job-facts reg job-id)))
+       (and same-incarnation? (verification-job-facts reg job-id)))
      (cond
-       [(not facts) cleared]
-       [(eq? (verification-job-state facts) 'running)
-        (set-status-message cleared
-                            (format "W~a verify running (detached) · log ~a"
-                                    (hash-ref progress 'wave "?")
-                                    (verification-job-log-path facts)))]
-       [else
-        (add-transcript-entry
+       [facts
+        (define state-name (reattach-verification-facts-ref facts verification-job-state
+                                                            verification-terminal-tombstone-state))
+        (cond
+          [(eq? state-name 'running)
+           (set-status-message cleared
+                               (format "W~a verify running (detached) · log ~a"
+                                       (hash-ref progress 'wave "?")
+                                       (verification-job-log-path facts)))]
+          [else
+           (add-transcript-entry
+            cleared
+            (make-entry 'system
+                        (format "[Verification (detached): state ~a exit ~a · log ~a]"
+                                state-name
+                                (reattach-verification-facts-ref
+                                 facts
+                                 verification-job-exit-code
+                                 verification-terminal-tombstone-exit-code)
+                                (reattach-verification-facts-ref
+                                 facts
+                                 verification-job-log-path
+                                 verification-terminal-tombstone-log-path))
+                        (current-inexact-milliseconds)
+                        (hasheq 'verification #t 'detached #t)))])]
+       ;; W4: explicit unknown attribution — the incarnation changed (the
+       ;; window is lost by design) or the job is unknown to this registry.
+       ;; The registry job-id is preserved in the text so the operator can
+       ;; correlate logs; nothing is guessed, nothing is relaunched.
+       [same-incarnation?
+        (set-status-message
          cleared
-         (make-entry 'system
-                     (format "[Verification (detached): state ~a exit ~a · log ~a]"
-                             (verification-job-state facts)
-                             (verification-job-exit-code facts)
-                             (verification-job-log-path facts))
-                     (current-inexact-milliseconds)
-                     (hasheq 'verification #t 'detached #t)))])]))
+         (format "W~a verify job ~a unknown in this registry; attribution lost, not relaunched"
+                 (hash-ref progress 'wave "?")
+                 job-id))]
+       [else
+        (set-status-message
+         cleared
+         (format "W~a verify job ~a belongs to a foreign registry incarnation (process restarted); attribution unknown, not relaunched"
+                 (hash-ref progress 'wave "?")
+                 job-id))])]))
 
 (define (execute-campaign-command cctx campaign-token display-text)
   (when display-text
