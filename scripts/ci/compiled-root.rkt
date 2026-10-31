@@ -34,6 +34,10 @@
          "../../ci/prepared-environment/compiled-root.rkt"
          "../../ci/prepared-environment/compiled-root-manifest.rkt")
 
+;; Provided for the contract test (tests/test-compiled-root-manifest.rkt):
+;; the W1a tests/fixtures exclusion is pinned against the real enumeration.
+(provide derive-checkout-modules)
+
 ;; Launch a child racket process running MODULE with the compiled-root
 ;; resolution mapping inherited via command-line flags. Returns
 ;; (values exit-code stdout/stderr transcript).
@@ -81,7 +85,7 @@
 ;; reports how many it skipped, instead of failing the lane. Test MODULES are
 ;; still included: the root stays an honest picture of what CI runs.
 ;;
-;; Returns (values modules skipped-non-module-inputs).
+;; Returns (values modules skipped-non-compilation-inputs).
 (define (derive-checkout-modules checkout)
   (define abs (path->complete-path checkout))
   (unless (directory-exists? abs)
@@ -89,6 +93,15 @@
   (define (excluded? p)
     (define parts (map path->string (explode-path (find-relative-path abs p))))
     (or (member ".git" parts) (member "compiled" parts)))
+  ;; W1a (open-gap-closure): deliberate-fault fixtures under tests/fixtures/
+  ;; are NEGATIVE-test inputs (e.g. the BUG-0088 baseline-query.rkt, a valid
+  ;; module whose require deliberately targets a nonexistent sibling). They
+  ;; are compiled per-test by the runner with its own error handling and must
+  ;; never enter the whole-checkout producer inventory: coordinator trial c01
+  ;; (run 41231230944) failed the C-lane producer exactly there.
+  (define (fixture-excluded? p)
+    (define parts (map path->string (explode-path (find-relative-path abs p))))
+    (and (member "tests" parts) (member "fixtures" parts)))
   (define candidates
     (sort (for/list ([p (in-list (find-files (lambda (p)
                                                (regexp-match? #rx"\\.(rkt|rktl)$" (path->string p)))
@@ -96,9 +109,9 @@
                      #:unless (excluded? p))
             (path->string (find-relative-path abs p)))
           string<?))
-  (define-values (mods skipped)
-    (partition (lambda (rel) (module-input? (build-path abs rel))) candidates))
-  (values mods skipped))
+  (define-values (fixture-inputs rest) (partition fixture-excluded? candidates))
+  (define-values (mods skipped) (partition (lambda (rel) (module-input? (build-path abs rel))) rest))
+  (values mods (append skipped fixture-inputs)))
 
 ;; A `.rkt`/`.rktl` file is a compilation input only if it declares a module:
 ;; a `#lang` line (optionally after a shebang) or an explicit `(module …)` form.
