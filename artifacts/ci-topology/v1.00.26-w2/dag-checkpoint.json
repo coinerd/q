@@ -1,137 +1,145 @@
 {
-  "schema": "ci-topology/dag-checkpoint@1",
-  "wave": "v1.00.26-w2",
-  "label": "fast-env starts after lightweight lint, concurrent with lint-quality",
-  "repository": "coinerd/q",
-  "captured_at": "2026-09-06T23:58:00Z",
-  "description": "same-SHA before/after needs-edge checkpoint for the W2 resequencing: the fast-env prepared-environment producer keeps a single needs edge into the lightweight lint job and runs concurrently with lint-quality; the manifest/OS/Racket/lockfile verification steps and the loud fallback are byte-identical. This is a topology checkpoint, not a cohort.",
-  "provenance": {
-    "before": "artifacts/ci-topology/v1.00.26-w0/graph-snapshot.json#timing_baseline (measured run, head_sha c6ee39e43025cc49202a27084aed459221dac43c)",
-    "after": "derived shape projection at the SAME head SHA under the explicit W2 edge (fast-env needs: [lint] against the lightweight lint); per-job times inherited from the W1 split-topology projection because the W2 change makes the scheduling intent explicit without altering the split graph",
-    "branch": "campaign/v1.00.26-w2",
-    "base": "campaign/v1.00.26-w1 @ 6e9d2bac9e5b9c99277636661e357479a0ee988c",
-    "edges_recorded_from": ".github/workflows/ci.yml (the W2-relevant subgraph of the live needs edges at this commit; the full graph remains pinned by the W0/W1 tests)"
-  },
-  "policy_pin": [
-    "lint",
-    "lint-quality",
-    "security",
-    "release-dry-run",
-    "workflows (0)",
-    "workflows (1)",
-    "workflows-aggregate",
-    "smoke (ubuntu-latest)",
-    "test (0)",
-    "test (1)",
-    "test (2)",
-    "test-aggregate",
-    "test-platform"
+ "schema": "ci-topology/dag-checkpoint@1",
+ "wave": "v1.00.26-w2",
+ "label": "fast-env starts after lightweight lint, concurrent with lint-quality",
+ "repository": "coinerd/q",
+ "captured_at": "2026-09-06T23:58:00Z",
+ "description": "same-SHA before/after needs-edge checkpoint for the W2 resequencing: the fast-env prepared-environment producer keeps a single needs edge into the lightweight lint job and runs concurrently with lint-quality; the manifest/OS/Racket/lockfile verification steps and the loud fallback are byte-identical. This is a topology checkpoint, not a cohort.",
+ "provenance": {
+  "before": "artifacts/ci-topology/v1.00.26-w0/graph-snapshot.json#timing_baseline (measured run, head_sha c6ee39e43025cc49202a27084aed459221dac43c)",
+  "after": "derived shape projection at the SAME head SHA under the explicit W2 edge (fast-env needs: [lint] against the lightweight lint); per-job times inherited from the W1 split-topology projection because the W2 change makes the scheduling intent explicit without altering the split graph",
+  "branch": "campaign/v1.00.26-w2",
+  "base": "campaign/v1.00.26-w1 @ 6e9d2bac9e5b9c99277636661e357479a0ee988c",
+  "edges_recorded_from": ".github/workflows/ci.yml (the W2-relevant subgraph of the live needs edges at this commit; the full graph remains pinned by the W0/W1 tests)"
+ },
+ "policy_pin": [
+  "lint",
+  "lint-quality",
+  "security",
+  "release-dry-run",
+  "workflows (0)",
+  "workflows (1)",
+  "workflows-aggregate",
+  "smoke (ubuntu-latest)",
+  "test (0)",
+  "test (1)",
+  "test (2)",
+  "test-aggregate",
+  "test-platform"
+ ],
+ "needs_edges": {
+  "lint": [],
+  "lint-quality": [],
+  "fast-env": [
+   "lint"
   ],
-  "needs_edges": {
-    "lint": [],
-    "lint-quality": [],
-    "fast-env": ["lint"],
-    "test": ["lint", "fast-env"],
-    "test-platform": ["lint"],
-    "fast-env_to_lint-quality_ordering_edge": "none",
-    "note": "fast-env and lint-quality have no ordering edge in either direction; the W2 resequencing touches the fast-env needs edge only, and downstream requirements (test needs lint+fast-env, test-platform needs lint) are unchanged from the W0/W1 pins."
+  "test": [
+   "lint",
+   "fast-env"
+  ],
+  "test-platform": [
+   "lint"
+  ],
+  "fast-env_to_lint-quality_ordering_edge": "none",
+  "note": "fast-env and lint-quality have no ordering edge in either direction; the W2 resequencing touches the fast-env needs edge only, and downstream requirements (test needs lint+fast-env, test-platform needs lint) are unchanged from the W0/W1 pins."
+ },
+ "fast_env_verification_contract": {
+  "prepare_action": ".github/actions/prepare-racket-environment/action.yml",
+  "prepare_action_sha256": "7d1b3a661c12a35a320ccf8be9ac7b9dfbb8a4e34438a9e7ee91afd3cd94db6d",
+  "setup_action": ".github/actions/setup-racket/action.yml",
+  "setup_action_sha256": "4873bec295c1bc47964f71304e027ece91a5a003b1db6dcdb477c87ebec51fb0",
+  "pinned_dimensions": [
+   "manifest.rkt emit",
+   "manifest.rkt verify",
+   "lock_digest",
+   "::error::",
+   "exit 1"
+  ],
+  "loud_fallback": [
+   "::warning::prepared-environment restore failed or mismatched",
+   "REBUILT",
+   "needs.fast-env.result"
+  ],
+  "note": "re-stamped by v1.00.30 W0 (BUG-0073): set -o pipefail added before the step-summary tee in the pack-size step; manifest/OS/Racket/lockfile verification steps and the guarded restore action unchanged",
+  "w6_restamp": {
+   "wave": "v1.00.29-w6",
+   "note": "v1.00.29 W6 extended the shared setup-racket action with the prepared-environment identity-manifest steps (compare at restore + save-side manifest + loud counted cold fallback, spec \u00a76 W4) and re-stamped setup_action_sha256 from the W4-era value 4d93721474c14f9e396ce1ea4fd7e4c08732c8de9870d7cf6ac4662f2d6c396c to a8532d7cfa683fe3e9ed3426dfcf11dd43531acec166ee14f7e802e016062784. The W4 BUG-0065 purge step and the guarded restore step are byte-identical (pinned by tests/test-workflow-purge-contract.rkt and tests/test-release-workflow-contract.rkt); the literal pins moved with this re-stamp are tests/test-ci-runtime-contract.rkt (checkpoint file hash, re-recorded in SHA256SUMS) and tests/test-w9-ci-workflow-verification.rkt (setup_action_sha256)."
   },
-  "fast_env_verification_contract": {
-    "prepare_action": ".github/actions/prepare-racket-environment/action.yml",
-    "prepare_action_sha256": "49bbb6795241550d973f70d12b9e568feb67f8065852c470ff9d8f1a204e683e",
-    "setup_action": ".github/actions/setup-racket/action.yml",
-    "setup_action_sha256": "4873bec295c1bc47964f71304e027ece91a5a003b1db6dcdb477c87ebec51fb0",
-    "pinned_dimensions": [
-      "manifest.rkt emit",
-      "manifest.rkt verify",
-      "lock_digest",
-      "::error::",
-      "exit 1"
-    ],
-    "loud_fallback": [
-      "::warning::prepared-environment restore failed or mismatched",
-      "REBUILT",
-      "needs.fast-env.result"
-    ],
-    "note": "re-stamped by v1.00.30 W0 (BUG-0073): set -o pipefail added before the step-summary tee in the pack-size step; manifest/OS/Racket/lockfile verification steps and the guarded restore action unchanged",
-    "w6_restamp": {
-      "wave": "v1.00.29-w6",
-      "note": "v1.00.29 W6 extended the shared setup-racket action with the prepared-environment identity-manifest steps (compare at restore + save-side manifest + loud counted cold fallback, spec §6 W4) and re-stamped setup_action_sha256 from the W4-era value 4d93721474c14f9e396ce1ea4fd7e4c08732c8de9870d7cf6ac4662f2d6c396c to a8532d7cfa683fe3e9ed3426dfcf11dd43531acec166ee14f7e802e016062784. The W4 BUG-0065 purge step and the guarded restore step are byte-identical (pinned by tests/test-workflow-purge-contract.rkt and tests/test-release-workflow-contract.rkt); the literal pins moved with this re-stamp are tests/test-ci-runtime-contract.rkt (checkpoint file hash, re-recorded in SHA256SUMS) and tests/test-w9-ci-workflow-verification.rkt (setup_action_sha256)."
-    },
-    "w2_restamp": {
-      "wave": "v1.00.30-w2",
-      "note": "v1.00.30 W2 (issue #9688) added eager-compilation containment telemetry outputs to the shared setup-racket action (eager-setup-seconds, purge-zo-count, cache-state) and re-stamped setup_action_sha256 from the W6-era value a8532d7cfa683fe3e9ed3426dfcf11dd43531acec166ee14f7e802e016062784 to da753d04a509f5e9c093543afe4cfb7e545dc6d28b511466472d82dcd0347772. The W4 BUG-0065 purge step and the guarded restore step remain byte-identical (pinned by tests/test-workflow-purge-contract.rkt and tests/test-release-workflow-contract.rkt); the literal pins moved with this re-stamp are tests/test-ci-runtime-contract.rkt (checkpoint file hash, re-recorded in SHA256SUMS) and tests/test-w9-ci-workflow-verification.rkt (setup_action_sha256)."
-    },
-    "w1_restamp": {
-      "wave": "v1.00.31-w1",
-      "note": "v1.00.31 W1 (register F1) re-stamped prepare_action_sha256 from the value the v1.00.26-w2 checkpoint recorded (f0e46ee2f20b1a4226c51dd70f532722781e3a7f6ade0542552d7cd615f02501) to 608d93c5d94ae3fb6079d98fe8b861596b4ac45e4da2a8e975e4c5ea7e1b038c so that the invocation the action DECLARES is executable: the action gains the compiled-root input (default 'false'), the COMPILED_ROOT env, and a guarded whole-checkout producer invocation inside the pack step's run: script (the same shape as the v1.00.30 W0 BUG-0073 pipefail re-stamp). Verification semantics are unchanged and mechanically proven in artifacts/wave-delivery-integrity/v1.00.31-w1/raw/action-pin-proof.txt: the diff is deletion-free (+22, -0), the pre-W1 file is an ORDERED SUBSEQUENCE of the post-W1 file, and the pinned dimensions (manifest.rkt emit, manifest.rkt verify, lock_digest, ::error::, exit 1) are unchanged; with the default the inserted block does not execute at all. setup_action_sha256 is untouched. The literal pins moved with this re-stamp are tests/test-ci-runtime-contract.rkt (checkpoint file hash, re-recorded in SHA256SUMS) and tests/test-w9-ci-workflow-verification.rkt (prepare_action_sha256)."
-    },
-    "w7_restamp": {
-      "wave": "v1.00.31-w7",
-      "note": "v1.00.31 W7 repaired the blocked v1.00.30 W4 wave (issue #9690) on top of this commit: the W4 lane's producer declaration is now the SAME single guarded whole-checkout invocation the W1 contract pinned (the duplicate ungated invocation the blocked wave carried was dropped, and the published root stays inside the already-contracted q-compiled/ prefix), so the action carries both the W4 activation semantics (SAME-RUN SAME-HEAD publication before resolution, same-run restore, loud eager fallback, default off) and the W1 invocation contract (tests/test-compiled-root-workflow.rkt executes exactly the declared line). prepare_action_sha256 is re-stamped from the W1 value 608d93c5d94ae3fb6079d98fe8b861596b4ac45e4da2a8e975e4c5ea7e1b038c to 49bbb6795241550d973f70d12b9e568feb67f8065852c470ff9d8f1a204e683e, because the W4 wave's producer telemetry output (compiled-root-producer-seconds) is carried forward with the lane. The independent W4 review then required the setup action's resolution gate to be opted into explicitly: the step now runs only when the compiled-root mode input is a resolution mode (default unset keeps a restored root untouched) and tests/ci pass the mode at the fast-shard call site, so setup_action_sha256 is re-stamped again from 6fb8fd7167932942668baf75d1fc939564c0a925e9ff5d862948e0ce03aab55f to 4873bec295c1bc47964f71304e027ece91a5a003b1db6dcdb477c87ebec51fb0 within this same wave. Verified against the merged files themselves (sha256sum of the two action files) and pinned by tests/test-ci-runtime-contract.rkt (checkpoint file hash) and tests/test-w9-ci-workflow-verification.rkt (both action hashes and the lane's byte-identity contract)."
-    }
+  "w2_restamp": {
+   "wave": "v1.00.30-w2",
+   "note": "v1.00.30 W2 (issue #9688) added eager-compilation containment telemetry outputs to the shared setup-racket action (eager-setup-seconds, purge-zo-count, cache-state) and re-stamped setup_action_sha256 from the W6-era value a8532d7cfa683fe3e9ed3426dfcf11dd43531acec166ee14f7e802e016062784 to da753d04a509f5e9c093543afe4cfb7e545dc6d28b511466472d82dcd0347772. The W4 BUG-0065 purge step and the guarded restore step remain byte-identical (pinned by tests/test-workflow-purge-contract.rkt and tests/test-release-workflow-contract.rkt); the literal pins moved with this re-stamp are tests/test-ci-runtime-contract.rkt (checkpoint file hash, re-recorded in SHA256SUMS) and tests/test-w9-ci-workflow-verification.rkt (setup_action_sha256)."
   },
-  "timing_checkpoint": {
-    "label": "topology checkpoint — not a cohort",
-    "measurement_kind": "derived-shape-projection",
-    "derived_from": "artifacts/ci-topology/v1.00.26-w1/dag-checkpoint.json#timing_checkpoint",
-    "note": "before/after are anchored to the SAME head SHA (same-SHA pairing). before is the measured W0 baseline run; after is the derived projection under the W2 edge: fast-env starts right after the lightweight lint completes and its execution interval overlaps lint-quality's. The derived times match the W1 split-topology projection because the W2 change pins the already-split scheduling as an explicit single-element needs edge.",
-    "before": {
-      "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
-      "jobs": [
-        {
-          "name": "lint",
-          "started_at": "2026-09-06T18:22:28Z",
-          "completed_at": "2026-09-06T18:26:45Z",
-          "conclusion": "success",
-          "note": "heavyweight pre-split lint (W0 measured baseline)"
-        },
-        {
-          "name": "fast-env",
-          "started_at": "2026-09-06T18:26:47Z",
-          "completed_at": "2026-09-06T18:31:28Z",
-          "conclusion": "success",
-          "note": "waits behind the heavyweight lint"
-        },
-        {
-          "name": "test (0)",
-          "started_at": "2026-09-06T18:31:30Z",
-          "completed_at": "2026-09-06T18:35:09Z",
-          "conclusion": "success"
-        }
-      ]
+  "w1_restamp": {
+   "wave": "v1.00.31-w1",
+   "note": "v1.00.31 W1 (register F1) re-stamped prepare_action_sha256 from the value the v1.00.26-w2 checkpoint recorded (f0e46ee2f20b1a4226c51dd70f532722781e3a7f6ade0542552d7cd615f02501) to 608d93c5d94ae3fb6079d98fe8b861596b4ac45e4da2a8e975e4c5ea7e1b038c so that the invocation the action DECLARES is executable: the action gains the compiled-root input (default 'false'), the COMPILED_ROOT env, and a guarded whole-checkout producer invocation inside the pack step's run: script (the same shape as the v1.00.30 W0 BUG-0073 pipefail re-stamp). Verification semantics are unchanged and mechanically proven in artifacts/wave-delivery-integrity/v1.00.31-w1/raw/action-pin-proof.txt: the diff is deletion-free (+22, -0), the pre-W1 file is an ORDERED SUBSEQUENCE of the post-W1 file, and the pinned dimensions (manifest.rkt emit, manifest.rkt verify, lock_digest, ::error::, exit 1) are unchanged; with the default the inserted block does not execute at all. setup_action_sha256 is untouched. The literal pins moved with this re-stamp are tests/test-ci-runtime-contract.rkt (checkpoint file hash, re-recorded in SHA256SUMS) and tests/test-w9-ci-workflow-verification.rkt (prepare_action_sha256)."
+  },
+  "w7_restamp": {
+   "wave": "v1.00.31-w7",
+   "note": "v1.00.31 W7 repaired the blocked v1.00.30 W4 wave (issue #9690) on top of this commit: the W4 lane's producer declaration is now the SAME single guarded whole-checkout invocation the W1 contract pinned (the duplicate ungated invocation the blocked wave carried was dropped, and the published root stays inside the already-contracted q-compiled/ prefix), so the action carries both the W4 activation semantics (SAME-RUN SAME-HEAD publication before resolution, same-run restore, loud eager fallback, default off) and the W1 invocation contract (tests/test-compiled-root-workflow.rkt executes exactly the declared line). prepare_action_sha256 is re-stamped from the W1 value 608d93c5d94ae3fb6079d98fe8b861596b4ac45e4da2a8e975e4c5ea7e1b038c to 49bbb6795241550d973f70d12b9e568feb67f8065852c470ff9d8f1a204e683e, because the W4 wave's producer telemetry output (compiled-root-producer-seconds) is carried forward with the lane. The independent W4 review then required the setup action's resolution gate to be opted into explicitly: the step now runs only when the compiled-root mode input is a resolution mode (default unset keeps a restored root untouched) and tests/ci pass the mode at the fast-shard call site, so setup_action_sha256 is re-stamped again from 6fb8fd7167932942668baf75d1fc939564c0a925e9ff5d862948e0ce03aab55f to 4873bec295c1bc47964f71304e027ece91a5a003b1db6dcdb477c87ebec51fb0 within this same wave. Verified against the merged files themselves (sha256sum of the two action files) and pinned by tests/test-ci-runtime-contract.rkt (checkpoint file hash) and tests/test-w9-ci-workflow-verification.rkt (both action hashes and the lane's byte-identity contract)."
+  },
+  "prepare_action_w1a_note": "open-gap-closure W1a (2026-10-31): hidden-file fail-closed guard added to the pack step; byte-identity checkpoint consciously re-recorded \u2014 smoke run 41192722012 proved the unguarded pack shipped a pruned identity basis"
+ },
+ "timing_checkpoint": {
+  "label": "topology checkpoint \u2014 not a cohort",
+  "measurement_kind": "derived-shape-projection",
+  "derived_from": "artifacts/ci-topology/v1.00.26-w1/dag-checkpoint.json#timing_checkpoint",
+  "note": "before/after are anchored to the SAME head SHA (same-SHA pairing). before is the measured W0 baseline run; after is the derived projection under the W2 edge: fast-env starts right after the lightweight lint completes and its execution interval overlaps lint-quality's. The derived times match the W1 split-topology projection because the W2 change pins the already-split scheduling as an explicit single-element needs edge.",
+  "before": {
+   "head_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
+   "jobs": [
+    {
+     "name": "lint",
+     "started_at": "2026-09-06T18:22:28Z",
+     "completed_at": "2026-09-06T18:26:45Z",
+     "conclusion": "success",
+     "note": "heavyweight pre-split lint (W0 measured baseline)"
     },
-    "after": {
-      "anchor_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
-      "jobs": [
-        {
-          "name": "lint",
-          "started_at": "2026-09-06T18:22:28Z",
-          "completed_at": "2026-09-06T18:23:12Z",
-          "conclusion": "success",
-          "note": "lightweight: governance controller tests + workflow YAML validation (~44s)"
-        },
-        {
-          "name": "lint-quality",
-          "started_at": "2026-09-06T18:22:29Z",
-          "completed_at": "2026-09-06T18:26:51Z",
-          "conclusion": "success",
-          "note": "full Racket lint suite, parallel; no ordering edge with fast-env"
-        },
-        {
-          "name": "fast-env",
-          "started_at": "2026-09-06T18:23:14Z",
-          "completed_at": "2026-09-06T18:27:55Z",
-          "conclusion": "success",
-          "note": "starts right after the lightweight lint; concurrent with lint-quality"
-        },
-        {
-          "name": "test (0)",
-          "started_at": "2026-09-06T18:27:57Z",
-          "completed_at": "2026-09-06T18:31:36Z",
-          "conclusion": "success"
-        }
-      ]
+    {
+     "name": "fast-env",
+     "started_at": "2026-09-06T18:26:47Z",
+     "completed_at": "2026-09-06T18:31:28Z",
+     "conclusion": "success",
+     "note": "waits behind the heavyweight lint"
+    },
+    {
+     "name": "test (0)",
+     "started_at": "2026-09-06T18:31:30Z",
+     "completed_at": "2026-09-06T18:35:09Z",
+     "conclusion": "success"
     }
+   ]
+  },
+  "after": {
+   "anchor_sha": "c6ee39e43025cc49202a27084aed459221dac43c",
+   "jobs": [
+    {
+     "name": "lint",
+     "started_at": "2026-09-06T18:22:28Z",
+     "completed_at": "2026-09-06T18:23:12Z",
+     "conclusion": "success",
+     "note": "lightweight: governance controller tests + workflow YAML validation (~44s)"
+    },
+    {
+     "name": "lint-quality",
+     "started_at": "2026-09-06T18:22:29Z",
+     "completed_at": "2026-09-06T18:26:51Z",
+     "conclusion": "success",
+     "note": "full Racket lint suite, parallel; no ordering edge with fast-env"
+    },
+    {
+     "name": "fast-env",
+     "started_at": "2026-09-06T18:23:14Z",
+     "completed_at": "2026-09-06T18:27:55Z",
+     "conclusion": "success",
+     "note": "starts right after the lightweight lint; concurrent with lint-quality"
+    },
+    {
+     "name": "test (0)",
+     "started_at": "2026-09-06T18:27:57Z",
+     "completed_at": "2026-09-06T18:31:36Z",
+     "conclusion": "success"
+    }
+   ]
   }
+ }
 }
