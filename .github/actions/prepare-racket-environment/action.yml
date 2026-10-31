@@ -169,16 +169,6 @@ runs:
         # checkout's compiled output. No .git, no credentials, no tokens,
         # no home-directory data ever enters the artifact.
         cp -a "$ADDON_PATH/." "$stage/addon-store/"
-
-        # W1a (open-gap-closure): upload-artifact drops hidden files
-        # (include-hidden-files defaults to false), so a hidden file in the
-        # store would make the shipped artifact silently differ from the
-        # store the trial identity binds. Fail closed instead of shipping a
-        # pruned identity basis.
-        if [ -n "$(find "$stage" -name '.*' ! -name '.' ! -name '..' -print -quit)" ]; then
-          echo "::error::staged prepared environment contains hidden files; the artifact would not be the store" >&2
-          exit 1
-        fi
         while IFS= read -r -d '' dir; do
           rel="${dir#./}"
           mkdir -p "$stage/q-compiled/$rel"
@@ -230,3 +220,12 @@ runs:
         path: ${{ runner.temp }}/prepared-env-${{ inputs.artifact-name }}
         retention-days: 1
         if-no-files-found: error
+        # W1a (open-gap-closure): ship hidden files too. The default (false)
+        # silently prunes them from the artifact, so the shipped store was
+        # not the store the trial identity bound (coordinator smoke run
+        # 41192722012: staged digest 0519408e… vs shipped 68079060…; the
+        # fail-closed guard confirmed real hidden files on the first W1a
+        # PR). With the complete store shipped, the producer↔consumer
+        # digest equality IS the completeness guard: any pruning or
+        # mutation resurfaces as an honest assessor refusal.
+        include-hidden-files: true

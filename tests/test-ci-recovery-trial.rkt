@@ -1540,7 +1540,11 @@
   (check-equal? (length (regexp-match* #rx"trial-addon-relative-r1" ci))
                 3
                 "the r1 recipe revision must be used by all three emit sites")
-  ;; The pack refuses hidden files: upload drops them silently, so a hidden
-  ;; file in the store would make the artifact not-the-store.
-  (check-true (string-contains? prepare "staged prepared environment contains hidden files")
-              "the pack step must fail closed on hidden files in the staged store"))
+  ;; The pack ships hidden files (include-hidden-files: true): the default
+  ;; silently pruned them, which is exactly the smoke-run divergence, and
+  ;; the producer↔consumer digest equality is the permanent completeness
+  ;; guard — any pruning resurfaces as an honest assessor refusal.
+  (check-true (string-contains? prepare "include-hidden-files: true")
+              "the prepared artifact must ship the complete store, hidden files included")
+  (check-false (string-contains? prepare "include-hidden-files: false")
+               "the silent hidden-file pruning must not survive"))
