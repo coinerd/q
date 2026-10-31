@@ -289,7 +289,7 @@
       (check-true (regexp-match? #rx"workflow_run" (file->string telemetry-yml))
                   "post-workflow trigger: workflow_run: CI completed"))
     (test-case "test-aggregate is the ci.yml workflow tail"
-      (check-equal? (job-needs "test-aggregate") '("test" "test-platform"))
+      (check-equal? (job-needs "test-aggregate") '("test" "test-platform" "fast-env"))
       (for ([job (in-list (top-jobs))])
         (check-false (member 'test-aggregate (job-needs job))
                      (format "~a must not depend on the new workflow tail" job))))

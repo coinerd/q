@@ -1,0 +1,354 @@
+name: CI recovery benchmark (v1.00.32 W2)
+
+# Trusted, manual, ISOLATED A/B/C experiment entry for the measured PR-CI
+# recovery question (plan .planning/PLAN-v1.00.32-MEASURED-PR-CI-RECOVERY.md,
+# wave W2; contract docs/reports/CI-RECOVERY-EVIDENCE.md).
+#
+# This workflow is a thin wrapper that REUSES the actual required CI
+# execution path — it calls .github/workflows/ci.yml as a reusable workflow
+# — instead of forking a second large pipeline. It never dispatches by
+# itself, never changes a required check, a default lane, a shard selector
+# or a proof input, and never enables anything on ordinary PRs (the called
+# workflow's experimental branches require the identity-bound inputs only
+# this gated wrapper passes).
+#
+# Gate (BEFORE any called code — the call job `needs` this gate and is
+# skipped whenever it fails):
+#   1. the ACTUAL event is workflow_dispatch (this workflow declares no
+#      other trigger);
+#   2. the ACTUAL ref is the protected refs/heads/main;
+#   3. the requested source-sha input equals github.sha AND the checked-out
+#      HEAD (the tested tree is pinned, not an arbitrary PR source);
+#   4. the trial identity is well-formed (non-empty trial id, positive
+#      attempt, treatment exactly A|B|C, 40-hex source SHA) — enforced by
+#      scripts/ci/ci-recovery-trial.rkt validate-dispatch.
+# The workflow revision (github.workflow_sha) and the tested tree
+# (github.sha) are recorded as DISTINCT fields in the trial evidence.
+#
+# Treatments (definitions pinned by the wave):
+#   A = today's root-off bounded-eager path + cold aggregate (the exact
+#       current required path — prepared shard restore, one bounded eager
+#       compile, cold full-setup aggregate);
+#   B = the same workload with the prepared-aggregate candidate (the
+#       aggregate restores the same-run prepared environment);
+#   C = B plus the verified compiled-root lane (root-on).
+#
+# NO live dispatch happens as part of the wave delivery: running trials is
+# a separately authorized coordinator gate, and coordinator-owned smoke
+# validation must confirm the dispatch/ref/checkout bindings recorded here
+# before any measured trial.
+
+on:
+  workflow_dispatch:
+    inputs:
+      trial-id:
+        description: 'Coordinator-chosen trial id (e.g. trial-2026-10-30-c1)'
+        required: true
+        type: string
+      trial-attempt:
+        description: 'Positive attempt number for this trial id'
+        required: true
+        type: string
+      treatment:
+        description: 'Treatment: A (root-off cold), B (root-off prepared aggregate), C (root-on prepared aggregate)'
+        required: true
+        type: string
+      source-sha:
+        description: 'Exact main head SHA under test (must equal the dispatch SHA)'
+        required: true
+        type: string
+
+# Never cancel anything: trials are rare, coordinator-owned measurements,
+# and a re-dispatch of the same trial id must queue behind, not kill, the
+# in-flight attempt (all attempts are retained, including failures).
+concurrency:
+  group: ci-recovery-benchmark-${{ inputs.trial-id }}-${{ inputs.trial-attempt }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  experiment-gate:
+    # The fail-closed wrapper gate. It checks the ACTUAL event name and ref
+    # of THIS run (not the caller's), so any future re-use of this workflow
+    # from another trigger fails here before any experiment code runs.
+    name: experiment-gate (workflow_dispatch on protected main)
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    outputs:
+      source-sha: ${{ steps.gate.outputs.source-sha }}
+      workflow-revision-sha: ${{ steps.gate.outputs.workflow-revision-sha }}
+    steps:
+      - name: Check out the exact tested tree (no persisted credentials)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Bind and validate the trusted trial identity
+        id: gate
+        shell: bash
+        # EVERY input and context value reaches this script through env
+        # indirection — no ${{ inputs.* }} or ${{ github.* }} expansion
+        # inside the shell — so the gate has no script-injection surface and
+        # the validated values are exactly the ones written to the outputs.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+          SOURCE_SHA_INPUT: ${{ inputs.source-sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          TRIAL_ID: ${{ inputs.trial-id }}
+          TRIAL_ATTEMPT: ${{ inputs.trial-attempt }}
+          TREATMENT: ${{ inputs.treatment }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          FAST_SHARD_COUNT: ${{ vars.FAST_SHARD_COUNT }}
+        run: |
+          set -euo pipefail
+          # (1) the actual event of THIS run, (2) the actual protected ref:
+          # the branch must be refs/heads/main AND actually marked
+          # protected, so a mirror/unprotected ref can never gate a trial.
+          test "$EVENT_NAME" = "workflow_dispatch"
+          test "$REF" = "refs/heads/main"
+          test "$REF_PROTECTED" = "true"
+          # (3) the requested source must be THIS dispatch's SHA and the
+          # checked-out tree, so the workflow revision and the tested tree
+          # are bound to the pinned main head — never an arbitrary PR source
+          # running with repository credentials.
+          test "$SOURCE_SHA_INPUT" = "$DISPATCH_SHA"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          test "$HEAD_SHA" = "$DISPATCH_SHA"
+          echo "$HEAD_SHA" | grep -qE '^[0-9a-f]{40}$'
+          # (4) coarse trial-identity pre-gate. This is deliberately the
+          # SAME rule the adapter enforces authoritatively at collect time
+          # (scripts/ci/ci-recovery-trial.rkt validate-dispatch); the gate
+          # stays dependency-light by checking it in shell here.
+          test -n "$TRIAL_ID"
+          case "$TRIAL_ATTEMPT" in
+            ''|*[!0-9]*|0) echo "trial-attempt must be a positive integer" >&2; exit 1 ;;
+          esac
+          case "$TREATMENT" in
+            A|B|C) ;;
+            *) echo "treatment must be exactly A, B or C" >&2; exit 1 ;;
+          esac
+          echo "source-sha=$DISPATCH_SHA" >> "$GITHUB_OUTPUT"
+          # Recorded as a DISTINCT field: the workflow revision is the SHA
+          # the workflow files were taken from; the tested tree is github.sha.
+          echo "workflow-revision-sha=$WORKFLOW_SHA" >> "$GITHUB_OUTPUT"
+          # Persist validated context BEFORE any reusable workflow code runs.
+          # Offline reconciliation uses this even when cancellation prevents
+          # the pending collector from ever starting.
+          python3 - <<'PY'
+          import os, json, hashlib, subprocess, datetime
+          e = os.environ
+          count = int(e['FAST_SHARD_COUNT']) if e['FAST_SHARD_COUNT'] in ('4', '6', '8') else 3
+          inventory = subprocess.check_output(['git', 'ls-files', 'tests']).splitlines()
+          digest = hashlib.sha256(b''.join(p + b'\n' for p in sorted(inventory))).hexdigest()
+          doc = {'trial-id': e['TRIAL_ID'], 'attempt': int(e['TRIAL_ATTEMPT']), 'treatment': e['TREATMENT'],
+                 'run-id': int(e['RUN_ID']), 'run-attempt': int(e['RUN_ATTEMPT']), 'head-sha': e['DISPATCH_SHA'],
+                 'workflow-revision-sha': e['WORKFLOW_SHA'], 'shard-total': count,
+                 'shard-plan': ','.join(str(n) for n in range(count)), 'test-inventory-digest': digest,
+                 'created-at-utc': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
+          with open('trial-context.json', 'w') as f:
+              json.dump(doc, f)
+          PY
+          {
+            echo "## Trusted trial gate passed"
+            echo "- treatment: \`$TREATMENT\`, trial \`$TRIAL_ID\`, attempt \`$TRIAL_ATTEMPT\`"
+            echo "- tested tree (github.sha == source-sha == HEAD): \`$HEAD_SHA\`"
+            echo "- workflow revision (github.workflow_sha): \`$WORKFLOW_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain validated context before called code
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-recovery-context-${{ github.run_id }}-${{ github.run_attempt }}
+          path: trial-context.json
+          retention-days: 30
+          if-no-files-found: error
+
+  ci-under-test:
+    # Reuse the ACTUAL required CI path. This job is skipped entirely when
+    # the gate above failed, so no called code can run ungated. The
+    # permissions here are the ones the called jobs actually need
+    # (contents: read for checkouts/artifacts; actions: read is harmless
+    # read-only and matches this wrapper's other jobs).
+    name: ci-under-test (reusable ci.yml run)
+    needs: experiment-gate
+    if: needs.experiment-gate.result == 'success'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      trial-treatment: ${{ inputs.treatment }}
+      trial-id: ${{ inputs.trial-id }}
+      trial-attempt: ${{ inputs.trial-attempt }}
+      source-sha: ${{ inputs.source-sha }}
+
+  collect-trial:
+    # Assemble ONE evidence artifact directory per attempt (envelope +
+    # verdict + verbatim Actions run/jobs metadata + producer binding), for
+    # the report owner to process. It runs even when the called CI failed or
+    # was cancelled (best effort). GitHub may not schedule a pending job
+    # after cancellation: the coordinator MUST reconcile from the early
+    # context + attempt-scoped API metadata (EVIDENCE §12), retaining a
+    # refused trial rather than dropping it. W1 checks shard readiness;
+    # the report additionally validates aggregate/run eligibility.
+    name: collect-trial (envelope + verdict + raw metadata)
+    needs: [experiment-gate, ci-under-test]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Check out the tested tree (no persisted credentials)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: '8.10'
+
+      - name: Fetch Actions run and jobs metadata (actions read only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          mkdir -p raw
+          gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT" > raw/run.json
+          gh api --paginate --slurp "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" \
+            | jq '{jobs: [.[].jobs[]]}' > raw/jobs.json
+
+      # Targeted, small artifact downloads only — never the multi-GB
+      # prepared environment artifact itself.
+      - name: Download per-shard restore records
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: prepared-env-records-${{ github.run_id }}-*
+          path: evidence/records
+      - name: Download compiled-root maps (launcher telemetry + producer stamps + measured shard identity)
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: compiled-root-map-${{ github.run_id }}-*
+          path: evidence/maps
+      - name: Download the producer manifest binding
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: prepared-env-producer-manifests-${{ github.run_id }}
+          path: evidence/producer
+      - name: Download the aggregate restore attestation
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: prepared-aggregate-restore-${{ github.run_id }}
+          path: evidence/aggregate
+
+      - name: Collect the trial evidence artifact
+        env:
+          TRIAL_ID: ${{ inputs.trial-id }}
+          TRIAL_ATTEMPT: ${{ inputs.trial-attempt }}
+          TREATMENT: ${{ inputs.treatment }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          SOURCE_SHA: ${{ github.sha }}
+          WORKFLOW_REVISION_SHA: ${{ github.workflow_sha }}
+          FAST_SHARD_COUNT: ${{ vars.FAST_SHARD_COUNT }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/records evidence/maps evidence/producer evidence/aggregate trial
+          # The expected shard inventory is explicit and derived from the
+          # SAME guarded repo-variable selector ci.yml's test matrix uses
+          # (same documented duplication as the shadow workflow's
+          # shard-count input); trials never widen the selector themselves.
+          case "$FAST_SHARD_COUNT" in
+            4) SHARD_TOTAL=4 ;;
+            6) SHARD_TOTAL=6 ;;
+            8) SHARD_TOTAL=8 ;;
+            *) SHARD_TOTAL=3 ;;
+          esac
+          # The ACTUAL matrix shard plan this run expanded to, and the
+          # ACTUAL test inventory digest of the pinned checkout — both
+          # caller/source-bound inputs of the actions-evidence config (the
+          # report cross-checks them against the trial envelope).
+          SHARD_PLAN="$(seq -s, 0 $((SHARD_TOTAL - 1)))"
+          TEST_INVENTORY_DIGEST="$(git ls-files tests | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          # The adapter re-validates the whole trial identity fail-closed
+          # (authoritative), assembles the envelope with producer-derived
+          # expected context and PER-SHARD MEASURED identities, verbatim
+          # restore records and 1:1 launcher telemetry, derives the required
+          # critical path (max required completion minus run start — never a
+          # sum), AND writes the report CLI's ci-recovery-actions-evidence@1
+          # document (actions.json + actions.jsonl). A B/C trial whose
+          # aggregate restore was not attested verified refuses with exit 1
+          # while ALL evidence stays on disk for the upload below.
+          racket scripts/ci/ci-recovery-trial.rkt collect \
+            --run-json raw/run.json \
+            --jobs-json raw/jobs.json \
+            --required-policy scripts/required-pr-checks.policy \
+            --records-dir evidence/records \
+            --maps-dir evidence/maps \
+            --producer-dir evidence/producer \
+            --aggregate-attestation evidence/aggregate \
+            --trial-id "$TRIAL_ID" \
+            --attempt "$TRIAL_ATTEMPT" \
+            --treatment "$TREATMENT" \
+            --run-id "$RUN_ID" \
+            --run-attempt "$RUN_ATTEMPT" \
+            --head-sha "$SOURCE_SHA" \
+            --workflow-revision-sha "$WORKFLOW_REVISION_SHA" \
+            --shard-total "$SHARD_TOTAL" \
+            --shard-plan "$SHARD_PLAN" \
+            --test-inventory-digest "$TEST_INVENTORY_DIGEST" \
+            --created-at-utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --out-dir trial
+
+      # The assessor is the only ready-oracle (evidence contract §8.4): the
+      # verdict is produced by the W1 CLI from the envelope, next to the raw
+      # evidence — never from this workflow's own claims. A missing producer
+      # binding or launcher telemetry refuses the trial honestly. The step
+      # runs ALWAYS so a fail-closed collection (for example a B/C trial
+      # whose aggregate restore was not attested verified) still leaves its
+      # verdict next to the retained evidence.
+      - name: Assess the trial envelope (W1 strict assessor)
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -f trial/envelope.json ]; then
+            echo "trial: no envelope was collected (raw evidence retained)" >&2
+            exit 0
+          fi
+          racket scripts/ci/prepared-env-report.rkt \
+            --trial-assess \
+            --envelope trial/envelope.json \
+            --out trial/verdict.json || echo "trial-assess exit $? (refused trials keep their verdict on disk)"
+          cat trial/verdict.json
+
+      - name: Upload the trial evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-recovery-trial-${{ inputs.trial-id }}-attempt-${{ inputs.trial-attempt }}
+          path: |
+            trial/
+            raw/
+          retention-days: 30
+          if-no-files-found: error
+        # The uploaded directory is DIRECTLY consumable by the report
+        # owner's CLI offline (docs/reports/CI-RECOVERY-EXPERIMENT.md §4):
+        #   racket scripts/run-tests/ci-recovery-benchmark-report.rkt \
+        #     --envelopes ENVELOPES.jsonl --actions ACTIONS.jsonl \
+        #     --out REPORT.json
+        # where ENVELOPES.jsonl/ACTIONS.jsonl are the per-attempt
+        # trial/envelope.jsonl and trial/actions.jsonl lines concatenated.

@@ -38,6 +38,16 @@
 ;;   --savings-check         fail-closed setup-savings.json validation
 ;;   --rollback-drill        evaluate one consumer's §11.6 rollback
 ;;
+;; W1 (v1.00.32): strict trial assessment (docs/reports/CI-RECOVERY-EVIDENCE.md):
+;;
+;;   --trial-assess          assess ONE trial evidence envelope
+;;                           (ci-recovery-trial-evidence@1) against the strict
+;;                           all-shard treatment rules: producer-bound expected
+;;                           context, exact run/head/shard binding, actual
+;;                           launcher telemetry for root-on, honest global-off
+;;                           for root-off. Exports assess-trial-envelope (pure)
+;;                           for the benchmark report owner to require.
+;;
 ;; Honesty rules enforced here: outcomes are exactly
 ;; verified | rebuilt | fallback | unknown; every non-verified outcome
 ;; names its fallback cause ("unknown" itself is only allowed as the
@@ -70,6 +80,9 @@
   (cons 'obj kvs))
 (define (json-arr . xs)
   (cons 'arr xs))
+
+(define (json-key<? a b)
+  (string<? (format "~a" a) (format "~a" b)))
 
 (define (json-string-escape s)
   (string-append "\""
@@ -109,6 +122,20 @@
                     "}")]
     [(and (pair? v) (eq? (car v) 'arr))
      (string-append "[" (string-join (map json-value->string (cdr v)) ",") "]")]
+    ;; Plain JSON arrays (refusal reasons, retained shard records) are
+    ;; serialized deterministically element by element.
+    [(list? v) (string-append "[" (string-join (map json-value->string v) ",") "]")]
+    ;; Plain JSON objects parsed back with read-json (trial envelopes,
+    ;; verdict raw echo) are serialized deterministically in sorted key
+    ;; order so identical envelopes produce byte-identical output.
+    [(hash? v)
+     (string-append "{"
+                    (string-join (for/list ([k (in-list (sort (hash-keys v) json-key<?))])
+                                   (string-append (json-string-escape (format "~a" k))
+                                                  ":"
+                                                  (json-value->string (hash-ref v k))))
+                                 ",")
+                    "}")]
     [(null? v) "[]"]
     [else (json-string-escape (format "~a" v))]))
 
@@ -217,6 +244,8 @@ usage:
   prepared-env-report.rkt --savings-check PATH
   prepared-env-report.rkt --rollback-drill --consumers F --consumer NAME [--vars K=V,K=V] \
   [--event push|workflow_dispatch] [--producer-result success|skipped|failure]
+  prepared-env-report.rkt --trial-assess --envelope F [--out VERDICT] [--expected-identity F] \
+  [--producer-manifest F]
   prepared-env-report.rkt --containment-check PATH
 "
    message)
@@ -1413,6 +1442,523 @@ usage:
      1]))
 
 ;; ---------------------------------------------------------------------------
+;; W1 (v1.00.32): strict trial assessment — one JSON envelope binding ONE
+;; trial attempt (ci-recovery-trial-evidence@1).
+;;
+;; The envelope carries the CALLER-provided producer-bound expected context
+;; (expected shard inventory, the nine prepared-environment identity
+;; dimensions + artifact digest, and the producer compiled-root manifest
+;; digest) plus, per expected shard, the emitted
+;; prepared-env-restore-record and the ACTUAL launcher telemetry captured
+;; by ci/prepared-environment/compiled-root.rkt (mode / root-hits /
+;; fallbacks / ...). The exact schema, CLI and refusal-reason catalogue for
+;; the workflow and report owners is documented in
+;; docs/reports/CI-RECOVERY-EVIDENCE.md.
+;;
+;; Honesty rules enforced here:
+;;   - The expected context is caller/producer-bound and is never read back
+;;     from the shards; a shard that self-attests expected identity/manifest
+;;     data is refused. Trusting the caller is what makes the comparison
+;;     meaningful: it is the one side the shards cannot forge, and
+;;     --producer-manifest binds the expected digest to actual file bytes
+;;     (a verified byte-level binding, not a merely claimed hash).
+;;   - Every record must carry the workflow adapter's strict binding
+;;     metadata — attempt / trial-id / treatment equal to the trial block
+;;     and an observed identity (nine canonical dimensions + artifact
+;;     digest) equal to the expected identity field by field. The emitter
+;;     itself never fabricates these keys; --emit-restore-record stays
+;;     byte-compatible.
+;;   - Treatment C (root-on) is ready only when EVERY expected shard is
+;;     present exactly once with launcher mode "verified-root-hit",
+;;     root-hits > 0, fallbacks = 0, launcher exit-code = 0 (the actual
+;;     launcher CLI always emits it; a failed launcher never certifies,
+;;     even in hit mode) and a launcher producer-manifest digest equal to
+;;     the expected digest. Resolution-only success (no launcher
+;;     telemetry, or no observed root loads) never certifies activation.
+;;   - Outcomes in a strict record are exactly verified | rebuilt |
+;;     fallback: the literal "unknown" refuses and so does ANY other value
+;;     outside the enum (raw CI vocabulary must never certify).
+;;   - Treatments A/B (root-off) classify honestly as ready-root-off when
+;;     every shard's launcher mode is "global-off" — a distinct, legitimate
+;;     classification, not a failed root-on trial.
+;;   - Duplicate/missing/unexpected shards, mixed run/head/shard,
+;;     attempt/trial-id/treatment or identity records, unknown/invalid
+;;     outcomes and malformed identities are refusals with named reasons.
+;;   - assess-trial-envelope is PURE: no I/O, no environment reads, and
+;;     deterministic for identical input.
+;; ---------------------------------------------------------------------------
+
+(define trial-evidence-schema "ci-recovery-trial-evidence@1")
+(define trial-assessment-schema "ci-recovery-trial-assessment@1")
+(define trial-treatments (list "A" "B" "C"))
+(define root-on-treatment "C")
+(define launcher-modes
+  (list "verified-root-hit" "global-off" "no-flags-current-source" "unmapped-child"))
+
+(provide trial-evidence-schema
+         trial-assessment-schema
+         trial-treatments
+         launcher-modes
+         assess-trial-envelope)
+
+(define (trial-head-sha? v)
+  (and (string? v) (regexp-match? #px"^[0-9a-f]{40}$" v)))
+
+(define (trial-envelope-refusal-reasons env)
+  ;; Pure structural + semantic validation; returns the deduplicated,
+  ;; sorted list of named refusal reasons (empty = internally consistent).
+  (cond
+    [(not (hash? env)) (list "envelope-schema-invalid")]
+    [else
+     (sort (remove-duplicates (append (if (equal? (hash-ref env 'schema #f) trial-evidence-schema)
+                                          '()
+                                          (list "envelope-schema-invalid"))
+                                      (trial-block-reasons (hash-ref env 'trial #f))
+                                      (trial-expected-block-reasons (hash-ref env 'expected #f))
+                                      (trial-shards-reasons (hash-ref env 'shards #f)
+                                                            (hash-ref env 'trial #f)
+                                                            (hash-ref env 'expected #f))))
+           string<?)]))
+
+(define (trial-block-reasons trial)
+  ;; Trial identity block: one attempt, one treatment, exact source binding.
+  (cond
+    [(not (hash? trial)) (list "missing-trial-block")]
+    [else
+     (append (if (non-empty-string? (hash-ref trial 'trial-id #f))
+                 '()
+                 (list "trial-id-invalid"))
+             (if (exact-positive-integer? (hash-ref trial 'attempt #f))
+                 '()
+                 (list "attempt-invalid"))
+             (if (member (hash-ref trial 'treatment #f) trial-treatments)
+                 '()
+                 (list "treatment-invalid"))
+             (if (real? (hash-ref trial 'run-id #f))
+                 '()
+                 (list "trial-run-id-invalid"))
+             (if (trial-head-sha? (hash-ref trial 'head-sha #f))
+                 '()
+                 (list "trial-head-sha-malformed"))
+             (if (non-empty-string? (hash-ref trial 'created-at-utc #f))
+                 '()
+                 (list "trial-created-at-invalid")))]))
+
+(define (trial-expected-block-reasons expected)
+  ;; Expected context: caller/producer-bound, never shard-derived.
+  (cond
+    [(not (hash? expected)) (list "expected-block-invalid")]
+    [else
+     (define inventory (hash-ref expected 'shard-inventory #f))
+     (append (if (and (list? inventory)
+                      (pair? inventory)
+                      (andmap exact-integer? inventory)
+                      (not (check-duplicates inventory)))
+                 '()
+                 (list "expected-shard-inventory-invalid"))
+             (if (hex-digest? (hash-ref expected 'producer-manifest-digest #f))
+                 '()
+                 (list "expected-producer-manifest-digest-malformed"))
+             (trial-expected-identity-reasons (hash-ref expected 'identity #f)))]))
+
+(define (trial-expected-identity-reasons ident)
+  (cond
+    [(not (hash? ident)) (list "expected-identity-missing")]
+    [else
+     (for/list ([dim (in-list identity-dimensions)]
+                #:unless (let ([v (hash-ref ident (string->symbol dim) #f)])
+                           (if (member dim identity-digest-dimensions)
+                               (hex-digest? v)
+                               (non-empty-string? v))))
+       (format "expected-identity-invalid-~a" dim))]))
+
+(define (trial-observed-identity-valid? ident)
+  ;; The observed record identity mirrors a prepared-env-identity@1 field
+  ;; set: the nine canonical dimensions PLUS the artifact digest, all
+  ;; present and well-formed. A malformed observed identity fails closed
+  ;; instead of comparing garbage against the expected identity.
+  (and (hash? ident)
+       (for/and ([dim (in-list identity-dimensions)])
+         (define v (hash-ref ident (string->symbol dim) #f))
+         (if (member dim identity-digest-dimensions)
+             (hex-digest? v)
+             (non-empty-string? v)))
+       (hex-digest? (hash-ref ident 'artifact-digest #f))))
+
+(define (trial-shards-reasons shards trial expected)
+  (define treatment
+    (if (hash? trial)
+        (hash-ref trial 'treatment #f)
+        #f))
+  (define run-id
+    (if (hash? trial)
+        (hash-ref trial 'run-id #f)
+        #f))
+  (define head-sha
+    (if (hash? trial)
+        (hash-ref trial 'head-sha #f)
+        #f))
+  (define inventory
+    (if (hash? expected)
+        (hash-ref expected 'shard-inventory #f)
+        #f))
+  (define expected-digest
+    (if (hash? expected)
+        (hash-ref expected 'producer-manifest-digest #f)
+        #f))
+  (define expected-identity
+    (if (hash? expected)
+        (hash-ref expected 'identity #f)
+        #f))
+  (cond
+    [(not (list? shards)) (list "shards-invalid")]
+    [(null? shards) (list "shards-empty")]
+    [else
+     (define seen (make-hash))
+     (append (append* (for/list ([entry (in-list shards)])
+                        (trial-shard-entry-reasons entry
+                                                   trial
+                                                   treatment
+                                                   run-id
+                                                   head-sha
+                                                   inventory
+                                                   expected-digest
+                                                   expected-identity
+                                                   seen)))
+             (for/list ([sid (in-list (if (and (list? inventory)
+                                               (pair? inventory)
+                                               (andmap exact-integer? inventory)
+                                               (not (check-duplicates inventory)))
+                                          inventory
+                                          (list)))]
+                        #:unless (hash-has-key? seen sid))
+               "missing-shard-record"))]))
+
+(define (trial-shard-entry-reasons entry
+                                   trial
+                                   treatment
+                                   run-id
+                                   head-sha
+                                   inventory
+                                   expected-digest
+                                   expected-identity
+                                   seen)
+  (cond
+    [(not (hash? entry)) (list "shard-entry-invalid")]
+    [else
+     (define sid (hash-ref entry 'shard #f))
+     (define sid-ok? (exact-integer? sid))
+     (define duplicate? (and sid-ok? (hash-has-key? seen sid)))
+     (when sid-ok?
+       (hash-set! seen sid #t))
+     (append
+      (if sid-ok?
+          '()
+          (list "shard-entry-invalid"))
+      (if duplicate?
+          (list "duplicate-shard-record")
+          '())
+      (if (and (pair? inventory)
+               (andmap exact-integer? inventory)
+               (not (check-duplicates inventory))
+               sid-ok?
+               (not (member sid inventory)))
+          (list "unexpected-shard-record")
+          '())
+      (trial-record-reasons (hash-ref entry 'record #f) trial run-id head-sha sid expected-identity)
+      (trial-launcher-reasons (hash-ref entry 'launcher #f) treatment expected-digest))]))
+
+(define (trial-record-reasons record trial run-id head-sha sid expected-identity)
+  (cond
+    [(not (hash? record)) (list "shard-entry-invalid")]
+    [else
+     (define trial-attempt
+       (if (hash? trial)
+           (hash-ref trial 'attempt #f)
+           #f))
+     (define trial-trial-id
+       (if (hash? trial)
+           (hash-ref trial 'trial-id #f)
+           #f))
+     (define trial-treatment
+       (if (hash? trial)
+           (hash-ref trial 'treatment #f)
+           #f))
+     (define outcome (hash-ref record 'outcome #f))
+     (define observed-identity (hash-ref record 'identity #f))
+     (append (if (and (hash? trial) (real? run-id) (trial-head-sha? head-sha))
+                 (append (if (equal? (hash-ref record 'run-id #f) run-id)
+                             '()
+                             (list "record-run-id-mismatch"))
+                         (if (equal? (hash-ref record 'head-sha #f) head-sha)
+                             '()
+                             (list "record-head-sha-mismatch")))
+                 '())
+             (if (equal? (hash-ref record 'shard #f) sid)
+                 '()
+                 (list "record-shard-mismatch"))
+             ;; Strict attempt/trial/treatment binding: the record must carry the
+             ;; adapter-attached attempt/trial-id/treatment and each must equal
+             ;; the trial block. When the trial field itself is malformed, its own
+             ;; refusal reason is the single named cause (checks suppressed).
+             (if (and (hash? trial) (exact-positive-integer? trial-attempt))
+                 (if (equal? (hash-ref record 'attempt #f) trial-attempt)
+                     '()
+                     (list "record-attempt-mismatch"))
+                 '())
+             (if (and (hash? trial) (non-empty-string? trial-trial-id))
+                 (if (equal? (hash-ref record 'trial-id #f) trial-trial-id)
+                     '()
+                     (list "record-trial-id-mismatch"))
+                 '())
+             (if (and (hash? trial) (member trial-treatment trial-treatments))
+                 (if (equal? (hash-ref record 'treatment #f) trial-treatment)
+                     '()
+                     (list "record-treatment-mismatch"))
+                 '())
+             ;; Outcomes are exactly verified | rebuilt | fallback: the literal
+             ;; "unknown" refuses (an honest attribution gap never certifies) and
+             ;; so does ANY other value outside the enum — raw CI vocabulary like
+             ;; "restored" or "success" must never certify an attempt.
+             (cond
+               [(equal? outcome "unknown") (list "record-outcome-unknown")]
+               [(member outcome (list "verified" "rebuilt" "fallback")) '()]
+               [else (list "record-outcome-invalid")])
+             ;; Observed identity binding: the record must carry the shard's
+             ;; ACTUAL observed identity (nine canonical dimensions + artifact
+             ;; digest) and it must equal the caller/producer-bound expected
+             ;; identity field by field. When the expected identity itself is
+             ;; malformed, its own reasons are the named cause (checks suppressed).
+             (if (and (hash? expected-identity)
+                      (null? (trial-expected-identity-reasons expected-identity)))
+                 (cond
+                   [(not (trial-observed-identity-valid? observed-identity))
+                    (if (hash? observed-identity)
+                        (list "record-identity-malformed")
+                        (list "record-identity-missing"))]
+                   [else
+                    (for/list ([dim (in-list (append identity-dimensions (list "artifact-digest")))]
+                               #:unless (equal? (hash-ref expected-identity (string->symbol dim) #f)
+                                                (hash-ref observed-identity (string->symbol dim) #f)))
+                      (format "record-identity-mismatch-~a" dim))])
+                 '())
+             (if (or (hash-has-key? record 'expected-identity)
+                     (hash-has-key? record 'expected-manifest-digest))
+                 (list "self-attested-expected-context-in-record")
+                 '()))]))
+
+(define (trial-launcher-reasons launcher treatment expected-digest)
+  (cond
+    [(not (hash? launcher)) (list "missing-launcher-telemetry")]
+    [else
+     (define launcher-digest (hash-ref launcher 'producer-manifest-digest #f))
+     (define mode (hash-ref launcher 'mode #f))
+     (define hits (hash-ref launcher 'root-hits #f))
+     (define fallbacks (hash-ref launcher 'fallbacks #f))
+     (define launcher-exit-code (hash-ref launcher 'exit-code #f))
+     (define treatment-valid? (member treatment trial-treatments))
+     (define mode-valid? (member mode launcher-modes))
+     (define hits-valid? (exact-nonnegative-integer? hits))
+     (define fallbacks-valid? (exact-nonnegative-integer? fallbacks))
+     ;; Treatment semantics: C demands OBSERVED root use (resolution alone
+     ;; never certifies activation); A/B demand honest global-off (root
+     ;; activity is contamination there).
+     (append (if (or (hash-has-key? launcher 'expected-identity)
+                     (hash-has-key? launcher 'expected-manifest-digest))
+                 (list "self-attested-expected-context-in-launcher")
+                 '())
+             (if (hex-digest? launcher-digest)
+                 '()
+                 (list "launcher-manifest-digest-malformed"))
+             (if (and (hex-digest? launcher-digest)
+                      (hex-digest? expected-digest)
+                      (not (equal? launcher-digest expected-digest)))
+                 (list "launcher-manifest-digest-mismatch")
+                 '())
+             (if mode-valid?
+                 '()
+                 (list "launcher-mode-invalid"))
+             (if hits-valid?
+                 '()
+                 (list "launcher-root-hits-invalid"))
+             (if fallbacks-valid?
+                 '()
+                 (list "launcher-fallbacks-invalid"))
+             ;; The launcher process itself must have succeeded: the actual
+             ;; launcher CLI ALWAYS emits exit-code, so telemetry without it
+             ;; is malformed (fail closed), and a FAILED launcher (nonzero
+             ;; exit-code) never certifies a trial — not even in
+             ;; verified-root-hit mode.
+             (if (exact-integer? launcher-exit-code)
+                 '()
+                 (list "launcher-exit-code-invalid"))
+             (if (and (exact-integer? launcher-exit-code) (not (zero? launcher-exit-code)))
+                 (list "launcher-exit-code-nonzero")
+                 '())
+             (cond
+               [(not (and treatment-valid? mode-valid? hits-valid? fallbacks-valid?)) '()]
+               [(equal? treatment root-on-treatment)
+                ;; A non-hit launcher mode IS the root cause; the hit/fallback
+                ;; counters only add information when the mode was a root hit.
+                (cond
+                  [(not (equal? mode "verified-root-hit")) (list (format "launcher-mode-~a" mode))]
+                  [else
+                   (append (if (zero? hits)
+                               (list "zero-root-hits")
+                               '())
+                           (if (positive? fallbacks)
+                               (list "launcher-fallbacks-nonzero")
+                               '()))])]
+               [else
+                (if (equal? mode "global-off")
+                    '()
+                    (list "launcher-mode-not-global-off"))]))]))
+
+(define (assess-trial-envelope env)
+  ;; Pure, deterministic strict assessment of one trial evidence envelope.
+  ;; Returns an immutable hash:
+  ;;   schema — "ci-recovery-trial-assessment@1"
+  ;;   ready? — boolean; #t only when no refusal reason applies
+  ;;   classification — "ready-root-on" | "ready-root-off" | "refused"
+  ;;   treatment, reasons (sorted), shards-assessed, expected-shard-count
+  ;;   raw — the retained input data (trial/expected/shards echo)
+  (define reasons (trial-envelope-refusal-reasons env))
+  (define trial
+    (if (hash? env)
+        (hash-ref env 'trial #f)
+        #f))
+  (define expected
+    (if (hash? env)
+        (hash-ref env 'expected #f)
+        #f))
+  (define shards
+    (if (hash? env)
+        (hash-ref env 'shards #f)
+        #f))
+  (define treatment
+    (if (hash? trial)
+        (hash-ref trial 'treatment #f)
+        #f))
+  (define inventory
+    (if (hash? expected)
+        (hash-ref expected 'shard-inventory #f)
+        #f))
+  (define classification
+    (cond
+      [(pair? reasons) "refused"]
+      [(equal? treatment root-on-treatment) "ready-root-on"]
+      [else "ready-root-off"]))
+  (hasheq 'schema
+          trial-assessment-schema
+          'ready?
+          (null? reasons)
+          'classification
+          classification
+          'treatment
+          treatment
+          'reasons
+          reasons
+          'shards-assessed
+          (if (list? shards)
+              (for/sum ([entry (in-list shards)]
+                        #:when (and (hash? entry) (exact-integer? (hash-ref entry 'shard #f))))
+                       1)
+              0)
+          'expected-shard-count
+          (if (and (list? inventory) (andmap exact-integer? inventory))
+              (length inventory)
+              0)
+          'raw
+          (hasheq 'trial
+                  (if (hash? trial)
+                      trial
+                      (hasheq))
+                  'expected
+                  (if (hash? expected)
+                      expected
+                      (hasheq))
+                  'shards
+                  (if (list? shards)
+                      shards
+                      (list)))))
+
+;; ---------------------------------------------------------------------------
+;; Mode: --trial-assess
+;; ---------------------------------------------------------------------------
+
+(define (do-trial-assess args)
+  (define envelope-path (assoc-value args "--envelope"))
+  (unless (string? envelope-path)
+    (exit (usage-fail "--trial-assess requires --envelope F")))
+  (define env
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (exit (die-usage (format "--trial-assess: cannot read trial envelope ~a: ~a"
+                                                envelope-path
+                                                (exn-message e)))))])
+      (with-input-from-file envelope-path read-json)))
+  ;; Optional: caller-supplied producer-bound expected identity via the SAME
+  ;; identity-manifest artifact --identity-emit produces (the existing
+  ;; validator runs, so a structurally invalid manifest fails closed here).
+  (define expected-identity-path (assoc-value args "--expected-identity"))
+  (when (and expected-identity-path (hash? env))
+    (define fields (read-identity-manifest! expected-identity-path))
+    (define expected (hash-ref env 'expected #f))
+    (define inline
+      (if (hash? expected)
+          (hash-ref expected 'identity #f)
+          #f))
+    (cond
+      [(not inline)
+       (set! env
+             (hash-set env
+                       'expected
+                       (if (hash? expected)
+                           (hash-set expected 'identity fields)
+                           (hasheq 'identity fields))))]
+      [(not (equal? inline fields))
+       (exit
+        (die-usage
+         "--trial-assess: --expected-identity conflicts with the envelope's inline expected identity"))]))
+  ;; Optional: bind the expected producer manifest digest to the bytes of the
+  ;; REAL manifest.rktd artifact (the file's SHA-256 must equal the digest).
+  (define producer-manifest-path (assoc-value args "--producer-manifest"))
+  (define manifest-digest-mismatch?
+    (and
+     producer-manifest-path
+     (hash? env)
+     (hash? (hash-ref env 'expected #f))
+     (let ([expected-digest (hash-ref (hash-ref env 'expected (hash)) 'producer-manifest-digest #f)])
+       (if (hex-digest? expected-digest)
+           (with-handlers ([exn:fail?
+                            (lambda (_)
+                              (exit (die-usage
+                                     (format "--trial-assess: cannot read producer manifest ~a"
+                                             producer-manifest-path))))])
+             (not (equal? (sha256-hex-of-file producer-manifest-path) expected-digest)))
+           ;; a malformed expected digest is refused by the assessor itself
+           #f))))
+  (define base (assess-trial-envelope env))
+  (define assessment
+    (if manifest-digest-mismatch?
+        (hash-set (hash-set (hash-set base 'ready? #f) 'classification "refused")
+                  'reasons
+                  (sort (cons "producer-manifest-digest-mismatch-with-file"
+                              (hash-ref base 'reasons (list)))
+                        string<?))
+        base))
+  (define out (assoc-value args "--out"))
+  (when (string? out)
+    (write-json-file out assessment))
+  (define raw-trial (hash-ref (hash-ref assessment 'raw (hasheq)) 'trial (hasheq)))
+  (printf "prepared-env-report: trial ~a treatment ~a: classification ~a (~a refusal reason(s))\n"
+          (hash-ref raw-trial 'trial-id "?")
+          (hash-ref raw-trial 'treatment "?")
+          (hash-ref assessment 'classification)
+          (length (hash-ref assessment 'reasons (list))))
+  (if (hash-ref assessment 'ready? #f) 0 1))
+
+;; ---------------------------------------------------------------------------
 ;; Entry point
 ;; ---------------------------------------------------------------------------
 
@@ -1429,6 +1975,7 @@ usage:
     [(has-flag? args "--savings-check") (do-savings-check args)]
     [(has-flag? args "--rollback-drill") (do-rollback-drill args)]
     [(has-flag? args "--containment-check") (do-containment-check args)]
+    [(has-flag? args "--trial-assess") (do-trial-assess args)]
     [else (usage-fail "unknown arguments")]))
 
 (module+ main

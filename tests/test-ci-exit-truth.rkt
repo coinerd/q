@@ -258,4 +258,53 @@
     (check-true (< producer-start verifier-start)
                 "verifier must run at/after the bundle-producer boundary")
     (check-true (string-contains? ci-yml "Stamp shard run SHA (shard-side attestation)")
-                "the fast suite must stamp the run SHA shard-side before upload")))
+                "the fast suite must stamp the run SHA shard-side before upload")
+
+    ;; -- v1.00.32 W2: the prepared-aggregate candidate (trusted trial only) --
+    ;; The experiment wires a trial-only prepared-environment restore into
+    ;; test-aggregate. The truth verifier is UNCHANGED: the bundle producer
+    ;; still mints the green claim, verify-result-truth still gates it with
+    ;; the same SHA/shard bindings, and the producer-before-verifier ordering
+    ;; survives. The trial gate step must sit BEFORE the producer (it only
+    ;; resolves setup inputs; it never touches result truth).
+    (test-case "wiring: the trial-only aggregate restore never weakens the truth verifier"
+      (define ci-yml (file->string (build-path repo-root ".github" "workflows" "ci.yml")))
+      ;; the aggregate's needs stay exactly the pinned pair (no promotion, no
+      ;; new DAG edge on the required path)
+      (check-true (string-contains? ci-yml "needs: [test, test-platform]")
+                  "test-aggregate keeps its pinned needs pair")
+      ;; the trusted-trial gate resolves a setup input, gated on treatments B/C
+      ;; and the same identity bindings as the wrapper
+      (check-true (string-contains? ci-yml
+                                    "Resolve the trusted-trial prepared-aggregate restore gate")
+                  "the prepared-aggregate candidate has an explicit, named trial gate")
+      (define gate-at
+        (car (car (regexp-match-positions
+                   #rx"Resolve the trusted-trial prepared-aggregate restore gate"
+                   ci-yml))))
+      (for ([needle (in-list '("\"$TRIAL_TREATMENT\" = \"B\""
+                               "\"$TRIAL_TREATMENT\" = \"C\""
+                               "\"$SOURCE_SHA\" = \"$HEAD_SHA\""
+                               "\"$HEAD_REF\" = \"refs/heads/main\""))])
+        (check-true (string-contains? ci-yml needle) (format "the aggregate gate binds ~a" needle)))
+      ;; the restore is trial-only: ordinary runs keep the aggregate cold
+      (check-true
+       (string-contains?
+        ci-yml
+        "prepared-environment: ${{ steps.trial-aggregate-env.outputs.prepared-env || 'off' }}")
+       "the aggregate's prepared restore defaults to off for every ordinary run")
+      ;; ordering: gate < bundle producer < truth verifier
+      (define producer-at
+        (car (car (regexp-match-positions #rx"Produce fast-suite proof bundle" ci-yml))))
+      (define verifier-at
+        (car (car (regexp-match-positions #rx"scripts/ci/verify-result-truth[.]rkt" ci-yml))))
+      (check-true (< gate-at producer-at)
+                  "the trial gate only resolves setup inputs before the producer")
+      (check-true (< producer-at verifier-at) "the bundle producer still precedes the truth verifier")
+      ;; the verifier invocation itself is unchanged
+      (check-true (string-contains? ci-yml "--aggregate \"$SUMMARY\"")
+                  "the verifier still gates the produced aggregate")
+      (check-true (string-contains? ci-yml "--expect-shards \"$SHARD_EXPECT\"")
+                  "the verifier still binds the matrix-derived shard count")
+      (check-true (string-contains? ci-yml "--expect-sha \"$GITHUB_SHA\"")
+                  "the verifier still binds the run SHA"))))

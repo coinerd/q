@@ -59,10 +59,43 @@ on:
         required: false
         default: ''
         type: string
+  # v1.00.32 W2 (docs/reports/CI-RECOVERY-EVIDENCE.md §8; plan
+  # .planning/v10032-implementation/PLAN.md): callable by the trusted
+  # benchmark wrapper (.github/workflows/ci-recovery-benchmark.yml) so the
+  # isolated A/B/C recovery experiment reuses THIS execution path instead of
+  # forking a second large pipeline. Ordinary push/PR/dispatch behavior is
+  # byte-identical: every experimental branch below requires a non-empty,
+  # identity-bound trial input that only the gated wrapper supplies.
+  workflow_call:
+    inputs:
+      trial-treatment:
+        description: 'Trusted-trial treatment A|B|C; empty for ordinary CI'
+        required: false
+        default: ''
+        type: string
+      trial-id:
+        description: 'Coordinator-chosen trial id (required for a trial)'
+        required: false
+        default: ''
+        type: string
+      trial-attempt:
+        description: 'Positive attempt number (required for a trial)'
+        required: false
+        default: ''
+        type: string
+      source-sha:
+        description: 'The exact main head SHA under test; must equal github.sha'
+        required: false
+        default: ''
+        type: string
 
-# Cancel superseded runs on the same branch/PR
+# Cancel superseded runs on the same branch/PR. A trusted trial gets its own
+# group (derived from the trial identity), so a dispatched experiment can
+# never cancel an in-flight required run on main and vice versa. For every
+# ordinary event the inputs are empty and the group below is byte-identical
+# to the pre-trial expression.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}${{ inputs.trial-id != '' && format('-trial-{0}-attempt-{1}', inputs.trial-id, inputs.trial-attempt) || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -167,8 +200,20 @@ jobs:
     # starts after the lightweight `lint` gate only and runs concurrently
     # with the parallel `lint-quality` job (no ordering edge in either
     # direction; the prepared-environment contract is unchanged).
+    #
+    # v1.00.32 W2: a trusted trial always produces the prepared environment
+    # (treatment A is today's exact path, B/C add the prepared-aggregate and
+    # compiled-root candidates on top), so the trial term below is decided by
+    # the identity-bound inputs ALONE — deliberately independent of the
+    # github.event_name semantics a called workflow observes. The term
+    # additionally requires the ACTUAL ref to be the PROTECTED main branch
+    # (github.ref_protected), so the reusable execution path itself
+    # fail-closes on a non-protected ref even when some caller passes
+    # arbitrary inputs. Ordinary events carry empty trial inputs, so the
+    # first disjunct is exactly the pre-trial condition. The global rollback
+    # switch wins for every path.
     needs: [lint]
-    if: ${{ github.event_name != 'workflow_dispatch' && vars.RACKET_PREPARED_ARTIFACT != 'off' }}
+    if: ${{ (github.event_name != 'workflow_dispatch' && vars.RACKET_PREPARED_ARTIFACT != 'off' && inputs.trial-treatment == '') || (vars.RACKET_PREPARED_ARTIFACT != 'off' && inputs.trial-id != '' && inputs.trial-attempt != '' && inputs.source-sha == github.sha && github.ref == 'refs/heads/main' && github.ref_protected && (inputs.trial-treatment == 'A' || inputs.trial-treatment == 'B' || inputs.trial-treatment == 'C')) }}
     runs-on: ubuntu-latest
     # W4 pilot (issue #9690): surface the measured producer cost of the
     # same-run compiled root so consumer shards can separate producer cost
@@ -188,7 +233,59 @@ jobs:
           # enabled — this mirrors the consumer gate below (prepared-artifact
           # rollback, lane switch, no version override, same-run producer),
           # so the producer builds the root exactly when a shard will use it.
-          compiled-root: ${{ vars.RACKET_COMPILED_ROOT == 'on' }}
+          # v1.00.32 W2: a trusted treatment-C trial builds the root through
+          # the identity-bound trial term (the global lane switch keeps its
+          # ordinary meaning; ordinary PRs never set trial inputs, so the
+          # activation decisions here are unchanged for them).
+          compiled-root: ${{ vars.RACKET_COMPILED_ROOT == 'on' || (inputs.trial-treatment == 'C' && inputs.trial-id != '' && inputs.trial-attempt != '' && inputs.source-sha == github.sha && github.ref == 'refs/heads/main') }}
+
+      # v1.00.32 W2 (trial evidence, producer side): hash the REAL staged
+      # manifest bytes (prepared-env manifest.json, plus the compiled-root
+      # manifest.rktd when this run's lane built it) and derive the W6
+      # identity fields from THIS producer job's real bytes (lock file,
+      # racket executable, staged addon store) — so the trial envelope's
+      # expected context is producer-derived, never an invented constant and
+      # never read back from a shard. The identity manifest itself is
+      # emitted through the evidence owner's --identity-emit CLI by the
+      # adapter, so the canonical shape stays single-sourced.
+      - name: Bind prepared-env producer manifests and identity (trial evidence)
+        id: producer-binding
+        if: always() && inputs.trial-id != ''
+        shell: bash
+        env:
+          RACKET_VERSION: '8.10'
+          RECIPE_REVISION: 'trial-addon-relative-r1'
+          POLICY_FINGERPRINT: 'addon-store-v2|pltaddon-explicit|no-workspace-bytecode'
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/prepared-env-prepared-env-fast"
+          mkdir -p producer-binding
+          if [ -f "$stage/manifest.json" ]; then
+            racket scripts/ci/ci-recovery-trial.rkt bind-producer \
+              --stage "$stage" \
+              --out producer-binding/producer-manifests.json
+          else
+            echo "trial evidence: no staged manifest to bind (producer did not complete); the trial will refuse honestly"
+          fi
+          racket scripts/ci/ci-recovery-trial.rkt emit-identity \
+            --stage "$stage" \
+            --out producer-binding/identity-manifest.json \
+            --lock-file ci/racket-package-lock.rktd \
+            --racket-version "$RACKET_VERSION" \
+            --os "${{ runner.os }}" \
+            --os-image "${ImageOS:-unknown}:${ImageVersion:-unknown}" \
+            --arch 'x64' \
+            --recipe-revision "$RECIPE_REVISION" \
+            --policy-fingerprint "$POLICY_FINGERPRINT"
+
+      - name: Upload producer manifest binding (trial evidence)
+        if: always() && inputs.trial-id != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: prepared-env-producer-manifests-${{ github.run_id }}
+          path: producer-binding/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # ────────────────────────────────────────────────────────────
   # Gate 2: Sharded test suite — 3 parallel shards on ubuntu (default)
@@ -226,14 +323,26 @@ jobs:
       # setup-racket call agree: 'auto' only when the prepared path is
       # actually in play for this run (producer green, not a dispatch
       # version-override, rollback switch not off).
-      PREPARED_ENV: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
+      # v1.00.32 W2: a trusted A/B/C trial additionally activates the
+      # prepared path through the identity-bound trial term (the second
+      # disjunct; it also requires the PROTECTED main ref). The first
+      # disjunct is the ordinary pre-trial expression, kept verbatim;
+      # ordinary push/PR/dispatch runs carry empty trial inputs, so only the
+      # rollback switch and the same-run producer can still flip them off,
+      # and the global rollback switch wins everywhere.
+      PREPARED_ENV: ${{ ((vars.RACKET_PREPARED_ARTIFACT != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') || (vars.RACKET_PREPARED_ARTIFACT != 'off' && needs.fast-env.result == 'success' && (inputs.trial-treatment == 'A' || inputs.trial-treatment == 'B' || inputs.trial-treatment == 'C') && inputs.trial-id != '' && inputs.trial-attempt != '' && inputs.source-sha == github.sha && github.ref == 'refs/heads/main' && github.ref_protected)) && 'auto' || 'off' }}
       # v1.00.30 W4 (issue #9690): guarded compiled-root activation for
       # the ubuntu fast shards ONLY. Precedence is evaluated in order:
       # the global emergency switch wins BEFORE the lane switch is even
       # consulted; the lane additionally requires RACKET_COMPILED_ROOT
       # explicitly 'on', a SAME-RUN successful producer, and no version
       # override. Windows/macOS/cross-version/release lanes never opt in.
-      COMPILED_ROOT: ${{ (vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_COMPILED_ROOT == 'on' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') && 'auto' || 'off' }}
+      # v1.00.32 W2: a trusted treatment-C trial activates the same lane
+      # through the identity-bound trial term (second disjunct; it also
+      # requires the PROTECTED main ref). Treatments A/B keep the compiled
+      # root OFF inside the trial and the ordinary first disjunct is
+      # unchanged for every non-trial event.
+      COMPILED_ROOT: ${{ ((vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_COMPILED_ROOT == 'on' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success') || (vars.RACKET_PREPARED_ARTIFACT != 'off' && needs.fast-env.result == 'success' && inputs.trial-treatment == 'C' && inputs.trial-id != '' && inputs.trial-attempt != '' && inputs.source-sha == github.sha && github.ref == 'refs/heads/main' && github.ref_protected)) && 'auto' || 'off' }}
     steps:
       - uses: actions/checkout@v7
       # Legacy pre-W3 cache; only pays off on the full path.
@@ -289,6 +398,36 @@ jobs:
             --trusted-label q-trusted-producer \
             --flags-file "$flags"
           echo "flags-file=$flags" >> "$GITHUB_OUTPUT"
+
+      # v1.00.32 W2 (trial evidence, consumer side): the OBSERVED producer
+      # binding for the trusted benchmark's envelope — hash the manifest the
+      # restore actually materialized (the verified compiled-root
+      # manifest.rktd on a root lane; else the prepared-env manifest.json),
+      # exactly like the trusted wrapper's producer-side binding step does.
+      # The strict assessor enforces launcher digest == expected digest, so
+      # this stamp binds THIS shard to the producer artifact bytes. It runs
+      # only for trials and only after a verified restore; when nothing was
+      # restored, the stamp is absent and the trial refuses honestly.
+      - name: Stamp the observed producer manifest binding (trial evidence)
+        if: always() && inputs.trial-id != '' && steps.setup.outputs.prepared-env-result == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/compiled-root-map"
+          racket scripts/ci/ci-recovery-trial.rkt stamp-producer-manifest \
+            --shard ${{ matrix.shard }} \
+            --out "$RUNNER_TEMP/compiled-root-map/shard-${{ matrix.shard }}.producer.json" \
+            --prepared-download "$RUNNER_TEMP/prepared-env-download" \
+            --compiled-root "${{ steps.setup.outputs.prepared-env-root }}"
+          # Trial-only identity: measure the installed bytes, NOT the shared
+          # setup action's normal-PR identity or the producer's expected tuple.
+          racket scripts/ci/ci-recovery-trial.rkt emit-identity \
+            --addon-store "${PLTADDONDIR:-$HOME/.cache/q-racket-addon}/8.10" \
+            --out "$RUNNER_TEMP/compiled-root-map/shard-${{ matrix.shard }}.identity.json" \
+            --lock-file ci/racket-package-lock.rktd --racket-version '8.10' \
+            --os "${{ runner.os }}" --os-image "${ImageOS:-unknown}:${ImageVersion:-unknown}" \
+            --arch 'x64' --recipe-revision 'trial-addon-relative-r1' \
+            --policy-fingerprint 'addon-store-v2|pltaddon-explicit|no-workspace-bytecode'
 
       # W1 telemetry contract: normalize the prepared-environment outcome
       # into machine-readable state for the test runner (runner.rkt reads
@@ -611,15 +750,134 @@ jobs:
   # the suite on ANY consume failure — never a silent skip (§11.3).
   # ────────────────────────────────────────────────────────────
   test-aggregate:
-    needs: [test, test-platform]
+    needs: [test, test-platform, fast-env]
+    # v1.00.32 W2: the DIRECT fast-env producer edge (the prepared-aggregate
+    # candidate restores the same-run producer's artifact HERE — the ordering
+    # is declared, not transitive). The if preserves the pre-trial semantics
+    # exactly: the job runs when test AND test-platform succeeded; fast-env's
+    # own result (success, failure or a rollback-switch skip) must never
+    # change whether this required gate runs on an ordinary PR — the trial
+    # gate below re-checks needs.fast-env.result == 'success' before any
+    # prepared restore.
+    if: ${{ !cancelled() && needs.test.result == 'success' && needs.test-platform.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - run: echo "All test shards and platform checks passed."
 
       - uses: actions/checkout@v7
+      # v1.00.32 W2 (trusted trial ONLY): the prepared-aggregate candidate.
+      # Ordinary push/PR/dispatch runs resolve this gate to 'off' and the
+      # aggregate keeps its cold full setup — the candidate is never enabled
+      # in normal CI and there is no promotion here. Ordering is guaranteed
+      # by the job's DIRECT needs edge to fast-env (needs: [test,
+      # test-platform, fast-env]): the same-run producer is complete before
+      # any test-aggregate step runs, so the guarded restore below cannot
+      # race it, and the gate additionally re-checks
+      # needs.fast-env.result == 'success' so a failed/skipped producer
+      # keeps the aggregate cold instead of classifying a fallback as a
+      # prepared treatment. The restore's W6 identity verify and the
+      # always-on BUG-0065 purge live inside setup-racket and are unchanged;
+      # the proof bundle below still passes through the same result-truth
+      # verifier exactly as before.
+      - name: Resolve the trusted-trial prepared-aggregate restore gate
+        id: trial-aggregate-env
+        if: vars.RACKET_PREPARED_ARTIFACT != 'off'
+        shell: bash
+        env:
+          TRIAL_TREATMENT: ${{ inputs.trial-treatment }}
+          TRIAL_ID: ${{ inputs.trial-id }}
+          TRIAL_ATTEMPT: ${{ inputs.trial-attempt }}
+          SOURCE_SHA: ${{ inputs.source-sha }}
+          HEAD_SHA: ${{ github.sha }}
+          HEAD_REF: ${{ github.ref }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+          EVENT_NAME: ${{ github.event_name }}
+          FAST_ENV_RESULT: ${{ needs.fast-env.result }}
+        run: |
+          set -euo pipefail
+          restore=off
+          if [ "$TRIAL_TREATMENT" = "B" ] || [ "$TRIAL_TREATMENT" = "C" ]; then
+            # The REUSABLE execution path re-validates the full trusted
+            # identity itself — it never trusts the caller's gate, because
+            # any workflow_call caller can pass arbitrary inputs. Required
+            # here, inside ci.yml: the actual event is a manual dispatch,
+            # the actual ref is the PROTECTED main branch, the requested
+            # source is the checked-out dispatch HEAD, the attempt is a
+            # positive integer, and the same-run producer actually
+            # succeeded (a failed or skipped producer keeps the aggregate
+            # cold — the cold fallback is never classified as a prepared
+            # treatment).
+            if [ "$EVENT_NAME" = "workflow_dispatch" ] \
+               && [ "$REF_PROTECTED" = "true" ] \
+               && [ "$HEAD_REF" = "refs/heads/main" ] \
+               && [ "$SOURCE_SHA" = "$HEAD_SHA" ] \
+               && [ -n "$TRIAL_ID" ] \
+               && [ "$FAST_ENV_RESULT" = "success" ] \
+               && case "$TRIAL_ATTEMPT" in ''|*[!0-9]*|0) false ;; *) true ;; esac; then
+              restore=auto
+            fi
+          fi
+          echo "prepared-env=$restore" >> "$GITHUB_OUTPUT"
       - uses: ./.github/actions/setup-racket
+        id: agg-setup
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+          # v1.00.32 W2: 'auto' ONLY through the trusted-trial gate above;
+          # every non-trial run passes 'off' (the input's own default), so
+          # the aggregate's ordinary execution path is unchanged.
+          prepared-environment: ${{ steps.trial-aggregate-env.outputs.prepared-env || 'off' }}
+          prepared-artifact-name: prepared-env-fast
+          prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
+
+      # v1.00.32 W2 (trial evidence): attest the aggregate's ACTUAL restore
+      # outcome from the setup action's observed outputs. The trial's B/C
+      # evidence is only a prepared-aggregate measurement when this
+      # attestation says the restore was manifest- AND identity-verified; a
+      # cold fallback keeps the aggregate cold and is recorded as exactly
+      # that (the adapter refuses such B/C trials fail-closed). All values
+      # reach the script through env indirection.
+      - name: Attest the actual aggregate restore outcome (trial evidence)
+        if: always() && inputs.trial-id != ''
+        shell: bash
+        env:
+          AGG_REQUESTED: ${{ steps.trial-aggregate-env.outputs.prepared-env || 'off' }}
+          AGG_RESULT: ${{ steps.agg-setup.outputs.prepared-env-result || 'unknown' }}
+          AGG_STATE: ${{ steps.agg-setup.outputs.prepared-env-state || 'unknown' }}
+          AGG_IDENTITY_RESULT: ${{ steps.agg-setup.outputs.prepared-env-identity-result || 'unknown' }}
+          AGG_RESTORE_MS: ${{ steps.agg-setup.outputs.prepared-env-restore-ms }}
+          AGG_COMPILED_ROOT: ${{ steps.agg-setup.outputs.prepared-env-root }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p aggregate-restore
+          if [ "$AGG_RESULT" = success ]; then
+            racket scripts/ci/ci-recovery-trial.rkt emit-identity \
+              --addon-store "${PLTADDONDIR:-$HOME/.cache/q-racket-addon}/8.10" \
+              --out aggregate-restore/identity.json \
+              --lock-file ci/racket-package-lock.rktd --racket-version '8.10' \
+              --os "${{ runner.os }}" --os-image "${ImageOS:-unknown}:${ImageVersion:-unknown}" \
+              --arch 'x64' --recipe-revision 'trial-addon-relative-r1' \
+              --policy-fingerprint 'addon-store-v2|pltaddon-explicit|no-workspace-bytecode'
+            racket scripts/ci/ci-recovery-trial.rkt stamp-producer-manifest \
+              --shard 0 --out aggregate-restore/producer.json \
+              --prepared-download "$RUNNER_TEMP/prepared-env-download" \
+              --compiled-root "$AGG_COMPILED_ROOT"
+          fi
+          # Serializer preserves unknown strings and embeds OBSERVED bytes only.
+          racket scripts/ci/ci-recovery-trial.rkt attest-aggregate \
+            --out aggregate-restore/prepared-aggregate-restore.json \
+            --identity aggregate-restore/identity.json --stamp aggregate-restore/producer.json
+
+      - name: Upload the aggregate restore attestation (trial evidence)
+        if: always() && inputs.trial-id != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: prepared-aggregate-restore-${{ github.run_id }}
+          path: aggregate-restore/
+          retention-days: 30
+          if-no-files-found: ignore
 
       # The fast shards upload their run-summary JSON as
       # test-results-fast-<shard> (one file per artifact, so no
