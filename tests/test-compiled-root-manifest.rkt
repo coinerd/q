@@ -23,10 +23,12 @@
          racket/match
          racket/path
          racket/port
+         racket/string
          racket/system
          rackunit
          "../ci/prepared-environment/compiled-root-manifest.rkt"
-         "../ci/prepared-environment/compiled-root.rkt")
+         "../ci/prepared-environment/compiled-root.rkt"
+         (prefix-in cli: "../scripts/ci/compiled-root.rkt"))
 
 (module+ test
   (define tmp-root (make-temporary-file "qcr-manifest-test~a" 'directory))
@@ -280,3 +282,30 @@
                                               #:root-dir staging
                                               #:racket-executable fake-exe
                                               #:producer-label "q-trusted-producer")))))
+
+(module+ test
+  ;; W1a (open-gap-closure): the whole-checkout producer inventory must
+  ;; exclude deliberate-fault fixtures under tests/fixtures/. Coordinator
+  ;; trial c01 (run 41231230944) failed the C-lane producer exactly there:
+  ;; the BUG-0088 fixture tests/fixtures/supplemental-evidence/baseline-query.rkt
+  ;; is a VALID module whose require deliberately targets a nonexistent
+  ;; sibling, so raco make died with "no such file or directory". Fixtures
+  ;; are negative-test inputs compiled per-test by the runner with its own
+  ;; error handling — never producer inventory.
+  (test-case "derive-checkout-modules excludes tests/fixtures deliberate-fault inputs"
+    (define scratch (make-temporary-file "qcr-w1a-fixtures~a" 'directory))
+    (define (write-rel rel content)
+      (define p (build-path scratch rel))
+      (make-directory* (path-only p))
+      (display-to-file content p #:mode 'text #:exists 'replace))
+    (write-rel "mod.rkt" "#lang racket/base\n(provide ok)\n(define ok 1)\n")
+    (write-rel "tests/fixtures/deliberate-fault/broken.rkt"
+               "#lang racket/base\n(require \"settings-core.rkt\")\n")
+    (write-rel "tests/fixtures/nonmod.rkt" "(module+ test (void))\n")
+    (define-values (mods skipped) (cli:derive-checkout-modules scratch))
+    (check-equal? mods '("mod.rkt") "only real modules outside tests/fixtures are inventory")
+    (check-equal? skipped
+                  '("tests/fixtures/deliberate-fault/broken.rkt" "tests/fixtures/nonmod.rkt")
+                  "both fixture files are skipped non-compilation inputs")
+    (check-false (member "tests/fixtures/deliberate-fault/broken.rkt" mods)
+                 "a deliberate-fault fixture must never enter the producer inventory")))
