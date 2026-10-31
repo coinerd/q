@@ -1484,3 +1484,67 @@
     ;; binding: one pinned tree, uniform config
     (check-true (hash-ref (hash-ref report 'binding) 'source-uniform))
     (check-true (hash-ref (hash-ref report 'binding) 'config-uniform))))
+
+;; ─────────────────────────────────────────────────────────────────────────
+;; W1a (open-gap-closure): trial identity must bind the SHIPPED bytes.
+;;
+;; Coordinator smoke run 41192722012 (trial-2026-10-31-smoke-1) proved three
+;; divergent addon-store digests across the artifact lifecycle: producer
+;; binding 0519408e… (hashed the live stage), uploaded artifact 68079060…
+;; (verified byte-faithful: 5494 files / 73311102 bytes), shard-installed
+;; 1ccb3951… (all three shards identical; installed stores accumulate
+;; runtime state). The strict assessor therefore refused the envelope
+;; (record-identity-mismatch-artifact-digest/-resolved-set-digest) and every
+;; measured trial would refuse the same way. The workflow contract is now:
+;; the producer hashes the RE-DOWNLOADED artifact, every consumer (shards
+;; and the aggregate attestation) hashes the PRISTINE delivered download,
+;; the digest recipe stays r1 (W1a changes the measurement point, never the
+;; contract strength), and the pack step refuses hidden files (upload drops
+;; them silently — a hidden file would make the artifact not-the-store).
+;; These assertions read the workflow text itself so the step graph and the
+;; contract cannot drift apart.
+
+(define-runtime-path w1a-ci-yml "../.github/workflows/ci.yml")
+(define-runtime-path w1a-prepare-yml "../.github/actions/prepare-racket-environment/action.yml")
+(define w1a-download-v8-sha "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c")
+
+(test-case "trial identity binds shipped bytes (W1a, smoke run 41192722012)"
+  (define ci (file->string w1a-ci-yml))
+  (define prepare (file->string w1a-prepare-yml))
+  ;; Producer binding downloads the shipped artifact and hashes IT — never
+  ;; the live stage (which diverged from the artifact in the smoke run).
+  (check-true (string-contains?
+               ci
+               "name: Download the shipped prepared artifact for trial binding (trial evidence)")
+              "the binding must consume the shipped artifact, not the live stage")
+  (check-true
+   (string-contains? ci (string-append "uses: actions/download-artifact@" w1a-download-v8-sha))
+   "the trial download step must pin the audited download-artifact v8 SHA")
+  (check-true (string-contains? ci "path: producer-binding/artifact-download")
+              "the shipped artifact must be unpacked into the binding download path")
+  (check-true (string-contains? ci "shipped=\"producer-binding/artifact-download\"")
+              "the binding must pin the shipped-artifact download path")
+  (check-true (string-contains? ci "--stage \"$shipped\"")
+              "producer emit-identity must hash the shipped artifact bytes")
+  (check-false (string-contains? ci "--stage \"$RUNNER_TEMP/prepared-env-prepared-env-fast\"")
+               "producer binding must not hash the live stage (smoke 41192722012 divergence)")
+  ;; Shards and the aggregate attestation hash the pristine delivered
+  ;; download — never the installed store (which accumulates runtime state).
+  (check-equal?
+   (length (regexp-match* #rx"--addon-store \"\\$RUNNER_TEMP/prepared-env-download/addon-store\"" ci))
+   2
+   "shard identity + aggregate attestation must hash the pristine delivered download")
+  (check-false (string-contains? ci "--addon-store \"${PLTADDONDIR")
+               "installed-store identity measurement must not survive (smoke 41192722012 divergence)")
+  ;; The digest recipe is unchanged — same strength, new measurement point.
+  (check-equal? (length (regexp-match* #rx"trial-addon-relative-r1" ci))
+                3
+                "the r1 recipe revision must be used by all three emit sites")
+  ;; The pack ships hidden files (include-hidden-files: true): the default
+  ;; silently pruned them, which is exactly the smoke-run divergence, and
+  ;; the producer↔consumer digest equality is the permanent completeness
+  ;; guard — any pruning resurfaces as an honest assessor refusal.
+  (check-true (string-contains? prepare "include-hidden-files: true")
+              "the prepared artifact must ship the complete store, hidden files included")
+  (check-false (string-contains? prepare "include-hidden-files: false")
+               "the silent hidden-file pruning must not survive"))

@@ -242,12 +242,24 @@ jobs:
       # v1.00.32 W2 (trial evidence, producer side): hash the REAL staged
       # manifest bytes (prepared-env manifest.json, plus the compiled-root
       # manifest.rktd when this run's lane built it) and derive the W6
-      # identity fields from THIS producer job's real bytes (lock file,
-      # racket executable, staged addon store) — so the trial envelope's
-      # expected context is producer-derived, never an invented constant and
-      # never read back from a shard. The identity manifest itself is
-      # emitted through the evidence owner's --identity-emit CLI by the
-      # adapter, so the canonical shape stays single-sourced.
+      # identity fields from the SHIPPED artifact bytes (lock file,
+      # racket executable, addon store) — so the trial envelope's
+      # expected context is derived from the exact bytes every consumer
+      # restores, never an invented constant, never read back from a
+      # shard, and never the live staging directory (W1a, open-gap-closure:
+      # coordinator smoke run 41192722012 proved the live-stage binding
+      # diverges from the shipped artifact — store digest 0519408e… at the
+      # live stage vs 68079060… in the uploaded artifact — so binding now
+      # re-downloads the artifact and hashes exactly those bytes). The
+      # identity manifest itself is emitted through the evidence owner's
+      # --identity-emit CLI by the adapter, so the canonical shape stays
+      # single-sourced.
+      - name: Download the shipped prepared artifact for trial binding (trial evidence)
+        if: always() && inputs.trial-id != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: prepared-env-fast
+          path: producer-binding/artifact-download
       - name: Bind prepared-env producer manifests and identity (trial evidence)
         id: producer-binding
         if: always() && inputs.trial-id != ''
@@ -258,17 +270,17 @@ jobs:
           POLICY_FINGERPRINT: 'addon-store-v2|pltaddon-explicit|no-workspace-bytecode'
         run: |
           set -euo pipefail
-          stage="$RUNNER_TEMP/prepared-env-prepared-env-fast"
+          shipped="producer-binding/artifact-download"
           mkdir -p producer-binding
-          if [ -f "$stage/manifest.json" ]; then
+          if [ -f "$shipped/manifest.json" ]; then
             racket scripts/ci/ci-recovery-trial.rkt bind-producer \
-              --stage "$stage" \
+              --stage "$shipped" \
               --out producer-binding/producer-manifests.json
           else
-            echo "trial evidence: no staged manifest to bind (producer did not complete); the trial will refuse honestly"
+            echo "trial evidence: no shipped manifest to bind (producer did not complete); the trial will refuse honestly"
           fi
           racket scripts/ci/ci-recovery-trial.rkt emit-identity \
-            --stage "$stage" \
+            --stage "$shipped" \
             --out producer-binding/identity-manifest.json \
             --lock-file ci/racket-package-lock.rktd \
             --racket-version "$RACKET_VERSION" \
@@ -419,10 +431,15 @@ jobs:
             --out "$RUNNER_TEMP/compiled-root-map/shard-${{ matrix.shard }}.producer.json" \
             --prepared-download "$RUNNER_TEMP/prepared-env-download" \
             --compiled-root "${{ steps.setup.outputs.prepared-env-root }}"
-          # Trial-only identity: measure the installed bytes, NOT the shared
-          # setup action's normal-PR identity or the producer's expected tuple.
+          # W1a (open-gap-closure): trial-only identity measures the
+          # DELIVERED bytes — the pristine prepared-env-download store this
+          # job restored — never the installed copy (which accumulates
+          # runtime state: compiled caches written during the run; smoke
+          # run 41192722012 measured a divergent installed-store digest)
+          # and never the shared setup action's normal-PR identity or the
+          # producer's expected tuple.
           racket scripts/ci/ci-recovery-trial.rkt emit-identity \
-            --addon-store "${PLTADDONDIR:-$HOME/.cache/q-racket-addon}/8.10" \
+            --addon-store "$RUNNER_TEMP/prepared-env-download/addon-store" \
             --out "$RUNNER_TEMP/compiled-root-map/shard-${{ matrix.shard }}.identity.json" \
             --lock-file ci/racket-package-lock.rktd --racket-version '8.10' \
             --os "${{ runner.os }}" --os-image "${ImageOS:-unknown}:${ImageVersion:-unknown}" \
@@ -853,8 +870,12 @@ jobs:
           set -euo pipefail
           mkdir -p aggregate-restore
           if [ "$AGG_RESULT" = success ]; then
+            # W1a (open-gap-closure): the attested identity binds the
+            # DELIVERED bytes (pristine prepared-env-download store), not
+            # the installed copy; the installation outcome itself is
+            # attested separately through AGG_RESULT/AGG_STATE below.
             racket scripts/ci/ci-recovery-trial.rkt emit-identity \
-              --addon-store "${PLTADDONDIR:-$HOME/.cache/q-racket-addon}/8.10" \
+              --addon-store "$RUNNER_TEMP/prepared-env-download/addon-store" \
               --out aggregate-restore/identity.json \
               --lock-file ci/racket-package-lock.rktd --racket-version '8.10' \
               --os "${{ runner.os }}" --os-image "${ImageOS:-unknown}:${ImageVersion:-unknown}" \

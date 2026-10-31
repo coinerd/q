@@ -220,3 +220,12 @@ runs:
         path: ${{ runner.temp }}/prepared-env-${{ inputs.artifact-name }}
         retention-days: 1
         if-no-files-found: error
+        # W1a (open-gap-closure): ship hidden files too. The default (false)
+        # silently prunes them from the artifact, so the shipped store was
+        # not the store the trial identity bound (coordinator smoke run
+        # 41192722012: staged digest 0519408e… vs shipped 68079060…; the
+        # fail-closed guard confirmed real hidden files on the first W1a
+        # PR). With the complete store shipped, the producer↔consumer
+        # digest equality IS the completeness guard: any pruning or
+        # mutation resurfaces as an honest assessor refusal.
+        include-hidden-files: true

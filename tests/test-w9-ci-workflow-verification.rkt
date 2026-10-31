@@ -368,7 +368,7 @@
     (define contract (hash-ref cp 'fast_env_verification_contract))
     (check-equal?
      (hash-ref contract 'prepare_action_sha256)
-     "49bbb6795241550d973f70d12b9e568feb67f8065852c470ff9d8f1a204e683e"
+     "954e3ab6906bef691c9181003fc156ae446a43e8be3ba1093a14e35eb4ff1525"
      (string-append
       "manifest/OS/Racket/lockfile verification steps must stay byte-identical"
       " (re-stamped by v1.00.30 W0 BUG-0073: pipefail added before the step-summary tee;"
@@ -380,7 +380,11 @@
       " (re-stamped by this campaign's W7: the repaired v1.00.30 W4 guarded compiled-root"
       " pilot, issue #9690, is carried forward into that same single guarded"
       " producer invocation, publishing before resolution with same-run restore,"
-      " and the loud eager fallback retained; see w7_restamp)"))
+      " and the loud eager fallback retained; see w7_restamp)"
+      " (re-stamped by open-gap-closure W1a, 2026-10-31: the pack step gained a"
+      " fail-closed hidden-file check, then shipped hidden files via"
+      " include-hidden-files: true — coordinator smoke run 41192722012 proved the"
+      " silent pruning diverged the bound identity basis from the shipped artifact)"))
     (check-equal?
      (hash-ref contract 'setup_action_sha256)
      "4873bec295c1bc47964f71304e027ece91a5a003b1db6dcdb477c87ebec51fb0"

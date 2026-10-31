@@ -358,7 +358,15 @@ launches Actions):
   and, if present, `q-compiled/trusted-root/manifest.rktd` bytes.
 - `emit-identity --stage DIR --out F --lock-file F --racket-version V --os OS
   --os-image IMG --arch ARCH --recipe-revision R --policy-fingerprint P`.
-  A consumer replaces `--stage DIR` with `--addon-store INSTALLED_VERSION_DIR`.
+  W1a (open-gap-closure): the producer passes `--stage` pointing at the
+  RE-DOWNLOADED shipped artifact (never the live staging directory), and
+  consumers pass `--addon-store` pointing at the PRISTINE delivered download
+  (`$RUNNER_TEMP/prepared-env-download/addon-store`), never the installed
+  copy — installed stores accumulate runtime state (compiled caches written
+  during the run), so the three lifecycle points hash the same shipped
+  bytes by construction. Coordinator smoke run 41192722012 demonstrated the
+  divergence this closes (store digests 0519408e… live-stage binding /
+  68079060… shipped artifact / 1ccb3951… installed).
   Both use `trial-addon-relative-r1`: sort files by path, concatenate each
   `<sha256 of file bytes>  <path relative to addon-store>\n`, then SHA-256 that
   byte stream. Both `resolved-set-digest` and `artifact-digest` use this digest.
