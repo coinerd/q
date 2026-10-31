@@ -1,4 +1,4 @@
-#lang racket/base
+#lang racket
 
 ;; @speed fast
 ;; @suite testing
@@ -56,7 +56,8 @@
 ;; "unknown", never a fabricated zero; the committed report is bound to a
 ;; SHA256SUMS file; and the committed window report passes --check.
 
-(require json
+(require "../scripts/ci/prepared-env-report.rkt" ; W1 strict trial assessor: pure exported API under test
+         json
          (only-in "../util/version.rkt" q-version)
          racket/file
          racket/port
@@ -211,6 +212,212 @@
           'consumers
           (list (hasheq 'consumer "ci:test" 'honors-global-switch #t)
                 (hasheq 'consumer "ci:smoke" 'honors-global-switch #t))))
+
+;; ---------------------------------------------------------------------------
+;; W1 (v1.00.32) strict trial assessment helpers — ci-recovery-trial-evidence@1
+;;
+;; The shared schema/CLI/API contract built tests-first here is documented
+;; for the workflow and report owners in docs/reports/CI-RECOVERY-EVIDENCE.md.
+;; Every fixture below is SYNTHETIC: it proves the assessor's refusal rules,
+;; never a real CI outcome. Actual baseline collection remains a separately
+;; authorized coordinator gate.
+;; ---------------------------------------------------------------------------
+
+(define sha40-a "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+(define sha40-b "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+
+(define (w1-identity-fields)
+  ;; Field values deliberately match the `identity-args` defaults below so
+  ;; the flag-supplied expected-identity test can reuse one coherent
+  ;; synthetic environment across both fixture families.
+  (hasheq 'os
+          "Linux"
+          'os-image
+          "ubuntu-24.04:20260901.1"
+          'arch
+          "x64"
+          'racket-version
+          "8.10"
+          'racket-executable-digest
+          digest-a
+          'lock-digest
+          digest-b
+          'resolved-set-digest
+          digest-c
+          'precompile-recipe-revision
+          "setup-racket-full-path-r1"
+          'policy-fingerprint
+          "addon-store-v2-no-workspace-bytecode"
+          'artifact-digest
+          digest-d))
+
+(define (w1-restore-record shard
+                           #:head [head sha40-a]
+                           #:run [run 7100]
+                           #:outcome [outcome "verified"]
+                           #:trial-id [trial-id "trial-2026-10-30-c1"]
+                           #:attempt [attempt 1]
+                           #:treatment [treatment "C"]
+                           #:identity [identity (w1-identity-fields)])
+  ;; The four strict binding fields (trial-id/attempt/treatment/identity)
+  ;; are NOT emitted by --emit-restore-record: the workflow adapter
+  ;; attaches them when it builds the envelope. `identity` is the shard's
+  ;; ACTUAL observed environment identity (the ten fields of a
+  ;; prepared-env-identity@1 manifest as measured on this shard).
+  (hasheq 'schema
+          "prepared-env-restore-record"
+          'trial-id
+          trial-id
+          'attempt
+          attempt
+          'treatment
+          treatment
+          'identity
+          identity
+          'run-id
+          run
+          'head-sha
+          head
+          'created-at-utc
+          "2026-10-30T10:00:00Z"
+          'shard
+          shard
+          'prepared-env-mode
+          "auto"
+          'fast-env-producer-result
+          "success"
+          'raw-state
+          "restored"
+          'outcome
+          outcome
+          'restore-ms
+          12000
+          'fallback-ms
+          "unknown"
+          'wall-clock-seconds
+          210.5
+          'compiled-code-outcome
+          "unknown"
+          'eager-setup-seconds
+          "unknown"
+          'cache-state
+          "unknown"
+          'purge-zo-count
+          "unknown"
+          'compiled-root-outcome
+          "unknown"
+          'compiled-root-producer-seconds
+          "unknown"
+          'compiled-root-fallback-seconds
+          "unknown"
+          'cache-key
+          "prepared-env-fast:deadbeef"
+          'sha-context
+          head))
+
+(define (w1-launcher #:mode [mode "verified-root-hit"]
+                     #:hits [hits 3]
+                     #:fallbacks [fallbacks 0]
+                     #:digest [digest digest-d]
+                     #:exit-code [exit-code 0])
+  ;; exit-code mirrors the actual launcher CLI, which ALWAYS emits it.
+  (hasheq 'producer-manifest-digest
+          digest
+          'mode
+          mode
+          'root-hits
+          hits
+          'fallbacks
+          fallbacks
+          'exit-code
+          exit-code
+          'wall-ms
+          90000
+          'loads
+          12
+          'bytes-served
+          1048576
+          'mechanism
+          "external-compiled-root(map-dir symlinks)"
+          'raw-datum
+          (string-append
+           "(compiled-root-launch-telemetry (mode . \"verified-root-hit\") (exit-code . 0)"
+           " (wall-ms . 90000) (root-hits . 3) (fallbacks . 0) (loads . 12)"
+           " (bytes-served . 1048576) (mechanism . \"external-compiled-root(map-dir symlinks)\"))")))
+
+(define (w1-launcher-off [digest digest-d] #:exit-code [exit-code 0])
+  (w1-launcher #:mode "global-off" #:hits 0 #:fallbacks 0 #:digest digest #:exit-code exit-code))
+
+(define (w1-shard shard
+                  #:record [record #f]
+                  #:launcher [launcher (w1-launcher)]
+                  #:trial-id [trial-id "trial-2026-10-30-c1"]
+                  #:attempt [attempt 1]
+                  #:treatment [treatment "C"]
+                  #:identity [identity (w1-identity-fields)])
+  (define base
+    (hasheq 'shard
+            shard
+            'record
+            (or record
+                (w1-restore-record shard
+                                   #:trial-id trial-id
+                                   #:attempt attempt
+                                   #:treatment treatment
+                                   #:identity identity))))
+  (if launcher
+      (hash-set base 'launcher launcher)
+      base))
+
+(define (w1-shards-off [treatment "A"])
+  (list (w1-shard 0 #:treatment treatment #:launcher (w1-launcher-off))
+        (w1-shard 1 #:treatment treatment #:launcher (w1-launcher-off))))
+
+(define (w1-envelope #:treatment [treatment "C"]
+                     #:head [head sha40-a]
+                     #:run [run 7100]
+                     #:inventory [inventory (list 0 1)]
+                     #:shards [shards (list (w1-shard 0) (w1-shard 1))]
+                     #:identity [identity (w1-identity-fields)]
+                     #:manifest-digest [manifest-digest digest-d])
+  (define expected
+    (hash-set (if identity
+                  (hasheq 'shard-inventory inventory 'identity identity)
+                  (hasheq 'shard-inventory inventory))
+              'producer-manifest-digest
+              manifest-digest))
+  (hasheq 'schema
+          trial-evidence-schema
+          'trial
+          (hasheq 'trial-id
+                  "trial-2026-10-30-c1"
+                  'attempt
+                  1
+                  'treatment
+                  treatment
+                  'run-id
+                  run
+                  'head-sha
+                  head
+                  'created-at-utc
+                  "2026-10-30T10:00:00Z")
+          'expected
+          expected
+          'shards
+          shards))
+
+(define (write-envelope path env)
+  (with-output-to-file path (lambda () (write-json env)) #:exists 'replace))
+
+(define (trial-assess-verdict envelope-path [extra ""])
+  ;; Run --trial-assess with a verdict file; return (values code verdict stdout).
+  (define verdict (tmp-path (format "trial-verdict-~a.json" (symbol->string (gensym 't)))))
+  (define-values (code out)
+    (run-script (format "--trial-assess --envelope ~a --out ~a~a"
+                        (path->string envelope-path)
+                        (path->string verdict)
+                        extra)))
+  (values code (and (file-exists? verdict) (read-jsexpr verdict)) out))
 
 ;; ---------------------------------------------------------------------------
 ;; W6 identity-manifest helpers (module level: test-case bodies are
@@ -1266,7 +1473,484 @@
       (rejects (hash-set good-containment-doc 'residual-gap "") "bad-empty-gap.json")
       (rejects (hash-set good-containment-doc 'evidence "") "bad-empty-evidence.json")
       ;; Not a JSON object at all.
-      (rejects (list 1 2 3) "bad-not-object.json"))))
+      (rejects (list 1 2 3) "bad-not-object.json"))
+
+    ;; ---------------------------------------------------------------
+    ;; W1 (v1.00.32): strict trial assessment (--trial-assess and the
+    ;; exported pure function assess-trial-envelope). Shared contract
+    ;; for the workflow and report owners; see
+    ;; docs/reports/CI-RECOVERY-EVIDENCE.md. Fixtures are synthetic.
+    ;; ---------------------------------------------------------------
+
+    (test-case "trial-assess: complete C trial with ACTUAL launcher telemetry is ready-root-on"
+      (define p (tmp-path "trial-c.json"))
+      (write-envelope p (w1-envelope))
+      (define-values (code verdict out) (trial-assess-verdict p))
+      (check-equal? code 0)
+      (check-true (hash? verdict) "a ready verdict must be written")
+      (check-equal? (hash-ref verdict 'schema) "ci-recovery-trial-assessment@1")
+      (check-equal? (hash-ref verdict 'ready?) #t)
+      (check-equal? (hash-ref verdict 'classification) "ready-root-on")
+      (check-equal? (hash-ref verdict 'reasons) (list))
+      (check-equal? (hash-ref verdict 'treatment) "C")
+      (check-equal? (hash-ref verdict 'shards-assessed) 2)
+      (check-equal? (hash-ref verdict 'expected-shard-count) 2)
+      ;; Raw data is retained in the verdict for the report owners.
+      (define raw (hash-ref verdict 'raw))
+      (check-equal? (length (hash-ref raw 'shards)) 2)
+      (check-equal? (hash-ref (hash-ref raw 'trial) 'treatment) "C"))
+
+    (test-case "trial-assess: A/B root-off trials classify honestly as ready-root-off (global-off is legitimate)"
+      (for ([treatment (in-list (list "A" "B"))])
+        (define p (tmp-path (format "trial-~a.json" treatment)))
+        (write-envelope p (w1-envelope #:treatment treatment #:shards (w1-shards-off treatment)))
+        (define-values (code verdict out) (trial-assess-verdict p))
+        (check-equal? code
+                      0
+                      (format "treatment ~a with all-global-off telemetry must be ready" treatment))
+        (check-equal? (hash-ref verdict 'ready?) #t)
+        (check-equal? (hash-ref verdict 'classification)
+                      "ready-root-off"
+                      "root-off is a distinct honest classification, never a failed root-on trial")
+        (check-equal? (hash-ref verdict 'reasons) (list))))
+
+    (test-case "trial-assess: missing shard record is a refusal, never ready"
+      (define p (tmp-path "trial-missing.json"))
+      (write-envelope p (w1-envelope #:shards (list (w1-shard 0))))
+      (define-values (code verdict out) (trial-assess-verdict p))
+      (check-true (positive? code))
+      (check-equal? (hash-ref verdict 'ready?) #f)
+      (check-equal? (hash-ref verdict 'classification) "refused")
+      (check-equal? (hash-ref verdict 'reasons) (list "missing-shard-record")))
+
+    (test-case "trial-assess: duplicate shard record is refused"
+      (define p (tmp-path "trial-dup.json"))
+      (write-envelope p (w1-envelope #:shards (list (w1-shard 0) (w1-shard 0) (w1-shard 1))))
+      (define-values (code verdict out) (trial-assess-verdict p))
+      (check-true (positive? code))
+      (check-equal? (hash-ref verdict 'reasons) (list "duplicate-shard-record")))
+
+    (test-case "trial-assess: shard outside the expected inventory is refused"
+      (define p (tmp-path "trial-extra.json"))
+      (write-envelope p (w1-envelope #:shards (list (w1-shard 0) (w1-shard 1) (w1-shard 2))))
+      (define-values (code verdict out) (trial-assess-verdict p))
+      (check-true (positive? code))
+      (check-equal? (hash-ref verdict 'reasons) (list "unexpected-shard-record")))
+
+    (test-case "trial-assess: mixed head/run/shard records are refused (exact identity binding)"
+      ;; mixed head
+      (define p-head (tmp-path "trial-mixed-head.json"))
+      (write-envelope p-head
+                      (w1-envelope #:shards
+                                   (list (w1-shard 0)
+                                         (w1-shard 1 #:record (w1-restore-record 1 #:head sha40-b)))))
+      (define-values (code-head verdict-head out-head) (trial-assess-verdict p-head))
+      (check-true (positive? code-head))
+      (check-equal? (hash-ref verdict-head 'reasons) (list "record-head-sha-mismatch"))
+      ;; mixed run
+      (define p-run (tmp-path "trial-mixed-run.json"))
+      (write-envelope p-run
+                      (w1-envelope #:shards
+                                   (list (w1-shard 0)
+                                         (w1-shard 1 #:record (w1-restore-record 1 #:run 7199)))))
+      (define-values (code-run verdict-run out-run) (trial-assess-verdict p-run))
+      (check-true (positive? code-run))
+      (check-equal? (hash-ref verdict-run 'reasons) (list "record-run-id-mismatch"))
+      ;; record/shard key mismatch
+      (define p-shard (tmp-path "trial-mixed-shard.json"))
+      (write-envelope p-shard
+                      (w1-envelope #:shards (list (w1-shard 0 #:record (w1-restore-record 5))
+                                                  (w1-shard 1))))
+      (define-values (code-shard verdict-shard out-shard) (trial-assess-verdict p-shard))
+      (check-true (positive? code-shard))
+      (check-equal? (hash-ref verdict-shard 'reasons) (list "record-shard-mismatch")))
+
+    (test-case "trial-assess: records must carry strict attempt/trial-id/treatment/identity binding"
+      ;; mixed attempt: a record from another attempt must not certify this one
+      (define p-attempt (tmp-path "trial-mixed-attempt.json"))
+      (write-envelope p-attempt
+                      (w1-envelope #:shards
+                                   (list (w1-shard 0)
+                                         (w1-shard 1 #:record (w1-restore-record 1 #:attempt 2)))))
+      (define-values (code-attempt verdict-attempt out-attempt) (trial-assess-verdict p-attempt))
+      (check-true (positive? code-attempt))
+      (check-equal? (hash-ref verdict-attempt 'reasons) (list "record-attempt-mismatch"))
+      ;; a record MISSING the adapter-attached key refuses too (required key)
+      (define p-noattempt (tmp-path "trial-missing-attempt.json"))
+      (write-envelope
+       p-noattempt
+       (w1-envelope #:shards (list (w1-shard 0 #:record (hash-remove (w1-restore-record 0) 'attempt))
+                                   (w1-shard 1))))
+      (define-values (code-noattempt verdict-noattempt out-noattempt)
+        (trial-assess-verdict p-noattempt))
+      (check-true (positive? code-noattempt))
+      (check-equal? (hash-ref verdict-noattempt 'reasons) (list "record-attempt-mismatch"))
+      ;; mixed trial-id
+      (define p-trialid (tmp-path "trial-mixed-trialid.json"))
+      (write-envelope
+       p-trialid
+       (w1-envelope
+        #:shards (list (w1-shard 0)
+                       (w1-shard 1 #:record (w1-restore-record 1 #:trial-id "trial-2026-10-30-c2")))))
+      (define-values (code-trialid verdict-trialid out-trialid) (trial-assess-verdict p-trialid))
+      (check-true (positive? code-trialid))
+      (check-equal? (hash-ref verdict-trialid 'reasons) (list "record-trial-id-mismatch"))
+      ;; a record MISSING the trial-id key refuses too
+      (define p-notrialid (tmp-path "trial-missing-trialid.json"))
+      (write-envelope
+       p-notrialid
+       (w1-envelope #:shards (list (w1-shard 0 #:record (hash-remove (w1-restore-record 0) 'trial-id))
+                                   (w1-shard 1))))
+      (define-values (code-notrialid verdict-notrialid out-notrialid)
+        (trial-assess-verdict p-notrialid))
+      (check-true (positive? code-notrialid))
+      (check-equal? (hash-ref verdict-notrialid 'reasons) (list "record-trial-id-mismatch"))
+      ;; mixed treatment: a record from another treatment must not certify C
+      (define p-treatment (tmp-path "trial-mixed-treatment.json"))
+      (write-envelope
+       p-treatment
+       (w1-envelope #:shards (list (w1-shard 0)
+                                   (w1-shard 1 #:record (w1-restore-record 1 #:treatment "A")))))
+      (define-values (code-treatment verdict-treatment out-treatment)
+        (trial-assess-verdict p-treatment))
+      (check-true (positive? code-treatment))
+      (check-equal? (hash-ref verdict-treatment 'reasons) (list "record-treatment-mismatch"))
+      ;; a record MISSING the treatment key refuses too
+      (define p-notreatment (tmp-path "trial-missing-treatment.json"))
+      (write-envelope
+       p-notreatment
+       (w1-envelope #:shards
+                    (list (w1-shard 0 #:record (hash-remove (w1-restore-record 0) 'treatment))
+                          (w1-shard 1))))
+      (define-values (code-notreatment verdict-notreatment out-notreatment)
+        (trial-assess-verdict p-notreatment))
+      (check-true (positive? code-notreatment))
+      (check-equal? (hash-ref verdict-notreatment 'reasons) (list "record-treatment-mismatch")))
+
+    (test-case "trial-assess: observed record identity must equal the expected identity field-by-field"
+      ;; Valid-looking mismatches: well-formed 64-hex digests and real
+      ;; platform words that simply belong to ANOTHER environment.
+      (for ([case (in-list (list (cons "os" "Darwin")
+                                 (cons "os-image" "ubuntu-24.04:20260101.1")
+                                 (cons "arch" "arm64")
+                                 (cons "racket-version" "8.11")
+                                 (cons "racket-executable-digest" digest-b)
+                                 (cons "lock-digest" digest-c)
+                                 (cons "resolved-set-digest" digest-d)
+                                 (cons "precompile-recipe-revision" "setup-racket-full-path-r2")
+                                 (cons "policy-fingerprint" "strict-queue")
+                                 (cons "artifact-digest" digest-a)))])
+        (define dim (car case))
+        (define p (tmp-path (format "trial-ident-~a.json" dim)))
+        (write-envelope p
+                        (w1-envelope #:shards (list (w1-shard 0)
+                                                    (w1-shard 1
+                                                              #:record (w1-restore-record
+                                                                        1
+                                                                        #:identity
+                                                                        (hash-set (w1-identity-fields)
+                                                                                  (string->symbol dim)
+                                                                                  (cdr case)))))))
+        (define-values (code verdict out) (trial-assess-verdict p))
+        (check-true (positive? code) (format "an observed ~a mismatch must refuse" dim))
+        (check-equal? (hash-ref verdict 'reasons)
+                      (list (format "record-identity-mismatch-~a" dim))
+                      (format "the refusal must name the mismatching identity field: ~a" dim)))
+      ;; the identity key is REQUIRED: a record without it refuses
+      (define p-missing (tmp-path "trial-ident-missing.json"))
+      (write-envelope
+       p-missing
+       (w1-envelope #:shards (list (w1-shard 0 #:record (hash-remove (w1-restore-record 0) 'identity))
+                                   (w1-shard 1))))
+      (define-values (code-missing verdict-missing out-missing) (trial-assess-verdict p-missing))
+      (check-true (positive? code-missing))
+      (check-equal? (hash-ref verdict-missing 'reasons) (list "record-identity-missing"))
+      ;; a malformed observed identity (garbage where a 64-hex digest
+      ;; belongs) fails closed instead of comparing garbage
+      (define p-malformed (tmp-path "trial-ident-malformed.json"))
+      (write-envelope p-malformed
+                      (w1-envelope #:shards
+                                   (list (w1-shard 0
+                                                   #:record (w1-restore-record
+                                                             0
+                                                             #:identity (hash-set (w1-identity-fields)
+                                                                                  'lock-digest
+                                                                                  "deadbeef")))
+                                         (w1-shard 1))))
+      (define-values (code-malformed verdict-malformed out-malformed)
+        (trial-assess-verdict p-malformed))
+      (check-true (positive? code-malformed))
+      (check-equal? (hash-ref verdict-malformed 'reasons) (list "record-identity-malformed")))
+
+    (test-case "trial-assess: ANY outcome outside the valid enum refuses, not only the literal unknown"
+      (for ([bad (in-list (list "restored" "success" "failure" "unknown"))])
+        (define expected-reason
+          (if (equal? bad "unknown") "record-outcome-unknown" "record-outcome-invalid"))
+        (define p (tmp-path (format "trial-outcome-~a.json" bad)))
+        (write-envelope p
+                        (w1-envelope #:shards
+                                     (list (w1-shard 0 #:record (w1-restore-record 0 #:outcome bad))
+                                           (w1-shard 1))))
+        (define-values (code verdict out) (trial-assess-verdict p))
+        (check-true (positive? code) (format "raw-CI outcome ~s must never certify" bad))
+        (check-equal? (hash-ref verdict 'reasons)
+                      (list expected-reason)
+                      (format "outcome ~s must name its refusal reason" bad))))
+
+    (test-case "trial-assess: launcher exit-code is required and must be zero (failed launcher never certifies)"
+      ;; a FAILED launcher refuses even in verified-root-hit mode
+      (define p-failed-hit (tmp-path "trial-exitcode-failed-hit.json"))
+      (write-envelope
+       p-failed-hit
+       (w1-envelope #:shards (list (w1-shard 0) (w1-shard 1 #:launcher (w1-launcher #:exit-code 3)))))
+      (define-values (code-failed verdict-failed out-failed) (trial-assess-verdict p-failed-hit))
+      (check-true (positive? code-failed))
+      (check-equal? (hash-ref verdict-failed 'reasons) (list "launcher-exit-code-nonzero"))
+      ;; the actual launcher CLI ALWAYS emits exit-code: telemetry without
+      ;; it is malformed and fails closed
+      (define p-absent (tmp-path "trial-exitcode-absent.json"))
+      (write-envelope
+       p-absent
+       (w1-envelope #:shards (list (w1-shard 0)
+                                   (w1-shard 1 #:launcher (hash-remove (w1-launcher) 'exit-code)))))
+      (define-values (code-absent verdict-absent out-absent) (trial-assess-verdict p-absent))
+      (check-true (positive? code-absent))
+      (check-equal? (hash-ref verdict-absent 'reasons) (list "launcher-exit-code-invalid"))
+      ;; a failed launcher refuses under root-off treatments too
+      (define p-failed-off (tmp-path "trial-exitcode-failed-off.json"))
+      (write-envelope
+       p-failed-off
+       (w1-envelope #:treatment "A"
+                    #:shards (list (w1-shard 0
+                                             #:treatment "A"
+                                             #:launcher (w1-launcher-off digest-d #:exit-code 1))
+                                   (w1-shard 1 #:treatment "A" #:launcher (w1-launcher-off)))))
+      (define-values (code-off verdict-off out-off) (trial-assess-verdict p-failed-off))
+      (check-true (positive? code-off))
+      (check-equal? (hash-ref verdict-off 'reasons) (list "launcher-exit-code-nonzero")))
+
+    (test-case "trial-assess: bad identities are refused fail-closed"
+      ;; malformed head sha
+      (define p-head (tmp-path "trial-bad-head.json"))
+      (write-envelope p-head (w1-envelope #:head "zz-not-a-sha"))
+      (define-values (code-head verdict-head out-head) (trial-assess-verdict p-head))
+      (check-true (positive? code-head))
+      (check-equal? (hash-ref verdict-head 'reasons) (list "trial-head-sha-malformed"))
+      ;; malformed producer manifest digest
+      (define p-digest (tmp-path "trial-bad-digest.json"))
+      (write-envelope p-digest (w1-envelope #:manifest-digest "deadbeef"))
+      (define-values (code-digest verdict-digest out-digest) (trial-assess-verdict p-digest))
+      (check-true (positive? code-digest))
+      (check-equal? (hash-ref verdict-digest 'reasons)
+                    (list "expected-producer-manifest-digest-malformed"))
+      ;; expected identity missing a dimension (lock digest)
+      (define p-identity (tmp-path "trial-bad-identity.json"))
+      (write-envelope p-identity
+                      (w1-envelope #:identity (hash-remove (w1-identity-fields) 'lock-digest)))
+      (define-values (code-identity verdict-identity out-identity) (trial-assess-verdict p-identity))
+      (check-true (positive? code-identity))
+      (check-equal? (hash-ref verdict-identity 'reasons)
+                    (list "expected-identity-invalid-lock-digest"))
+      ;; expected identity with a malformed digest dimension
+      (define p-identity-2 (tmp-path "trial-bad-identity-2.json"))
+      (write-envelope
+       p-identity-2
+       (w1-envelope #:identity (hash-set (w1-identity-fields) 'racket-executable-digest "deadbeef")))
+      (define-values (code-identity-2 verdict-identity-2 out-identity-2)
+        (trial-assess-verdict p-identity-2))
+      (check-true (positive? code-identity-2))
+      (check-equal? (hash-ref verdict-identity-2 'reasons)
+                    (list "expected-identity-invalid-racket-executable-digest"))
+      ;; expected identity entirely absent
+      (define p-identity-3 (tmp-path "trial-no-identity.json"))
+      (write-envelope p-identity-3 (w1-envelope #:identity #f))
+      (define-values (code-identity-3 verdict-identity-3 out-identity-3)
+        (trial-assess-verdict p-identity-3))
+      (check-true (positive? code-identity-3))
+      (check-equal? (hash-ref verdict-identity-3 'reasons) (list "expected-identity-missing")))
+
+    (test-case "trial-assess: C needs ACTUAL launcher telemetry — resolution-only claims never certify"
+      ;; no launcher telemetry at all: a resolution/resolve-step success
+      ;; without observed root use is not activation evidence
+      (define p (tmp-path "trial-resolution-only.json"))
+      (write-envelope p (w1-envelope #:shards (list (w1-shard 0 #:launcher #f) (w1-shard 1))))
+      (define-values (code verdict out) (trial-assess-verdict p))
+      (check-true (positive? code))
+      (check-equal? (hash-ref verdict 'classification) "refused")
+      (check-equal? (hash-ref verdict 'reasons) (list "missing-launcher-telemetry"))
+      ;; self-attested expected context inside a shard is refused: the
+      ;; expected root identity is caller/producer-bound, never shard-declared
+      (define p-self (tmp-path "trial-self-attested.json"))
+      (write-envelope p-self
+                      (w1-envelope #:shards (list (w1-shard 0
+                                                            #:record (hash-set (w1-restore-record 0)
+                                                                               'expected-identity
+                                                                               (w1-identity-fields)))
+                                                  (w1-shard 1))))
+      (define-values (code-self verdict-self out-self) (trial-assess-verdict p-self))
+      (check-true (positive? code-self))
+      (check-equal? (hash-ref verdict-self 'reasons)
+                    (list "self-attested-expected-context-in-record")))
+
+    (test-case "trial-assess: C with fallback / zero-hit / non-hit launcher mode is refused"
+      ;; fallback contamination: a bounded eager fallback ran
+      (define p-fb (tmp-path "trial-c-fallback.json"))
+      (write-envelope
+       p-fb
+       (w1-envelope #:shards (list (w1-shard 0) (w1-shard 1 #:launcher (w1-launcher #:fallbacks 1)))))
+      (define-values (code-fb verdict-fb out-fb) (trial-assess-verdict p-fb))
+      (check-true (positive? code-fb))
+      (check-equal? (hash-ref verdict-fb 'reasons) (list "launcher-fallbacks-nonzero"))
+      ;; resolution ran but zero loads were served from the root
+      (define p-hits (tmp-path "trial-c-zero-hits.json"))
+      (write-envelope p-hits
+                      (w1-envelope #:shards (list (w1-shard 0)
+                                                  (w1-shard 1 #:launcher (w1-launcher #:hits 0)))))
+      (define-values (code-hits verdict-hits out-hits) (trial-assess-verdict p-hits))
+      (check-true (positive? code-hits))
+      (check-equal? (hash-ref verdict-hits 'reasons) (list "zero-root-hits"))
+      ;; launcher ran with the root globally off: not a verified root hit
+      (define p-mode (tmp-path "trial-c-global-off.json"))
+      (write-envelope
+       p-mode
+       (w1-envelope #:shards
+                    (list (w1-shard 0)
+                          (w1-shard 1 #:launcher (w1-launcher #:mode "global-off" #:hits 0)))))
+      (define-values (code-mode verdict-mode out-mode) (trial-assess-verdict p-mode))
+      (check-true (positive? code-mode))
+      (check-equal? (hash-ref verdict-mode 'reasons) (list "launcher-mode-global-off")))
+
+    (test-case "trial-assess: root activity inside a root-off treatment is refused"
+      (define p (tmp-path "trial-a-root-activity.json"))
+      (write-envelope p
+                      (w1-envelope #:treatment "A"
+                                   #:shards
+                                   (list (w1-shard 0 #:treatment "A" #:launcher (w1-launcher-off))
+                                         (w1-shard 1 #:treatment "A"))))
+      (define-values (code verdict out) (trial-assess-verdict p))
+      (check-true (positive? code))
+      (check-equal? (hash-ref verdict 'reasons) (list "launcher-mode-not-global-off")))
+
+    (test-case "trial-assess: launcher manifest digest must equal the producer-bound expected digest"
+      (define p (tmp-path "trial-digest-mismatch.json"))
+      (write-envelope p
+                      (w1-envelope #:shards
+                                   (list (w1-shard 0)
+                                         (w1-shard 1 #:launcher (w1-launcher #:digest digest-c)))))
+      (define-values (code verdict out) (trial-assess-verdict p))
+      (check-true (positive? code))
+      (check-equal? (hash-ref verdict 'reasons) (list "launcher-manifest-digest-mismatch")))
+
+    (test-case "trial-assess: a record with an unknown outcome cannot certify the attempt"
+      (define p (tmp-path "trial-unknown-outcome.json"))
+      (write-envelope
+       p
+       (w1-envelope #:shards (list (w1-shard 0 #:record (w1-restore-record 0 #:outcome "unknown"))
+                                   (w1-shard 1))))
+      (define-values (code verdict out) (trial-assess-verdict p))
+      (check-true (positive? code))
+      (check-equal? (hash-ref verdict 'reasons) (list "record-outcome-unknown")))
+
+    (test-case "emit: strict trial binding keys are attached by the workflow adapter, never fabricated by the emitter"
+      ;; Old --emit-restore-record behavior stays compatible: the emitter
+      ;; knows nothing about trials. The workflow adapter attaches
+      ;; attempt/trial-id/treatment/identity when it builds the envelope.
+      (define out (tmp-path "emit-adapter-keys.json"))
+      (script-succeeds
+       (emit-command
+        out
+        "--fast-env-producer-result success --prepared-artifact-name prepared-env-fast --installer-sha256 deadbeef")
+       '(("Q_PREPARED_ENV_STATE" . "restored") ("Q_PREPARED_ENV_RESTORE_MS" . "12000")))
+      (define rec (read-jsexpr out))
+      (for ([key (in-list (list 'attempt 'trial-id 'treatment 'identity))])
+        (check-false (hash-has-key? rec key)
+                     (format "the emitter must not fabricate ~a; the workflow adapter attaches it"
+                             key))))
+
+    (test-case "trial-assess: wrong envelope schema is refused"
+      (define p (tmp-path "trial-bad-schema.json"))
+      (write-envelope p (hash-set (w1-envelope) 'schema "something-else@1"))
+      (define-values (code verdict out) (trial-assess-verdict p))
+      (check-true (positive? code))
+      (check-equal? (hash-ref verdict 'reasons) (list "envelope-schema-invalid")))
+
+    (test-case "trial-assess: --expected-identity reuses the real identity-manifest validator"
+      ;; A producer-bound expected identity manifest (emitted by
+      ;; --identity-emit) can be supplied by flag instead of inline.
+      (define manifest (tmp-path "trial-expected-identity.json"))
+      (script-succeeds (identity-args manifest))
+      (define p (tmp-path "trial-flag-identity.json"))
+      (write-envelope p (w1-envelope #:identity #f))
+      (define-values (code verdict out)
+        (trial-assess-verdict p (format " --expected-identity ~a" (path->string manifest))))
+      (check-equal? code 0 "the flag-supplied identity satisfies the expected-identity requirement")
+      (check-equal? (hash-ref verdict 'ready?) #t)
+      ;; A file that is not a valid prepared-env-identity@1 manifest fails closed.
+      (define not-manifest (tmp-path "trial-not-manifest.json"))
+      (write-jsexpr not-manifest (hasheq 'schema "nope"))
+      (define p-2 (tmp-path "trial-flag-identity-2.json"))
+      (write-envelope p-2 (w1-envelope))
+      (define-values (code-2 verdict-2 out-2)
+        (trial-assess-verdict p-2 (format " --expected-identity ~a" (path->string not-manifest))))
+      (check-equal? code-2 2 "structural misuse exits 2 without writing a verdict")
+      (check-false verdict-2))
+
+    (test-case "trial-assess: --producer-manifest binds the expected digest to real manifest bytes"
+      (define not-the-manifest (tmp-path "trial-producer-manifest.bin"))
+      (with-output-to-file not-the-manifest
+                           (lambda () (display "definitely not the manifest"))
+                           #:exists 'replace)
+      (define p (tmp-path "trial-flag-manifest.json"))
+      (write-envelope p (w1-envelope))
+      (define-values (code verdict out)
+        (trial-assess-verdict p (format " --producer-manifest ~a" (path->string not-the-manifest))))
+      (check-true (positive? code)
+                  "a manifest file whose bytes do not hash to the expected digest is refused")
+      (check-equal? (hash-ref verdict 'ready?) #f)
+      (check-true (pair? (member "producer-manifest-digest-mismatch-with-file"
+                                 (hash-ref verdict 'reasons)))
+                  "the mismatch names its reason"))
+
+    (test-case "trial-assess: an unparseable envelope fails closed with exit 2 and no verdict"
+      (define p (tmp-path "trial-not-json.json"))
+      (with-output-to-file p (lambda () (display "this is not json")) #:exists 'replace)
+      (define-values (code verdict out) (trial-assess-verdict p))
+      (check-equal? code 2)
+      (check-false verdict))
+
+    (test-case "assess-trial-envelope: pure, deterministic, retains raw data (exported API)"
+      (define env (w1-envelope))
+      (define a (assess-trial-envelope env))
+      (define b (assess-trial-envelope env))
+      (check-equal? a b "the assessor is deterministic for identical input")
+      (check-equal? (hash-ref a 'ready?) #t)
+      (check-equal? (hash-ref a 'classification) "ready-root-on")
+      (check-equal? (hash-ref a 'reasons) (list))
+      (check-true (hash-has-key? a 'raw) "the result retains the raw envelope data")
+      (check-equal? (length (hash-ref (hash-ref a 'raw) 'shards)) 2)
+      ;; And the refused side is deterministic too.
+      (define refused (assess-trial-envelope (hash-set env 'schema "nope")))
+      (check-equal? refused (assess-trial-envelope (hash-set env 'schema "nope")))
+      (check-equal? (hash-ref refused 'classification) "refused"))
+
+    (test-case "trial-assess: verdict JSON is byte-deterministic for identical envelopes"
+      (define p-1 (tmp-path "trial-det-1.json"))
+      (define p-2 (tmp-path "trial-det-2.json"))
+      (write-envelope p-1 (w1-envelope))
+      (write-envelope p-2 (w1-envelope))
+      (define v-1 (tmp-path "trial-det-verdict-1.json"))
+      (define v-2 (tmp-path "trial-det-verdict-2.json"))
+      (script-succeeds
+       (format "--trial-assess --envelope ~a --out ~a" (path->string p-1) (path->string v-1)))
+      (script-succeeds
+       (format "--trial-assess --envelope ~a --out ~a" (path->string p-2) (path->string v-2)))
+      (check-equal? (file->string v-1)
+                    (file->string v-2)
+                    "identical envelopes must produce byte-identical verdicts"))
+
+    (test-case "trial-assess: existing aggregate and check modes are untouched by the new mode"
+      ;; The strict trial mode is additive: report-only behavior must not move.
+      (script-succeeds (string-append "--manifest " (path->string committed-manifest) " --check")))))
 
 (module+ main
   (define failed (run-tests (suite)))

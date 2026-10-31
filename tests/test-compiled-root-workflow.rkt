@@ -736,3 +736,273 @@
     (check-equal? code 0 transcript)
     (check-false (regexp-match? #rx"illegal Q_CI_COMPILED_ROOT" transcript) transcript)
     (check-true (regexp-match? #rx"verified root hit" transcript) transcript)))
+
+;; ---------------------------------------------------------------------------
+;; v1.00.32 W2 — trusted CI-recovery benchmark wiring (isolated experiment)
+;;
+;; The A/B/C harness reuses the ACTUAL required CI path by calling ci.yml as
+;; a reusable workflow from .github/workflows/ci-recovery-benchmark.yml
+;; (docs/reports/CI-RECOVERY-EVIDENCE.md §8). These pins EXTEND (never
+;; weaken) the contracts above:
+;;   - the compiled-root lane exclusivity is narrowed by exactly ONE new
+;;     file, and that exception cannot enable the ordinary PR lane;
+;;   - every trial term in ci.yml is identity-bound and inert for ordinary
+;;     push/PR/dispatch events, and the ordinary precedence expressions are
+;;     kept verbatim;
+;;   - the wrapper gates the reusable call on the actual event/ref/SHA
+;;     identity BEFORE any called code runs;
+;;   - the per-trial evidence artifact carries envelope + verdict + verbatim
+;;     Actions metadata for the report owner, with the required critical
+;;     path derived by the adapter (never summed, never a max job duration).
+
+(define benchmark-yml (build-path repo-root ".github" "workflows" "ci-recovery-benchmark.yml"))
+(define benchmark-text (file->string benchmark-yml))
+(test-case "cancellation context precedes called code and uses all attempt job pages"
+  (check-true (string-contains? benchmark-text "name: ci-recovery-context-"))
+  (check-true (< (index-of benchmark-text "path: trial-context.json")
+                 (index-of benchmark-text "  ci-under-test:")))
+  (check-false (string-contains? benchmark-text "!cancelled()"))
+  (check-true (string-contains?
+               benchmark-text
+               "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100"))
+  (check-true (string-contains? benchmark-text "--paginate --slurp")))
+(test-case "trial identity recipe is shared by producer and two installed consumers"
+  (check-equal? (length (regexp-match* #rx"trial-addon-relative-r1" ci-text)) 3)
+  (check-equal? (length (regexp-match* #rx"--addon-store" ci-text)) 2))
+
+;; ---------------------------------------- compiled-root exclusivity: narrowed
+
+;; The existing loop above already sweeps every non-ci.yml workflow,
+;; including this new one. The narrowing is explicit here: exactly one new
+;; file enters the graph and it may reference the experiment only through
+;; the treatment input — never the repository variable switch and never the
+;; compiled-root artifact.
+(check-true (file-exists? benchmark-yml) "the trusted benchmark wrapper exists")
+(check-false (string-contains? benchmark-text "RACKET_COMPILED_ROOT")
+             "the wrapper never touches the compiled-root switch")
+(check-false (string-contains? benchmark-text "compiled-root-fast")
+             "the wrapper never consumes the compiled-root artifact")
+
+;; The exception cannot enable the ordinary PR lane: in ci.yml the
+;; treatment-C activation appears ONLY inside identity-bound trial terms.
+;; Every occurrence of the treatment-C input check must sit next to the
+;; trial-id / source-sha / protected-ref bindings, so a run without the
+;; gated wrapper's inputs — in particular every push and pull_request —
+;; keeps COMPILED_ROOT evaluated exactly by the ordinary expression.
+(define trial-c-occurrences
+  (let loop ([text ci-text]
+             [base 0]
+             [acc '()])
+    (if (string-contains? text "inputs.trial-treatment == 'C'")
+        (let* ([at (index-of text "inputs.trial-treatment == 'C'")]
+               [window (substring text (max 0 (- at 260)) (min (string-length text) (+ at 260)))])
+          (loop (substring text (+ at 1)) (+ base at 1) (cons window acc)))
+        (reverse acc))))
+(check-true (>= (length trial-c-occurrences) 2)
+            "the C term drives both the shard lane and the producer input")
+(for ([window (in-list trial-c-occurrences)])
+  (check-true (string-contains? window "inputs.trial-id != ''")
+              "the C activation requires a non-empty trial id")
+  (check-true (string-contains? window "inputs.trial-attempt != ''")
+              "the C activation requires a positive attempt")
+  (check-true (string-contains? window "inputs.source-sha == github.sha")
+              "the C activation binds the requested SHA to the checked-out tree")
+  (check-true (string-contains? window "github.ref == 'refs/heads/main'")
+              "the C activation requires the protected main ref"))
+
+;; ------------------------------------- the ordinary lane: extended, not weakened
+
+;; The ordinary precedence expressions survive VERBATIM as the first
+;; disjunct of their extended expressions (the global rollback switch still
+;; wins before the lane switch, and a dispatch version-override still pins
+;; the full path).
+(check-true
+ (string-contains?
+  ci-text
+  "(vars.RACKET_PREPARED_ARTIFACT != 'off' && github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success')")
+ "the ordinary PREPARED_ENV expression is kept verbatim")
+(check-true
+ (string-contains?
+  ci-text
+  (string-append "(vars.RACKET_PREPARED_ARTIFACT != 'off' && vars.RACKET_COMPILED_ROOT == 'on' && "
+                 "github.event_name != 'workflow_dispatch' && needs.fast-env.result == 'success')"))
+ "the ordinary COMPILED_ROOT precedence is kept verbatim")
+
+;; Ordinary events carry empty trial inputs, so the trial terms are inert:
+;; the fast-env trial branch requires a treatment of exactly A/B/C.
+(check-true
+ (string-contains?
+  ci-text
+  "(inputs.trial-treatment == 'A' || inputs.trial-treatment == 'B' || inputs.trial-treatment == 'C')")
+ "the trial producer branch enumerates the treatments")
+(check-true
+ (string-contains?
+  ci-text
+  "github.event_name != 'workflow_dispatch' && vars.RACKET_PREPARED_ARTIFACT != 'off' && inputs.trial-treatment == ''")
+ "the ordinary fast-env branch is gated on the absence of a trial")
+
+;; The eager-compilation containment contract still holds: every PREPARED_ENV
+;; expression resolves a prepared-environment call site (count equality) —
+;; the trusted-trial aggregate restore is a separate, trial-only input, so
+;; both counts are unchanged by this wave.
+(define prepared-env-expression-count
+  (length (regexp-match* #rx"PREPARED_ENV: \\$\\{\\{ (.*?) \\}\\}" ci-text)))
+(define env-prepared-call-sites
+  (length (regexp-match* #rx"prepared-environment: \\$\\{\\{ env.PREPARED_ENV \\}\\}" ci-text)))
+(check-equal? prepared-env-expression-count
+              env-prepared-call-sites
+              "every env.PREPARED_ENV call site still resolves from a PREPARED_ENV expression")
+
+;; ---------------------------------------- the reusable-call wrapper gate
+
+;; Gate BEFORE any called code: the call job needs the gate and is skipped
+;; whenever the gate fails.
+(check-true (string-contains? benchmark-text "needs: experiment-gate")
+            "the reusable call is downstream of the wrapper gate")
+(check-true (string-contains? benchmark-text "if: needs.experiment-gate.result == 'success'")
+            "the call runs only on a green gate")
+(check-true (string-contains?
+             benchmark-text
+             "if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}")
+            "the gate checks the ACTUAL event and the ACTUAL protected ref")
+;; The tested tree is pinned: requested SHA == dispatch SHA == checked-out
+;; HEAD — and EVERY input/context value reaches the gate script through env
+;; indirection (no ${{ inputs.* }} shell interpolation, no injection
+;; surface), with the ACTUAL ref additionally required to be marked
+;; protected (github.ref_protected).
+(check-true (string-contains? benchmark-text "SOURCE_SHA_INPUT: ${{ inputs.source-sha }}")
+            "the requested source SHA is passed by env indirection")
+(check-true (string-contains? benchmark-text "DISPATCH_SHA: ${{ github.sha }}")
+            "the dispatch SHA is passed by env indirection")
+(check-true (string-contains? benchmark-text "test \"$SOURCE_SHA_INPUT\" = \"$DISPATCH_SHA\"")
+            "the requested source SHA must equal the dispatch SHA")
+(check-true (string-contains? benchmark-text "test \"$HEAD_SHA\" = \"$DISPATCH_SHA\"")
+            "the requested source SHA must equal the checked-out HEAD")
+(check-true (string-contains? benchmark-text "git rev-parse HEAD")
+            "the gate binds the checked-out HEAD")
+(check-true (string-contains? benchmark-text "test \"$REF\" = \"refs/heads/main\"")
+            "the gate pins the protected main ref")
+(check-true (string-contains? benchmark-text "REF_PROTECTED: ${{ github.ref_protected }}")
+            "the gate reads the actual protection status")
+(check-true (string-contains? benchmark-text "test \"$REF_PROTECTED\" = \"true\"")
+            "the gate requires the ref to ACTUALLY be protected, not merely named main")
+(check-true (string-contains? benchmark-text "test \"$EVENT_NAME\" = \"workflow_dispatch\"")
+            "the gate re-checks the actual event inside the script")
+;; Fail-closed injection hardening: every ${{ inputs.* }} occurrence in the
+;; wrapper sits on a YAML mapping value line (env: indirection, with: call
+;; input, artifact name) or a comment — never on a shell line inside a run
+;; block. A run block's shell text (test "...", echo "...", case arms)
+;; would not start with a YAML key or comment marker.
+(for ([ln (in-list (string-split benchmark-text "\n"))]
+      #:when (string-contains? ln "${{ inputs."))
+  (check-true (or (regexp-match? #px"^\\s*#" ln)
+                  (regexp-match? #px"^\\s*(- )?[A-Za-z_][A-Za-z0-9_-]*:" ln))
+              (format "every inputs interpolation is a YAML mapping value or comment, never shell: ~a"
+                      (string-trim ln))))
+;; Treatment and attempt are validated fail-closed.
+(check-true (string-contains? benchmark-text "A|B|C) ;;")
+            "the gate accepts exactly the three treatments")
+(check-true (string-contains? benchmark-text "trial-attempt must be a positive integer")
+            "the gate refuses a non-positive attempt")
+;; The workflow revision and the tested tree are recorded as DISTINCT fields.
+(check-true (string-contains? benchmark-text "workflow-revision-sha=$WORKFLOW_SHA")
+            "the workflow revision is recorded separately from the tested tree")
+(check-true (string-contains? benchmark-text "WORKFLOW_SHA: ${{ github.workflow_sha }}")
+            "the workflow revision comes from the run context")
+(check-true (string-contains? benchmark-text "source-sha=$DISPATCH_SHA")
+            "the tested tree is recorded")
+
+;; The call reuses the ACTUAL CI execution path with the trial inputs.
+(check-true (string-contains? benchmark-text "uses: ./.github/workflows/ci.yml")
+            "the harness calls the real ci.yml instead of forking a pipeline")
+(for ([input (in-list '("trial-treatment:" "trial-id:" "trial-attempt:" "source-sha:"))])
+  (check-true (string-contains? benchmark-text input) (format "the call forwards ~a" input)))
+
+;; Caller permissions match what the called jobs need (read-only).
+(check-true (string-contains? benchmark-text "contents: read")
+            "the wrapper and its jobs run with read-only content access")
+(check-true (string-contains? benchmark-text "actions: read")
+            "the collect job reads Actions metadata read-only")
+
+;; ---------------------------------------- the per-trial evidence artifact
+
+;; Collection runs even for failed/cancelled attempts (all attempts are
+;; retained), downloads targeted small artifacts, and uploads ONE artifact
+;; per attempt for the report owner.
+(check-true (string-contains? benchmark-text "if: ${{ always() }}")
+            "collection retains failed and cancelled attempts")
+(for ([needle (in-list '("prepared-env-records-${{ github.run_id }}-*"
+                         "compiled-root-map-${{ github.run_id }}-*"
+                         "prepared-env-producer-manifests-${{ github.run_id }}"
+                         "prepared-aggregate-restore-${{ github.run_id }}"))])
+  (check-true (string-contains? benchmark-text needle)
+              (format "the collect job downloads ~a" needle)))
+(check-true (string-contains? benchmark-text "scripts/ci/ci-recovery-trial.rkt collect")
+            "collection runs the adapter")
+(check-true (string-contains? benchmark-text "--required-policy scripts/required-pr-checks.policy")
+            "the required critical path is computed against the required-check policy")
+(check-true (string-contains? benchmark-text "--aggregate-attestation evidence/aggregate")
+            "the aggregate's actual restore attestation reaches the adapter")
+(check-true (string-contains? benchmark-text "--test-inventory-digest \"$TEST_INVENTORY_DIGEST\"")
+            "the actions config binds the ACTUAL test inventory digest of the pinned checkout")
+(check-true (string-contains? benchmark-text "git ls-files tests | LC_ALL=C sort | sha256sum")
+            "the inventory digest is computed over the real checkout, never invented")
+(check-true (string-contains? benchmark-text "--shard-plan \"$SHARD_PLAN\"")
+            "the actions config binds the actual matrix shard plan")
+(check-true (string-contains? benchmark-text "--trial-assess")
+            "the verdict is minted by the W1 assessor, never by the wrapper")
+(check-true
+ (string-contains? benchmark-text "if: always()")
+ "the assess step runs even after a fail-closed collection, keeping the refused verdict on disk")
+(check-true
+ (string-contains? benchmark-text
+                   "ci-recovery-trial-${{ inputs.trial-id }}-attempt-${{ inputs.trial-attempt }}")
+ "one evidence artifact per trial attempt")
+
+;; ------------------------- v1.00.32 W2 repair: report interop + identity
+
+;; The collected evidence must be DIRECTLY consumable by the report CLI
+;; (docs/reports/CI-RECOVERY-EXPERIMENT.md §4): the adapter writes the
+;; one-line JSONL twins next to the single-document forms.
+(for ([needle (in-list '("envelope.json" "envelope.jsonl" "actions.json" "actions.jsonl"))])
+  (check-true (string-contains? benchmark-text needle)
+              (format "the trial artifact carries ~a for the report owner" needle)))
+;; The wrapper never RUNS the report: the report owner's CLI is invoked
+;; offline by the coordinator over the collected JSONL, so any report-script
+;; mention in the wrapper lives only in comment lines.
+(for ([ln (in-list (string-split benchmark-text "\n"))]
+      #:when (string-contains? ln "ci-recovery-benchmark-report.rkt"))
+  (check-true (regexp-match? #rx"^\\s*#" (string-trim ln))
+              (format "the report CLI may only be documented in comments, never run: ~a"
+                      (string-trim ln))))
+
+;; ci.yml: the trial terms in the REUSABLE execution path additionally
+;; require the ACTUAL ref to be protected — not just named main — so a
+;; caller passing arbitrary inputs cannot activate a trial from an
+;; unprotected ref.
+(define ci-w2-text (file->string ci-yml))
+(check-true (>= (length (regexp-match* #rx"github\\.ref_protected" ci-w2-text)) 3)
+            "fast-env, PREPARED_ENV and COMPILED_ROOT trial terms all require a protected ref")
+(check-true (string-contains? ci-w2-text "--addon-store")
+            "each shard captures its OWN measured identity side file")
+(check-true (string-contains? ci-w2-text "shard-${{ matrix.shard }}.identity.json")
+            "the measured identity is captured per shard into the uploaded map artifact")
+(check-true (string-contains? ci-w2-text "Attest the actual aggregate restore outcome")
+            "test-aggregate attests its actual restore from observed setup outputs")
+(check-true (string-contains? ci-w2-text "prepared-aggregate-restore-${{ github.run_id }}")
+            "the aggregate attestation travels as its own artifact")
+(check-true (string-contains? ci-w2-text "ci-recovery-trial.rkt attest-aggregate")
+            "the attestation carries the run-level schema")
+(check-true
+ (string-contains? ci-w2-text
+                   "AGG_RESULT: ${{ steps.agg-setup.outputs.prepared-env-result || 'unknown' }}")
+ "the attestation records the OBSERVED restore result, unknown when absent")
+
+(module+ test
+  (test-case "the wrapper declares no trigger except workflow_dispatch"
+    ;; A reusable or PR-triggered wrapper would let ungated callers reach
+    ;; the experiment inputs; the wrapper is dispatch-only by construction.
+    (check-true (string-contains? benchmark-text "workflow_dispatch:"))
+    (check-false (string-contains? benchmark-text "push:"))
+    (check-false (string-contains? benchmark-text "pull_request:"))
+    (check-false (string-contains? benchmark-text "workflow_call:"))))
