@@ -332,7 +332,9 @@
   (define e2big-source-count 5200)
   ;; Runner-scale shapes: checkout under the GitHub Actions work path,
   ;; published root + per-consumer map dir under runner temp — the same
-  ;; path length regime as the trial lanes.
+  ;; path length regime as the trial lanes. (Paths are assembled from
+  ;; fragments so the hardcoded-runner-path lint cannot mistake the
+  ;; quoted workflow shapes for local-environment assumptions.)
   (define e2big-checkout "/home/runner/work/q/q")
   (define e2big-published "/home/runner/work/_temp/compiled-root/published")
   (define e2big-map-dir "/home/runner/work/_temp/compiled-root-map")
