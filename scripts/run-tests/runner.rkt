@@ -45,6 +45,9 @@
                   normalize-counts
                   effective-exit-code
                   classify-test-result)
+         (only-in "compiled-root-child.rkt"
+                  compiled-root-raco-child-args
+                  compiled-root-bare-child-args)
          (only-in "reporting.rkt"
                   print-summary
                   save-failure-logs
@@ -267,18 +270,42 @@
   (define elapsed (lambda () (exact-round (- (current-inexact-milliseconds) t0))))
   (define stdout-out (open-output-string))
   (define stderr-out (open-output-string))
+  ;; v1.00.32 W2 repair (trial c01 window-2, run 41271542715): under a
+  ;; root-on launch the runner's per-file children must inherit the
+  ;; compiled-root activation — they are separate processes and inherit
+  ;; neither current-compiled-file-roots nor the TOCTOU guard, so no test
+  ;; load could ever be root-served (zero-root-hits). The launcher exports
+  ;; Q_COMPILED_ROOT_FLAGS_FILE; compiled-root-child re-validates it and
+  ;; yields the identical bootstrap argv. When inactive (#f) every
+  ;; invocation below stays byte-identical to the legacy path.
   (define-values (ctrl)
     (if (file-has-rackunit-tests? resolved-path)
-        (let ([raco-bin (find-executable-path "raco")])
-          (define-values (sp2 out-in2 pid2 err-in2 ctrl2)
-            (apply values
+        (let ([cr-args (compiled-root-raco-child-args resolved-path)])
+          (if cr-args
+              (let ([racket-bin (find-executable-path "racket")])
+                ;; The raco launcher binary is literally `exec racket -N
+                ;; raco -l- raco/main.rkt "$@"`: identical discovery
+                ;; output and exit codes, with the bootstrap applied.
+                (define-values (sp2 out-in2 pid2 err-in2 ctrl2)
+                  (apply values (apply process*/ports stdout-out #f stderr-out racket-bin cr-args)))
+                (when out-in2
+                  (close-output-port out-in2))
+                ctrl2)
+              (let ([raco-bin (find-executable-path "raco")])
+                (define-values (sp2 out-in2 pid2 err-in2 ctrl2)
+                  (apply
+                   values
                    (process*/ports stdout-out #f stderr-out raco-bin "test" "-t" resolved-path)))
-          (when out-in2
-            (close-output-port out-in2))
-          ctrl2)
-        (let ([racket-bin (find-executable-path "racket")])
+                (when out-in2
+                  (close-output-port out-in2))
+                ctrl2)))
+        (let ([cr-args (compiled-root-bare-child-args resolved-path)]
+              [racket-bin (find-executable-path "racket")])
           (define-values (sp out-in pid err-in ctrl)
-            (apply values (process*/ports stdout-out #f stderr-out racket-bin resolved-path)))
+            (apply values
+                   (if cr-args
+                       (apply process*/ports stdout-out #f stderr-out racket-bin cr-args)
+                       (process*/ports stdout-out #f stderr-out racket-bin resolved-path))))
           (when out-in
             (close-output-port out-in))
           ctrl)))
