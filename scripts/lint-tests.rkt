@@ -144,7 +144,13 @@
                           "test-gsd-wave-worktree.rkt"
                           "test-gsd-branch-delivery-verification.rkt"
                           "test-operational-checkpoint.rkt"
-                          "test-operational-checkpoint-injection.rkt"))
+                          "test-operational-checkpoint-injection.rkt"
+                          ;; W1a (open-gap-closure): the E2BIG contract test
+                          ;; asserts argv-size under GitHub-Actions runner-scale
+                          ;; absolute path shapes — the path LENGTH regime is the
+                          ;; test's subject (coordinator trial c02, run
+                          ;; 41248049747: 1.2 MB single argv vs 128 KiB limit).
+                          "test-compiled-root-manifest.rkt"))
 
 (define (hardcoded-path-allowed? filepath)
   (for/or ([a (in-list hardcoded-path-allowlist)])

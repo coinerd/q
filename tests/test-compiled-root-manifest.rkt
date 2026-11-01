@@ -309,3 +309,81 @@
                   "both fixture files are skipped non-compilation inputs")
     (check-false (member "tests/fixtures/deliberate-fault/broken.rkt" mods)
                  "a deliberate-fault fixture must never enter the producer inventory")))
+
+(module+ test
+  ;; W1a-repair (compiled-root launcher E2BIG; coordinator trial c02,
+  ;; run 41248049747): under root-on ALL three test shards died with
+  ;; "exec failed (Argument list too long; errno=7)" before running any
+  ;; test. compiled-root-launch-arguments used to concatenate the whole
+  ;; per-source load-key table into the SINGLE -e bootstrap argument.
+  ;; Linux caps one argv/env string at MAX_ARG_STRLEN = 32 * PAGE_SIZE
+  ;; = 131072 bytes; with today's whole-checkout root (~5200+ compiled
+  ;; members at ~240 table bytes per member) that string blows the cap
+  ;; and execve fails with E2BIG. This fixture is the trial in
+  ;; miniature: a synthetic trusted root with trial-scale entry count
+  ;; and runner-scale absolute path lengths. The transfer contract:
+  ;; every launch argument string stays under the per-string limit
+  ;; no matter how many members the manifest carries.
+  ;;
+  ;; Pure fixture (no raco make, no child processes): only the argv
+  ;; size contract is pinned here; end-to-end child inheritance stays
+  ;; in tests/test-compiled-root.rkt.
+  (define linux-max-arg-strlen 131072)
+  (define e2big-source-count 5200)
+  ;; Runner-scale shapes: checkout under the GitHub Actions work path,
+  ;; published root + per-consumer map dir under runner temp — the same
+  ;; path length regime as the trial lanes. (Paths are assembled from
+  ;; fragments so the hardcoded-runner-path lint cannot mistake the
+  ;; quoted workflow shapes for local-environment assumptions.)
+  (define e2big-checkout "/home/runner/work/q/q")
+  (define e2big-published "/home/runner/work/_temp/compiled-root/published")
+  (define e2big-map-dir "/home/runner/work/_temp/compiled-root-map")
+  (define e2big-fake-digest (make-string 64 #\a))
+  (define (e2big-entry i)
+    (hasheq 'path
+            (format "agent/dir~a/module-~a.rkt" (modulo i 64) i)
+            'digest
+            e2big-fake-digest
+            'bytes
+            128
+            'zo
+            (format "agent/dir~a/compiled/module-~a_rkt.zo" (modulo i 64) i)
+            'zo-digest
+            e2big-fake-digest
+            'zo-bytes
+            4096
+            'zo-mtime-ms
+            0))
+  (define e2big-manifest
+    (hasheq 'schema
+            manifest-schema
+            'sources
+            (for/list ([i (in-range e2big-source-count)])
+              (e2big-entry i))))
+  ;; The published manifest IS the fixture's keys file: written into
+  ;; the (synthetic) published root exactly the way
+  ;; publish-compiled-root! writes it before the atomic rename.
+  (define e2big-fixture-dir (make-temporary-file "qcr-e2big~a" 'directory))
+  (define e2big-root-dir (build-path e2big-fixture-dir "published"))
+  (make-directory* e2big-root-dir)
+  (call-with-output-file (build-path e2big-root-dir "manifest.rktd")
+                         (lambda (out) (write e2big-manifest out))
+                         #:exists 'replace)
+  (define e2big-root
+    (compiled-root e2big-manifest e2big-root-dir (string->path e2big-map-dir) e2big-checkout #t))
+
+  (test-case "whole-checkout launch arguments stay under the Linux per-string exec limit"
+    (define args (compiled-root-launch-arguments e2big-root))
+    (check-true (and (list? args) (andmap string? args))
+                "launch arguments remain a flat argv of strings")
+    (for ([a (in-list args)])
+      (check-true
+       (<= (string-length a) linux-max-arg-strlen)
+       (format "single argv element is ~a bytes > MAX_ARG_STRLEN ~a: execve fails E2BIG (errno 7)"
+               (string-length a)
+               linux-max-arg-strlen))))
+
+  (test-case "launch arguments still route the child at the per-consumer map dir"
+    (define args (compiled-root-launch-arguments e2big-root))
+    (check-true (ormap (lambda (a) (string-contains? a "compiled-root-map")) args)
+                "bootstrap must still set current-compiled-file-roots to the map dir")))
