@@ -276,6 +276,45 @@
     ;; restore for any later reader
     (with-output-to-file zo-abs #:exists 'truncate/replace (lambda () (write-bytes orig-bytes))))
 
+  (test-case "manifest mutation after resolve fails the child launch closed (W1a-repair)"
+    ;; W1a-repair: the child bootstrap no longer receives embedded
+    ;; per-source digests (that transfer went E2BIG, trial c02); it
+    ;; re-derives the table from the published manifest and verifies the
+    ;; launch-time baked manifest digest instead. A manifest mutated
+    ;; between resolve and launch must therefore kill the child at
+    ;; startup — the same fail-closed canary the old embedded digests
+    ;; provided. Whitespace-only mutation: the table itself would parse
+    ;; identically, so only the digest canary can catch this.
+    (define checkout-m (make-checkout! "consumer-manifest-canary" 'producer-fixture))
+    (define map-dir-m (build-path tmp-base "map-m"))
+    (define root-m
+      (resolve-compiled-root! #:final-dir final-dir
+                              #:checkout checkout-m
+                              #:trusted-producer-labels '("q-trusted-producer")
+                              #:map-dir map-dir-m))
+    (check-true (eq? (compiled-root-reason root-m) #t))
+    (define child-path-m (build-path tmp-base "child-manifest-canary.rkt"))
+    (with-output-to-file child-path-m #:exists 'replace (lambda () (display "(void)\n")))
+    (define launch-args-m (compiled-root-launch-arguments root-m))
+    (define manifest-path-m (build-path final-dir "manifest.rktd"))
+    (unless (zero? (system*/exit-code (find-executable-path "chmod") "u+w" manifest-path-m))
+      (error 'canary-test "could not chmod +w the published manifest"))
+    (define manifest-bytes-m (file->bytes manifest-path-m))
+    (with-output-to-file manifest-path-m
+                         #:exists 'truncate/replace
+                         (lambda () (write-bytes (bytes-append manifest-bytes-m #" "))))
+    (define exit-code-m
+      (apply system*/exit-code
+             (find-executable-path "racket")
+             (append launch-args-m (list "-f" (path->string child-path-m)))))
+    (check-false (zero? exit-code-m)
+                 "child must fail closed when the manifest mutated after verification")
+    ;; restore for any later reader
+    (with-output-to-file manifest-path-m
+                         #:exists 'truncate/replace
+                         (lambda () (write-bytes manifest-bytes-m)))
+    (system*/exit-code (find-executable-path "chmod") "a-w" manifest-path-m))
+
   ;; ----------- B1/B2 regression: producer CLI + shared compiled dirs
 
   ;; Fixture builder for checkouts whose module closure places several

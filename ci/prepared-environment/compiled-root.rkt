@@ -46,9 +46,11 @@
 ;;     wrapper maps a source path back to its published payload member
 ;;     via the manifest and digests the bytes behind the mapping
 ;;     symlink); mutation after validation fails closed instead of
-;;     executing tampered bytecode. The subprocess launcher bakes the
-;;     same digest table into its child bootstrap for identical
-;;     protection outside the process.
+;;     executing tampered bytecode. The subprocess bootstrap derives
+;;     the same digest table from the published manifest and verifies
+;;     a launch-time baked manifest digest, for identical protection
+;;     outside the process (O(1)-sized transfer, see
+;;     compiled-root-launch-arguments).
 ;;   - Any validation failure resolves to a single EAGER fallback
 ;;     (raco make in the job-local checkout at the setup boundary,
 ;;     W2 containment semantics) or a hard failure — never producer-era
@@ -550,36 +552,58 @@
 ;;   in-process TOCTOU canary (child mutation-after-verification
 ;;   coverage), using the project-owned pure-Racket sha256 from the
 ;;   manifest module resolved via define-runtime-path.
-;;   manifest module resolved via define-runtime-path. The relative
-;;   string form is used because define-runtime-path evaluates its
-;;   template in the transformer phase where build-path is not bound
-;;   on Racket 8.10; the result is resolved at load time relative to
-;;   this module's source directory.
+;;   W1a-repair (coordinator trial c02, run 41248049747): the per-source
+;;   load-key table used to be CONCATENATED INTO this single -e
+;;   argument — one (cons <abs-src> (list <abs-zo> <digest>)) entry per
+;;   manifest source, ~230 bytes each. With today's whole-checkout root
+;;   (~5200+ members) that argv element reached ~1.2 MB and blew the
+;;   Linux per-string exec limit (MAX_ARG_STRLEN = 32 pages = 128 KiB):
+;;   every root-on shard died with "exec failed (Argument list too
+;;   long; errno=7)" before running a single test. The transfer is
+;;   O(1) now: the child re-reads the manifest.rktd ALREADY PUBLISHED
+;;   inside the immutable root (the authoritative keys file — written
+;;   into the staging tree before the atomic rename, read-only
+;;   afterwards) and derives the identical load-key table at startup.
+;;   The only baked-in payload is the manifest's own sha256 (64 hex
+;;   chars): if the manifest mutates after resolve-time verification,
+;;   the child fails closed AT STARTUP — the same
+;;   mutation-after-verification canary the embedded per-source
+;;   digests used to provide, now over the table's single source of
+;;   truth. Marker checks, per-load fail-closed guard errors, loud
+;;   eager fallback selection at the resolve boundary, and relocation
+;;   independence (per-consumer map dir) are unchanged.
+;;   The relative string form is used because define-runtime-path
+;;   evaluates its template in the transformer phase where build-path
+;;   is not bound on Racket 8.10; the result is resolved at load time
+;;   relative to this module's source directory.
 (define-runtime-path compiled-root-manifest-module-path "compiled-root-manifest.rkt")
 
 (define (compiled-root-launch-arguments root)
-  (define entries (hash-ref (compiled-root-manifest root) 'sources))
-  (define checkout-dir
-    (path->directory-path (simplify-path (path->complete-path (compiled-root-checkout root)))))
-  (define final-dir (compiled-root-root-dir root))
-  (define tbl
-    (string-join (for/list ([e (in-list entries)])
-                   (format "(cons ~s (list ~s ~s))"
-                           (path->string (simplify-path (path->complete-path
-                                                         (build-path checkout-dir (hash-ref e 'path)))
-                                                        #t))
-                           (path->string (build-path final-dir (hash-ref e 'zo)))
-                           (hash-ref e 'zo-digest)))
-                 " "))
+  (define root-dir (path->string (simplify-path (path->complete-path (compiled-root-root-dir root)))))
+  (define manifest-path (path->string (build-path root-dir "manifest.rktd")))
   (list "-e"
         (format
          (string-append
           "(begin"
-          " (define sha256 (dynamic-require (string->path ~s) 'sha256-bytes))"
+          " (define sha256-file (dynamic-require (string->path ~s) 'sha256-file))"
           " (require racket/file)"
+          " (define manifest-path (string->path ~s))"
+          " (unless (string=? (sha256-file manifest-path) ~s)"
+          "  (error 'compiled-root-toctou \"root manifest mutated after verification: ~~a\""
+          "                            manifest-path))"
           " (current-compiled-file-roots (list (string->path ~s)))"
           " (use-compiled-file-check 'modify-seconds)"
-          " (define tbl (list ~a))"
+          " (define checkout-dir (string->path ~s))"
+          " (define root-dir (string->path ~s))"
+          " (define tbl"
+          "  (for/list ([e (in-list (hash-ref (file->value manifest-path) 'sources))])"
+          "   (list"
+          "    (path->string"
+          "     (simplify-path"
+          "      (path->complete-path (build-path checkout-dir (string->path (hash-ref e 'path))))"
+          "      #t))"
+          "    (path->string (build-path root-dir (string->path (hash-ref e 'zo))))"
+          "    (hash-ref e 'zo-digest))))"
           " (define orig-load (current-load))"
           " (current-load"
           "  (lambda (path modname)"
@@ -588,12 +612,16 @@
           "         (assoc (path->string (simplify-path (path->complete-path path) #t))"
           "                tbl)))"
           "   (when hit"
-          "    (unless (string=? (sha256 (file->bytes (cadr hit))) (caddr hit))"
+          "    (unless (string=? (sha256-file (cadr hit)) (caddr hit))"
           "     (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path)))"
           "   (orig-load path modname))))")
          (path->string (simplify-path (path->complete-path compiled-root-manifest-module-path)))
+         manifest-path
+         (sha256-file manifest-path)
          (path->string (compiled-root-map-dir root))
-         tbl)))
+         (path->string (path->directory-path
+                        (simplify-path (path->complete-path (compiled-root-checkout root)))))
+         root-dir)))
 
 ;; eager-fallback-compile!
 ;;   The ONE eager current-source fallback: raco make in the job-local
