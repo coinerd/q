@@ -680,39 +680,45 @@
          root-dir)))
 
 ;; compiled-root-script-entry-argument
-;;   W2 repair (trial c01 window-2, run 41271542715): a Racket init option
-;;   such as the bootstrap's -e SUPPRESSES the implicit positional-file
-;;   load, so the mapped child `racket -e <bootstrap> <script> <args…>`
-;;   never loaded <script> at all — the root-on shard was a bootstrap-only
-;;   process that exited 0 without executing a single test (the vacuous
-;;   green behind zero-root-hits). This entry loads the script explicitly:
-;;   module body first (root-served, TOCTOU-guarded), then the module's
-;;   'main submodule when declared — the observable semantics of the plain
-;;   `racket <script> <args…>` command line (probe-verified: body AND
-;;   module+ main run, argv visible via current-command-line-arguments).
+;;   W1a round 5 (trial trial-2026-11-01-smoke-3, treatment C, run
+;;   41303344486): with ANY -e init option present — the bootstrap's own
+;;   included — Racket does not load a positional script as the run-file,
+;;   and arguments after the last -e expression are parsed as RACKET
+;;   switches: the real ci.yml lane's
+;;   `launch -- racket scripts/run-tests.rkt --suite fast …` died with
+;;   `racket: bad switch: --suite` before the runner ever started (the
+;;   W2 -e expression entry consumed the script into a second -e and
+;;   appended the child args as bare switches; the generic variant
+;;   silently swallowed them). The entry is therefore the SAME mechanism
+;;   as the proven raco dispatch (`racket -N raco -l- raco/main.rkt …`)
+;;   in the file-path grammar (-l rejects absolute file paths —
+;;   (lib "/abs/p.rkt") is a bad module path, probe-verified on 8.10;
+;;   -t is (require (file …))):
+;;
+;;     racket [-N <script>] -e <bootstrap> -t- <script> <args…>
+;;
+;;   Probe-verified on Racket 8.10: -e/-t- are processed in order (the
+;;   bootstrap evaluates first), -t- loads the script as a module AND as
+;;   the run-file (plain `racket <script>` identity: module body, then a
+;;   declared 'main submodule), stops switch parsing, and routes the
+;;   remaining arguments to the script's current-command-line-arguments;
+;;   -N restores find-system-path 'run-file to the script, which the
+;;   runner facade's direct-invocation guard requires.
 (define (compiled-root-script-entry-argument script-path)
-  (list "-e"
-        (format (string-append "(begin (define q-p (string->path ~s)) (dynamic-require q-p #f)"
-                               " (define q-sm (list 'submod q-p 'main))"
-                               " (when (module-declared? q-sm #t) (dynamic-require q-sm #f)))")
-                (path->string script-path))))
+  (define p (path->string script-path))
+  (list "-N" p "-t-" p))
 
 ;; compiled-root-runner-entry-argument
 ;;   The q test runner facade (scripts/run-tests.rkt) fires main under its
-;;   own run-file direct-invocation guard, which cannot recognize a -e
-;;   entry (find-system-path 'run-file stays the interpreter there), so
-;;   the generic script entry would load it as a library and exit 0 —
-;;   another silent vacuous green. The facade imports `main` from
-;;   scripts/run-tests/runner.rkt; this entry calls it with the child argv
-;;   after the root-served body load (probe-verified end to end).
+;;   own run-file direct-invocation guard. Under the unified -N/-t- entry
+;;   the facade IS the run-file, so the facade's own guard invokes main
+;;   exactly once with the routed child argv — the runner entry is the
+;;   script entry now (the W2 -e expression had to call q-main manually
+;;   because a -e entry leaves the run-file at the interpreter and can
+;;   never route a command line; kept as a distinct export so the
+;;   mapped-entry dispatch surface is unchanged).
 (define (compiled-root-runner-entry-argument script-path)
-  (list "-e"
-        (format
-         (string-append "(begin (define q-p (string->path ~s)) (dynamic-require q-p #f)"
-                        " (define q-main"
-                        " (namespace-variable-value 'main #t (lambda () #f) (module->namespace q-p)))"
-                        " (when q-main (q-main (vector->list (current-command-line-arguments)))))")
-         (path->string script-path))))
+  (compiled-root-script-entry-argument script-path))
 
 ;; compiled-root-mapped-entry-argument
 ;;   Entry selection by script identity. The shard child the launcher
@@ -727,11 +733,14 @@
       (compiled-root-script-entry-argument script-path)))
 
 ;; compiled-root-mapped-child-arguments
-;;   `launch -- racket <script> <args…>`: enter the script explicitly (see
-;;   compiled-root-script-entry-argument); the script path is completed
-;;   against the launcher's cwd, which the child inherits. Any other racket
-;;   child shape (e.g. `racket -t <module>`) keeps today's verbatim flag
-;;   prepend — the bootstrap's -e is processed first either way.
+;;   `launch -- racket <script> <args…>`: enter the script as the run-file
+;;   (see compiled-root-script-entry-argument: -e <bootstrap> -N <script>
+;;   -t- <script>); the script path is completed against the launcher's
+;;   cwd, which the child inherits, and the remaining args are appended
+;;   AFTER the script, where -t- routes them to the script's command line
+;;   (never parsed as racket switches). Any other racket child shape (e.g.
+;;   `racket -t <module>`) keeps today's verbatim flag prepend — the
+;;   bootstrap's -e is processed first either way.
 (define (compiled-root-mapped-child-arguments launch-args rest-args)
   (cond
     [(and (pair? rest-args) (string? (car rest-args)) (not (string-prefix? (car rest-args) "-")))
