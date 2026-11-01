@@ -199,6 +199,99 @@
     ;; child used the root: no compiled dir appeared in the consumer tree
     (check-false (directory-exists? (build-path checkout-b "marker" "compiled"))))
 
+  ;; ------------------ fresh-clone mtime skew (W1a-repair trial pin)
+
+  ;; W1a-repair (coordinator trial c01 window-2, run 41271542715): a
+  ;; fresh shard clone's source mtimes are strictly newer than any
+  ;; producer-era root zo. Root-on activation must still serve the root
+  ;; on BOTH paths — the in-process parameters and the subprocess -e
+  ;; bootstrap — because freshness is established by the same-commit
+  ;; source-sha gate plus per-load content digests, never by mtime. A
+  ;; lazily recompiled source-adjacent compiled/ dir is the observable
+  ;; zero-root-hits failure signature this pin guards against.
+  (test-case "fresh-clone consumer (sources newer than root zos) still gets root hits (W1a-repair)"
+    (define (stamp-sources-newer! root)
+      ;; make every manifest source in the consumer checkout strictly
+      ;; newer than its published root zo (what a fresh clone looks like)
+      (for ([e (in-list (hash-ref (compiled-root-manifest root) 'sources))])
+        (define src (build-path (compiled-root-checkout root) (hash-ref e 'path)))
+        (define zo-mtime
+          (file-or-directory-modify-seconds (build-path (compiled-root-root-dir root)
+                                                        (hash-ref e 'zo))))
+        (file-or-directory-modify-seconds src (+ zo-mtime 60))))
+    (define (assert-no-lazy-compile! checkout where)
+      (check-false (directory-exists? (build-path checkout "marker" "compiled"))
+                   (string-append where
+                                  ": root zo was judged stale and the "
+                                  "consumer tree was lazily recompiled")))
+
+    ;; --- in-process activation path (with-compiled-root parameters)
+    (define checkout-s1 (make-checkout! "consumer-fresh-clone-inproc" 'producer-fixture))
+    (define map-dir-s1 (build-path tmp-base "map-s1"))
+    (define root-s1
+      (resolve-compiled-root! #:final-dir final-dir
+                              #:checkout checkout-s1
+                              #:trusted-producer-labels '("q-trusted-producer")
+                              #:map-dir map-dir-s1))
+    (check-true (eq? (compiled-root-reason root-s1) #t)
+                (reason->string (compiled-root-reason root-s1)))
+    (stamp-sources-newer! root-s1)
+    (define s1-zo
+      (build-path final-dir
+                  (hash-ref (car (hash-ref (compiled-root-manifest root-s1) 'sources)) 'zo)))
+    (check-true (> (file-or-directory-modify-seconds (marker-abs-path checkout-s1))
+                   (file-or-directory-modify-seconds s1-zo))
+                "fixture precondition: consumer source strictly newer than root zo")
+    (reset-telemetry!)
+    (define hits-before-s1 (compiled-root-telemetry-root-hits (telemetry-snapshot)))
+    (with-compiled-root
+     root-s1
+     checkout-s1
+     (list "marker/compiled-root-marker.rkt")
+     (lambda ()
+       (parameterize ([current-load-relative-directory (path->directory-path checkout-s1)])
+         (check-equal? (dynamic-require (marker-abs-path checkout-s1) 'marker-result)
+                       'producer-fixture))))
+    (define tel-s1 (telemetry-snapshot))
+    (check-true (> (compiled-root-telemetry-root-hits tel-s1) hits-before-s1)
+                "in-process: TOCTOU guard observed no root-served load")
+    (check-true (> (compiled-root-telemetry-loads tel-s1) 0) "in-process: no module load observed")
+    (assert-no-lazy-compile! checkout-s1 "in-process")
+
+    ;; --- subprocess activation path (bootstrap -e preamble)
+    (define checkout-s2 (make-checkout! "consumer-fresh-clone-child" 'producer-fixture))
+    (define map-dir-s2 (build-path tmp-base "map-s2"))
+    (define root-s2
+      (resolve-compiled-root! #:final-dir final-dir
+                              #:checkout checkout-s2
+                              #:trusted-producer-labels '("q-trusted-producer")
+                              #:map-dir map-dir-s2))
+    (check-true (eq? (compiled-root-reason root-s2) #t)
+                (reason->string (compiled-root-reason root-s2)))
+    (stamp-sources-newer! root-s2)
+    (define child-path-s2 (build-path tmp-base "child-fresh-clone.rkt"))
+    (define child-out-s2 (build-path tmp-base "child-fresh-clone-result.txt"))
+    (with-output-to-file
+     child-path-s2
+     #:exists 'replace
+     (lambda ()
+       (printf "(define v (dynamic-require (string->path ~s) 'marker-result))\n"
+               (path->string (marker-abs-path checkout-s2)))
+       (printf "(call-with-output-file ~s\n" (path->string child-out-s2))
+       (printf (string-append "  (lambda (o) (fprintf o \"marker=~~a roots=~~a\\n\" v\n"
+                              "   (if (null? (current-compiled-file-roots))"
+                              " \"none\" \"set\"))))\n"))))
+    (define exit-code-s2
+      (apply system*/exit-code
+             (find-executable-path "racket")
+             (append (compiled-root-launch-arguments root-s2)
+                     (list "-f" (path->string child-path-s2)))))
+    (check-equal? exit-code-s2 0)
+    (define out-s2 (file->string child-out-s2))
+    (check-true (string-contains? out-s2 "marker=producer-fixture") out-s2)
+    (check-true (string-contains? out-s2 "roots=set") out-s2)
+    (assert-no-lazy-compile! checkout-s2 "subprocess"))
+
   ;; -------------------------------------------------- fail-closed paths
 
   (test-case "marker change at consumer fails validation, fallback runs current source"

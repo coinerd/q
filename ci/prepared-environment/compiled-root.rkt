@@ -9,13 +9,15 @@
 ;; Proven semantics (probe-verified on Racket 8.10 in this wave):
 ;;   - A zo under an explicit current-compiled-file-roots entry is
 ;;     consulted for a source S UNCONDITIONALLY: the 'modify-seconds
-;;     freshness gate did NOT reject root entries even when mtime(S)
-;;     was future-dated relative to mtime(zo) (probe: no lazy
-;;     recompilation in any mtime variant). The freshness gate governs
-;;     the source-ADJACENT default compiled directory, not external
-;;     roots. The resolver still forces consumer source mtimes older
-;;     than root zo mtimes as defense-in-depth; identity is proven by
-;;     digests, never by mtime.
+;;     freshness gate governs the source-ADJACENT default compiled
+;;     directory, not external roots (probe-verified on 8.10). Identity
+;;     is proven by digests, never by mtime. W1a-repair (coordinator
+;;     trial c01 window-2, run 41271542715): root-on activation pins
+;;     use-compiled-file-check to 'exists — mtime comparison is
+;;     structurally wrong for restored roots (fresh checkout mtimes are
+;;     always newer than producer-era zo mtimes), and freshness is
+;;     established by the same-commit source-sha gate plus per-load
+;;     content digests instead.
 ;;   - For an absolute source S = /D0/.../Dn/name.rkt and an absolute
 ;;     root entry R, the default compiled-load handler consults exactly
 ;;       R/D0/.../Dn/compiled/name_rkt.zo
@@ -90,7 +92,15 @@
          telemetry-snapshot
          reset-telemetry!
          with-compiled-root
-         reason->string)
+         reason->string
+         ;; v1.00.32 W2 repair (trial c01 window-2, run 41271542715):
+         ;; mapped-child entry, child-tree hit counting + aggregation.
+         compiled-root-script-entry-argument
+         compiled-root-runner-entry-argument
+         compiled-root-mapped-entry-argument
+         compiled-root-mapped-child-arguments
+         compiled-root-child-environment
+         aggregate-compiled-root-child-telemetry)
 
 (module+ test-helpers
   ;; W4: the activation-contract regression suite
@@ -433,10 +443,19 @@
 ;; compiled-root-activate-parameters
 ;;   Parameter values that route THIS racket's module lookups through
 ;;   the mapping directory. In-process activation returns three values.
+;;   W1a-repair (coordinator trial c01 window-2, run 41271542715): the
+;;   check mode is 'exists, never 'modify-seconds. Under
+;;   'modify-seconds a compiled file older than its source is ignored,
+;;   and restored roots can never satisfy that comparison BY DESIGN
+;;   (fresh checkout mtimes are always newer than producer-era zo
+;;   mtimes) — mtime comparison is structurally wrong for restored
+;;   roots. Under root-on, freshness is established by the same-commit
+;;   source-sha gate plus per-load content digests: any mutated zo
+;;   fails closed via the sha256 check (install-compiled-root-toctou-guard!).
 (define (compiled-root-activate-parameters root)
   (unless (eq? (compiled-root-reason root) #t)
     (error 'compiled-root-activate-parameters "root not resolved"))
-  (values (list (compiled-root-map-dir root)) 'modify-seconds))
+  (values (list (compiled-root-map-dir root)) 'exists))
 
 ;; compiled-root-load-keys
 ;;   The load-path spellings the TOCTOU guard recognizes for a source.
@@ -592,7 +611,14 @@
           "  (error 'compiled-root-toctou \"root manifest mutated after verification: ~~a\""
           "                            manifest-path))"
           " (current-compiled-file-roots (list (string->path ~s)))"
-          " (use-compiled-file-check 'modify-seconds)"
+          ;; W1a-repair (trial c01 window-2, run 41271542715): 'exists,
+          ;; never 'modify-seconds — mtime comparison is structurally
+          ;; wrong for restored roots (fresh checkout mtimes are always
+          ;; newer than producer-era zo mtimes, so every root member
+          ;; would be judged stale). Freshness comes from the same-commit
+          ;; source-sha gate; any mutated zo fails closed via the
+          ;; per-load sha256 check below.
+          " (use-compiled-file-check 'exists)"
           " (define checkout-dir (string->path ~s))"
           " (define root-dir (string->path ~s))"
           " (define tbl"
@@ -604,6 +630,35 @@
           "      #t))"
           "    (path->string (build-path root-dir (string->path (hash-ref e 'zo))))"
           "    (hash-ref e 'zo-digest))))"
+          ;; v1.00.32 W2 repair: hit counting. Q_COMPILED_ROOT_TELEMETRY_DIR
+          ;; (exported by `launch`) turns every bootstrapped process in the
+          ;; child tree into a counter: one temporary file per process,
+          ;; rewritten on EVERY root-served load, so counts survive killed
+          ;; children and parallel processes never race. Telemetry is
+          ;; best-effort (fail-open): a counting failure must never break a
+          ;; test execution — the per-load digest check above stays
+          ;; fail-closed regardless.
+          " (define q-tel-dir (getenv \"Q_COMPILED_ROOT_TELEMETRY_DIR\"))"
+          " (define q-tel-file"
+          "  (with-handlers ([exn:fail? (lambda (_) #f)])"
+          "   (and q-tel-dir"
+          "        (make-temporary-file \"q-compiled-root-hit~~a.rktd\" #f q-tel-dir))))"
+          " (define q-hits 0)"
+          " (define q-bytes 0)"
+          " (define (q-count! b)"
+          "  (set! q-hits (add1 q-hits))"
+          "  (set! q-bytes (+ q-bytes b))"
+          "  (when q-tel-file"
+          "   (with-handlers ([exn:fail? (lambda (_) (void))])"
+          "    (call-with-output-file"
+          "     q-tel-file"
+          "     (lambda (out)"
+          "      (write (list 'compiled-root-child-telemetry"
+          "                   (cons 'root-hits q-hits)"
+          "                   (cons 'loads q-hits)"
+          "                   (cons 'bytes-served q-bytes))"
+          "             out))"
+          "     #:exists 'truncate))))"
           " (define orig-load (current-load))"
           " (current-load"
           "  (lambda (path modname)"
@@ -613,7 +668,8 @@
           "                tbl)))"
           "   (when hit"
           "    (unless (string=? (sha256-file (cadr hit)) (caddr hit))"
-          "     (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path)))"
+          "     (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path))"
+          "    (q-count! (file-size (cadr hit))))"
           "   (orig-load path modname))))")
          (path->string (simplify-path (path->complete-path compiled-root-manifest-module-path)))
          manifest-path
@@ -622,6 +678,114 @@
          (path->string (path->directory-path
                         (simplify-path (path->complete-path (compiled-root-checkout root)))))
          root-dir)))
+
+;; compiled-root-script-entry-argument
+;;   W2 repair (trial c01 window-2, run 41271542715): a Racket init option
+;;   such as the bootstrap's -e SUPPRESSES the implicit positional-file
+;;   load, so the mapped child `racket -e <bootstrap> <script> <args…>`
+;;   never loaded <script> at all — the root-on shard was a bootstrap-only
+;;   process that exited 0 without executing a single test (the vacuous
+;;   green behind zero-root-hits). This entry loads the script explicitly:
+;;   module body first (root-served, TOCTOU-guarded), then the module's
+;;   'main submodule when declared — the observable semantics of the plain
+;;   `racket <script> <args…>` command line (probe-verified: body AND
+;;   module+ main run, argv visible via current-command-line-arguments).
+(define (compiled-root-script-entry-argument script-path)
+  (list "-e"
+        (format (string-append "(begin (define q-p (string->path ~s)) (dynamic-require q-p #f)"
+                               " (define q-sm (list 'submod q-p 'main))"
+                               " (when (module-declared? q-sm #t) (dynamic-require q-sm #f)))")
+                (path->string script-path))))
+
+;; compiled-root-runner-entry-argument
+;;   The q test runner facade (scripts/run-tests.rkt) fires main under its
+;;   own run-file direct-invocation guard, which cannot recognize a -e
+;;   entry (find-system-path 'run-file stays the interpreter there), so
+;;   the generic script entry would load it as a library and exit 0 —
+;;   another silent vacuous green. The facade imports `main` from
+;;   scripts/run-tests/runner.rkt; this entry calls it with the child argv
+;;   after the root-served body load (probe-verified end to end).
+(define (compiled-root-runner-entry-argument script-path)
+  (list "-e"
+        (format
+         (string-append "(begin (define q-p (string->path ~s)) (dynamic-require q-p #f)"
+                        " (define q-main"
+                        " (namespace-variable-value 'main #t (lambda () #f) (module->namespace q-p)))"
+                        " (when q-main (q-main (vector->list (current-command-line-arguments)))))")
+         (path->string script-path))))
+
+;; compiled-root-mapped-entry-argument
+;;   Entry selection by script identity. The shard child the launcher
+;;   exists to run is the q runner facade (the ci.yml invocation is pinned
+;;   by tests/test-compiled-root-workflow.rkt, so a rename fails the
+;;   contract loudly); any other script keeps the generic
+;;   racket-<script> semantics. Never guess from file CONTENT.
+(define q-runner-facade-suffix #rx"[/\\]scripts[/\\]run-tests[.]rkt$")
+(define (compiled-root-mapped-entry-argument script-path)
+  (if (regexp-match? q-runner-facade-suffix (path->string script-path))
+      (compiled-root-runner-entry-argument script-path)
+      (compiled-root-script-entry-argument script-path)))
+
+;; compiled-root-mapped-child-arguments
+;;   `launch -- racket <script> <args…>`: enter the script explicitly (see
+;;   compiled-root-script-entry-argument); the script path is completed
+;;   against the launcher's cwd, which the child inherits. Any other racket
+;;   child shape (e.g. `racket -t <module>`) keeps today's verbatim flag
+;;   prepend — the bootstrap's -e is processed first either way.
+(define (compiled-root-mapped-child-arguments launch-args rest-args)
+  (cond
+    [(and (pair? rest-args) (string? (car rest-args)) (not (string-prefix? (car rest-args) "-")))
+     (append
+      launch-args
+      (compiled-root-mapped-entry-argument (path->complete-path (string->path (car rest-args))))
+      (cdr rest-args))]
+    [else (append launch-args rest-args)]))
+
+;; compiled-root-child-environment
+;;   The child tree inherits the counting directory (the bootstrap reads
+;;   it) and the flags file (the q test runner re-validates it to inject
+;;   the same bootstrap into ITS racket children — the H2 layer). A fresh
+;;   environment object: the parent process env is never mutated.
+(define (compiled-root-child-environment flags-file hits-dir)
+  (define src (current-environment-variables))
+  (define dst (make-environment-variables))
+  (for ([n (in-list (environment-variables-names src))])
+    (environment-variables-set! dst n (environment-variables-ref src n)))
+  (environment-variables-set! dst
+                              #"Q_COMPILED_ROOT_TELEMETRY_DIR"
+                              (string->bytes/utf-8 (path->string hits-dir)))
+  (environment-variables-set! dst
+                              #"Q_COMPILED_ROOT_FLAGS_FILE"
+                              (string->bytes/utf-8 (path->string flags-file)))
+  dst)
+
+;; aggregate-compiled-root-child-telemetry
+;;   Sum the per-process counter files every bootstrapped process in the
+;;   child tree rewrote on each root-served load. Per-process temporary
+;;   files cannot race; per-hit rewrites survive killed children (timeout
+;;   kill). Unreadable or malformed files are skipped LOUDLY — telemetry
+;;   never breaks execution, but it is never silently wrong either.
+(define (aggregate-compiled-root-child-telemetry hits-dir)
+  (for/fold ([hits 0]
+             [loads 0]
+             [served 0])
+            ([f (in-list (directory-list hits-dir))])
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (eprintf "ci-compiled-root: ignoring unreadable child telemetry ~a: ~a\n"
+                                (path->string f)
+                                (exn-message e))
+                       (values hits loads served))])
+      (define datum (file->value (build-path hits-dir f)))
+      (match datum
+        [(list 'compiled-root-child-telemetry
+               (cons 'root-hits h)
+               (cons 'loads l)
+               (cons 'bytes-served b))
+         (values (+ hits h) (+ loads l) (+ served b))]
+        [_
+         (eprintf "ci-compiled-root: ignoring malformed child telemetry ~a\n" (path->string f))
+         (values hits loads served)]))))
 
 ;; eager-fallback-compile!
 ;;   The ONE eager current-source fallback: raco make in the job-local
@@ -652,8 +816,16 @@
       ;; imperative install to this dynamic extent (W3 review deferral,
       ;; fixed in W4): the TOCTOU wrapper is active for the thunk and
       ;; unwound on return — exceptions included.
+      ;; W1a-repair (coordinator trial c01 window-2, run 41271542715):
+      ;; 'exists, never 'modify-seconds — under root-on, freshness is
+      ;; established by the same-commit source-sha gate plus per-load
+      ;; content digests (any mutated zo fails closed via the sha256
+      ;; check), while mtime comparison is structurally wrong for
+      ;; restored roots: a fresh checkout's source mtimes are always
+      ;; newer than producer-era root zo mtimes, so 'modify-seconds
+      ;; judges every root member stale (zero-root-hits).
       (parameterize ([current-compiled-file-roots (list (compiled-root-map-dir root))]
-                     [use-compiled-file-check 'modify-seconds]
+                     [use-compiled-file-check 'exists]
                      [current-load (current-load)])
         (install-compiled-root-toctou-guard! root)
         (telemetry (match-let ([(compiled-root-telemetry h f l b _) (telemetry)])
@@ -750,23 +922,28 @@
       (error 'ci-compiled-root "missing required option --~a" name))
     (p))
 
-  (define (write-launch-telemetry! mode exit-code wall-ms)
+  (define (write-launch-telemetry! mode exit-code wall-ms served)
     (when (telemetry-file)
       (define t (telemetry-snapshot))
-      (call-with-output-file (telemetry-file)
-                             (lambda (out)
-                               (write (list 'compiled-root-launch-telemetry
-                                            (cons 'mode mode)
-                                            (cons 'exit-code exit-code)
-                                            (cons 'wall-ms wall-ms)
-                                            (cons 'root-hits (compiled-root-telemetry-root-hits t))
-                                            (cons 'fallbacks (compiled-root-telemetry-fallbacks t))
-                                            (cons 'loads (compiled-root-telemetry-loads t))
-                                            (cons 'bytes-served
-                                                  (compiled-root-telemetry-bytes-served t))
-                                            (cons 'mechanism (compiled-root-telemetry-mechanism t)))
-                                      out))
-                             #:exists 'truncate)))
+      (call-with-output-file
+       (telemetry-file)
+       (lambda (out)
+         (write (list 'compiled-root-launch-telemetry
+                      (cons 'mode mode)
+                      (cons 'exit-code exit-code)
+                      (cons 'wall-ms wall-ms)
+                      (cons 'root-hits (+ (compiled-root-telemetry-root-hits t) (list-ref served 0)))
+                      (cons 'fallbacks (compiled-root-telemetry-fallbacks t))
+                      (cons 'loads (+ (compiled-root-telemetry-loads t) (list-ref served 1)))
+                      (cons 'bytes-served
+                            (+ (compiled-root-telemetry-bytes-served t) (list-ref served 2)))
+                      ;; W2 repair: the mechanism IS the launch mode.
+                      ;; The old structurally-constant "none" hid a
+                      ;; mapped child whose counters could not report
+                      ;; back and lied on every pass-through record.
+                      (cons 'mechanism mode))
+                out))
+       #:exists 'truncate)))
 
   ;; The launch flags are racket VM flags (-e bootstrap). They are only
   ;; meaningful for a racket child process; anything else fails closed.
@@ -852,14 +1029,40 @@
             (and (list? (list-ref flags 4)) (andmap string? (list-ref flags 4)))))
      (define argv0 (first child-args))
      (define t0 (current-inexact-milliseconds))
-     (define-values (exit-code mode)
+     (define-values (exit-code mode served)
        (cond
          [(and valid-flags? (racket-child? argv0))
+          ;; W2 repair (trial c01 window-2, run 41271542715): the mapped
+          ;; child must actually ENTER the script — a Racket init option
+          ;; (-e bootstrap) suppresses the implicit positional-file load,
+          ;; so the pre-repair shard child was a bootstrap-only process
+          ;; that exited 0 without running a single test — and every
+          ;; bootstrapped process in the child tree counts its root-served
+          ;; loads into a per-launch telemetry directory that this launcher
+          ;; aggregates into the record below. Counts written by killed
+          ;; children survive (per-hit rewrites), and telemetry failures
+          ;; are loud but never fatal.
+          (define hits-dir
+            (with-handlers ([exn:fail? (lambda (_) #f)])
+              (make-temporary-file "compiled-root-hits~a"
+                                   'directory
+                                   (path-only (path->complete-path ff)))))
+          (unless hits-dir
+            (eprintf "ci-compiled-root: cannot create the child telemetry directory;"
+                     " root-hit counters stay 0\n"))
+          (define child-env
+            (and hits-dir (compiled-root-child-environment (path->complete-path ff) hits-dir)))
           (define code
-            (apply system*/exit-code
-                   (resolve-child-program argv0)
-                   (append (list-ref flags 4) (rest child-args))))
-          (values code "verified-root-hit")]
+            (parameterize ([current-environment-variables (or child-env
+                                                              (current-environment-variables))])
+              (apply system*/exit-code
+                     (resolve-child-program argv0)
+                     (compiled-root-mapped-child-arguments (list-ref flags 4) (rest child-args)))))
+          (define served
+            (if hits-dir
+                (call-with-values (lambda () (aggregate-compiled-root-child-telemetry hits-dir)) list)
+                (list 0 0 0)))
+          (values code "verified-root-hit" served)]
          [else
           ;; Pass-through: no flags file (lane off or failed resolution —
           ;; the one eager gate already compiled), the global off
@@ -872,7 +1075,8 @@
                   (cond
                     [(and override (equal? (string->symbol override) 'off)) "global-off"]
                     [(not valid-flags?) "no-flags-current-source"]
-                    [else "unmapped-child"]))]))
+                    [else "unmapped-child"])
+                  (list 0 0 0))]))
      (define wall-ms (inexact->exact (floor (- (current-inexact-milliseconds) t0))))
-     (write-launch-telemetry! mode exit-code wall-ms)
+     (write-launch-telemetry! mode exit-code wall-ms served)
      (exit exit-code)]))
