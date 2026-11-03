@@ -24,18 +24,105 @@
 ;; I10 (allowlisted contents only). This script never mutates the root on
 ;; failure and exits nonzero on ANY mismatch.
 
-(require racket/cmdline
+(require ffi/unsafe
+         racket/cmdline
          racket/file
          racket/format
          racket/list
          racket/match
          racket/path
          racket/string
-         json)
+         json
+         (only-in openssl/libcrypto libcrypto))
 
 (define schema-revision-supported 1)
 
-(provide sha256-file)
+(provide sha256-file
+         sha256-hex
+         sha256-hex/pure
+         sha256-active-backend
+         sha256-libcrypto-bindings
+         sha256-ffi-procedure)
+
+;; ------------------------------------------------------------- sha256
+
+;; SHA-256 with a libcrypto FFI fast path (the SAME availability probe
+;; racket's own openssl/sha1 module uses — libcrypto is #f when absent) and
+;; the pure-Racket FIPS 180-4 implementation below as the authoritative
+;; fallback. The DIGEST is identical either way — sha256 is sha256; only
+;; the throughput differs. Why the fast path matters (W1 performance
+;; repair round): the compiled-root startup canaries hash the whole
+;; published manifest (and the transfer module) in EVERY spawned child,
+;; which measured ~640 ms per child at trial scale (1.6 MB manifest) with
+;; the pure implementation and would have kept the spawn-heavy test files
+;; over the runner's per-file cap even after the compiled transfer-module
+;; repair. No openssl dependency is ADDED: without libcrypto the pure path
+;; computes the same digests, just slower.
+;;
+;; Binding discipline (W1 review round 6): the fast path is used only when
+;; ALL THREE SHA256_* symbols bind (a partial binding table must never
+;; reach a call site — a half-bound table would crash instead of falling
+;; back); the length argument is _size (C size_t), never _long (LP64
+;; mismatch class); every FFI return code is checked (OpenSSL returns 1
+;; on success, 0 on failure) and ANY failure — including an exn from a
+;; badly-typed call — resolves to #f, which routes the digest through the
+;; pure path. Fail closed to the slow-but-correct backend, never wrong.
+
+;; sha256-libcrypto-bindings : cpointer-or-#f -> (vector/c proc proc proc) or #f
+;;   Bind all three SHA256_* symbols from LIB or fail as a WHOLE. A single
+;;   missing symbol (get-ffi-obj failure thunk => #f) disables the whole
+;;   fast path — never a half-bound table.
+(define (sha256-libcrypto-bindings lib)
+  (and lib
+       (let ([init (get-ffi-obj 'SHA256_Init lib (_fun _pointer -> _int) (lambda () #f))]
+             [update
+              (get-ffi-obj 'SHA256_Update lib (_fun _pointer _pointer _size -> _int) (lambda () #f))]
+             [final (get-ffi-obj 'SHA256_Final lib (_fun _pointer _pointer -> _int) (lambda () #f))])
+         (and init update final (vector init update final)))))
+
+;; sha256-ffi-procedure : (or/c (vector/c proc proc proc) #f) -> (or/c (bytes? . -> . (or/c hex-string? #f)) #f)
+;;   Turn a binding table into a hashing procedure — or #f unless every
+;;   symbol is present. The returned procedure checks every OpenSSL return
+;;   code and returns #f on ANY failure so the caller can fall back to the
+;;   pure path (identical digest, deterministic).
+(define (sha256-ffi-procedure bindings)
+  (and (vector? bindings)
+       (= 3 (vector-length bindings))
+       (let ([init (vector-ref bindings 0)]
+             [update (vector-ref bindings 1)]
+             [final (vector-ref bindings 2)])
+         (and init
+              update
+              final
+              (lambda (b)
+                (with-handlers ([exn:fail? (lambda (_) #f)])
+                  (define ctx (make-bytes 256)) ; SHA256_CTX <= 112 B on all known ABIs; GC-managed
+                  (define out (make-bytes 32))
+                  (and (= 1 (init ctx))
+                       (= 1 (update ctx b (bytes-length b)))
+                       (= 1 (final out ctx))
+                       (sha256-bytes->hex out))))))))
+
+(define sha256-ffi (sha256-ffi-procedure (sha256-libcrypto-bindings libcrypto)))
+
+;; sha256-active-backend : -> (or/c 'libcrypto-ffi 'pure-racket)
+;;   Which backend sha256-hex currently routes through (test/telemetry
+;;   introspection; the digests are identical either way).
+(define (sha256-active-backend)
+  (if sha256-ffi 'libcrypto-ffi 'pure-racket))
+
+(define (sha256-bytes->hex b)
+  (define hex-digits "0123456789abcdef")
+  (apply string-append
+         (for/list ([x (in-bytes b)])
+           (string (string-ref hex-digits (arithmetic-shift x -4))
+                   (string-ref hex-digits (bitwise-and x 15))))))
+
+(define (sha256-hex b)
+  (or (and sha256-ffi (sha256-ffi b)) (sha256-hex/pure b)))
+
+(define (sha256-file p)
+  (sha256-hex (file->bytes p)))
 
 ;; The fixed universe of artifact-safe top-level prefixes. The producer may
 ;; only allowlist entries from this set; the verifier enforces the same set
@@ -46,9 +133,12 @@
   (apply eprintf (string-append "prepared-environment manifest: " fmt "\n") args)
   (exit 1))
 
-(define (sha256-file p)
-  ;; Pure-racket/base SHA-256 (FIPS 180-4) so this contract runs on any
-  ;; minimal Racket distribution — no openssl/sha256 dependency.
+;; The authoritative pure-Racket FIPS 180-4 SHA-256 (single copy in this
+;; directory): the FALLBACK path of sha256-hex above, and the reference
+;; the FFI fast path's digests are pinned against — no openssl dependency
+;; on minimal distributions. Takes BYTES (not a path) so the two backends
+;; are byte-for-byte comparable in tests.
+(define (sha256-hex/pure b)
   (define (u32 x)
     (bitwise-and x #xffffffff))
   (define (ror32 x n)
@@ -181,7 +271,7 @@
         (string-set! s i (string-ref hex-digits (bitwise-and v 15)))
         (loop (sub1 i) (arithmetic-shift v -4))))
     s)
-  (define bytes-in (pad! (file->bytes p)))
+  (define bytes-in (pad! b))
   (let loop ([off 0]
              [hv h])
     (if (>= off (bytes-length bytes-in))

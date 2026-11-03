@@ -295,6 +295,160 @@
     (check-equal? (hash-ref (hash-ref m 'producer) 'label) "per-module-producer")))
 
 ;; ---------------------------------------------------------------------------
+;; Execute the actual CI resolve block with a previously valid flags file.
+(module+ test
+  (test-case "failed CI resolution does not pass stale flags to launch"
+    (define workflow (file->string (build-path repo-root ".github" "workflows" "ci.yml")))
+    (define match-block
+      (regexp-match
+       #px"(?s:      - name: Resolve the verified compiled root \\(W4 activation\\)\n(.*?)      - name:)"
+       workflow))
+    (check-not-false match-block)
+    (define step (cadr match-block))
+    (check-true (string-contains? step "continue-on-error: true"))
+    (check-true (string-contains? step "shell: bash"))
+    (define run-match (regexp-match #px"(?s:        run: \\|\n(.*))" step))
+    (check-not-false run-match)
+    (define script (string-replace (cadr run-match) "${{ matrix.shard }}" "0"))
+    (check-false (string-contains? script "${{"))
+    (define runner (make-temporary-file "ci-dataflow~a" 'directory))
+    (define flags (build-path runner "compiled-root-map" "shard-0.rktd"))
+    (make-directory* (path-only flags))
+    (define cli (build-path repo-root "ci" "prepared-environment" "compiled-root.rkt"))
+    (define racket-bin (find-executable-path "racket"))
+    (define bash (find-executable-path "bash"))
+    (check-not-false bash)
+    (define output (build-path runner "github-output"))
+    (define log (build-path runner "log"))
+    (define env (git-plumbing-free-env))
+    (environment-variables-set! env #"RUNNER_TEMP" (path->bytes runner))
+    (environment-variables-set! env #"GITHUB_OUTPUT" (path->bytes output))
+    (environment-variables-set! env #"VERIFIED_ROOT" (path->bytes (build-path runner "missing-root")))
+    (environment-variables-set! env #"Q_CI_COMPILED_ROOT" #"auto")
+    (call-with-output-file output void #:exists 'truncate)
+    (make-file-or-directory-link (build-path repo-root "ci") (build-path checkout "ci"))
+    (define (run cwd exe . args)
+      (call-with-output-file log
+                             #:exists 'append
+                             (lambda (out)
+                               (parameterize ([current-directory cwd]
+                                              [current-environment-variables env]
+                                              [current-output-port out]
+                                              [current-error-port out])
+                                 (apply system*/exit-code exe args)))))
+    ;; Seed using the same extracted CI resolve block, not a parallel CLI spelling.
+    (environment-variables-set! env #"VERIFIED_ROOT" (path->bytes published))
+    (check-equal? (run checkout bash "--noprofile" "--norc" "-e" "-o" "pipefail" "-c" script)
+                  0
+                  (file->string log))
+    (check-equal? (car (file->value flags)) 'compiled-root-flags)
+    (define stale-bytes (file->bytes flags))
+    (call-with-output-file output void #:exists 'truncate)
+    (environment-variables-set! env #"VERIFIED_ROOT" (path->bytes (build-path runner "missing-root")))
+    (define code (run checkout bash "--noprofile" "--norc" "-e" "-o" "pipefail" "-c" script))
+    (check-not-equal? code 0 (file->string log))
+    (define outputs (file->string output))
+    (check-false (regexp-match? #px"(?m:^flags-file=)" outputs))
+    ;; Pin the entire gate condition and command in the same step. The small
+    ;; scheduler below models Actions' default success() behavior; it does not
+    ;; evaluate GitHub expressions or run an Actions runner.
+    (define gate-match
+      (regexp-match
+       #px"(?m:^      - name: Compile gate \\(one bounded eager compile\\)\n        if: ([^\n]+)\n        run: ([^\n]+)\n)"
+       workflow))
+    (check-not-false gate-match)
+    (check-equal?
+     (cadr gate-match)
+     "steps.setup.outputs.prepared-env-result != 'success' || steps.compiled-root.outcome == 'failure' || env.COMPILED_ROOT != 'auto'")
+    (define gate-command (caddr gate-match))
+    (check-equal? gate-command "raco make main.rkt")
+    (define shard-match
+      (regexp-match #px"(?s:      - name: Run test shard [^\n]*\n(.*?)        run: \\|\n)" workflow))
+    (check-not-false shard-match)
+    (check-false (regexp-match? #px"(?m:^        if:)" (cadr shard-match))
+                 "shard relies on the default success() condition")
+    ;; In the pinned condition, failure makes the middle disjunct true even
+    ;; with a successful setup and auto mode. Exercise the extracted command
+    ;; against current source, first broken and then compilable.
+    (define resolve-outcome (if (zero? code) "success" "failure"))
+    (define gate-selected? (equal? resolve-outcome "failure"))
+    (check-true gate-selected?)
+    (define main (build-path checkout "main.rkt"))
+    (define (write-main text)
+      (call-with-output-file main #:exists 'truncate (lambda (out) (display text out))))
+    (write-main "#lang racket/base\n(this-is-not-bound)\n")
+    (define failed-gate-code
+      (if gate-selected?
+          (run checkout bash "--noprofile" "--norc" "-e" "-c" gate-command)
+          0))
+    (check-not-equal? failed-gate-code 0 (file->string log))
+    (define blocked-marker (build-path runner "blocked-launch"))
+    (when (zero? failed-gate-code)
+      (run checkout
+           racket-bin
+           (path->string cli)
+           "launch"
+           "--flags-file"
+           ""
+           "--telemetry-file"
+           (path->string (build-path runner "blocked.rktd"))
+           "--"
+           (path->string racket-bin)
+           "-e"
+           (format "(call-with-output-file ~s void)" (path->string blocked-marker))))
+    (check-false (file-exists? blocked-marker) "modeled default success() blocks launch")
+    (write-main "#lang racket/base\n(provide answer)\n(define answer 42)\n")
+    (define gate-code (run checkout bash "--noprofile" "--norc" "-e" "-c" gate-command))
+    (check-equal? gate-code 0 (file->string log))
+    (check-true (file-exists? (build-path checkout "compiled" "main_rkt.zo")))
+    (check-true
+     (string-contains? workflow "COMPILED_ROOT_FLAGS: ${{ steps.compiled-root.outputs.flags-file }}"))
+    (check-true (string-contains? workflow "--flags-file \"$COMPILED_ROOT_FLAGS\""))
+    ;; Actions supplies an empty value for the absent output. Exercise that
+    ;; exact value with the real launcher, not the stale on-disk path.
+    (define supplied
+      (or (and (regexp-match #px"(?m:^flags-file=(.*)$)" outputs)
+               (cadr (regexp-match #px"(?m:^flags-file=(.*)$)" outputs)))
+          ""))
+    (check-equal? supplied "")
+    ;; Recreate the valid stale file even if resolve deleted it, modeling an
+    ;; unlink failure; output gating must not depend on file absence.
+    (call-with-output-file flags #:exists 'truncate (lambda (out) (write-bytes stale-bytes out)))
+    (define tel (build-path runner "launch.rktd"))
+    (define marker (build-path runner "child-ran"))
+    (define child-expr
+      (format
+       (string-append
+        "(begin (call-with-output-file ~s (lambda (o) (write (list "
+        "(map (lambda (p) (if (path? p) (path->string p) p)) "
+        "(current-compiled-file-roots)) (getenv \"Q_COMPILED_ROOT_FLAGS_FILE\")) o))) (exit 23))")
+       (path->string marker)))
+    (check-equal? (if (zero? gate-code)
+                      (run checkout
+                           racket-bin
+                           (path->string cli)
+                           "launch"
+                           "--flags-file"
+                           supplied
+                           "--telemetry-file"
+                           (path->string tel)
+                           "--"
+                           (path->string racket-bin)
+                           "-e"
+                           child-expr)
+                      gate-code)
+                  23
+                  (file->string log))
+    (define child-state (file->value marker))
+    (check-false (member (list-ref (file->value flags) 2) (car child-state)))
+    (check-false (cadr child-state))
+    (define telemetry (file->value tel))
+    (check-equal? (cdr (assq 'mode (cdr telemetry))) "no-flags-current-source")
+    (check-equal? (cdr (assq 'exit-code (cdr telemetry))) 23)
+    (check-equal? (cdr (assq 'root-hits (cdr telemetry))) 0)
+    (check-equal? (file->bytes flags) stale-bytes)))
+
+;; ---------------------------------------------------------------------------
 ;; v1.00.30 W4 guarded compiled-root activation (issue #9690), repaired by
 ;; the current campaign's W7.
 ;;
