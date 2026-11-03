@@ -42,13 +42,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout trusted guard (PR base branch)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.workflow_run.repository.default_branch }}
           persist-credentials: false
 
       - name: Install Racket
-        uses: Bogdanp/setup-racket@v1.19
+        uses: Bogdanp/setup-racket@v1.16
         with:
           version: "8.16"
 

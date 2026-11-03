@@ -43,21 +43,32 @@
          manifest-source-paths
          manifest-payload-members
          manifest-reason-ok
+         ;; W1 performance repair round: fixed publication names of the
+         ;; pre-compiled load-key transfer module shipped inside the root.
+         compiled-root-load-keys-source-name
+         compiled-root-load-keys-zo-rel
          (struct-out exn:fail:compiled-root-manifest))
 
 (define manifest-schema "q-compiled-root-manifest-1")
 (define manifest-reason-ok #t)
 
+;; W1 performance repair round: the child transfer table ships as a
+;; COMPILED module inside the immutable root (children require the zo
+;; instead of re-parsing manifest.rktd per spawned process). These fixed
+;; publication names are shared by the producer, the validator, the
+;; launcher and the aggregator — one definition, no drift.
+(define compiled-root-load-keys-source-name "load-keys.rkt")
+(define compiled-root-load-keys-zo-rel "compiled/load-keys_rkt.zo")
+
 ;; ---------------------------------------------------------------- digests
 
-;; SHA-256 via the pure-Racket FIPS 180-4 implementation owned by the
-;; v1.00.11 manifest contract (single authoritative copy in this
-;; directory; no duplicated constant tables, no openssl dependency).
+;; SHA-256 via the FIPS 180-4 implementation owned by the v1.00.11
+;; manifest contract (single authoritative copy in this directory; the
+;; libcrypto FFI fast path and the pure-Racket fallback compute identical
+;; digests — W1 review round 6: the digest is computed in memory, no
+;; temporary file per digest).
 (define (sha256-bytes b)
-  (define tmp (make-temporary-file "qcr-digest~a"))
-  (dynamic-wind (lambda () (with-output-to-file tmp #:exists 'replace (lambda () (write-bytes b))))
-                (lambda () (sha256-file tmp))
-                (lambda () (delete-file tmp))))
+  (sha256-hex b))
 
 ;; Digest of one payload member: canonical "rel\0len:bytes" framing so a
 ;; renamed file cannot silently substitute for another.
@@ -157,7 +168,36 @@
   (unless (exact-nonnegative-integer? (hash-ref e 'zo-mtime-ms #f))
     (raise-manifest! "~a: entry ~s lacks zo mtime" where (hash-ref e 'path))))
 
+(define (check-load-keys-field lk where)
+  (unless (hash? lk)
+    (raise-manifest! "~a: load-keys field is not a hash" where))
+  (unless (safe-rel-path-string? (hash-ref lk 'path #f))
+    (raise-manifest! "~a: unsafe load-keys path ~s" where (hash-ref lk 'path #f)))
+  (unless (safe-rel-path-string? (hash-ref lk 'zo #f))
+    (raise-manifest! "~a: unsafe load-keys zo path ~s" where (hash-ref lk 'zo #f)))
+  (req-hex lk 'digest where)
+  (req-hex lk 'zo-digest where))
+
 ;; -------------------------------------------------------------- producer
+
+;; canonical-root-members
+;;   The member set covered by the canonical whole-payload digest: every
+;;   declared payload zo plus — when the manifest binds one — the load-key
+;;   transfer module's source AND compiled form, so no byte of the child
+;;   transfer path can mutate below the manifest.
+(define (canonical-root-members root-dir sources load-keys)
+  (define members
+    (for/list ([e (in-list sources)])
+      (cons (string->bytes/utf-8 (hash-ref e 'zo))
+            (file->bytes (build-path root-dir (string->path (hash-ref e 'zo)))))))
+  (if load-keys
+      (append
+       members
+       (list (cons (string->bytes/utf-8 (hash-ref load-keys 'path))
+                   (file->bytes (build-path root-dir (string->path (hash-ref load-keys 'path)))))
+             (cons (string->bytes/utf-8 (hash-ref load-keys 'zo))
+                   (file->bytes (build-path root-dir (string->path (hash-ref load-keys 'zo)))))))
+      members))
 
 ;; make-compiled-root-manifest
 ;;   #:sources (list (list src-rel-string zo-rel-string))
@@ -165,6 +205,11 @@
 ;;   (staging root at manifest build time). Compose the manifest hash,
 ;;   computing every digest from the actual bytes on disk. Raises on any
 ;;   missing member.
+;;   #:load-keys the transfer-module field produced by
+;;   write-compiled-root-load-keys! (W1 performance repair round): shape
+;;   checked and digest-verified against the staged bytes right here — a
+;;   producer whose claimed transfer digests do not match its staging tree
+;;   fails closed at the producer boundary, not at consumer validation.
 (define (make-compiled-root-manifest
          #:sources sources
          #:root-dir root-dir
@@ -172,7 +217,8 @@
          #:producer-label label
          #:producer-trusted? [trusted? #t]
          #:producer-command [command "racket ci/prepared-environment/compiled-root.rkt produce"]
-         #:lockfile [lockfile #f])
+         #:lockfile [lockfile #f]
+         #:load-keys [load-keys #f])
   (unless (path-string? root-dir)
     (raise-manifest! "root-dir must be a path or string"))
   (define entries
@@ -202,10 +248,22 @@
               (bytes-length zo-b)
               'zo-mtime-ms
               (file-or-directory-modify-seconds zo-abs))))
+  (when load-keys
+    (check-load-keys-field load-keys "make")
+    ;; Fail closed at the producer boundary: the claimed transfer digests
+    ;; must match the staged bytes NOW.
+    (unless (string=? (sha256-bytes
+                       (file->bytes (build-path root-dir (string->path (hash-ref load-keys 'path)))))
+                      (hash-ref load-keys 'digest))
+      (raise-manifest! "load-keys transfer module digest mismatch at producer: ~s"
+                       (hash-ref load-keys 'path)))
+    (unless (string=? (sha256-bytes
+                       (file->bytes (build-path root-dir (string->path (hash-ref load-keys 'zo)))))
+                      (hash-ref load-keys 'zo-digest))
+      (raise-manifest! "compiled load-keys transfer module digest mismatch at producer: ~s"
+                       (hash-ref load-keys 'zo))))
   (define payload-digest
-    (canonical-payload-digest (for/list ([e (in-list entries)])
-                                (cons (string->bytes/utf-8 (hash-ref e 'zo))
-                                      (file->bytes (build-path root-dir (hash-ref e 'zo)))))))
+    (canonical-payload-digest (canonical-root-members root-dir entries load-keys)))
   (define lock-ht
     (if lockfile
         (hasheq 'lockfile
@@ -217,33 +275,37 @@
                                  lockfile
                                  (string->path lockfile))))
         (hasheq 'lockfile #f 'lockfile-digest #f)))
-  (hasheq 'schema
-          manifest-schema
-          'created
-          (parameterize ([date-display-format 'iso-8601])
-            (date->string (current-date) #t))
-          'producer
-          (hasheq 'label label 'trusted trusted? 'command command)
-          'racket
-          (hasheq 'version
-                  (version)
-                  'executable-digest
-                  (sha256-file (path->complete-path executable-path))
-                  'executable-path
-                  (path->string executable-path))
-          'platform
-          (hasheq 'os
-                  (->string (system-type))
-                  'arch
-                  (->string (system-type 'arch))
-                  'so-suffix
-                  (->string (system-type 'so-suffix)))
-          'packages
-          lock-ht
-          'sources
-          entries
-          'payload
-          (hasheq 'algorithm "sha256" 'digest payload-digest 'files (length entries))))
+  (define base-manifest
+    (hasheq 'schema
+            manifest-schema
+            'created
+            (parameterize ([date-display-format 'iso-8601])
+              (date->string (current-date) #t))
+            'producer
+            (hasheq 'label label 'trusted trusted? 'command command)
+            'racket
+            (hasheq 'version
+                    (version)
+                    'executable-digest
+                    (sha256-file (path->complete-path executable-path))
+                    'executable-path
+                    (path->string executable-path))
+            'platform
+            (hasheq 'os
+                    (->string (system-type))
+                    'arch
+                    (->string (system-type 'arch))
+                    'so-suffix
+                    (->string (system-type 'so-suffix)))
+            'packages
+            lock-ht
+            'sources
+            entries
+            'payload
+            (hasheq 'algorithm "sha256" 'digest payload-digest 'files (length entries))))
+  (if load-keys
+      (hash-set base-manifest 'load-keys load-keys)
+      base-manifest))
 
 ;; ------------------------------------------------------------- validation
 
@@ -305,6 +367,33 @@
       (raise-manifest! "manifest has no sources"))
     (for ([e (in-list sources)])
       (check-source-entry e "sources"))
+    ;; Codex contract review (presence-based optionality): absence is
+    ;; detected by KEY presence (hash-has-key?), never by field
+    ;; truthiness. A manifest that carries `load-keys` with a #f (or any
+    ;; non-hash) value is neither absent nor well-shaped — it fails the
+    ;; documented shape ("absent, or a hash binding path/digest/zo/
+    ;; zo-digest") and must fail closed here, exactly like any other
+    ;; malformed field. A truthiness guard would silently accept it as
+    ;; if the field were absent.
+    (define lk-present? (hash-has-key? manifest 'load-keys))
+    (define lk (hash-ref manifest 'load-keys #f))
+    (when lk-present?
+      (check-load-keys-field lk where)
+      (unless (path-stays-inside-root? root-dir (hash-ref lk 'path))
+        (raise-manifest! "load-keys path escapes root, is a symlink, or is missing: ~s"
+                         (hash-ref lk 'path)))
+      (unless (path-stays-inside-root? root-dir (hash-ref lk 'zo))
+        (raise-manifest! "load-keys zo path escapes root, is a symlink, or is missing: ~s"
+                         (hash-ref lk 'zo)))
+      (unless (string=? (sha256-bytes (file->bytes (build-path root-dir
+                                                               (string->path (hash-ref lk 'path)))))
+                        (hash-ref lk 'digest))
+        (raise-manifest! "load-key transfer module corruption detected: ~s" (hash-ref lk 'path)))
+      (unless (string=? (sha256-bytes (file->bytes (build-path root-dir
+                                                               (string->path (hash-ref lk 'zo)))))
+                        (hash-ref lk 'zo-digest))
+        (raise-manifest! "compiled load-key transfer module corruption detected: ~s"
+                         (hash-ref lk 'zo))))
     (define payload (req-hash manifest 'payload where))
     (unless (equal? (req-string payload 'algorithm "payload") "sha256")
       (raise-manifest! "unsupported payload algorithm ~s" (hash-ref payload 'algorithm)))
@@ -318,10 +407,7 @@
         (raise-manifest! "payload corruption detected: ~s" zo-rel))
       (unless (equal? (bytes-length zo-b) (hash-ref e 'zo-bytes))
         (raise-manifest! "payload size mismatch: ~s" zo-rel)))
-    (define computed
-      (canonical-payload-digest (for/list ([e (in-list sources)])
-                                  (cons (string->bytes/utf-8 (hash-ref e 'zo))
-                                        (file->bytes (build-path root-dir (hash-ref e 'zo)))))))
+    (define computed (canonical-payload-digest (canonical-root-members root-dir sources lk)))
     (unless (string=? computed (req-hex payload 'digest "payload"))
       (raise-manifest! "whole-payload digest mismatch: manifest ~s computed ~s"
                        (hash-ref payload 'digest)

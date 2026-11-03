@@ -265,11 +265,175 @@
                  (compiled-root-raco-child-args (string->path "/co/tests/a-test.rkt"))
                  (append launch-args
                          (list "-N" "raco" "-l-" "raco/main.rkt" "test" "-t" "/co/tests/a-test.rkt")))
-                ;; bare children: bootstrap + the racket-<file> entry expression
+                ;; bare children: bootstrap + the -N/-t- run-file entry
                 (define bare (compiled-root-bare-child-args (string->path "/co/tests/b.rkt")))
-                (check-equal? (length bare) (+ (length launch-args) 2))
-                (check-equal? (list-ref bare (length launch-args)) "-e")
-                (check-true (string-contains? (list-ref bare (+ (length launch-args) 1))
-                                              "/co/tests/b.rkt"))
-                (check-true (string-contains? (list-ref bare (+ (length launch-args) 1))
-                                              "module-declared?"))))))
+                (check-equal? bare
+                              (append launch-args
+                                      (list "-N" "/co/tests/b.rkt" "-t-" "/co/tests/b.rkt"))
+                              (format "~s" bare))))))
+
+;; -----------------------------------------------------------------------
+;; W1a round 5 (trial trial-2026-11-01-smoke-3, treatment C, run
+;; 41303344486): the bare-child entry form. With ANY -e init option
+;; present (the bootstrap's own included) Racket does not load a
+;; positional script as the run-file, and arguments after the last -e
+;; expression are parsed as RACKET switches — the real ci.yml lane's
+;; `launch -- racket scripts/run-tests.rkt --suite fast …` died with
+;; `racket: bad switch: --suite` before the runner ever started.
+;;
+;; The repaired contract, probe-verified on Racket 8.10 and unified on
+;; the same mechanism as the proven raco dispatch
+;; (`racket -N raco -l- raco/main.rkt …`, here in the file-path grammar:
+;; -l rejects absolute file paths — (lib "/abs/p.rkt") is a bad module
+;; path — while -t is (require (file …))):
+;;
+;;   racket [-N <script>] -e <bootstrap> -t- <script> <args…>
+;;
+;;   (a) -e/-t- are processed in order, so the bootstrap evaluates first;
+;;   (b) -t- loads the script as a module AND as the run-file (plain
+;;       `racket <script>` identity — what the real facade's
+;;       direct-invocation guard requires);
+;;   (c) -t- stops switch parsing and routes the remaining arguments to
+;;       the script's current-command-line-arguments.
+(module+ test
+  (require racket/file
+           racket/path
+           racket/string
+           racket/system
+           "../ci/prepared-environment/compiled-root.rkt"
+           "../scripts/run-tests/compiled-root-child.rkt")
+
+  (define fake-dir (make-temporary-file "qcr-inherit-fake~a" 'directory))
+  (define fake-runner (build-path fake-dir "fake-runner.rkt"))
+  ;; The fake runner mirrors the real facade's observable contract: write
+  ;; a LOADED marker when the module body executes, echo the routed
+  ;; command line into a second marker, and record the run-file identity
+  ;; into a third (the direct-invocation guard in
+  ;; scripts/run-tests/runner.rkt keys on exactly that identity).
+  (call-with-output-file
+   fake-runner
+   (lambda (o)
+     (display
+      (string-append "#lang racket/base\n"
+                     "(define q-dir (getenv \"FAKE_RUNNER_MARKER_DIR\"))\n"
+                     "(when q-dir\n"
+                     "  (call-with-output-file (build-path q-dir \"run-file\")\n"
+                     "    (lambda (o) (write (path->string (find-system-path 'run-file)) o))\n"
+                     "    #:exists 'truncate)\n"
+                     "  (call-with-output-file (build-path q-dir \"loaded\")\n"
+                     "    (lambda (o) (displayln \"loaded\" o))\n"
+                     "    #:exists 'truncate)\n"
+                     "  (call-with-output-file (build-path q-dir \"argv\")\n"
+                     "    (lambda (o) (write (vector->list (current-command-line-arguments)) o))\n"
+                     "    #:exists 'truncate))\n")
+      o)))
+  (define loaded-marker (build-path fake-dir "loaded"))
+  (define argv-marker (build-path fake-dir "argv"))
+  (define runfile-marker (build-path fake-dir "run-file"))
+
+  ;; A minimal VALID flags payload; the bootstrap here is a no-op -e, the
+  ;; exact option shape of the real bootstrap's launch-args.
+  (define launch-args (list "-e" "(begin (void))"))
+  (define good-flags (build-path fake-dir "good.rktd"))
+  (call-with-output-file good-flags
+                         (lambda (o)
+                           (write (list 'compiled-root-flags "/root" "/map" "/co" launch-args) o)))
+
+  ;; Execute `racket <argv…>` with the flags file and the marker directory
+  ;; exported, the way the launcher exports them into a shard child.
+  (define (clear-markers!)
+    (for ([m (in-list (list loaded-marker argv-marker runfile-marker))])
+      (when (file-exists? m)
+        (delete-file m))))
+  (define (racket-child argv)
+    (define env (make-environment-variables))
+    (for ([n (in-list (environment-variables-names (current-environment-variables)))])
+      (environment-variables-set! env
+                                  n
+                                  (environment-variables-ref (current-environment-variables) n)))
+    (environment-variables-set! env
+                                #"Q_COMPILED_ROOT_FLAGS_FILE"
+                                (string->bytes/utf-8 (path->string good-flags)))
+    (environment-variables-set! env
+                                #"FAKE_RUNNER_MARKER_DIR"
+                                (string->bytes/utf-8 (path->string fake-dir)))
+    (define o (open-output-string))
+    (define code
+      (parameterize ([current-output-port o]
+                     [current-error-port o]
+                     [current-environment-variables env])
+        (apply system*/exit-code (find-executable-path "racket") argv)))
+    (values code (get-output-string o)))
+
+  (test-case "the ci.yml mapped bare child runs the script and routes its command line"
+    ;; The exact shape of the failing smoke lane:
+    ;;   launch -- racket <script> --suite fast --jobs 2
+    (clear-markers!)
+    (define mapped
+      (compiled-root-mapped-child-arguments
+       launch-args
+       (list (path->string fake-runner) "--suite" "fast" "--jobs" "2")))
+    (define-values (code transcript) (racket-child mapped))
+    (check-equal? code
+                  0
+                  (format "the mapped bare child must not die on its own args:\n~a" transcript))
+    ;; The loaded marker proves the script really executed.
+    (check-true (file-exists? loaded-marker)
+                (format "the mapped bare child never loaded the script:\n~a" transcript))
+    ;; The script's command line is the routed argument vector — not
+    ;; racket switches, not swallowed positionals.
+    (check-equal? (file->value argv-marker)
+                  (list "--suite" "fast" "--jobs" "2")
+                  (format "argv routing: ~s" (file->value argv-marker)))
+    (check-equal? (file->value runfile-marker)
+                  (path->string fake-runner)
+                  "the script must be the run-file, like plain `racket <script>`"))
+
+  (test-case "the runner's per-file bare child loads the file as the run-file (empty argv)"
+    (clear-markers!)
+    (define bare
+      (parameterize ([current-environment-variables
+                      (let ([env (make-environment-variables)])
+                        (environment-variables-set! env
+                                                    #"Q_COMPILED_ROOT_FLAGS_FILE"
+                                                    (string->bytes/utf-8 (path->string good-flags)))
+                        env)])
+        (compiled-root-bare-child-args fake-runner)))
+    (check-true (and bare #t) "valid flags must yield bare-child argv")
+    (define-values (code transcript) (racket-child bare))
+    (check-equal? code 0 (format "per-file bare child failed:\n~a" transcript))
+    (check-true (file-exists? loaded-marker)
+                (format "the per-file bare child never loaded the file:\n~a" transcript))
+    ;; Plain `racket <file>` identity: the file is the run-file (the
+    ;; facade's direct-invocation guard depends on it) and the per-file
+    ;; child keeps an empty command line.
+    (check-equal? (file->value runfile-marker)
+                  (path->string fake-runner)
+                  (format "run-file must be the file itself, got ~s" (file->value runfile-marker)))
+    (check-equal? (file->value argv-marker)
+                  '()
+                  (format "per-file children keep an empty argv, got ~s" (file->value argv-marker))))
+
+  (test-case "the entry functions are unified on the -N/-t- run-file form"
+    (define script (string->path (string-append "/" "co/scripts/tool.rkt")))
+    (check-equal? (compiled-root-script-entry-argument script)
+                  (list "-N"
+                        (string-append "/" "co/scripts/tool.rkt")
+                        "-t-"
+                        (string-append "/" "co/scripts/tool.rkt")))
+    ;; The facade needs no special entry anymore: under -N/-t- the facade
+    ;; IS the run-file, so its own direct-invocation guard fires exactly
+    ;; once with the routed argv.
+    (check-equal? (compiled-root-runner-entry-argument script)
+                  (compiled-root-script-entry-argument script)
+                  "the runner entry must be the unified script entry")
+    ;; And the raco path is untouched (probe-proven mechanism, kept).
+    (check-equal?
+     (parameterize ([current-environment-variables
+                     (let ([env (make-environment-variables)])
+                       (environment-variables-set! env
+                                                   #"Q_COMPILED_ROOT_FLAGS_FILE"
+                                                   (string->bytes/utf-8 (path->string good-flags)))
+                       env)])
+       (compiled-root-raco-child-args (string->path "/co/tests/x.rkt")))
+     (append launch-args (list "-N" "raco" "-l-" "raco/main.rkt" "test" "-t" "/co/tests/x.rkt")))))
