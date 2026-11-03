@@ -786,15 +786,37 @@
      " (define root-dir (string->path ~s))"
      " (define tbl"
      ;; by NAME from the authenticated module — never (dynamic-require
-     ;; lk-path ...), which would re-open the path after authentication
-     "  (for/list ([e (in-list (dynamic-require ''load-keys 'compiled-root-load-key-table))])"
-     "   (list"
-     "    (path->string"
-     "     (simplify-path"
-     "      (path->complete-path (build-path checkout-dir (string->path (car e))))"
-     "      #t))"
-     "    (path->string (build-path root-dir (string->path (cadr e))))"
-     "    (caddr e))))"
+     ;; lk-path ...), which would re-open the path after authentication.
+     ;; W1a performance repair: the per-load lookup used to linear-scan
+     ;; this table with assoc — a shaped miss measured ~300–320 µs at
+     ;; production scale (5,200 entries) vs ~4.6–5.7 µs for a hash on
+     ;; the same keys (local probes, not CI measurements). The table is
+     ;; now an EQUAL?-based hash (make-hash; never hasheq/hasheqv —
+     ;; table keys and arriving canonical paths are separately
+     ;; allocated equal? strings), built insert-if-absent in manifest
+     ;; order so conflicting duplicate canonical keys keep the assoc
+     ;; FIRST match. Keys keep the identical simplify/complete
+     ;; canonicalization; values keep the assoc entry shape (canonical
+     ;; source, payload zo, digest) so the per-hit digest check and
+     ;; telemetry below are untouched; the table is STILL keyed by
+     ;; canonical SOURCE paths only — a direct payload-zo load misses it
+     ;; exactly as before, so this repair adds no direct-zo protection.
+     "  (let ([ht (make-hash)])"
+     "   (for ([e (in-list (dynamic-require ''load-keys 'compiled-root-load-key-table))])"
+     "    (define k"
+     "     (path->string"
+     "      (simplify-path"
+     "       (path->complete-path (build-path checkout-dir (string->path (car e))))"
+     "       #t)))"
+     "    (unless (hash-has-key? ht k)"
+     "     (hash-set!"
+     "      ht"
+     "      k"
+     "      (list"
+     "       k"
+     "       (path->string (build-path root-dir (string->path (cadr e))))"
+     "       (caddr e)))))"
+     "   ht))"
      ;; v1.00.32 W2 repair: hit counting. Q_COMPILED_ROOT_TELEMETRY_DIR
      ;; (exported by `launch`) turns every bootstrapped process in the
      ;; child tree into a counter: one temporary file per process,
@@ -841,8 +863,9 @@
      "  (lambda (path modname)"
      "   (define hit"
      "    (and path"
-     "         (assoc (path->string (simplify-path (path->complete-path path) #t))"
-     "                tbl)))"
+     "         (hash-ref tbl"
+     "                   (path->string (simplify-path (path->complete-path path) #t))"
+     "                   #f)))"
      "   (when hit"
      "    (unless (string=? (sha256-file (cadr hit)) (caddr hit))"
      "     (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path))"

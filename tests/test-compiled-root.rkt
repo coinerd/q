@@ -892,6 +892,426 @@
     (with-output-to-file lk-zo #:exists 'truncate/replace (lambda () (write-bytes lk-bytes)))
     (system*/exit-code (find-executable-path "chmod") "a-w" lk-zo))
 
+  ;; ------------------ W1a follow-on: child bootstrap hash lookup
+  ;;
+  ;; Smoke-5 diagnosis (see PLAN-W1-ARGV-REVIEW-REPAIR.md, "Follow-on W1a
+  ;; performance diagnosis"): the child bootstrap consulted its
+  ;; canonical-source table with a linear `assoc` per guarded load — a
+  ;; shaped miss measured ~300–320 µs at the 5,200-entry production
+  ;; scale vs ~4.6–5.7 µs for an equal?-based hash on the same keys
+  ;; (local synthetic probes; microbenchmarks, not CI measurements or
+  ;; proof of the smoke's dominant cause). The repair replaces ONLY the
+  ;; linear lookup table with an equal?-based hash preserving every
+  ;; existing semantic:
+  ;;   - equal? on canonical path strings (never hasheq/hasheqv; the
+  ;;     table keys and the arriving canonical path are separately
+  ;;     allocated equal? strings);
+  ;;   - manifest-order FIRST match on conflicting duplicate canonical
+  ;;     keys (the assoc rule); a plain immutable hash would keep the
+  ;;     LAST entry instead;
+  ;;   - identical simplify/complete canonicalization (links followed);
+  ;;   - per-hit digest checks and telemetry counting unchanged;
+  ;;   - the child table is STILL keyed by canonical SOURCE paths only:
+  ;;     a direct payload-zo load misses it exactly as before — this
+  ;;     repair adds no direct-zo protection (the parent keeps its two
+  ;;     by-src/by-zo branches).
+  ;; Detection does NOT rest on wall-clock alone: the mechanism pin
+  ;; below asserts the generated bootstrap structurally, and the
+  ;; semantic pins drive the REAL generated bootstrap end to end with
+  ;; exact hit counts; only the scale test carries a secondary generous
+  ;; timing budget (the parse-budget/no-parse two-layer pattern used
+  ;; throughout this file).
+  (define lookup-base (build-path repair-base "child-lookup"))
+  (make-directory* lookup-base)
+  ;; Real fixture modules the child actually loads: committed checkout,
+  ;; raco-made zo payload bytes, matching digests — so guarded loads
+  ;; HIT, pass the per-hit digest check, and leave exact, observable
+  ;; telemetry (unlike make-synthetic-root! above, whose fake members
+  ;; only measure startup cost of never-loading children).
+  (define lookup-checkout
+    (make-lang-checkout!
+     "lookup-checkout"
+     (for/list ([i (in-range 3)])
+       (cons (format "lookup/look-~a.rkt" i)
+             (format "#lang racket/base\n(provide look-~a)\n(define look-~a ~a)\n" i i i)))))
+  ;; Symlink alias spelling the alias table entries below are declared
+  ;; through: a REAL subdirectory plus a symlink to it, spelled with an
+  ;; up-element detour. simplify-path follows links ONLY when an
+  ;; up-element directly crosses them (probe-verified on this Racket:
+  ;; a plain link element is never collapsed), so this detour is the
+  ;; symlink alias whose normalization onto the canonical spelling the
+  ;; child's canonicalization actually performs — the alias-detour
+  ;; table entry then matches a consumer load of the REAL spelling.
+  ;; (A plain link-dir spelling without the detour can never match:
+  ;; its key stays link-spelled on both sides — the old fixture's
+  ;; alias hit was an artifact of the masked canonical entry.)
+  (make-directory* (build-path lookup-checkout "lookup" "real-sub"))
+  (with-output-to-file (build-path lookup-checkout "lookup" "real-sub" "keep.txt")
+                       #:exists 'replace
+                       (lambda () (display "placeholder")))
+  (make-file-or-directory-link (path->string (build-path lookup-checkout "lookup" "real-sub"))
+                               (build-path lookup-checkout "lookup" "link-sub"))
+  ;; raco make each fixture module and publish the zo bytes under the
+  ;; payload layout of ROOT-DIR; returns (list rel-src zo-rel digest)
+  ;; triples whose digests match the published bytes.
+  (define (make-real-lookup-triples! root-dir module-indices)
+    (for/list ([i (in-list module-indices)])
+      (define rel-src (format "lookup/look-~a.rkt" i))
+      (define abs-src (build-path lookup-checkout rel-src))
+      (unless (zero? (system*/exit-code (find-executable-path "raco") "make" "-j" "1" abs-src))
+        (error 'fixture "raco make failed for ~a" abs-src))
+      (define zo-rel (format "lookup/compiled/look-~a_rkt.zo" i))
+      (define payload-zo (build-path root-dir (string->path zo-rel)))
+      (make-directory* (path-only payload-zo))
+      (copy-file (build-path lookup-checkout (string->path zo-rel)) payload-zo #t)
+      (list rel-src zo-rel (sha256-file payload-zo))))
+  ;; Build a synthetic root from READY-MADE real triples plus arbitrary
+  ;; extra triples (duplicate-key/collision fixtures) and filler entries
+  ;; up to production scale. The transfer module is hand-built exactly
+  ;; like write-load-keys-fixture! above: a REAL raco-made compiled
+  ;; module, so the child bootstrap loads it through the ordinary
+  ;; authenticate-then-eval path.
+  (define (make-child-lookup-root! name real-triples extra-triples filler-count)
+    (define root-dir (build-path lookup-base name))
+    (make-directory* root-dir)
+    (define all-triples
+      (append real-triples
+              extra-triples
+              (for/list ([i (in-range filler-count)])
+                (list (format "filler/dir~a/module-~a.rkt" (modulo i 64) i)
+                      (format "filler/dir~a/compiled/module-~a_rkt.zo" (modulo i 64) i)
+                      (make-string 64 #\a)))))
+    (define lk-info (write-load-keys-fixture! root-dir all-triples))
+    (define manifest-entries
+      (for/list ([t (in-list real-triples)])
+        (hasheq 'path
+                (list-ref t 0)
+                'digest
+                (sha256-file (build-path lookup-checkout (string->path (list-ref t 0))))
+                'bytes
+                (file-size (build-path lookup-checkout (string->path (list-ref t 0))))
+                'zo
+                (list-ref t 1)
+                'zo-digest
+                (list-ref t 2)
+                'zo-bytes
+                (file-size (build-path root-dir (string->path (list-ref t 1))))
+                'zo-mtime-ms
+                0)))
+    (define manifest (hasheq 'schema manifest-schema 'sources manifest-entries 'load-keys lk-info))
+    (call-with-output-file (build-path root-dir "manifest.rktd") (lambda (o) (write manifest o)))
+    (compiled-root manifest
+                   root-dir
+                   (string->path (path->string (build-path lookup-base (string-append name "-map"))))
+                   lookup-checkout
+                   #t))
+  (define lookup-real (make-real-lookup-triples! (build-path lookup-base "lookup-root") (list 0 1 2)))
+  (define look-1-triple (list-ref lookup-real 1))
+  (define look-2-triple (list-ref lookup-real 2))
+  ;; Production-scale lookup root: 1 canonical table member + 4 extra
+  ;; entries (the look-2 alias-only symlink-detour declaration + the
+  ;; look-0 canonical duplicate + the look-1 alias-canonical duplicate
+  ;; pair) + 5,196 fillers = 5,201 table entries (~today's whole-
+  ;; checkout root). All three payload members ARE published, but look-2's AND
+  ;; look-1's CANONICAL spellings are deliberately ABSENT from the
+  ;; table: look-2's only entry is the alias spelling, and look-1's
+  ;; only entries are the alias-canonical duplicate pair. Any canonical
+  ;; entry placed BEFORE such a fixture entry would pre-empt the
+  ;; canonical key and mask the property under test (the exact trap
+  ;; that made the old symlink test ineffective).
+  (define lookup-root
+    (make-child-lookup-root!
+     "lookup-root"
+     ;; canonical table entry: look-0 ONLY
+     (list (list-ref lookup-real 0))
+     ;; conflicting SECOND occurrence of look-0's canonical key: its
+     ;; payload zo does not exist and its digest cannot match — a
+     ;; last-match regression digests it and fails the child closed
+     (list
+      (list "lookup/look-0.rkt" "dup/compiled/missing_rkt.zo" (make-string 64 #\b))
+      ;; look-2 ALIAS-ONLY entry, declared through the symlink
+      ;; up-detour spelling (same payload member as the absent
+      ;; canonical spelling; drives the symlink test below)
+      (list "lookup/link-sub/../look-2.rkt" (list-ref look-2-triple 1) (list-ref look-2-triple 2))
+      ;; conflicting ALIAS-CANONICAL duplicates of look-1: the FIRST
+      ;; entry is the valid symlink-detour spelling, the SECOND an
+      ;; invalid canonical duplicate. Normalization collides the
+      ;; pair on look-1's canonical key and insert-if-absent must
+      ;; keep the FIRST (valid) entry; a lost normalization leaves
+      ;; the invalid duplicate owning the canonical key and the
+      ;; real-spelling load digests the missing payload (child
+      ;; fails closed); a last-match-wins hash overwrites the valid
+      ;; alias entry (child fails closed). look-1 has NO other
+      ;; canonical table entry that could pre-empt this pair.
+      (list "lookup/link-sub/../look-1.rkt" (list-ref look-1-triple 1) (list-ref look-1-triple 2))
+      (list "lookup/look-1.rkt" "dup2/compiled/missing_rkt.zo" (make-string 64 #\c)))
+     5196))
+  ;; 2-entry control root for the scale delta (constant child costs
+  ;; cancel between the two runs; only table size differs).
+  (define lookup-small (make-child-lookup-root! "lookup-small" '() '() 2))
+
+  (test-case "child bootstrap builds an equal?-based hash lookup (deterministic mechanism pin)"
+    (define boot-expr (car (reverse (compiled-root-launch-arguments lookup-root))))
+    (check-false (string-contains? boot-expr "assoc")
+                 "the child bootstrap must not linear-scan the table with assoc")
+    (check-true (string-contains? boot-expr "(make-hash)")
+                "the lookup table must be an equal?-based hash (make-hash)")
+    (check-false (string-contains? boot-expr "(make-hasheq")
+                 "the table equivalence must stay equal?, never eq?")
+    (check-false (string-contains? boot-expr "(make-hasheqv")
+                 "the table equivalence must stay equal?, never eqv?")
+    (check-true (string-contains? boot-expr "(hash-ref tbl")
+                "guarded loads must consult the hash, not a linear scan")
+    (check-true
+     (string-contains? boot-expr "(hash-has-key? ht k)")
+     "conflicting duplicate canonical keys must keep the assoc first match (insert-if-absent)"))
+
+  ;; exact child hit/byte counts through the REAL generated bootstrap:
+  ;; one temporary telemetry directory per test case keeps the counts
+  ;; independent
+  (define (aggregate-child-telemetry tel-dir)
+    (parameterize ([current-error-port (open-output-string)])
+      (call-with-values (lambda () (aggregate-compiled-root-child-telemetry tel-dir)) list)))
+
+  (test-case "child guarded loads hit on separately allocated equal? string keys"
+    ;; the table keys arrive as zo-marshaled strings and the lookups as
+    ;; fresh path->string allocations: an eq-keyed table (hasheq) would
+    ;; miss them and report 0 hits; the equal?-based table must hit
+    (define tel-dir (build-path lookup-base "tel-equal-keys"))
+    (make-directory* tel-dir)
+    (define child (build-path lookup-base "equal-keys-child.rkt"))
+    (call-with-output-file
+     child
+     (lambda (o)
+       (fprintf o "(module qcr-equal-keys racket/base\n")
+       (fprintf o
+                "  (require (file ~s))\n"
+                (path->string (build-path lookup-checkout "lookup" "look-0.rkt")))
+       (fprintf o
+                "  (require (file ~s))\n"
+                (path->string (build-path lookup-checkout "lookup" "look-1.rkt")))
+       (fprintf o "  (void look-0 look-1))\n")))
+    (define-values (code transcript) (run-telemetry-child! lookup-root child tel-dir))
+    (check-equal? code 0 (format "hit child failed: ~a" transcript))
+    (match-define (list hits loads served) (aggregate-child-telemetry tel-dir))
+    (check-equal? hits 2 "each of the two guarded loads must hit the equal?-keyed table")
+    (check-equal? loads 2 "hit counting must stay per guarded load")
+    (check-equal?
+     served
+     (+ (file-size
+         (build-path (compiled-root-root-dir lookup-root) "lookup" "compiled" "look-0_rkt.zo"))
+        (file-size
+         (build-path (compiled-root-root-dir lookup-root) "lookup" "compiled" "look-1_rkt.zo")))
+     "served bytes must be the payload zo sizes of exactly the hit members"))
+
+  (test-case "conflicting duplicate canonical keys select the assoc first match"
+    ;; the transfer table carries look-0's canonical key TWICE: the
+    ;; valid first entry and an invalid duplicate (nonexistent payload
+    ;; zo, unmatchable digest). assoc semantics select the FIRST entry;
+    ;; a hash built last-match-wins would digest the missing duplicate
+    ;; payload and fail the child closed.
+    (define tel-dir (build-path lookup-base "tel-dup-first"))
+    (make-directory* tel-dir)
+    (define child (build-path lookup-base "dup-first-child.rkt"))
+    (call-with-output-file
+     child
+     (lambda (o)
+       (fprintf o "(module qcr-dup-first racket/base\n")
+       (fprintf o
+                "  (require (file ~s))\n"
+                (path->string (build-path lookup-checkout "lookup" "look-0.rkt")))
+       (fprintf o "  (void look-0))\n")))
+    (define-values (code transcript) (run-telemetry-child! lookup-root child tel-dir))
+    (check-equal? code
+                  0
+                  (format "the child must run: first-match selection avoids the invalid duplicate: ~a"
+                          transcript))
+    (match-define (list hits loads served) (aggregate-child-telemetry tel-dir))
+    (check-equal? hits 1 "exactly the guarded look-0 load must hit")
+    (check-equal?
+     served
+     (file-size (build-path (compiled-root-root-dir lookup-root) "lookup" "compiled" "look-0_rkt.zo"))
+     "the FIRST duplicate entry's payload must be the one digest-checked"))
+
+  (test-case "conflicting alias-canonical duplicates select the first match after normalization"
+    ;; the table declares look-1's canonical key TWICE: FIRST under the
+    ;; symlink-detour alias spelling (valid payload), THEN under the
+    ;; canonical spelling with a nonexistent payload zo and unmatchable
+    ;; digest. Normalization collides the pair on look-1's canonical
+    ;; key; insert-if-absent must then keep the FIRST (valid) entry.
+    ;; Dually red: a lost normalization leaves the invalid duplicate
+    ;; owning the canonical key and the real-spelling load digests the
+    ;; missing payload (child fails closed); a last-match-wins hash
+    ;; overwrites the valid alias entry with the invalid duplicate
+    ;; (child fails closed). look-1 has NO earlier canonical table
+    ;; entry that could pre-empt this pair (the masking trap that
+    ;; neutralized the original symlink test). Ordered BEFORE the
+    ;; payload-mutation test, which permanently corrupts look-1's
+    ;; published payload.
+    (define tel-dir (build-path lookup-base "tel-dup-alias-first"))
+    (make-directory* tel-dir)
+    (define child (build-path lookup-base "dup-alias-first-child.rkt"))
+    (call-with-output-file
+     child
+     (lambda (o)
+       (fprintf o "(module qcr-dup-alias-first racket/base\n")
+       (fprintf o
+                "  (require (file ~s))\n"
+                (path->string (build-path lookup-checkout "lookup" "look-1.rkt")))
+       (fprintf o "  (void look-1))\n")))
+    (define-values (code transcript) (run-telemetry-child! lookup-root child tel-dir))
+    (check-equal?
+     code
+     0
+     (format "the child must run: the normalized FIRST match is the valid alias entry: ~a"
+             transcript))
+    (match-define (list hits loads served) (aggregate-child-telemetry tel-dir))
+    (check-equal? hits 1 "exactly the guarded look-1 load must hit")
+    (check-equal?
+     served
+     (file-size (build-path (compiled-root-root-dir lookup-root) "lookup" "compiled" "look-1_rkt.zo"))
+     "the FIRST (alias-declared) duplicate entry's payload must be the one digest-checked"))
+
+  (test-case "symlink alias spellings still hit (canonicalization preserved)"
+    ;; EFFECTIVE alias regression (Codex review: the previous version
+    ;; also kept look-2's canonical entry in the table, so the
+    ;; real-spelling load hit it even with alias normalization removed —
+    ;; the test could never go red). The table now carries look-2 ONLY
+    ;; under the lookup/link-sub/../ symlink detour spelling; the child
+    ;; loads the REAL spelling, so the hit is possible only if the
+    ;; bootstrap's canonicalization normalizes the alias-detour key onto
+    ;; the canonical real-spelling key (dropped normalization yields
+    ;; 0 hits), and it must hit exactly once
+    (define tel-dir (build-path lookup-base "tel-symlink"))
+    (make-directory* tel-dir)
+    (define child (build-path lookup-base "symlink-child.rkt"))
+    (call-with-output-file
+     child
+     (lambda (o)
+       (fprintf o "(module qcr-symlink racket/base\n")
+       (fprintf o
+                "  (require (file ~s))\n"
+                (path->string (build-path lookup-checkout "lookup" "look-2.rkt")))
+       (fprintf o "  (void look-2))\n")))
+    (define-values (code transcript) (run-telemetry-child! lookup-root child tel-dir))
+    (check-equal? code 0 (format "hit child failed: ~a" transcript))
+    (match-define (list hits loads served) (aggregate-child-telemetry tel-dir))
+    (check-equal? hits 1 "the real-spelling load must hit the symlink-declared entry")
+    (check-equal?
+     served
+     (file-size (build-path (compiled-root-root-dir lookup-root) "lookup" "compiled" "look-2_rkt.zo"))
+     "the alias entry must resolve to the same payload member"))
+
+  (test-case "direct payload-zo loads miss the child table (source-only lookup preserved)"
+    ;; the child table is keyed by canonical SOURCE paths only (the
+    ;; parent keeps a separate by-zo table; the child never had one).
+    ;; A direct load of a payload zo must NOT hit: no digest check, no
+    ;; telemetry — this repair adds no direct-zo protection.
+    (define tel-dir (build-path lookup-base "tel-direct-zo"))
+    (make-directory* tel-dir)
+    (define child (build-path lookup-base "direct-zo-child.rkt"))
+    (call-with-output-file child
+                           (lambda (o)
+                             (fprintf o "(module qcr-direct-zo racket/base\n")
+                             (fprintf o
+                                      "  (require (file ~s))\n"
+                                      (path->string (build-path (compiled-root-root-dir lookup-root)
+                                                                "lookup"
+                                                                "compiled"
+                                                                "look-1_rkt.zo")))
+                             (fprintf o "  (void))\n")))
+    (define-values (code transcript) (run-telemetry-child! lookup-root child tel-dir))
+    (check-equal? code 0 (format "a valid payload zo must load directly: ~a" transcript))
+    (match-define (list hits loads served) (aggregate-child-telemetry tel-dir))
+    (check-equal? (list hits loads served)
+                  (list 0 0 0)
+                  "direct zo loads must miss the canonical-source-only child table"))
+
+  (test-case "payload mutation after bootstrap init fails a later child hit closed"
+    ;; the table is built (and the transfer module authenticated) at
+    ;; bootstrap; the per-hit digest check must still catch payload
+    ;; bytes mutated afterwards — no weakening of the load-time canary
+    (define child (build-path lookup-base "mutate-child.rkt"))
+    (define look-1-zo
+      (build-path (compiled-root-root-dir lookup-root) "lookup" "compiled" "look-1_rkt.zo"))
+    (call-with-output-file
+     child
+     (lambda (o)
+       (fprintf o "(module qcr-child-mutate racket/base\n")
+       (fprintf o "  (require racket/file)\n")
+       ;; runs AFTER the bootstrap initialized: flip the first payload
+       ;; byte, then make a guarded load whose digest check must fail
+       (fprintf o "  (define b (file->bytes (string->path ~s)))\n" (path->string look-1-zo))
+       (fprintf o "  (bytes-set! b 0 (bitwise-xor (bytes-ref b 0) #xFF))\n")
+       (fprintf o "  (call-with-output-file (string->path ~s)\n" (path->string look-1-zo))
+       (fprintf o "    (lambda (out) (write-bytes b out)) #:exists 'truncate)\n")
+       (fprintf o
+                "  (dynamic-require (string->path ~s) 'look-1))\n"
+                (path->string (build-path lookup-checkout "lookup" "look-1.rkt")))))
+    (define tel-dir (build-path lookup-base "tel-mutate"))
+    (make-directory* tel-dir)
+    (define-values (code transcript) (run-telemetry-child! lookup-root child tel-dir))
+    (check-false (zero? code)
+                 (format "the later guarded hit must fail closed on mutated payload bytes: ~a"
+                         transcript))
+    (check-true (string-contains? transcript "payload mutated after verification")
+                (format "the failure must name the load-time canary: ~a" transcript)))
+
+  (test-case "scale: repeated guarded misses over the production-size table (real bootstrap)"
+    ;; 40,000 guarded misses of a key absent from both tables, through
+    ;; the REAL generated bootstrap. Linear assoc at 5,200 entries costs
+    ;; ~300 µs per miss (~12 s for the batch, measured on this machine);
+    ;; the equal?-based hash costs ~5 µs (~0.2 s). The 3 s budget is a
+    ;; SECONDARY smoke check (CI variance can wobble it), ~4x below the
+    ;; red measurement and ~60x above the green one; the deterministic
+    ;; proof of the mechanism is the structural pin and the exact-count
+    ;; semantic pins above. Constant per-load costs (canonicalization,
+    ;; the orig-load miss) are identical for both roots and cancel in
+    ;; the delta; warm-up children absorb OS cache effects.
+    (define scale-child (build-path lookup-base "scale-child.rkt"))
+    (define done-path (build-path lookup-base "scale-done.txt"))
+    (define probe-path (build-path lookup-checkout "filler" "no-such-module.rkt"))
+    (call-with-output-file
+     scale-child
+     (lambda (o)
+       (fprintf o "(module qcr-lookup-scale racket/base\n")
+       (fprintf o "  (define cl (current-load))\n")
+       (fprintf o "  (define probe (string->path ~s))\n" (path->string probe-path))
+       (fprintf o "  (define done 0)\n")
+       (fprintf o "  (for ([_ (in-range 40000)])\n")
+       (fprintf o "    (with-handlers ([exn:fail? void])\n")
+       (fprintf o "      (cl probe 'qcr-scale-probe))\n")
+       (fprintf o "    (set! done (add1 done)))\n")
+       (fprintf o "  (call-with-output-file ~s\n" (path->string done-path))
+       (fprintf o "    (lambda (out) (write done out)) #:exists 'truncate)\n")
+       (fprintf o "  (void))\n")))
+    (define (timed-scale-child! root)
+      (define t0 (current-inexact-milliseconds))
+      (define code
+        (apply system*/exit-code
+               (find-executable-path "racket")
+               (append (compiled-root-launch-arguments root)
+                       (list "-N" (path->string scale-child) "-t-" (path->string scale-child)))))
+      (values code (- (current-inexact-milliseconds) t0)))
+    (timed-scale-child! lookup-small)
+    (timed-scale-child! lookup-root)
+    (define-values (small-code small-ms) (timed-scale-child! lookup-small))
+    (define-values (big-code big-ms) (timed-scale-child! lookup-root))
+    (check-equal? small-code 0 "the small-root scale child must complete")
+    (check-equal? big-code 0 "the production-size scale child must complete")
+    (check-equal? (file->value done-path)
+                  40000
+                  "every guarded load must traverse the child wrapper end to end")
+    (define delta (- big-ms small-ms))
+    (check-true
+     (<= delta 3000)
+     (format (string-append "per-lookup table cost over budget: big=~a ms small=~a ms "
+                            "(delta ~a ms for 40000 guarded misses over 5201 vs 2 entries) "
+                            "— the child still linear-scans the canonical-source table")
+             big-ms
+             small-ms
+             delta)))
+
   ;; Codex contract review: old roots (published before the compiled
   ;; load-key transfer module existed; manifest with the field absent)
   ;; deliberately VALIDATE under the new reader — the field is optional
