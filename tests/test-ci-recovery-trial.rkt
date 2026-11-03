@@ -1506,7 +1506,10 @@
 
 (define-runtime-path w1a-ci-yml "../.github/workflows/ci.yml")
 (define-runtime-path w1a-prepare-yml "../.github/actions/prepare-racket-environment/action.yml")
-(define w1a-download-v8-sha "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c")
+;; Canonical download-artifact pin = upstream tag v8.0.2 (git ls-remote
+;; https://github.com/actions/download-artifact.git refs/tags/v8.0.2); PR
+;; #9883 aligned every lane to it.
+(define w1a-download-v8-sha "9000827ccba6bdab643e8b6fd33ac0654aef8333")
 
 (test-case "trial identity binds shipped bytes (W1a, smoke run 41192722012)"
   (define ci (file->string w1a-ci-yml))

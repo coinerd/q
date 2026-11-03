@@ -232,25 +232,25 @@ jobs:
       # prepared environment artifact itself.
       - name: Download per-shard restore records
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: prepared-env-records-${{ github.run_id }}-*
           path: evidence/records
       - name: Download compiled-root maps (launcher telemetry + producer stamps + measured shard identity)
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: compiled-root-map-${{ github.run_id }}-*
           path: evidence/maps
       - name: Download the producer manifest binding
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: prepared-env-producer-manifests-${{ github.run_id }}
           path: evidence/producer
       - name: Download the aggregate restore attestation
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: prepared-aggregate-restore-${{ github.run_id }}
           path: evidence/aggregate

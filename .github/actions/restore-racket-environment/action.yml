@@ -60,7 +60,7 @@ runs:
         installer-sha256: ${{ inputs.installer-sha256 }}
 
     - name: Download the prepared-environment artifact
-      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
       with:
         name: ${{ inputs.artifact-name }}
         # Never extract into the checkout: the artifact contains package

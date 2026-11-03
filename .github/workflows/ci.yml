@@ -256,7 +256,7 @@ jobs:
       # single-sourced.
       - name: Download the shipped prepared artifact for trial binding (trial evidence)
         if: always() && inputs.trial-id != ''
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: prepared-env-fast
           path: producer-binding/artifact-download
@@ -725,7 +725,7 @@ jobs:
           prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
       - name: Download shard restore records
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: prepared-env-records-${{ github.run_id }}-*
           path: records-raw
@@ -904,7 +904,7 @@ jobs:
       # test-results-fast-<shard> (one file per artifact, so no
       # merge-multiple: artifacts land in per-artifact subdirectories).
       - name: Download fast-suite shard results
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           path: shard-results
           pattern: test-results-fast-*
