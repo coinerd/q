@@ -130,7 +130,7 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned Racket toolchain
-        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd
+        uses: Bogdanp/setup-racket@8889db76ff6cdc86df8aa09fdd1729cd090b7144
         with:
           version: '8.10'
 
@@ -263,7 +263,7 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned Racket toolchain
-        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd
+        uses: Bogdanp/setup-racket@8889db76ff6cdc86df8aa09fdd1729cd090b7144
         with:
           version: '8.10'
 
