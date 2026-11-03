@@ -47,12 +47,30 @@
 ;;     paths — zo discovery is internal to the module system — so the
 ;;     wrapper maps a source path back to its published payload member
 ;;     via the manifest and digests the bytes behind the mapping
-;;     symlink); mutation after validation fails closed instead of
-;;     executing tampered bytecode. The subprocess bootstrap derives
-;;     the same digest table from the published manifest and verifies
-;;     a launch-time baked manifest digest, for identical protection
-;;     outside the process (O(1)-sized transfer, see
-;;     compiled-root-launch-arguments).
+;;     symlink). Codex contract review qualification — the guarantee is
+;;     NOT a blanket race immunity for ordinary payload members: the
+;;     per-load canary is a hash-then-load (two-open) shape — it digests
+;;     one open of the zo, then the module system's default handler
+;;     re-opens the same path for the actual load — so a same-user
+;;     process can in principle swap bytes between the two opens. The
+;;     canary deterministically rejects any mutation that lands before
+;;     its digest read (fail closed at the digest check), but executed
+;;     bytes are not PROVABLY the digested bytes for ordinary payloads:
+;;     that two-open window is a preexisting limitation, documented here
+;;     and in the canonical report, never guarded away. The deterministic
+;;     executed-equals-authenticated property exists ONLY for the child
+;;     transfer module (authenticate-compiled-module reads the zo exactly
+;;     once and evals the compiled form FROM THOSE BYTES —
+;;     transfer-auth.rkt). A second preexisting mapping limitation: a
+;;     load arriving under a path spelling outside the manifest's key
+;;     set (e.g. an unresolved symlink spelling on symlinked checkouts)
+;;     misses both key tables and passes through WITHOUT a digest check
+;;     (the guard silently no-ops; the W3 deferred observation). The
+;;     subprocess bootstrap derives the same digest table from the
+;;     published manifest and verifies a launch-time baked manifest
+;;     digest, for identical protection outside the process
+;;     (O(1)-sized transfer, see compiled-root-launch-arguments); its
+;;     per-load checks inherit the same two-open qualification.
 ;;   - Any validation failure resolves to a single EAGER fallback
 ;;     (raco make in the job-local checkout at the setup boundary,
 ;;     W2 containment semantics) or a hard failure — never producer-era
@@ -70,7 +88,12 @@
          racket/runtime-path
          racket/string
          racket/system
-         "compiled-root-manifest.rkt")
+         "compiled-root-manifest.rkt"
+         ;; W1 review round 6: required for its side effect on the
+         ;; producer's raco make closure — the child bootstrap loads this
+         ;; module (authenticate-compiled-module, the atomic telemetry
+         ;; writer), so every published root must ship its compiled form.
+         "transfer-auth.rkt")
 
 (provide (struct-out compiled-root)
          (struct-out compiled-root-telemetry)
@@ -100,7 +123,17 @@
          compiled-root-mapped-entry-argument
          compiled-root-mapped-child-arguments
          compiled-root-child-environment
-         aggregate-compiled-root-child-telemetry)
+         aggregate-compiled-root-child-telemetry
+         ;; W1 performance repair round: pre-compiled load-key transfer
+         ;; module (producer) + child telemetry filename contract.
+         write-compiled-root-load-keys!
+         compiled-root-child-telemetry-filename?
+         compiled-root-telemetry-tmp-prefix
+         ;; W1 repair round 7 (reviewer P2): the filename contract's two
+         ;; halves, shared with the reservation (reserve-child-telemetry-
+         ;; target) and pinned writer/reader-aligned in tests.
+         compiled-root-child-telemetry-prefix
+         compiled-root-child-telemetry-suffix)
 
 (module+ test-helpers
   ;; W4: the activation-contract regression suite
@@ -296,13 +329,65 @@
                                                     (simplify-path dir))))])
     (unless (member compiled-dir pre-existing-compiled-dirs)
       (delete-directory/files compiled-dir)))
+  ;; W1 performance repair round: ship the load-key table as a COMPILED
+  ;; module inside the root (see write-compiled-root-load-keys!) so
+  ;; children require the zo instead of re-parsing manifest.rktd per
+  ;; spawned process. Written and compiled in staging BEFORE the atomic
+  ;; rename; the manifest binds its digests below.
+  (define load-keys (write-compiled-root-load-keys! staging-dir pairs))
   (make-compiled-root-manifest #:sources (for/list ([p (in-list pairs)])
                                            (list (list-ref p 0) (list-ref p 1)))
                                #:root-dir staging-dir
                                #:racket-executable (find-executable-path "racket")
                                #:producer-label label
                                #:producer-trusted? trusted?
-                               #:lockfile lockfile))
+                               #:lockfile lockfile
+                               #:load-keys load-keys))
+
+;; write-compiled-root-load-keys!
+;;   W1 performance repair round: the O(1)-argv transfer (PR #9878) left
+;;   every spawned child re-parsing the full manifest.rktd to rebuild its
+;;   load-key table — measured ~1.5 s of extra wall clock per child at
+;;   trial scale (5,200 entries), which alone pushed the spawn-heavy test
+;;   files over the runner's 2-min per-file cap (shard wall 3h13m vs
+;;   ~25 min). This producer step ships the SAME table as a compiled
+;;   module inside the root: children require the zo (an O(1) marshal
+;;   load) instead of parsing the rktd — the parse cost moves to the
+;;   producer, once. The module carries plain rel-path triples
+;;   (src-rel zo-rel zo-digest): relocation stays a consumer-side
+;;   completion, absolute paths are NEVER baked into the immutable root.
+;;   The compiled form is produced here (raco make in staging, before the
+;;   atomic rename) so a child never runs the table through the reader.
+;;   Returns the manifest load-keys field: the digests bind the module
+;;   into the manifest, whose own baked startup canary covers it.
+(define (write-compiled-root-load-keys! staging-dir sources)
+  (define triples
+    (for/list ([s (in-list sources)])
+      (list (list-ref s 0)
+            (list-ref s 1)
+            (sha256-file (build-path staging-dir (string->path (list-ref s 1)))))))
+  (define lk-src (build-path staging-dir compiled-root-load-keys-source-name))
+  (call-with-output-file lk-src
+                         #:exists 'replace
+                         (lambda (o)
+                           (write `(module load-keys racket/base
+                                     (provide compiled-root-load-key-table)
+                                     (define compiled-root-load-key-table ',triples))
+                                  o)))
+  (unless (zero? (system*/exit-code (find-executable-path "raco") "make" "-j" "1" lk-src))
+    (error 'write-compiled-root-load-keys!
+           "raco make failed for the compiled load-key transfer module"))
+  (define lk-zo (build-path staging-dir (string->path compiled-root-load-keys-zo-rel)))
+  (unless (file-exists? lk-zo)
+    (error 'write-compiled-root-load-keys! "compiled transfer module missing: ~a" lk-zo))
+  (hasheq 'path
+          compiled-root-load-keys-source-name
+          'digest
+          (sha256-file lk-src)
+          'zo
+          compiled-root-load-keys-zo-rel
+          'zo-digest
+          (sha256-file lk-zo)))
 
 ;; publish-compiled-root!
 ;;   Atomic publication: write manifest into staging, fsync-ish via file
@@ -419,16 +504,33 @@
       ;; retries, shared map dirs). Remapping must be idempotent: same
       ;; target => no-op; stale/different target => replace; regular
       ;; file at the link path => overwrite too (fail-closed integrity
-      ;; is re-proven per run anyway).
+      ;; is re-proven per run anyway). Reviewer-blocker follow-up: the
+      ;; same-target probe used to read the link target's FILE CONTENT
+      ;; and UTF-8-decode it — payload members are binary zo, so every
+      ;; re-entry over an existing link raised inside the probe and the
+      ;; whole resolve failed. A retried shard could then never recover
+      ;; on a shared map dir (its own stale-flags invalidation aside).
+      ;; resolve-path compares identities, not data: a symlink resolves
+      ;; to its target, a regular file resolves to itself — same-target
+      ;; links are a no-op, everything else is replaced.
       (define link-path (build-path lookup-dir zo-name))
       (define link-target (path->string payload-zo))
+      (define link-target-complete (simplify-path (path->complete-path payload-zo)))
       (cond
         [(and (file-exists? link-path)
-              (with-handlers ([exn:fail:filesystem? (lambda (_) #f)])
-                (equal? (bytes->string/utf-8 (file->bytes link-path)) link-target)))
+              (with-handlers ([exn:fail? (lambda (_) #f)])
+                (equal? (resolve-path link-path) link-target-complete)))
          (void)]
         [else
-         (when (file-exists? link-path)
+         ;; Reviewer blocker: file-exists? FOLLOWS links, so a stale
+         ;; DANGLING link (its target vanished since a previous resolve —
+         ;; rebuilt/republished payload, GCed temp tree) is invisible to
+         ;; the probe, the delete was skipped, and the recreate raised
+         ;; exn:fail:filesystem:exists on the existing link path; resolve
+         ;; then failed on EVERY re-entry with a shared map dir and could
+         ;; never recover. link-exists? probes the link itself, not its
+         ;; target, and must gate the replacement delete as well.
+         (when (or (file-exists? link-path) (link-exists? link-path))
            (delete-file link-path))
          (make-file-or-directory-link link-target link-path)]))
     (compiled-root validated
@@ -582,137 +684,248 @@
 ;;   O(1) now: the child re-reads the manifest.rktd ALREADY PUBLISHED
 ;;   inside the immutable root (the authoritative keys file — written
 ;;   into the staging tree before the atomic rename, read-only
-;;   afterwards) and derives the identical load-key table at startup.
-;;   The only baked-in payload is the manifest's own sha256 (64 hex
-;;   chars): if the manifest mutates after resolve-time verification,
-;;   the child fails closed AT STARTUP — the same
-;;   mutation-after-verification canary the embedded per-source
-;;   digests used to provide, now over the table's single source of
-;;   truth. Marker checks, per-load fail-closed guard errors, loud
-;;   eager fallback selection at the resolve boundary, and relocation
-;;   independence (per-consumer map dir) are unchanged.
+;;   afterwards). W1 performance repair round: the table no longer comes
+;;   from re-parsing that rktd per spawned child (~1.5 s wall clock per
+;;   child at trial scale, the 36/431 per-file 2-min timeouts behind the
+;;   3h13m shard wall) — the producer ships it as a COMPILED module
+;;   (load-keys.rkt next to manifest.rktd, raco-made in staging before
+;;   the rename; see write-compiled-root-load-keys!) and children require
+;;   the zo: an O(1) marshal load. Integrity is unchanged, fail-closed:
+;;   the baked-in payload is the manifest's own sha256 PLUS the transfer
+;;   module's zo sha256 (both 64 hex chars, both sourced from the
+;;   manifest, which resolve-time validation digest-checks against the
+;;   published bytes). If the manifest OR the transfer module mutates
+;;   after resolve-time verification, the child fails closed AT STARTUP
+;;   — the same mutation-after-verification canary the embedded
+;;   per-source digests used to provide, now over the table's two-file
+;;   source of truth. W1 review round 6 (TOCTOU): the child no longer
+;;   hashes the zo PATH and then dynamic-requires the same path — that
+;;   authenticates one open and executes a second one, and a same-user
+;;   process can swap the bytes between the two opens (deterministically
+;;   demonstrated by a current-load stand-in in the regression suite).
+;;   authenticate-compiled-module (transfer-auth.rkt) reads the zo
+;;   exactly once, digests those bytes against the baked canary, and
+;;   evals the compiled form read FROM THOSE BYTES: the executed table
+;;   IS the authenticated table, deterministically — there is no second
+;;   open to race. Per-load zo digest checks are unchanged; the table's
+;;   digests now root in an authenticated-and-executed module. Marker
+;;   checks, per-load fail-closed guard errors, loud eager fallback
+;;   selection at the resolve boundary, and relocation independence
+;;   (per-consumer map dir; the transfer module stores REL-path
+;;   triples) are unchanged.
 ;;   The relative string form is used because define-runtime-path
 ;;   evaluates its template in the transformer phase where build-path
 ;;   is not bound on Racket 8.10; the result is resolved at load time
 ;;   relative to this module's source directory.
 (define-runtime-path compiled-root-manifest-module-path "compiled-root-manifest.rkt")
+(define-runtime-path compiled-root-transfer-auth-module-path "transfer-auth.rkt")
 
 (define (compiled-root-launch-arguments root)
+  ;; Old roots (published before the compiled transfer module existed:
+  ;; manifest with the load-keys field ABSENT — a present-but-false field
+  ;; cannot reach this point, the presence-based shape gate rejects it at
+  ;; validation) deliberately VALIDATE under the new reader — the field
+  ;; is optional for backward acceptance — but they CANNOT LAUNCH: launch
+  ;; arguments cannot be derived without the transfer module, so this
+  ;; builder RAISES, naming the explicit rebuild requirement. Fail-closed
+  ;; launch behavior by construction: the resolve CLI step invokes this
+  ;; builder BEFORE writing the flags file, so an old root yields a
+  ;; non-zero resolve and no newly written flags. Callers must gate launch
+  ;; on successful resolve because a stale flags file may survive failure.
+  ;; The remedy is an explicit rebuild with the current producer
+  ;; (scripts/ci/compiled-root.rkt build); historic artifacts are never
+  ;; rewritten to match the new field.
   (define root-dir (path->string (simplify-path (path->complete-path (compiled-root-root-dir root)))))
   (define manifest-path (path->string (build-path root-dir "manifest.rktd")))
-  (list "-e"
-        (format
-         (string-append
-          "(begin"
-          " (define sha256-file (dynamic-require (string->path ~s) 'sha256-file))"
-          " (require racket/file)"
-          " (define manifest-path (string->path ~s))"
-          " (unless (string=? (sha256-file manifest-path) ~s)"
-          "  (error 'compiled-root-toctou \"root manifest mutated after verification: ~~a\""
-          "                            manifest-path))"
-          " (current-compiled-file-roots (list (string->path ~s)))"
-          ;; W1a-repair (trial c01 window-2, run 41271542715): 'exists,
-          ;; never 'modify-seconds — mtime comparison is structurally
-          ;; wrong for restored roots (fresh checkout mtimes are always
-          ;; newer than producer-era zo mtimes, so every root member
-          ;; would be judged stale). Freshness comes from the same-commit
-          ;; source-sha gate; any mutated zo fails closed via the
-          ;; per-load sha256 check below.
-          " (use-compiled-file-check 'exists)"
-          " (define checkout-dir (string->path ~s))"
-          " (define root-dir (string->path ~s))"
-          " (define tbl"
-          "  (for/list ([e (in-list (hash-ref (file->value manifest-path) 'sources))])"
-          "   (list"
-          "    (path->string"
-          "     (simplify-path"
-          "      (path->complete-path (build-path checkout-dir (string->path (hash-ref e 'path))))"
-          "      #t))"
-          "    (path->string (build-path root-dir (string->path (hash-ref e 'zo))))"
-          "    (hash-ref e 'zo-digest))))"
-          ;; v1.00.32 W2 repair: hit counting. Q_COMPILED_ROOT_TELEMETRY_DIR
-          ;; (exported by `launch`) turns every bootstrapped process in the
-          ;; child tree into a counter: one temporary file per process,
-          ;; rewritten on EVERY root-served load, so counts survive killed
-          ;; children and parallel processes never race. Telemetry is
-          ;; best-effort (fail-open): a counting failure must never break a
-          ;; test execution — the per-load digest check above stays
-          ;; fail-closed regardless.
-          " (define q-tel-dir (getenv \"Q_COMPILED_ROOT_TELEMETRY_DIR\"))"
-          " (define q-tel-file"
-          "  (with-handlers ([exn:fail? (lambda (_) #f)])"
-          "   (and q-tel-dir"
-          "        (make-temporary-file \"q-compiled-root-hit~~a.rktd\" #f q-tel-dir))))"
-          " (define q-hits 0)"
-          " (define q-bytes 0)"
-          " (define (q-count! b)"
-          "  (set! q-hits (add1 q-hits))"
-          "  (set! q-bytes (+ q-bytes b))"
-          "  (when q-tel-file"
-          "   (with-handlers ([exn:fail? (lambda (_) (void))])"
-          "    (call-with-output-file"
-          "     q-tel-file"
-          "     (lambda (out)"
-          "      (write (list 'compiled-root-child-telemetry"
-          "                   (cons 'root-hits q-hits)"
-          "                   (cons 'loads q-hits)"
-          "                   (cons 'bytes-served q-bytes))"
-          "             out))"
-          "     #:exists 'truncate))))"
-          " (define orig-load (current-load))"
-          " (current-load"
-          "  (lambda (path modname)"
-          "   (define hit"
-          "    (and path"
-          "         (assoc (path->string (simplify-path (path->complete-path path) #t))"
-          "                tbl)))"
-          "   (when hit"
-          "    (unless (string=? (sha256-file (cadr hit)) (caddr hit))"
-          "     (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path))"
-          "    (q-count! (file-size (cadr hit))))"
-          "   (orig-load path modname))))")
-         (path->string (simplify-path (path->complete-path compiled-root-manifest-module-path)))
-         manifest-path
-         (sha256-file manifest-path)
-         (path->string (compiled-root-map-dir root))
-         (path->string (path->directory-path
-                        (simplify-path (path->complete-path (compiled-root-checkout root)))))
-         root-dir)))
+  (define lk-info (hash-ref (compiled-root-manifest root) 'load-keys #f))
+  (unless lk-info
+    (error
+     'compiled-root-launch-arguments
+     "published root carries no compiled load-key transfer module ~
+            (rebuild with the current producer)"))
+  (define lk-zo-path (path->string (build-path root-dir (string->path (hash-ref lk-info 'zo)))))
+  (list
+   "-e"
+   (format
+    (string-append
+     "(begin"
+     " (define sha256-file (dynamic-require (string->path ~s) 'sha256-file))"
+     ;; W1 review round 6: authenticate-then-eval transfer loader (no
+     ;; hash-path/require-path TOCTOU) + atomic telemetry writer.
+     " (define auth! (dynamic-require (string->path ~s) 'authenticate-compiled-module))"
+     " (define q-tel-writer (dynamic-require (string->path ~s) 'make-atomic-telemetry-writer))"
+     ;; W1 repair round 7 (reviewer P2): the counter name is reserved
+     ;; (a unique contract-matching name, NO file created) through the
+     ;; same trusted transfer module — never via a bootstrap-side
+     ;; make-temporary-file, which published an empty contract file
+     ;; before the first complete snapshot.
+     " (define q-tel-reserve (dynamic-require (string->path ~s) 'reserve-child-telemetry-target))"
+     " (require racket/file)"
+     " (define manifest-path (string->path ~s))"
+     " (unless (string=? (sha256-file manifest-path) ~s)"
+     "  (error 'compiled-root-toctou \"root manifest mutated after verification: ~~a\""
+     "                            manifest-path))"
+     ;; W1 performance repair round: authenticate the transfer
+     ;; module's bytes and execute EXACTLY those bytes (see
+     ;; transfer-auth.rkt), then fetch the COMPILED table from the
+     ;; declared module — the module system never re-opens lk-path.
+     ;; use-compiled-file-check below is 'exists, so the zo inside
+     ;; the immutable root is used regardless of mtimes.
+     " (define lk-path (string->path ~s))"
+     " (auth! lk-path ~s)"
+     " (current-compiled-file-roots (list (string->path ~s)))"
+     ;; W1a-repair (trial c01 window-2, run 41271542715): 'exists,
+     ;; never 'modify-seconds — mtime comparison is structurally
+     ;; wrong for restored roots (fresh checkout mtimes are always
+     ;; newer than producer-era zo mtimes, so every root member
+     ;; would be judged stale). Freshness comes from the same-commit
+     ;; source-sha gate; any mutated zo fails closed via the
+     ;; per-load sha256 check below.
+     " (use-compiled-file-check 'exists)"
+     " (define checkout-dir (string->path ~s))"
+     " (define root-dir (string->path ~s))"
+     " (define tbl"
+     ;; by NAME from the authenticated module — never (dynamic-require
+     ;; lk-path ...), which would re-open the path after authentication.
+     ;; W1a performance repair: the per-load lookup used to linear-scan
+     ;; this table with assoc — a shaped miss measured ~300–320 µs at
+     ;; production scale (5,200 entries) vs ~4.6–5.7 µs for a hash on
+     ;; the same keys (local probes, not CI measurements). The table is
+     ;; now an EQUAL?-based hash (make-hash; never hasheq/hasheqv —
+     ;; table keys and arriving canonical paths are separately
+     ;; allocated equal? strings), built insert-if-absent in manifest
+     ;; order so conflicting duplicate canonical keys keep the assoc
+     ;; FIRST match. Keys keep the identical simplify/complete
+     ;; canonicalization; values keep the assoc entry shape (canonical
+     ;; source, payload zo, digest) so the per-hit digest check and
+     ;; telemetry below are untouched; the table is STILL keyed by
+     ;; canonical SOURCE paths only — a direct payload-zo load misses it
+     ;; exactly as before, so this repair adds no direct-zo protection.
+     "  (let ([ht (make-hash)])"
+     "   (for ([e (in-list (dynamic-require ''load-keys 'compiled-root-load-key-table))])"
+     "    (define k"
+     "     (path->string"
+     "      (simplify-path"
+     "       (path->complete-path (build-path checkout-dir (string->path (car e))))"
+     "       #t)))"
+     "    (unless (hash-has-key? ht k)"
+     "     (hash-set!"
+     "      ht"
+     "      k"
+     "      (list"
+     "       k"
+     "       (path->string (build-path root-dir (string->path (cadr e))))"
+     "       (caddr e)))))"
+     "   ht))"
+     ;; v1.00.32 W2 repair: hit counting. Q_COMPILED_ROOT_TELEMETRY_DIR
+     ;; (exported by `launch`) turns every bootstrapped process in the
+     ;; child tree into a counter: one temporary file per process,
+     ;; rewritten on EVERY root-served load, so counts survive killed
+     ;; children and parallel processes never race. Telemetry is
+     ;; best-effort (fail-open): a counting failure must never break a
+     ;; test execution — the per-load digest check above stays
+     ;; fail-closed regardless. W1 performance repair round: the
+     ;; filename contract (prefix/suffix shared with the parent
+     ;; aggregator) is passed in as an argument, and the zero
+     ;; counters are written AT STARTUP — a zero-hit child leaves an
+     ;; aggregatable file, never the empty file the parent used to
+     ;; have to reject as malformed. W1 review round 6: the write is
+     ;; atomic (unique same-directory temp + rename(2), see
+     ;; transfer-auth.rkt) — a kill mid-write or a concurrent
+     ;; aggregator read observes complete datums only, never the
+     ;; partial/empty file truncate-in-place used to expose. W1
+     ;; repair round 7 (reviewer P2): the counter NAME is reserved
+     ;; through reserve-child-telemetry-target — a unique
+     ;; contract-matching name and NO file — because the old
+     ;; (make-temporary-file "q-compiled-root-hit~a.rktd" ...) created
+     ;; an EMPTY contract-matching file BEFORE the first complete
+     ;; snapshot, and a child killed in that startup window left the
+     ;; aggregator a malformed "telemetry" file to reject loudly. The
+     ;; reserved name materializes only when the first atomic rename
+     ;; publishes the complete startup snapshot; an interrupted
+     ;; startup leaves at worst a foreign temporary, never a contract
+     ;; file.
+     " (define q-tel-dir (getenv \"Q_COMPILED_ROOT_TELEMETRY_DIR\"))"
+     " (define q-tel-file"
+     "  (with-handlers ([exn:fail? (lambda (_) #f)])"
+     "   (and q-tel-dir"
+     "        (q-tel-reserve q-tel-dir ~s ~s))))"
+     " (define q-hits 0)"
+     " (define q-bytes 0)"
+     " (define q-write-tel! (and q-tel-file (q-tel-writer q-tel-file)))"
+     " (define (q-count! b)"
+     "  (set! q-hits (add1 q-hits))"
+     "  (set! q-bytes (+ q-bytes b))"
+     "  (when q-write-tel! (q-write-tel! q-hits q-hits q-bytes)))"
+     " (when q-write-tel! (q-write-tel! 0 0 0))"
+     " (define orig-load (current-load))"
+     " (current-load"
+     "  (lambda (path modname)"
+     "   (define hit"
+     "    (and path"
+     "         (hash-ref tbl"
+     "                   (path->string (simplify-path (path->complete-path path) #t))"
+     "                   #f)))"
+     "   (when hit"
+     "    (unless (string=? (sha256-file (cadr hit)) (caddr hit))"
+     "     (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path))"
+     "    (q-count! (file-size (cadr hit))))"
+     "   (orig-load path modname))))")
+    (path->string (simplify-path (path->complete-path compiled-root-manifest-module-path)))
+    (path->string (simplify-path (path->complete-path compiled-root-transfer-auth-module-path)))
+    (path->string (simplify-path (path->complete-path compiled-root-transfer-auth-module-path)))
+    (path->string (simplify-path (path->complete-path compiled-root-transfer-auth-module-path)))
+    manifest-path
+    (sha256-file manifest-path)
+    lk-zo-path
+    (hash-ref lk-info 'zo-digest)
+    (path->string (compiled-root-map-dir root))
+    (path->string (path->directory-path (simplify-path (path->complete-path (compiled-root-checkout
+                                                                             root)))))
+    root-dir
+    compiled-root-child-telemetry-prefix
+    compiled-root-child-telemetry-suffix)))
 
 ;; compiled-root-script-entry-argument
-;;   W2 repair (trial c01 window-2, run 41271542715): a Racket init option
-;;   such as the bootstrap's -e SUPPRESSES the implicit positional-file
-;;   load, so the mapped child `racket -e <bootstrap> <script> <args…>`
-;;   never loaded <script> at all — the root-on shard was a bootstrap-only
-;;   process that exited 0 without executing a single test (the vacuous
-;;   green behind zero-root-hits). This entry loads the script explicitly:
-;;   module body first (root-served, TOCTOU-guarded), then the module's
-;;   'main submodule when declared — the observable semantics of the plain
-;;   `racket <script> <args…>` command line (probe-verified: body AND
-;;   module+ main run, argv visible via current-command-line-arguments).
+;;   W1a round 5 (trial trial-2026-11-01-smoke-3, treatment C, run
+;;   41303344486): with ANY -e init option present — the bootstrap's own
+;;   included — Racket does not load a positional script as the run-file,
+;;   and arguments after the last -e expression are parsed as RACKET
+;;   switches: the real ci.yml lane's
+;;   `launch -- racket scripts/run-tests.rkt --suite fast …` died with
+;;   `racket: bad switch: --suite` before the runner ever started (the
+;;   W2 -e expression entry consumed the script into a second -e and
+;;   appended the child args as bare switches; the generic variant
+;;   silently swallowed them). The entry is therefore the SAME mechanism
+;;   as the proven raco dispatch (`racket -N raco -l- raco/main.rkt …`)
+;;   in the file-path grammar (-l rejects absolute file paths —
+;;   (lib "/abs/p.rkt") is a bad module path, probe-verified on 8.10;
+;;   -t is (require (file …))):
+;;
+;;     racket [-N <script>] -e <bootstrap> -t- <script> <args…>
+;;
+;;   Probe-verified on Racket 8.10: -e/-t- are processed in order (the
+;;   bootstrap evaluates first), -t- loads the script as a module AND as
+;;   the run-file (plain `racket <script>` identity: module body, then a
+;;   declared 'main submodule), stops switch parsing, and routes the
+;;   remaining arguments to the script's current-command-line-arguments;
+;;   -N restores find-system-path 'run-file to the script, which the
+;;   runner facade's direct-invocation guard requires.
 (define (compiled-root-script-entry-argument script-path)
-  (list "-e"
-        (format (string-append "(begin (define q-p (string->path ~s)) (dynamic-require q-p #f)"
-                               " (define q-sm (list 'submod q-p 'main))"
-                               " (when (module-declared? q-sm #t) (dynamic-require q-sm #f)))")
-                (path->string script-path))))
+  (define p (path->string script-path))
+  (list "-N" p "-t-" p))
 
 ;; compiled-root-runner-entry-argument
 ;;   The q test runner facade (scripts/run-tests.rkt) fires main under its
-;;   own run-file direct-invocation guard, which cannot recognize a -e
-;;   entry (find-system-path 'run-file stays the interpreter there), so
-;;   the generic script entry would load it as a library and exit 0 —
-;;   another silent vacuous green. The facade imports `main` from
-;;   scripts/run-tests/runner.rkt; this entry calls it with the child argv
-;;   after the root-served body load (probe-verified end to end).
+;;   own run-file direct-invocation guard. Under the unified -N/-t- entry
+;;   the facade IS the run-file, so the facade's own guard invokes main
+;;   exactly once with the routed child argv — the runner entry is the
+;;   script entry now (the W2 -e expression had to call q-main manually
+;;   because a -e entry leaves the run-file at the interpreter and can
+;;   never route a command line; kept as a distinct export so the
+;;   mapped-entry dispatch surface is unchanged).
 (define (compiled-root-runner-entry-argument script-path)
-  (list "-e"
-        (format
-         (string-append "(begin (define q-p (string->path ~s)) (dynamic-require q-p #f)"
-                        " (define q-main"
-                        " (namespace-variable-value 'main #t (lambda () #f) (module->namespace q-p)))"
-                        " (when q-main (q-main (vector->list (current-command-line-arguments)))))")
-         (path->string script-path))))
+  (compiled-root-script-entry-argument script-path))
 
 ;; compiled-root-mapped-entry-argument
 ;;   Entry selection by script identity. The shard child the launcher
@@ -727,11 +940,14 @@
       (compiled-root-script-entry-argument script-path)))
 
 ;; compiled-root-mapped-child-arguments
-;;   `launch -- racket <script> <args…>`: enter the script explicitly (see
-;;   compiled-root-script-entry-argument); the script path is completed
-;;   against the launcher's cwd, which the child inherits. Any other racket
-;;   child shape (e.g. `racket -t <module>`) keeps today's verbatim flag
-;;   prepend — the bootstrap's -e is processed first either way.
+;;   `launch -- racket <script> <args…>`: enter the script as the run-file
+;;   (see compiled-root-script-entry-argument: -e <bootstrap> -N <script>
+;;   -t- <script>); the script path is completed against the launcher's
+;;   cwd, which the child inherits, and the remaining args are appended
+;;   AFTER the script, where -t- routes them to the script's command line
+;;   (never parsed as racket switches). Any other racket child shape (e.g.
+;;   `racket -t <module>`) keeps today's verbatim flag prepend — the
+;;   bootstrap's -e is processed first either way.
 (define (compiled-root-mapped-child-arguments launch-args rest-args)
   (cond
     [(and (pair? rest-args) (string? (car rest-args)) (not (string-prefix? (car rest-args) "-")))
@@ -759,17 +975,44 @@
                               (string->bytes/utf-8 (path->string flags-file)))
   dst)
 
+;; W1 performance repair round: the child telemetry filename contract.
+;; Writer (the bootstrap's reserve-child-telemetry-target reservation,
+;; via transfer-auth.rkt) and reader (the aggregator below) are aligned
+;; on ONE format, defined here once: q-compiled-root-hit<unique>.rktd —
+;; prefix and suffix ARE the contract; the middle is the per-process
+;; unique suffix reserved through the contract-disjoint probe. The CI
+;; shard logs previously flooded with "ignoring malformed child telemetry
+;; q-compiled-root-hit<...>.rktd" lines (filename format mismatch) because
+;; the aggregator parsed every file in the hits directory.
+(define compiled-root-child-telemetry-prefix "q-compiled-root-hit")
+(define compiled-root-child-telemetry-suffix ".rktd")
+
+(define (compiled-root-child-telemetry-filename? name)
+  (define s
+    (if (path? name)
+        (path->string name)
+        (~a name)))
+  (and (string-prefix? s compiled-root-child-telemetry-prefix)
+       (string-suffix? s compiled-root-child-telemetry-suffix)
+       (> (string-length s)
+          (+ (string-length compiled-root-child-telemetry-prefix)
+             (string-length compiled-root-child-telemetry-suffix)))))
+
 ;; aggregate-compiled-root-child-telemetry
 ;;   Sum the per-process counter files every bootstrapped process in the
 ;;   child tree rewrote on each root-served load. Per-process temporary
 ;;   files cannot race; per-hit rewrites survive killed children (timeout
-;;   kill). Unreadable or malformed files are skipped LOUDLY — telemetry
-;;   never breaks execution, but it is never silently wrong either.
+;;   kill). Only files matching the child telemetry filename contract are
+;;   telemetry: foreign files in the hits directory are not evidence and
+;;   are ignored silently; a contract-named file that fails to parse IS
+;;   evidence of a problem and is skipped LOUDLY — telemetry never breaks
+;;   execution, but it is never silently wrong either.
 (define (aggregate-compiled-root-child-telemetry hits-dir)
   (for/fold ([hits 0]
              [loads 0]
              [served 0])
-            ([f (in-list (directory-list hits-dir))])
+            ([f (in-list (directory-list hits-dir))]
+             #:when (compiled-root-child-telemetry-filename? f))
     (with-handlers ([exn:fail?
                      (lambda (e)
                        (eprintf "ci-compiled-root: ignoring unreadable child telemetry ~a: ~a\n"
@@ -882,6 +1125,10 @@
         (append (cdr flag-argv) (list (car flag-argv)))
         flag-argv))
 
+  ;; Parse errors are non-destructive: argv tokens cannot safely identify
+  ;; either a command or a flags path until the parser has succeeded.
+  ;; Callers must gate launch on a successful resolve, not file existence.
+
   (define root-dir (make-parameter #f))
   (define checkout-dir (make-parameter #f))
   (define trusted-labels (make-parameter '()))
@@ -957,45 +1204,64 @@
 
   (match cmd
     ["resolve"
-     (define rd (require-opt! root-dir "root"))
-     (define co (require-opt! checkout-dir "checkout"))
-     (define ff (require-opt! flags-file "flags-file"))
-     ;; The resolver API and the flags payload work in path values;
-     ;; normalize CLI strings to complete paths once, here.
-     (define rd-path (path->complete-path (string->path rd)))
-     (define co-path (path->complete-path (string->path co)))
-     (define ff-path (path->complete-path (string->path ff)))
-     (when (null? (trusted-labels))
-       (error 'ci-compiled-root "resolve requires at least one --trusted-label"))
-     (define md
-       ;; map-dir is stored in the root struct and consumed by
-       ;; compiled-root-launch-arguments as a path value.
-       (path->directory-path (path->complete-path (or (map-dir-opt)
-                                                      (build-path (path-only ff-path)
-                                                                  "compiled-root-map")))))
-     (define root
-       (resolve-compiled-root! #:final-dir rd-path
-                               #:checkout co-path
-                               #:trusted-producer-labels (trusted-labels)
-                               #:map-dir md))
-     (unless (eq? (compiled-root-reason root) #t)
-       (eprintf "ci-compiled-root: resolution failed (~a)\n"
-                (reason->string (compiled-root-reason root)))
-       (exit 1))
-     (define launch-args (compiled-root-launch-arguments root))
-     (define ff-complete ff-path)
-     (make-directory* (path-only ff-complete))
-     (call-with-output-file ff-complete
-                            (lambda (out)
-                              (write (list 'compiled-root-flags
-                                           (path->string (compiled-root-root-dir root))
-                                           (path->string (compiled-root-map-dir root))
-                                           (path->string (compiled-root-checkout root))
-                                           launch-args)
-                                     out))
-                            #:exists 'truncate)
-     (printf "ci-compiled-root: verified root resolved; flags written to ~a\n"
-             (path->string ff-complete))]
+     ;; After parsing, attempt to invalidate the parser-bound flags path
+     ;; on resolve failure. Parse errors do not enter this handler, and an
+     ;; unlink error can leave valid stale flags behind. Such errors are
+     ;; reported, not swallowed; callers must gate launch on resolve success.
+     ;; The invalidation deletes through the RAW option string:
+     ;; file-exists? and delete-file accept path strings, which keeps
+     ;; the closure usable even when the complete-path conversion of the
+     ;; flags path itself fails. Success behavior is unchanged: the file
+     ;; is written only after the root verified and the launch arguments
+     ;; were derived.
+     ;;
+     (define (invalidate-stale-flags!)
+       (define ff (flags-file))
+       (when (and ff (file-exists? ff))
+         (delete-file ff)))
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (invalidate-stale-flags!)
+                                  (raise e))])
+       (define ff (require-opt! flags-file "flags-file"))
+       ;; The resolver API and the flags payload work in path values;
+       ;; normalize CLI strings to complete paths once, here.
+       (define ff-path (path->complete-path (string->path ff)))
+       (define rd (require-opt! root-dir "root"))
+       (define co (require-opt! checkout-dir "checkout"))
+       (define rd-path (path->complete-path (string->path rd)))
+       (define co-path (path->complete-path (string->path co)))
+       (when (null? (trusted-labels))
+         (error 'ci-compiled-root "resolve requires at least one --trusted-label"))
+       (define md
+         ;; map-dir is stored in the root struct and consumed by
+         ;; compiled-root-launch-arguments as a path value.
+         (path->directory-path (path->complete-path (or (map-dir-opt)
+                                                        (build-path (path-only ff-path)
+                                                                    "compiled-root-map")))))
+       (define root
+         (resolve-compiled-root! #:final-dir rd-path
+                                 #:checkout co-path
+                                 #:trusted-producer-labels (trusted-labels)
+                                 #:map-dir md))
+       (unless (eq? (compiled-root-reason root) #t)
+         (invalidate-stale-flags!)
+         (eprintf "ci-compiled-root: resolution failed (~a)\n"
+                  (reason->string (compiled-root-reason root)))
+         (exit 1))
+       (define launch-args (compiled-root-launch-arguments root))
+       (define ff-complete ff-path)
+       (make-directory* (path-only ff-complete))
+       (call-with-output-file ff-complete
+                              (lambda (out)
+                                (write (list 'compiled-root-flags
+                                             (path->string (compiled-root-root-dir root))
+                                             (path->string (compiled-root-map-dir root))
+                                             (path->string (compiled-root-checkout root))
+                                             launch-args)
+                                       out))
+                              #:exists 'truncate)
+       (printf "ci-compiled-root: verified root resolved; flags written to ~a\n"
+               (path->string ff-complete)))]
     ["launch"
      (define ff (require-opt! flags-file "flags-file"))
      (when (null? child-args)
@@ -1016,6 +1282,7 @@
      (define flags
        (and override
             (not (equal? (string->symbol override) 'off))
+            (not (string=? ff ""))
             (file-exists? ff)
             (with-handlers ([exn:fail? (lambda (_) #f)])
               (file->value (path->complete-path ff)))))

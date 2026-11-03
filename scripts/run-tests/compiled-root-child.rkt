@@ -19,10 +19,16 @@
 ;;      byte-identical discovery output and exit codes)
 ;;
 ;;   other files:
-;;     racket <bootstrap…> -e <entry(<file>)>
-;;     (a Racket init option suppresses the implicit positional-file load,
-;;     so the entry replicates plain `racket <file>` semantics: module
-;;     body, then the 'main submodule when declared)
+;;     racket <bootstrap…> -N <file> -t- <file>
+;;     (the unified bare-child entry, W1a round 5 / trial
+;;     trial-2026-11-01-smoke-3 run 41303344486: the same mechanism as
+;;     the proven raco dispatch `racket -N raco -l- raco/main.rkt …`,
+;;     here in the file-path grammar because -l rejects absolute file
+;;     paths. The former -e expression entry left find-system-path
+;;     'run-file at the interpreter and could never route a command
+;;     line; -t- loads the file as a module AND as the run-file — plain
+;;     `racket <file>` semantics: module body, then the 'main submodule
+;;     when declared, empty child argv)
 ;;
 ;; Without those test files' bootstrap the children inherit neither
 ;; current-compiled-file-roots nor the TOCTOU guard, so no test load could
@@ -103,15 +109,10 @@
 ;; compiled-root-bare-child-args
 ;;   Full argv (after the racket binary) for a non-rackunit test file
 ;;   child under root-on, or #f to keep the legacy `racket <file>`
-;;   invocation. The entry expression preserves `racket <file>` semantics
-;;   exactly (body + declared 'main submodule, empty child argv).
+;;   invocation. The -N/-t- entry preserves `racket <file>` semantics
+;;   exactly (body + declared 'main submodule, empty child argv) AND
+;;   keeps the file as the run-file (the unified entry, see the
+;;   launcher's compiled-root-script-entry-argument, W1a round 5).
 (define (compiled-root-bare-child-args resolved-path)
   (define prefix (compiled-root-child-prefix))
-  (and prefix
-       (append
-        prefix
-        (list "-e"
-              (format (string-append "(begin (define q-p (string->path ~s)) (dynamic-require q-p #f)"
-                                     " (define q-sm (list 'submod q-p 'main))"
-                                     " (when (module-declared? q-sm #t) (dynamic-require q-sm #f)))")
-                      (path->string resolved-path))))))
+  (and prefix (let ([p (path->string resolved-path)]) (append prefix (list "-N" p "-t-" p)))))
