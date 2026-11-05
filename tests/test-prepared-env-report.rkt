@@ -321,6 +321,11 @@
                      #:digest [digest digest-d]
                      #:exit-code [exit-code 0])
   ;; exit-code mirrors the actual launcher CLI, which ALWAYS emits it.
+  ;; The additive per-root keys mirror the ACTUAL W1a launch record
+  ;; (ci/prepared-environment/compiled-root.rkt write-launch-telemetry!);
+  ;; every refusal test below therefore runs with them present, pinning
+  ;; that additive keys neither break ci-recovery-trial-evidence@1 nor
+  ;; silence an assessor refusal.
   (hasheq 'producer-manifest-digest
           digest
           'mode
@@ -339,11 +344,18 @@
           1048576
           'mechanism
           "external-compiled-root(map-dir symlinks)"
+          'checkout-map-hits
+          1
+          'install-map-hits
+          2
+          'unmapped-loads
+          0
           'raw-datum
           (string-append
            "(compiled-root-launch-telemetry (mode . \"verified-root-hit\") (exit-code . 0)"
            " (wall-ms . 90000) (root-hits . 3) (fallbacks . 0) (loads . 12)"
-           " (bytes-served . 1048576) (mechanism . \"external-compiled-root(map-dir symlinks)\"))")))
+           " (bytes-served . 1048576) (mechanism . \"external-compiled-root(map-dir symlinks)\")"
+           " (checkout-map-hits . 1) (install-map-hits . 2) (unmapped-loads . 0))")))
 
 (define (w1-launcher-off [digest digest-d] #:exit-code [exit-code 0])
   (w1-launcher #:mode "global-off" #:hits 0 #:fallbacks 0 #:digest digest #:exit-code exit-code))
@@ -1499,6 +1511,26 @@
       (define raw (hash-ref verdict 'raw))
       (check-equal? (length (hash-ref raw 'shards)) 2)
       (check-equal? (hash-ref (hash-ref raw 'trial) 'treatment) "C"))
+
+    (test-case "trial-assess: W1a additive per-root launcher keys keep the envelope valid without weakening refusals"
+      ;; w1-launcher carries the W1a additive per-root counters
+      ;; (checkout-map-hits/install-map-hits/unmapped-loads), exactly as
+      ;; the real launcher's launch record does. ci-recovery-trial-evidence@1
+      ;; must stay valid: a ready C trial stays ready AND a failed launcher
+      ;; still refuses with the additive keys present.
+      (define p-ready (tmp-path "trial-w1a-additive-ready.json"))
+      (write-envelope p-ready (w1-envelope))
+      (define-values (code-ready verdict-ready out-ready) (trial-assess-verdict p-ready))
+      (check-equal? code-ready 0)
+      (check-equal? (hash-ref verdict-ready 'classification) "ready-root-on")
+      (check-equal? (hash-ref verdict-ready 'reasons) (list))
+      (define p-refused (tmp-path "trial-w1a-additive-refused.json"))
+      (write-envelope
+       p-refused
+       (w1-envelope #:shards (list (w1-shard 0) (w1-shard 1 #:launcher (w1-launcher #:exit-code 3)))))
+      (define-values (code-refused verdict-refused out-refused) (trial-assess-verdict p-refused))
+      (check-true (positive? code-refused))
+      (check-equal? (hash-ref verdict-refused 'reasons) (list "launcher-exit-code-nonzero")))
 
     (test-case "trial-assess: A/B root-off trials classify honestly as ready-root-off (global-off is legitimate)"
       (for ([treatment (in-list (list "A" "B"))])

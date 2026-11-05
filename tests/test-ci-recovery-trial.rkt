@@ -367,10 +367,17 @@
                         #:hits [hits 3]
                         #:fallbacks [fallbacks 0]
                         #:exit-code [exit-code 0])
+  ;; Mirrors the ACTUAL W1a launch record emitted by
+  ;; ci/prepared-environment/compiled-root.rkt write-launch-telemetry!:
+  ;; the classic fields PLUS the additive per-root counters
+  ;; (checkout-map-hits/install-map-hits/unmapped-loads). The collector
+  ;; must map every datum pair 1:1 and the strict assessor must stay
+  ;; valid (ci-recovery-trial-evidence@1).
   (format
    (string-append "(compiled-root-launch-telemetry (mode . ~s) (exit-code . ~a) (wall-ms . 90000)"
                   " (root-hits . ~a) (fallbacks . ~a) (loads . 12) (bytes-served . 1048576)"
-                  " (mechanism . \"external-compiled-root(map-dir symlinks)\"))")
+                  " (mechanism . \"external-compiled-root(map-dir symlinks)\")"
+                  " (checkout-map-hits . 1) (install-map-hits . 2) (unmapped-loads . 0))")
    mode
    exit-code
    hits
@@ -619,6 +626,10 @@
       (check-equal? (hash-ref launcher 'wall-ms) 90000)
       (check-equal? (hash-ref launcher 'loads) 12)
       (check-equal? (hash-ref launcher 'bytes-served) 1048576)
+      ;; W1a additive per-root counters map 1:1 into the envelope
+      (check-equal? (hash-ref launcher 'checkout-map-hits) 1)
+      (check-equal? (hash-ref launcher 'install-map-hits) 2)
+      (check-equal? (hash-ref launcher 'unmapped-loads) 0)
       (check-equal? (hash-ref launcher 'producer-manifest-digest) digest-d))
     ;; the strict W1 assessor accepts the adapter's envelope
     (define verdict (assess-trial-envelope envelope))
