@@ -270,3 +270,109 @@ The wave was provisioned as `Inbox` under a launch HOLD (predecessor `gsd-govern
 `evidence is not a hash` in W11 binding; live branch protection omitted policy-required
 `lint-quality`). Per the campaign contract, missing remote evidence means HOLD and no weakened
 checks or fabricated evidence — this report records only what was locally observed.
+
+## Install-map addendum: two verified map roots (W1a repair)
+
+The W1a install-map repair (`PLAN-W1-INSTALL-MAP.md`) extends the single checkout map to
+**two verified map roots**. This addendum records the shipped design; where any earlier
+section above describes the root as a single map directory, this section supersedes it.
+Historic sections and artifact history are left untouched.
+
+### Two-root launch design
+
+- Root-on children launch with `current-compiled-file-roots` bound to
+  `(list checkout-map install-map)` — absolute paths, map-first order: the first existing
+  zo wins, so the checkout payload shadows the install map for manifest-covered sources,
+  and the install map serves the installation closure (typed/racket etc.) that the
+  checkout payload never covers. No `'same`, no relative entries, no defaults are
+  consulted under root-on. The roots shape is pinned identically for the `-e` launch
+  string and the flags payload in `tests/test-compiled-root.rkt`.
+- The install map is built at **resolve time**, job-local, deterministic and immutable
+  (`chmod -R a-w`, like the published payload): every reachable installation zo is
+  inventoried and mapped as a **per-zo symlink** under the probe-verified reroot layout
+  `<install-map>/<abs-source-dir minus the leading slash>/compiled/<munged>.zo`.
+  Whole-`compiled/`-directory symlinks were probe-validated to serve but are REJECTED by
+  design: a directory link would expose non-inventoried members added to the installation
+  after the inventory, while per-zo links can only ever serve inventoried bytes
+  (fail-closed containment by construction).
+- Enumeration base: the primary library collection paths **plus every existing collection
+  link file** (the primary paths alone miss every package collection — probed on 8.10); a
+  zo is inventoried only when its un-munged sibling source exists. The CLI surface is
+  `--install-map-dir` plus repeatable `--collection-root` overrides (hermetic tests);
+  production defaults to the real collection search universe.
+- The map directory is rebuilt from scratch on every resolve: a previous job's links can
+  never leak non-inventoried members into the current inventory.
+
+### Inventory digest verification
+
+- Inventory happens FIRST, digests before links: each reachable member contributes
+  `(source, zo, sha256(zo), size)`; a zo that disappears between inventory and linking
+  fails the resolve closed at the link step. The inventory records a canonical **inventory
+  digest** over the sorted `src\0zo-digest\n` frames plus the member count.
+- The map ships its own compiled transfer module (`install-load-keys.rkt` →
+  `compiled/install-load-keys_rkt.zo`, produced by `raco make`) under the same
+  authenticate-then-eval discipline as the checkout transfer module; the inventory binds
+  the module's source and zo digests in its `load-keys` field.
+- **Activation re-verifies** (`install-map-members-verified?`): activation-time verification
+  is **existence-only for every keyed mapped member** — each must still resolve to real
+  bytes. Only the two transfer-module files are additionally re-digested against their
+  recorded digests at activation. Mapped-member bytes are covered by the per-load digest
+  checks (next section), not by activation: a vanished member fails closed at activation,
+  while mutated bytes fail closed at load. Data checks only, nothing executes before
+  verification.
+
+### Per-load install digest checks
+
+Per-load sha256 digest checks extend to install-served loads with the same mechanics as
+the checkout table: equal?-based hash, canonicalized absolute keys
+(`simplify-path`/`complete-path #t`), first-match insert-if-absent, and the libcrypto FFI
+fast path where available. Children authenticate the compiled install transfer module
+once (O(1) marshal load) and build their per-load table from it — no per-child
+re-derivation. Measured cost is ~1–2 ms per member and ~235 ms for a full 833-member
+inventory digest — not prohibitive, so the plan's stop condition ("measured per-child
+cost makes this prohibitive → STOP") never fired and the checks ship enabled. The
+install-served per-load checks inherit the same **hash-then-load (two-open) qualification**
+as checkout members (see "Preexisting limitations" above): deterministic fail-closed
+rejection for mutations landing before the digest read, not a provably race-free
+executed-equals-digested guarantee.
+
+### Residual risk: install == interpreter trust domain
+
+The Racket installation is **already the interpreter's trust domain**: its zo files
+execute at boot before any of this machinery runs. The install map does not elevate the
+installation to a stronger trust position — what it changes is coverage: post-inventory
+mutation of install-served members now fails closed at load time, where pre-repair those
+loads arrived through unverified source-adjacent compilation. The residual exposure is
+bounded by the same two-open window qualification as the checkout payload, and by the
+fact that an attacker able to mutate the installation itself would already own the
+interpreter — outside this design's threat model.
+
+### Corrected invariants (cross-reference)
+
+Two header invariants of the v1.00.30 W3 text above were disproved by W1a probes and are
+corrected in the proven-semantics header of `ci/prepared-environment/compiled-root.rkt`,
+restated at every pin site:
+
+- The `'exists` freshness pin is **GLOBAL**: it governs every compiled-file candidate,
+  including source-adjacent default `'same` lookups — a stale adjacent zo is served
+  without any freshness comparison while the pin is active. Root-on therefore excludes
+  `'same` entirely, and identity rests entirely on the resolve-time source-sha gate and
+  the per-load content digests, never on mtime semantics.
+- `'modify-seconds` gating of root-derived candidates is **not reproducible in
+  isolation** on 8.10 (an external-root candidate is served even with a strictly newer
+  source, with or without its `.dep` sidecar); the historical zero-root-hits attribution
+  to mtime comparison is superseded by the W2 analysis (H0 bootstrap-only child / H1 no
+  hit channel / H2 non-inheriting grandchildren —
+  `tests/test-compiled-root-runner-inheritance.rkt`). The `'exists` pin stays as defense
+  in depth: no lookup freshness can ever gate a verified root member.
+
+### Fail-closed missing-member behavior
+
+A keyed mapped member missing at load time cannot be served silently: activation symlink
+verification (`install-map-members-verified?`) refuses the root and the run continues on
+the plain-legacy fallback lane (counted as a fallback in telemetry; the eager-fallback
+selection is pinned by test). Per-zo links can only serve inventoried bytes, so members
+cannot be introduced after the inventory. Pinned in `tests/test-compiled-root.rkt`: a
+mutated install member fails closed at its per-load digest check; a removed map member
+fails closed to the legacy fallback lane; wrong-layout fixtures never serve; direct-zo
+and stale-zo behaviors are unchanged.

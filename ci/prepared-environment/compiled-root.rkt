@@ -10,14 +10,40 @@
 ;;   - A zo under an explicit current-compiled-file-roots entry is
 ;;     consulted for a source S UNCONDITIONALLY: the 'modify-seconds
 ;;     freshness gate governs the source-ADJACENT default compiled
-;;     directory, not external roots (probe-verified on 8.10). Identity
-;;     is proven by digests, never by mtime. W1a-repair (coordinator
-;;     trial c01 window-2, run 41271542715): root-on activation pins
+;;     directory, not external roots. W1a-repair (coordinator trial c01
+;;     window-2, run 41271542715): root-on activation pins
 ;;     use-compiled-file-check to 'exists — mtime comparison is
 ;;     structurally wrong for restored roots (fresh checkout mtimes are
 ;;     always newer than producer-era zo mtimes), and freshness is
 ;;     established by the same-commit source-sha gate plus per-load
 ;;     content digests instead.
+;;     W1a install-map repair (PLAN-W1-INSTALL-MAP.md) re-probing,
+;;     deterministic marker probes on 8.10 (pinned in
+;;     tests/test-compiled-root.rkt):
+;;     * CORRECTED invariant — the 'exists pin is GLOBAL: it governs
+;;       EVERY compiled-file candidate, including the source-adjacent
+;;       default 'same lookup. With the pin active a STALE
+;;       source-adjacent zo is served without any freshness comparison
+;;       (probe: a 10-seconds-older adjacent zo, distinct bytes, served
+;;       under 'exists). Every pin site below therefore states the
+;;       global effect; identity rests entirely on the resolve-time
+;;       source-sha gate and the per-load content digests, never on
+;;       mtime semantics.
+;;     * CORRECTED invariant — 'modify-seconds gating of ROOT-DERIVED
+;;       candidates is NOT reproducible in isolation on 8.10: an
+;;       external-root candidate is served even with a strictly newer
+;;       source, with or without its .dep sidecar (probe matrix). The
+;;       historical zero-root-hits attribution to mtime comparison
+;;       (trial c01 window-2) is superseded by the W2 analysis of the
+;;       same trial (H0 bootstrap-only child / H1 no hit channel / H2
+;;       non-inheriting grandchildren — see
+;;       tests/test-compiled-root-runner-inheritance.rkt). The 'exists
+;;       pin stays as defense in depth: no lookup freshness can ever
+;;       gate a verified root member, whichever of the two readings of
+;;       8.10 internals holds on a given shape.
+;;     * Map-first: when several root entries carry a member, the FIRST
+;;       current-compiled-file-roots entry wins (probe: root+same,
+;;       per-zo root served, adjacent never consulted).
 ;;   - For an absolute source S = /D0/.../Dn/name.rkt and an absolute
 ;;     root entry R, the default compiled-load handler consults exactly
 ;;       R/D0/.../Dn/compiled/name_rkt.zo
@@ -74,9 +100,48 @@
 ;;   - Any validation failure resolves to a single EAGER fallback
 ;;     (raco make in the job-local checkout at the setup boundary,
 ;;     W2 containment semantics) or a hard failure — never producer-era
-;;     code and never uncontrolled lazy compilation.
+;;     code and never uncontrolled lazy compilation. W1a install-map
+;;     repair: the fallback lane is PLAIN LEGACY Racket — default
+;;     parameter values (current-compiled-file-roots '(same),
+;;     use-compiled-file-check 'modify-seconds) — so the eager raco
+;;     make output is usable; the pre-repair '() parameterize was
+;;     no-compiled semantics and discarded the eager output.
 ;;   - Publication is atomic (staging directory + rename) and the
 ;;     published root is made read-only; consumers never write to it.
+;;
+;; W1a install map (PLAN-W1-INSTALL-MAP.md):
+;;   - Launch roots become (list checkout-map install-map) — absolute
+;;     paths, map-first order (first existing zo wins; the checkout
+;;     payload shadows install for manifest-covered sources). No 'same,
+;;     no relative entries, no defaults consulted. Any future append
+;;     must use the RHS-before-assignment form
+;;     (append (list ...) (current-compiled-file-roots)).
+;;   - The install map is built at resolve time (job-local,
+;;     deterministic, immutable, chmod a-w like the payload): every
+;;     reachable installation zo is inventoried and mapped as a PER-ZO
+;;     symlink under <install-map>/<abs-source-dir minus the leading
+;;     slash>/compiled/<munged>.zo. Enumeration base: the primary
+;;     library collection paths plus every existing collection LINK
+;;     FILE (the primary paths alone miss every package collection —
+;;     probed on 8.10); a zo is reachable when its un-munged sibling
+;;     source exists. Whole-compiled-DIR symlinks were probe-validated
+;;     to serve but are REJECTED: a directory link would expose
+;;     non-inventoried members added to the installation after the
+;;     inventory, while per-zo links can only ever serve inventoried
+;;     bytes (fail-closed containment by construction).
+;;   - Integrity: the map records a canonical inventory digest; per-load
+;;     sha256 digest checks extend to install-served loads (same
+;;     table/equal?-hash/first-match/canonicalization mechanics as the
+;;     checkout table, libcrypto FFI fast path where available —
+;;     measured ~1-2 ms per member, ~235 ms for a full 833-member
+;;     inventory digest, NOT prohibitive); activation re-verifies every
+;;     keyed mapped member and a missing member fails closed to the
+;;     legacy fallback lane.
+;;   - Residual risk: the installation is already the interpreter trust
+;;     domain (its zos execute at boot); the digest checks make
+;;     post-inventory mutation of install-served members fail closed,
+;;     with the same hash-then-load two-open qualification as checkout
+;;     members (see the TOCTOU canary paragraph above).
 
 (require racket/bool
          racket/file
@@ -114,6 +179,18 @@
          eager-fallback-compile!
          telemetry-snapshot
          reset-telemetry!
+         ;; W1a install-map repair: additive per-root counters (the
+         ;; five-field compiled-root-telemetry envelope struct is
+         ;; untouched) + the install map surface.
+         telemetry-map-counters
+         (struct-out compiled-root-map-counters)
+         compiled-root-map-counters-filename?
+         install-map-members-verified?
+         aggregate-compiled-root-map-counters
+         compiled-root-install-map-dir
+         ;; W1a: exposed for hermetic fixture drivers in the test suite
+         build-install-map!
+         install-collection-roots
          with-compiled-root
          reason->string
          ;; v1.00.32 W2 repair (trial c01 window-2, run 41271542715):
@@ -170,6 +247,46 @@
          mechanism) ; exact lookup mechanism string
   #:transparent)
 
+;; W1a install-map repair: additive per-root counters. The five-field
+;; envelope struct above and its semantics are UNTOUCHED (the
+;; ci-recovery-trial-evidence@1 launcher mapping keeps reading exactly
+;; its five fields; the collector maps datum pairs 1:1 and the assessor
+;; reads named fields, so additive launch-record keys are verified
+;; tolerated — pinned by tests). These counters travel separately:
+;;   - in-process: the telemetry-map-counters parameter below;
+;;   - children: a SECOND contract-disjoint counter file per process
+;;     (q-compiled-root-map*.rktd — never a child-telemetry filename),
+;;     written with the same atomic temp+rename discipline the
+;;     transfer-auth writer uses, aggregated by
+;;     aggregate-compiled-root-map-counters into the launch record's
+;;     additive keys (checkout-map-hits/install-map-hits/unmapped-loads).
+(struct compiled-root-map-counters
+        (checkout-map ; loads served through the checkout map table
+         install-map ; loads served through the install map table
+         unmapped) ; loads of real files that hit neither table
+  #:transparent)
+
+(define compiled-root-map-counters-prefix "q-compiled-root-map")
+
+;; compiled-root-map-counters-filename?
+;;   The per-root counter filename contract: prefix + non-empty unique
+;;   middle + the same .rktd suffix as the child telemetry contract —
+;;   deliberately DISJOINT from that contract (a map-counter file is
+;;   never a root-hits file and vice versa), so neither aggregator can
+;;   mistake the other writer's files for its own telemetry.
+(define (compiled-root-map-counters-filename? name)
+  (define s
+    (if (path? name)
+        (path->string name)
+        (~a name)))
+  (and (string-prefix? s compiled-root-map-counters-prefix)
+       (string-suffix? s compiled-root-child-telemetry-suffix)
+       (> (string-length s)
+          (+ (string-length compiled-root-map-counters-prefix)
+             (string-length compiled-root-child-telemetry-suffix)))))
+
+(define telemetry-map-counters (make-parameter (compiled-root-map-counters 0 0 0)))
+
 ;; ---------------------------------------------------------------- state
 
 (define telemetry (make-parameter (compiled-root-telemetry 0 0 0 0 "none")))
@@ -178,7 +295,9 @@
   (telemetry))
 
 (define (reset-telemetry! [t (compiled-root-telemetry 0 0 0 0 "none")])
-  (telemetry t))
+  (telemetry t)
+  ;; W1a: the additive per-root counters reset with the envelope struct
+  (telemetry-map-counters (compiled-root-map-counters 0 0 0)))
 
 (define (reason->string r)
   (if (eq? r #t)
@@ -419,6 +538,209 @@
 
 ;; ------------------------------------------------------ consumer helpers
 
+;; --------------------------------------------------- install map builder
+
+;; install-collection-roots
+;;   The enumeration base for the install map. The primary library
+;;   collection paths (each element is a collection root) plus every
+;;   root declared by an existing collection LINK FILE
+;;   (current-library-collection-links): entries of the form
+;;   (collection-or-root element ...) relative to the link file's
+;;   directory, where element is a path element (bytes/symbol), and
+;;   'root makes every directory ELEMENT of the target a collection
+;;   root. Probed on 8.10: the primary paths alone miss every package
+;;   collection (typed/racket lives under a pkgs root declared in the
+;;   link file), so the link files are load-bearing for the
+;;   "every reachable zo is inventoried" goal. Missing entries are
+;;   skipped, never fatal: an uninstall-only partial environment must
+;;   still yield a valid (possibly smaller) inventory.
+(define (install-collection-roots)
+  (define roots '())
+  (for ([p (in-list (current-library-collection-paths))])
+    (set! roots (cons p roots)))
+  (for ([f (in-list (current-library-collection-links))]
+        #:when (and (path? f) (file-exists? f)))
+    (define entries
+      (with-handlers ([exn:fail? (lambda (_) '())])
+        (file->value f)))
+    (when (and (list? entries) (andmap (lambda (e) (and (pair? e) (list? (cdr e)))) entries))
+      (define base (path->directory-path (simplify-path (path->complete-path f))))
+      (for ([e (in-list entries)])
+        (define dir
+          (with-handlers ([exn:fail? (lambda (_) #f)])
+            (simplify-path (path->complete-path (apply build-path
+                                                       base
+                                                       (for/list ([c (in-list (cdr e))])
+                                                         (if (bytes? c)
+                                                             (bytes->path-element c)
+                                                             c)))))))
+        (when (and dir (directory-exists? dir))
+          (if (eq? (car e) 'root)
+              (for ([d (in-list (with-handlers ([exn:fail:filesystem? (lambda (_) '())])
+                                  (directory-list dir)))]
+                    #:when (directory-exists? (build-path dir d)))
+                (set! roots (cons (simplify-path (path->complete-path (build-path dir d))) roots)))
+              (set! roots (cons dir roots)))))))
+  (remove-duplicates (reverse roots)))
+
+;; install-reachable-zos
+;;   Every reachable zo under ROOT: a compiled/ member whose un-munged
+;;   sibling source exists (the source lives in the PARENT of the
+;;   compiled/ directory). Returns (list source-abs-string zo-abs-string)
+;;   pairs in sorted, deterministic order. A zo that is itself a symlink
+;;   is skipped (its bytes are someone else's inventory); a disappearing
+;;   path is skipped, never fatal.
+(define (install-reachable-zos root)
+  (define abs-root (simplify-path (path->complete-path root)))
+  (define pairs '())
+  (define (zo->src zo)
+    (define name (path->string (file-name-from-path zo)))
+    (define src-name
+      (cond
+        [(regexp-match? #rx"_rkt[.]zo$" name) (regexp-replace #rx"_rkt[.]zo$" name ".rkt")]
+        [(regexp-match? #rx"[.]zo$" name) (regexp-replace #rx"[.]zo$" name "")]
+        [else #f]))
+    (and src-name
+         (let ([p (build-path (path->directory-path (path-only zo)) 'up src-name)])
+           (and (file-exists? p) p))))
+  (define (walk! d)
+    (define zos
+      ;; fold-files raises PLAIN exn:fail for "path disappeared" (a root
+      ;; or intermediate removed mid-walk), not an exn:fail:filesystem
+      ;; subtype — probe-verified, so the catch must be exn:fail?.
+      (with-handlers ([exn:fail? (lambda (_) '())])
+        (find-files (lambda (p) (regexp-match? #rx"[.]zo$" (path->string p))) d)))
+    (for ([p (in-list zos)]
+          #:unless (link-exists? p)
+          #:when (file-exists? p)
+          #:when (zo->src p))
+      (define src (zo->src p))
+      (set! pairs
+            (cons (list (path->string (simplify-path (path->complete-path src)))
+                        (path->string (simplify-path (path->complete-path p))))
+                  pairs))))
+  (walk! abs-root)
+  (sort (remove-duplicates pairs) string<? #:key car))
+
+;; build-install-map!
+;;   Resolve-time install-map materialization (job-local, deterministic,
+;;   immutable): rebuild MAP-DIR from scratch, link every reachable zo
+;;   under the probe-verified reroot layout, write the compiled install
+;;   transfer module (same authenticate-then-eval discipline as the
+;;   checkout table), revoke write permission, and return the inventory
+;;   hash (map-dir, canonical inventory digest, member count, transfer
+;;   field). Any failure raises — the resolver converts it to a
+;;   fail-closed resolve.
+(define (build-install-map! #:map-dir map-dir #:collection-roots roots)
+  ;; fresh materialization: a previous job's links must never leak
+  ;; non-inventoried members into this inventory
+  (when (directory-exists? map-dir)
+    (system*/exit-code (find-executable-path "chmod") "-R" "u+w" map-dir)
+    (delete-directory/files map-dir))
+  (make-directory* map-dir)
+  (define members
+    (for/list ([root (in-list roots)])
+      (install-reachable-zos root)))
+  (define pairs (sort (remove-duplicates (apply append members)) string<? #:key car))
+  ;; inventory FIRST (digests before links): a zo that disappears between
+  ;; inventory and linking makes the resolve fail closed at the link step
+  (define inventoried
+    (for/list ([p (in-list pairs)])
+      (define zo (string->path (list-ref p 1)))
+      (unless (file-exists? zo)
+        (error 'build-install-map! "install zo disappeared during inventory: ~a" zo))
+      (list (list-ref p 0) (list-ref p 1) (sha256-file zo) (file-size zo))))
+  ;; per-zo symlinks under the PROBE-VERIFIED layout: for source
+  ;; /A/B/mod.rkt the lookup is R/A/B/compiled/mod_rkt.zo (the SOURCE
+  ;; DIRECTORY is spliced under R — path->directory-path on the FILE
+  ;; path would keep the member name as a directory, the exact
+  ;; wrong-layout shape that never serves)
+  (define mapped
+    (for/list ([m (in-list inventoried)])
+      (define src (string->path (list-ref m 0)))
+      (define src-dir (or (path-only src) (string->path "/")))
+      (define lookup-dir (build-path map-dir (substring (path->string src-dir) 1) "compiled"))
+      (make-directory* lookup-dir)
+      (define link-path (build-path lookup-dir (source->zo-name (file-name-from-path src))))
+      (when (or (file-exists? link-path) (link-exists? link-path))
+        (delete-file link-path))
+      (make-file-or-directory-link (list-ref m 1) link-path)
+      ;; link verification: every keyed mapped member must resolve NOW
+      (unless (file-exists? link-path)
+        (error 'build-install-map! "mapped member missing after linking: ~a" link-path))
+      (list (list-ref m 0) (path->string link-path) (list-ref m 2))))
+  ;; canonical inventory digest: sorted "src\0zo-digest\n" frames
+  (define inventory-digest
+    (sha256-bytes (apply bytes-append
+                         (for/list ([m (in-list inventoried)])
+                           (bytes-append (string->bytes/utf-8 (list-ref m 0))
+                                         #"\0"
+                                         (string->bytes/utf-8 (list-ref m 2))
+                                         #"\n")))))
+  ;; the compiled install transfer module: children authenticate-then-eval
+  ;; it and build their per-load table from it (O(1) marshal load, no
+  ;; per-child re-derivation)
+  (define lk-src (build-path map-dir "install-load-keys.rkt"))
+  (call-with-output-file lk-src
+                         #:exists 'truncate
+                         (lambda (o)
+                           (write `(module install-load-keys racket/base
+                                     (provide compiled-root-install-key-table)
+                                     (define compiled-root-install-key-table ',mapped))
+                                  o)))
+  (unless (zero? (system*/exit-code (find-executable-path "raco") "make" "-j" "1" lk-src))
+    (error 'build-install-map! "raco make failed for the install transfer module"))
+  (define lk-zo (build-path map-dir "compiled" "install-load-keys_rkt.zo"))
+  (unless (file-exists? lk-zo)
+    (error 'build-install-map! "compiled install transfer module missing: ~a" lk-zo))
+  ;; immutability: revoke all write bits recursively (POSIX chmod)
+  (unless (zero? (system*/exit-code (find-executable-path "chmod") "-R" "a-w" map-dir))
+    (error 'build-install-map! "failed to revoke write permissions: ~a" map-dir))
+  (hasheq 'map-dir
+          (path->string (simplify-path (path->complete-path map-dir)))
+          'digest
+          inventory-digest
+          'members
+          (length inventoried)
+          'mapped
+          mapped
+          'load-keys
+          (hasheq 'path
+                  "install-load-keys.rkt"
+                  'digest
+                  (sha256-file lk-src)
+                  'zo
+                  "compiled/install-load-keys_rkt.zo"
+                  'zo-digest
+                  (sha256-file lk-zo))))
+
+;; compiled-root-install-map-dir
+;;   The install map directory of a resolved root, or #f when the root
+;;   carries no install map (resolve without #:install-map-dir).
+(define (compiled-root-install-map-dir root)
+  (define inv (hash-ref (compiled-root-manifest root) 'install-map #f))
+  (and inv (hash-ref inv 'map-dir #f) (string->path (hash-ref inv 'map-dir))))
+
+;; install-map-members-verified?
+;;   Symlink verification at activation: every keyed mapped member must
+;;   still resolve to real bytes, and the transfer module files must
+;;   still match the inventory's recorded digests. A member missing at
+;;   activation fails closed (the caller selects the eager fallback),
+;;   never silently. Digest/bytes data only — nothing is executed here.
+(define (install-map-members-verified? root)
+  (define inv (hash-ref (compiled-root-manifest root) 'install-map #f))
+  (or (not inv)
+      (let ([map-dir (string->path (hash-ref inv 'map-dir))]
+            [lk (hash-ref inv 'load-keys)])
+        (and (file-exists? (build-path map-dir (string->path (hash-ref lk 'path))))
+             (file-exists? (build-path map-dir (string->path (hash-ref lk 'zo))))
+             (string=? (sha256-file (build-path map-dir (string->path (hash-ref lk 'path))))
+                       (hash-ref lk 'digest))
+             (string=? (sha256-file (build-path map-dir (string->path (hash-ref lk 'zo))))
+                       (hash-ref lk 'zo-digest))
+             (for/and ([e (in-list (hash-ref inv 'mapped '()))])
+               (file-exists? (string->path (list-ref e 1))))))))
+
 ;; resolve-compiled-root!
 ;;   Pure validation first; then bind a per-consumer job-local mapping
 ;;   directory (symlinks into the immutable root) for the CURRENT
@@ -426,6 +748,13 @@
 ;;   forced. Returns a compiled-root record; on ANY failure returns a
 ;;   record whose reason is the failure string (fail closed, no roots
 ;;   activated, caller falls back eagerly).
+;;   W1a install-map repair: when #:install-map-dir is given, the
+;;   installation's reachable zos are inventoried, digest-checked and
+;;   mapped under the reroot layout; the validated manifest carries the
+;;   consumer-local 'install-map inventory (map-dir, canonical digest,
+;;   member count, transfer field). #:collection-roots overrides the
+;;   enumeration base (hermetic tests); production defaults to the real
+;;   collection search universe.
 
 ;; source->zo-name
 ;;   The member name the default compiled-load handler consults for a
@@ -447,7 +776,12 @@
                                 #:checkout checkout
                                 #:trusted-producer-labels labels
                                 #:map-dir map-dir
-                                #:expect-lockfile-digest [lock-digest #f])
+                                #:expect-lockfile-digest [lock-digest #f]
+                                ;; W1a install-map repair: opt-in install
+                                ;; map; absent (the default) keeps today's
+                                ;; single-map behavior bit-for-bit.
+                                #:install-map-dir [install-map-dir #f]
+                                #:collection-roots [install-roots #f])
   (with-handlers ([exn:fail? (lambda (e) (compiled-root #f #f #f checkout (exn-message e)))])
     (define manifest (load-compiled-root-manifest final-dir))
     (define validated
@@ -533,7 +867,18 @@
          (when (or (file-exists? link-path) (link-exists? link-path))
            (delete-file link-path))
          (make-file-or-directory-link link-target link-path)]))
-    (compiled-root validated
+    ;; W1a install-map repair: build the install map AFTER the checkout
+    ;; mapping verified — any failure here fails the whole resolve closed
+    ;; (never a partially verified two-map activation).
+    (define validated+
+      (if install-map-dir
+          (hash-set validated
+                    'install-map
+                    (build-install-map! #:map-dir install-map-dir
+                                        #:collection-roots
+                                        (or install-roots (install-collection-roots))))
+          validated))
+    (compiled-root validated+
                    (simplify-path (path->complete-path final-dir))
                    (simplify-path (path->complete-path map-dir))
                    (simplify-path (path->complete-path checkout))
@@ -544,7 +889,7 @@
 
 ;; compiled-root-activate-parameters
 ;;   Parameter values that route THIS racket's module lookups through
-;;   the mapping directory. In-process activation returns three values.
+;;   the mapping directories. In-process activation returns two values.
 ;;   W1a-repair (coordinator trial c01 window-2, run 41271542715): the
 ;;   check mode is 'exists, never 'modify-seconds. Under
 ;;   'modify-seconds a compiled file older than its source is ignored,
@@ -554,10 +899,23 @@
 ;;   roots. Under root-on, freshness is established by the same-commit
 ;;   source-sha gate plus per-load content digests: any mutated zo
 ;;   fails closed via the sha256 check (install-compiled-root-toctou-guard!).
+;;   W1a install-map repair — GLOBAL PIN EFFECT (probe-verified): pinning
+;;   use-compiled-file-check to 'exists affects EVERY compiled-file
+;;   candidate lookup in this process, INCLUDING source-adjacent default
+;;   'same lookups: a stale source-adjacent zo is served without any
+;;   freshness comparison while the pin is active. That is accepted at
+;;   activation because the roots list excludes 'same entirely (no
+;;   source-adjacent candidate is ever consulted under root-on) and
+;;   identity is digest-proven; any future change that reintroduces
+;;   'same alongside the pin must re-justify this note.
 (define (compiled-root-activate-parameters root)
   (unless (eq? (compiled-root-reason root) #t)
     (error 'compiled-root-activate-parameters "root not resolved"))
-  (values (list (compiled-root-map-dir root)) 'exists))
+  (define install-dir (compiled-root-install-map-dir root))
+  (values (if install-dir
+              (list (compiled-root-map-dir root) install-dir)
+              (list (compiled-root-map-dir root)))
+          'exists))
 
 ;; compiled-root-load-keys
 ;;   The load-path spellings the TOCTOU guard recognizes for a source.
@@ -641,6 +999,30 @@
                                             #t))))])
       (values k
               (list (path->string (build-path final-dir (hash-ref e 'zo))) (hash-ref e 'zo-digest)))))
+  ;; W1a install-map repair: the install table, same mechanics (equal?
+  ;; keys over raw + link-blind simplified spellings; first-match).
+  ;; Values keep the same (list zo-path digest) shape, where the zo path
+  ;; is the MAPPED member inside the install map — digesting it follows
+  ;; the symlink to the exact bytes the module system will serve.
+  (define install-inv (hash-ref (compiled-root-manifest root) 'install-map #f))
+  (define by-install-src
+    (if install-inv
+        (for*/hash ([e (in-list (hash-ref install-inv 'mapped))]
+                    [k (in-list (compiled-root-load-keys (list-ref e 0)))])
+          (values k (list (list-ref e 1) (list-ref e 2))))
+        #f))
+  ;; Probe-verified on 8.10 (W1a install-map repair): under root-on the
+  ;; module system hands current-load the MAPPED ZO PATH for
+  ;; install-served loads (unlike checkout-map members, which arrive as
+  ;; consumer source paths), so the guard must also key the mapped
+  ;; member paths — the digest checks the exact bytes behind the
+  ;; serving symlink either way.
+  (define by-install-zo
+    (if install-inv
+        (for*/hash ([e (in-list (hash-ref install-inv 'mapped))]
+                    [k (in-list (compiled-root-load-keys (list-ref e 1)))])
+          (values k (list (list-ref e 1) (list-ref e 2))))
+        #f))
   (define orig (current-load))
   (current-load
    (lambda (path modname)
@@ -657,13 +1039,53 @@
              (let ([rel (find-relative-path root-path p)])
                (define digest (hash-ref by-zo (string->path (path->string rel)) #f))
                (and digest (list (path->string (build-path final-dir (path->string rel))) digest)))))
-       (when hit
-         (match-define (list zo-path digest) hit)
-         (define bs (file->bytes zo-path))
-         (unless (string=? (sha256-bytes bs) digest)
-           (error 'compiled-root-toctou "payload mutated after verification: ~a" path))
-         (telemetry (match-let ([(compiled-root-telemetry h f l b m) (telemetry)])
-                      (compiled-root-telemetry (add1 h) f (add1 l) (+ b (bytes-length bs)) m)))))
+       ;; W1a install-map repair: the install table lookup (source-path
+       ;; keys first, then the probe-verified mapped-zo-path spellings
+       ;; the module system actually delivers under root-on), tried only
+       ;; when the checkout tables miss.
+       (define ihit
+         (and (not hit)
+              (or (and by-install-src
+                       (for*/first ([k (in-list (compiled-root-load-keys path))]
+                                    [v (in-value (hash-ref by-install-src k #f))]
+                                    #:when v)
+                         v))
+                  (and by-install-zo
+                       (for*/first ([k (in-list (compiled-root-load-keys path))]
+                                    [v (in-value (hash-ref by-install-zo k #f))]
+                                    #:when v)
+                         v)))))
+       (cond
+         [hit
+          (match-define (list zo-path digest) hit)
+          (define bs (file->bytes zo-path))
+          (unless (string=? (sha256-bytes bs) digest)
+            (error 'compiled-root-toctou "payload mutated after verification: ~a" path))
+          (telemetry (match-let ([(compiled-root-telemetry h f l b m) (telemetry)])
+                       (compiled-root-telemetry (add1 h) f (add1 l) (+ b (bytes-length bs)) m)))
+          (telemetry-map-counters
+           (match-let ([(compiled-root-map-counters c i u) (telemetry-map-counters)])
+             (compiled-root-map-counters (add1 c) i u)))]
+         ;; W1a: install-served loads digest-check the mapped member's
+         ;; actual bytes (the same hash-then-load canary as checkout
+         ;; members) and count under the install-map counter.
+         [ihit
+          (match-define (list zo-path digest) ihit)
+          (define bs (file->bytes zo-path))
+          (unless (string=? (sha256-bytes bs) digest)
+            (error 'compiled-root-toctou "payload mutated after verification: ~a" path))
+          (telemetry (match-let ([(compiled-root-telemetry h f l b m) (telemetry)])
+                       (compiled-root-telemetry (add1 h) f (add1 l) (+ b (bytes-length bs)) m)))
+          (telemetry-map-counters
+           (match-let ([(compiled-root-map-counters c i u) (telemetry-map-counters)])
+             (compiled-root-map-counters c (add1 i) u)))]
+         ;; Unmapped loads: a real file in neither table is served
+         ;; (compiled) by the module system WITHOUT a digest check —
+         ;; counted here, never silent.
+         [else
+          (telemetry-map-counters
+           (match-let ([(compiled-root-map-counters c i u) (telemetry-map-counters)])
+             (compiled-root-map-counters c i (add1 u))))]))
      (orig path modname))))
 
 ;; compiled-root-launch-arguments
@@ -744,6 +1166,118 @@
      "published root carries no compiled load-key transfer module ~
             (rebuild with the current producer)"))
   (define lk-zo-path (path->string (build-path root-dir (string->path (hash-ref lk-info 'zo)))))
+  ;; W1a install-map repair: the install map inventory (resolve-time,
+  ;; consumer-local). When present, the launch roots become (list
+  ;; checkout-map install-map) — absolute paths, MAP-FIRST (probe: the
+  ;; first entry wins) — and the child authenticates the install
+  ;; transfer module exactly like the checkout one (baked zo digest,
+  ;; authenticate-then-eval, table fetched by module name).
+  (define install-inv (hash-ref (compiled-root-manifest root) 'install-map #f))
+  (define install-dir (and install-inv (hash-ref install-inv 'map-dir)))
+  (define install-lk (and install-inv (hash-ref install-inv 'load-keys)))
+  (define il-zo-path
+    (and install-lk
+         (path->string (build-path (string->path install-dir)
+                                   (string->path (hash-ref install-lk 'zo))))))
+  ;; Segment 1: launch roots + install transfer table. The checkout-map
+  ;; entry is FIRST in both shapes; the install entry is appended, never
+  ;; prepended (any future append must use the RHS-before-assignment
+  ;; form (append (list ...) (current-compiled-file-roots))).
+  (define roots-install-segment
+    (if install-dir
+        (string-append
+         (format "(current-compiled-file-roots (list (string->path ~s) (string->path ~s)))"
+                 (path->string (compiled-root-map-dir root))
+                 install-dir)
+         (format " (define il-path (string->path ~s))" il-zo-path)
+         (format " (auth! il-path ~s \"install load-key table\")" (hash-ref install-lk 'zo-digest))
+         ;; absolute install keys — canonicalized exactly like the
+         ;; checkout keys (simplify/complete #t), insert-if-absent keeps
+         ;; the first match for any conflicting duplicate
+         " (define itbl"
+         "  (let ([ht (make-hash)])"
+         "   (for ([e (in-list (dynamic-require ''install-load-keys"
+         "                                     'compiled-root-install-key-table))])"
+         "    (define k"
+         "     (path->string"
+         "      (simplify-path"
+         "       (path->complete-path (string->path (car e)))"
+         "       #t)))"
+         "    (unless (hash-has-key? ht k)"
+         "     (hash-set! ht k (list (cadr e) (caddr e)))))"
+         "   ht))"
+         ;; probe-verified on 8.10: under root-on the module system hands
+         ;; current-load the MAPPED ZO PATH for install-served loads, so
+         ;; the child keeps the same by-zo twin table the parent guard has
+         " (define itbl-zo"
+         "  (let ([ht (make-hash)])"
+         "   (for ([e (in-list (dynamic-require ''install-load-keys"
+         "                                     'compiled-root-install-key-table))])"
+         "    (define k"
+         "     (path->string"
+         "      (simplify-path"
+         "       (path->complete-path (string->path (cadr e)))"
+         "       #t)))"
+         "    (unless (hash-has-key? ht k)"
+         "     (hash-set! ht k (list (cadr e) (caddr e)))))"
+         "   ht))")
+        (string-append (format "(current-compiled-file-roots (list (string->path ~s)))"
+                               (path->string (compiled-root-map-dir root)))
+                       " (define itbl #f)"
+                       " (define itbl-zo #f)")))
+  ;; Segment 2: per-root counters + the SECOND counter file. Contract:
+  ;; q-compiled-root-map*.rktd — derived from the reserved hit-counter
+  ;; name (its unique middle carries over, so cross-process uniqueness
+  ;; is inherited), deliberately DISJOINT from the root-hits contract
+  ;; (neither aggregator mistakes the other's files for its own
+  ;; telemetry). Same atomic temp+rename discipline as the transfer-auth
+  ;; writer: complete datums only, rewritten on EVERY classified load,
+  ;; zero snapshot AT STARTUP (a zero-hit child leaves an aggregatable
+  ;; file). Telemetry stays best-effort (fail-open); the per-load
+  ;; digest checks above stay fail-closed regardless.
+  (define map-counters-segment
+    (string-append
+     " (define q-hits 0)"
+     " (define q-bytes 0)"
+     " (define q-i-hits 0)"
+     " (define q-i-bytes 0)"
+     " (define q-unmapped 0)"
+     " (define q-write-tel! (and q-tel-file (q-tel-writer q-tel-file)))"
+     " (define q-map-file"
+     "  (with-handlers ([exn:fail? (lambda (_) #f)])"
+     "   (and q-tel-file"
+     "        (string->path"
+     "         (string-replace (path->string q-tel-file)"
+     "                         \"q-compiled-root-hit\""
+     "                         \"q-compiled-root-map\")))))"
+     " (define q-write-map!"
+     "  (and q-map-file"
+     "       (let ([tmp (string->path (string-append (path->string q-map-file) \".part\"))])"
+     "        (lambda (c i u)"
+     "         (with-handlers ([exn:fail? void])"
+     "          (call-with-output-file tmp"
+     "                                 (lambda (out)"
+     "                                   (write (list 'compiled-root-map-telemetry"
+     "                                                (cons 'checkout-map-hits c)"
+     "                                                (cons 'install-map-hits i)"
+     "                                                (cons 'unmapped-loads u))"
+     "                                          out))"
+     "                                 #:exists 'truncate)"
+     "          (rename-file-or-directory tmp q-map-file #t))))))"
+     " (define (q-count! b)"
+     "  (set! q-hits (add1 q-hits))"
+     "  (set! q-bytes (+ q-bytes b))"
+     "  (when q-write-tel! (q-write-tel! q-hits q-hits q-bytes))"
+     "  (when q-write-map! (q-write-map! q-hits q-i-hits q-unmapped)))"
+     " (define (q-count-install! b)"
+     "  (set! q-i-hits (add1 q-i-hits))"
+     "  (set! q-i-bytes (+ q-i-bytes b))"
+     "  (when q-write-map! (q-write-map! q-hits q-i-hits q-unmapped)))"
+     " (define (q-count-unmapped!)"
+     "  (set! q-unmapped (add1 q-unmapped))"
+     "  (when q-write-map! (q-write-map! q-hits q-i-hits q-unmapped)))"
+     " (when q-write-tel! (q-write-tel! 0 0 0))"
+     " (when q-write-map! (q-write-map! 0 0 0))"))
   (list
    "-e"
    (format
@@ -761,6 +1295,9 @@
      ;; before the first complete snapshot.
      " (define q-tel-reserve (dynamic-require (string->path ~s) 'reserve-child-telemetry-target))"
      " (require racket/file)"
+     ;; W1a install-map repair: string-replace derives the per-root
+     ;; counter file name from the reserved hit-counter name below.
+     " (require racket/string)"
      " (define manifest-path (string->path ~s))"
      " (unless (string=? (sha256-file manifest-path) ~s)"
      "  (error 'compiled-root-toctou \"root manifest mutated after verification: ~~a\""
@@ -773,7 +1310,10 @@
      ;; the immutable root is used regardless of mtimes.
      " (define lk-path (string->path ~s))"
      " (auth! lk-path ~s)"
-     " (current-compiled-file-roots (list (string->path ~s)))"
+     ;; W1a install-map repair: the launch roots + (when the resolve
+     ;; carried an install map) the authenticated install transfer
+     ;; table are spliced in here — see roots-install-segment below.
+     "~a"
      ;; W1a-repair (trial c01 window-2, run 41271542715): 'exists,
      ;; never 'modify-seconds — mtime comparison is structurally
      ;; wrong for restored roots (fresh checkout mtimes are always
@@ -781,6 +1321,13 @@
      ;; would be judged stale). Freshness comes from the same-commit
      ;; source-sha gate; any mutated zo fails closed via the
      ;; per-load sha256 check below.
+     ;; W1a install-map repair — GLOBAL PIN EFFECT (probe-verified):
+     ;; this pin governs EVERY compiled-file candidate lookup in the
+     ;; child, including source-adjacent default 'same lookups (a stale
+     ;; adjacent zo is served without any freshness comparison while
+     ;; the pin is active). The roots list excludes 'same entirely, so
+     ;; no source-adjacent candidate is consulted under root-on and
+     ;; identity stays digest-proven.
      " (use-compiled-file-check 'exists)"
      " (define checkout-dir (string->path ~s))"
      " (define root-dir (string->path ~s))"
@@ -850,26 +1397,38 @@
      "  (with-handlers ([exn:fail? (lambda (_) #f)])"
      "   (and q-tel-dir"
      "        (q-tel-reserve q-tel-dir ~s ~s))))"
-     " (define q-hits 0)"
-     " (define q-bytes 0)"
-     " (define q-write-tel! (and q-tel-file (q-tel-writer q-tel-file)))"
-     " (define (q-count! b)"
-     "  (set! q-hits (add1 q-hits))"
-     "  (set! q-bytes (+ q-bytes b))"
-     "  (when q-write-tel! (q-write-tel! q-hits q-hits q-bytes)))"
-     " (when q-write-tel! (q-write-tel! 0 0 0))"
+     ;; W1a install-map repair: per-root counters + the SECOND counter
+     ;; file are spliced in here — see map-counters-segment below.
+     "~a"
      " (define orig-load (current-load))"
      " (current-load"
      "  (lambda (path modname)"
-     "   (define hit"
-     "    (and path"
-     "         (hash-ref tbl"
-     "                   (path->string (simplify-path (path->complete-path path) #t))"
-     "                   #f)))"
-     "   (when hit"
-     "    (unless (string=? (sha256-file (cadr hit)) (caddr hit))"
-     "     (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path))"
-     "    (q-count! (file-size (cadr hit))))"
+     ;; W1a install-map repair: first-match classification — the
+     ;; checkout table, then the install table, then an unmapped load.
+     ;; Same canonicalization for every lookup (simplify/complete #t).
+     "   (define canon"
+     "    (and path (path->string (simplify-path (path->complete-path path) #t))))"
+     "   (define hit (and canon (hash-ref tbl canon #f)))"
+     "   (define i-hit"
+     "    (and canon (not hit) itbl (hash-ref itbl canon #f)))"
+     "   (define iz-hit"
+     "    (and canon (not hit) (not i-hit) itbl-zo (hash-ref itbl-zo canon #f)))"
+     "   (cond"
+     "    [hit"
+     "     (unless (string=? (sha256-file (cadr hit)) (caddr hit))"
+     "      (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path))"
+     "     (q-count! (file-size (cadr hit)))]"
+     "    [i-hit"
+     "     (unless (string=? (sha256-file (car i-hit)) (cadr i-hit))"
+     "      (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path))"
+     "     (q-count-install! (file-size (car i-hit)))]"
+     "    [iz-hit"
+     "     (unless (string=? (sha256-file (car iz-hit)) (cadr iz-hit))"
+     "      (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path))"
+     "     (q-count-install! (file-size (car iz-hit)))]"
+     "    [else"
+     "     (when (and path (file-exists? path))"
+     "      (q-count-unmapped!))])"
      "   (orig-load path modname))))")
     (path->string (simplify-path (path->complete-path compiled-root-manifest-module-path)))
     (path->string (simplify-path (path->complete-path compiled-root-transfer-auth-module-path)))
@@ -879,12 +1438,13 @@
     (sha256-file manifest-path)
     lk-zo-path
     (hash-ref lk-info 'zo-digest)
-    (path->string (compiled-root-map-dir root))
+    roots-install-segment
     (path->string (path->directory-path (simplify-path (path->complete-path (compiled-root-checkout
                                                                              root)))))
     root-dir
     compiled-root-child-telemetry-prefix
-    compiled-root-child-telemetry-suffix)))
+    compiled-root-child-telemetry-suffix
+    map-counters-segment)))
 
 ;; compiled-root-script-entry-argument
 ;;   W1a round 5 (trial trial-2026-11-01-smoke-3, treatment C, run
@@ -1030,6 +1590,37 @@
          (eprintf "ci-compiled-root: ignoring malformed child telemetry ~a\n" (path->string f))
          (values hits loads served)]))))
 
+;; aggregate-compiled-root-map-counters
+;;   W1a install-map repair: sum the per-root counter files every
+;;   bootstrapped child wrote (contract q-compiled-root-map*.rktd,
+;;   deliberately disjoint from the root-hits contract). Same loud-vs-
+;;   silent split as the hit aggregator: foreign files are ignored
+;;   silently; a contract-named file that fails to parse is skipped
+;;   LOUDLY. Never fatal: telemetry must not break a test run, but it is
+;;   never silently wrong either.
+(define (aggregate-compiled-root-map-counters hits-dir)
+  (for/fold ([checkout 0]
+             [install 0]
+             [unmapped 0])
+            ([f (in-list (directory-list hits-dir))]
+             #:when (compiled-root-map-counters-filename? f))
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (eprintf "ci-compiled-root: ignoring unreadable per-root counter ~a: ~a\n"
+                                (path->string f)
+                                (exn-message e))
+                       (values checkout install unmapped))])
+      (define datum (file->value (build-path hits-dir f)))
+      (match datum
+        [(list 'compiled-root-map-telemetry
+               (cons 'checkout-map-hits c)
+               (cons 'install-map-hits i)
+               (cons 'unmapped-loads u))
+         (values (+ checkout c) (+ install i) (+ unmapped u))]
+        [_
+         (eprintf "ci-compiled-root: ignoring malformed per-root counter ~a\n" (path->string f))
+         (values checkout install unmapped)]))))
+
 ;; eager-fallback-compile!
 ;;   The ONE eager current-source fallback: raco make in the job-local
 ;;   checkout (W2 containment boundary). Producer-era code is never
@@ -1053,8 +1644,21 @@
 ;;   Consumer entry point: resolve the root; if resolved, activate
 ;;   parameters + TOCTOU guard and run thunk; if not, run the eager
 ;;   fallback and run thunk WITHOUT any root (current source semantics).
+;;   W1a install-map repair: (a) activation re-verifies every keyed
+;;   install-map member first — a missing member fails closed to the
+;;   eager fallback, never silently; (b) the fallback lane is PLAIN
+;;   LEGACY Racket: no parameterization at all, so the thunk runs with
+;;   the ambient default parameter values ((current-compiled-file-roots)
+;;   = '(same), (use-compiled-file-check) = 'modify-seconds) and the
+;;   eager raco make output is usable — the pre-repair
+;;   (current-compiled-file-roots '()) parameterize was no-compiled
+;;   semantics and made the eager output unusable.
 (define (with-compiled-root root checkout modules thunk)
-  (if (eq? (compiled-root-reason root) #t)
+  (if (and (eq? (compiled-root-reason root) #t)
+           ;; W1a: symlink verification at activation (digest/bytes only,
+           ;; nothing executed). A keyed mapped member missing NOW is the
+           ;; fail-closed path to the legacy fallback lane.
+           (install-map-members-verified? root))
       ;; The [current-load (current-load)] frame scopes the guard's
       ;; imperative install to this dynamic extent (W3 review deferral,
       ;; fixed in W4): the TOCTOU wrapper is active for the thunk and
@@ -1067,17 +1671,31 @@
       ;; restored roots: a fresh checkout's source mtimes are always
       ;; newer than producer-era root zo mtimes, so 'modify-seconds
       ;; judges every root member stale (zero-root-hits).
-      (parameterize ([current-compiled-file-roots (list (compiled-root-map-dir root))]
+      ;; W1a install-map repair — GLOBAL PIN EFFECT (probe-verified):
+      ;; the 'exists pin governs EVERY compiled-file candidate lookup in
+      ;; this dynamic extent, including source-adjacent default 'same
+      ;; lookups; the roots list below excludes 'same entirely, so no
+      ;; source-adjacent candidate is ever consulted under root-on and
+      ;; identity stays digest-proven.
+      (parameterize ([current-compiled-file-roots
+                      (let ([install-dir (compiled-root-install-map-dir root)])
+                        (if install-dir
+                            (list (compiled-root-map-dir root) install-dir)
+                            (list (compiled-root-map-dir root))))]
                      [use-compiled-file-check 'exists]
                      [current-load (current-load)])
         (install-compiled-root-toctou-guard! root)
         (telemetry (match-let ([(compiled-root-telemetry h f l b _) (telemetry)])
                      (compiled-root-telemetry h f l b "external-compiled-root(map-dir symlinks)")))
         (thunk))
+      ;; W1a install-map repair: PLAIN LEGACY fallback — no
+      ;; parameterization at all (the pre-repair '() parameterize was
+      ;; no-compiled semantics and discarded the eager output; no 'exists
+      ;; pin either — the ambient default check mode governs, exactly
+      ;; like legacy Racket).
       (begin
         (eager-fallback-compile! checkout modules)
-        (parameterize ([current-compiled-file-roots '()])
-          (thunk)))))
+        (thunk))))
 
 ;; --------------------------------------------------------- CI CLI (W4)
 ;;
@@ -1134,25 +1752,44 @@
   (define trusted-labels (make-parameter '()))
   (define flags-file (make-parameter #f))
   (define map-dir-opt (make-parameter #f))
+  ;; W1a install-map repair: opt-in install map; when given, the launch
+  ;; roots become (list checkout-map install-map) — absolute, map-first.
+  (define install-map-opt (make-parameter #f))
+  ;; W1a install-map repair: hermetic install-map enumeration roots (the
+  ;; CLI spelling of the resolver API's #:collection-roots). Absent, the
+  ;; resolver enumerates the real collection search universe (production
+  ;; behavior); present, exactly these roots are inventoried — the
+  ;; controlled fixture-injection mechanism the suite uses to exercise
+  ;; install-map members deterministically.
+  (define collection-roots-opt (make-parameter '()))
   (define telemetry-file (make-parameter #f))
 
   (define rest-args
-    (command-line #:program "ci-compiled-root"
-                  #:argv ordered-argv
-                  #:once-each ["--root" d "published immutable compiled-root directory" (root-dir d)]
-                  ["--checkout" d "consumer checkout directory" (checkout-dir d)]
-                  ["--trusted-label"
-                   l
-                   "accepted producer label (repeatable)"
-                   (trusted-labels (append (trusted-labels) (list l)))]
-                  ["--flags-file"
-                   f
-                   "per-shard activation flags file (written by resolve, read by launch)"
-                   (flags-file f)]
-                  ["--map-dir" d "per-consumer read-only mapping directory" (map-dir-opt d)]
-                  ["--telemetry-file" f "write launch telemetry to this file" (telemetry-file f)]
-                  #:args rest
-                  rest))
+    (command-line
+     #:program "ci-compiled-root"
+     #:argv ordered-argv
+     #:once-each ["--root" d "published immutable compiled-root directory" (root-dir d)]
+     ["--checkout" d "consumer checkout directory" (checkout-dir d)]
+     ["--trusted-label"
+      l
+      "accepted producer label (repeatable)"
+      (trusted-labels (append (trusted-labels) (list l)))]
+     ["--flags-file"
+      f
+      "per-shard activation flags file (written by resolve, read by launch)"
+      (flags-file f)]
+     ["--map-dir" d "per-consumer read-only mapping directory" (map-dir-opt d)]
+     ["--install-map-dir"
+      d
+      "job-local install map directory (two-map launch roots)"
+      (install-map-opt d)]
+     ["--collection-root"
+      d
+      "install-map enumeration root (repeatable; default: the real collection search universe)"
+      (collection-roots-opt (append (collection-roots-opt) (list d)))]
+     ["--telemetry-file" f "write launch telemetry to this file" (telemetry-file f)]
+     #:args rest
+     rest))
 
   (define cmd
     (cond
@@ -1169,27 +1806,40 @@
       (error 'ci-compiled-root "missing required option --~a" name))
     (p))
 
-  (define (write-launch-telemetry! mode exit-code wall-ms served)
+  (define (write-launch-telemetry! mode exit-code wall-ms served [map-counters (list 0 0 0)])
     (when (telemetry-file)
       (define t (telemetry-snapshot))
+      (define mc (telemetry-map-counters))
       (call-with-output-file
        (telemetry-file)
        (lambda (out)
-         (write (list 'compiled-root-launch-telemetry
-                      (cons 'mode mode)
-                      (cons 'exit-code exit-code)
-                      (cons 'wall-ms wall-ms)
-                      (cons 'root-hits (+ (compiled-root-telemetry-root-hits t) (list-ref served 0)))
-                      (cons 'fallbacks (compiled-root-telemetry-fallbacks t))
-                      (cons 'loads (+ (compiled-root-telemetry-loads t) (list-ref served 1)))
-                      (cons 'bytes-served
-                            (+ (compiled-root-telemetry-bytes-served t) (list-ref served 2)))
-                      ;; W2 repair: the mechanism IS the launch mode.
-                      ;; The old structurally-constant "none" hid a
-                      ;; mapped child whose counters could not report
-                      ;; back and lied on every pass-through record.
-                      (cons 'mechanism mode))
-                out))
+         (write
+          (list 'compiled-root-launch-telemetry
+                (cons 'mode mode)
+                (cons 'exit-code exit-code)
+                (cons 'wall-ms wall-ms)
+                (cons 'root-hits (+ (compiled-root-telemetry-root-hits t) (list-ref served 0)))
+                (cons 'fallbacks (compiled-root-telemetry-fallbacks t))
+                (cons 'loads (+ (compiled-root-telemetry-loads t) (list-ref served 1)))
+                (cons 'bytes-served (+ (compiled-root-telemetry-bytes-served t) (list-ref served 2)))
+                ;; W2 repair: the mechanism IS the launch mode.
+                ;; The old structurally-constant "none" hid a
+                ;; mapped child whose counters could not report
+                ;; back and lied on every pass-through record.
+                (cons 'mechanism mode)
+                ;; W1a install-map repair: ADDITIVE per-root keys.
+                ;; In-process guard counters + child per-root counter
+                ;; files. The collector maps datum pairs 1:1 and the
+                ;; strict assessor reads named fields only — additive
+                ;; keys verified tolerated (ci-recovery-trial-evidence@1
+                ;; stays valid; pinned by the trial/evidence tests).
+                (cons 'checkout-map-hits
+                      (+ (compiled-root-map-counters-checkout-map mc) (list-ref map-counters 0)))
+                (cons 'install-map-hits
+                      (+ (compiled-root-map-counters-install-map mc) (list-ref map-counters 1)))
+                (cons 'unmapped-loads
+                      (+ (compiled-root-map-counters-unmapped mc) (list-ref map-counters 2))))
+          out))
        #:exists 'truncate)))
 
   ;; The launch flags are racket VM flags (-e bootstrap). They are only
@@ -1239,10 +1889,18 @@
                                                         (build-path (path-only ff-path)
                                                                     "compiled-root-map")))))
        (define root
-         (resolve-compiled-root! #:final-dir rd-path
-                                 #:checkout co-path
-                                 #:trusted-producer-labels (trusted-labels)
-                                 #:map-dir md))
+         (resolve-compiled-root!
+          #:final-dir rd-path
+          #:checkout co-path
+          #:trusted-producer-labels (trusted-labels)
+          #:map-dir md
+          #:install-map-dir (let ([d (install-map-opt)])
+                              (and d (path->directory-path (path->complete-path (string->path d)))))
+          #:collection-roots
+          (let ([ds (collection-roots-opt)])
+            (and (not (null? ds))
+                 (map (lambda (d) (path->directory-path (path->complete-path (string->path d))))
+                      ds)))))
        (unless (eq? (compiled-root-reason root) #t)
          (invalidate-stale-flags!)
          (eprintf "ci-compiled-root: resolution failed (~a)\n"
@@ -1296,7 +1954,7 @@
             (and (list? (list-ref flags 4)) (andmap string? (list-ref flags 4)))))
      (define argv0 (first child-args))
      (define t0 (current-inexact-milliseconds))
-     (define-values (exit-code mode served)
+     (define-values (exit-code mode served map-counters)
        (cond
          [(and valid-flags? (racket-child? argv0))
           ;; W2 repair (trial c01 window-2, run 41271542715): the mapped
@@ -1329,7 +1987,13 @@
             (if hits-dir
                 (call-with-values (lambda () (aggregate-compiled-root-child-telemetry hits-dir)) list)
                 (list 0 0 0)))
-          (values code "verified-root-hit" served)]
+          ;; W1a install-map repair: per-root counter files (best-effort;
+          ;; a missing hits dir keeps them 0, like the hit counters)
+          (define map-counters
+            (if hits-dir
+                (call-with-values (lambda () (aggregate-compiled-root-map-counters hits-dir)) list)
+                (list 0 0 0)))
+          (values code "verified-root-hit" served map-counters)]
          [else
           ;; Pass-through: no flags file (lane off or failed resolution —
           ;; the one eager gate already compiled), the global off
@@ -1343,7 +2007,8 @@
                     [(and override (equal? (string->symbol override) 'off)) "global-off"]
                     [(not valid-flags?) "no-flags-current-source"]
                     [else "unmapped-child"])
+                  (list 0 0 0)
                   (list 0 0 0))]))
      (define wall-ms (inexact->exact (floor (- (current-inexact-milliseconds) t0))))
-     (write-launch-telemetry! mode exit-code wall-ms served)
+     (write-launch-telemetry! mode exit-code wall-ms served map-counters)
      (exit exit-code)]))
