@@ -307,6 +307,15 @@
     (define step (cadr match-block))
     (check-true (string-contains? step "continue-on-error: true"))
     (check-true (string-contains? step "shell: bash"))
+    ;; W1a round 2 (smoke-7, run 41985193945): the resolve invocation must
+    ;; bind the job-local install map under RUNNER_TEMP, and must NOT
+    ;; pre-create it (build-install-map! materializes the directory itself).
+    (check-true
+     (string-contains? step "--install-map-dir \"$RUNNER_TEMP/compiled-root-install-map\"")
+     "the resolve invocation must activate the job-local install map (two verified map roots)")
+    (check-false
+     (string-contains? step "mkdir -p \"$RUNNER_TEMP/compiled-root-install-map\"")
+     "resolve self-creates the install map (no redundant workflow mkdir)")
     (define run-match (regexp-match #px"(?s:        run: \\|\n(.*))" step))
     (check-not-false run-match)
     (define script (string-replace (cadr run-match) "${{ matrix.shard }}" "0"))
@@ -342,6 +351,24 @@
                   0
                   (file->string log))
     (check-equal? (car (file->value flags)) 'compiled-root-flags)
+    ;; W1a round 2: the payload the shard launcher consumes must carry BOTH
+    ;; verified maps in the -e bootstrap the child actually executes —
+    ;; checkout map FIRST, then the job-local install map. (Local index
+    ;; helper: the module-level string-index-of is defined later in this
+    ;; file's body and is not yet initialized inside this early test-case.)
+    (define (boot-index needle)
+      (let loop ([i 0])
+        (cond
+          [(> (+ i (string-length needle)) (string-length boot-text)) -1]
+          [(equal? (substring boot-text i (+ i (string-length needle))) needle) i]
+          [else (loop (add1 i))])))
+    (define boot-text (cadr (list-ref (file->value flags) 4)))
+    (define boot-map-at (boot-index (path->string (build-path runner "compiled-root-map"))))
+    (define boot-install-at
+      (boot-index (path->string (build-path runner "compiled-root-install-map"))))
+    (check-true (>= boot-map-at 0) "child flags must carry the checkout map")
+    (check-true (>= boot-install-at 0) "child flags must carry the job-local install map")
+    (check-true (< boot-map-at boot-install-at) "map-first order must hold in the child flags")
     (define stale-bytes (file->bytes flags))
     (call-with-output-file output void #:exists 'truncate)
     (environment-variables-set! env #"VERIFIED_ROOT" (path->bytes (build-path runner "missing-root")))
