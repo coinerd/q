@@ -1562,3 +1562,24 @@
               "the prepared artifact must ship the complete store, hidden files included")
   (check-false (string-contains? prepare "include-hidden-files: false")
                "the silent hidden-file pruning must not survive"))
+
+;; W1a round 2 (smoke-7, run 41985193945): the merged round-1 repair was
+;; INERT in CI — the resolve step never passed --install-map-dir, so launch
+;; roots stayed checkout-map-only (shard timeouts 88/94/79, same class as
+;; smoke-6). Pin the consumer activation wiring: the resolve invocation
+;; must bind the job-local install map under RUNNER_TEMP, and the workflow
+;; must NOT pre-create that directory (build-install-map! materializes it
+;; itself; a redundant mkdir would only mask a resolver regression).
+(test-case "resolve step wires the job-local install map (W1a round 2, smoke-7)"
+  (define ci (file->string w1a-ci-yml))
+  (define resolve-block
+    (cadr
+     (regexp-match
+      #px"(?s:      - name: Resolve the verified compiled root \\(W4 activation\\)\n(.*?)      - name:)"
+      ci)))
+  (check-true
+   (string-contains? resolve-block "--install-map-dir \"$RUNNER_TEMP/compiled-root-install-map\"")
+   "the CI resolve step must activate the job-local install map (two verified map roots)")
+  (check-false
+   (string-contains? resolve-block "mkdir -p \"$RUNNER_TEMP/compiled-root-install-map\"")
+   "resolve self-creates the install map (no redundant workflow mkdir)"))
