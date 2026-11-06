@@ -2550,6 +2550,306 @@
       (real->decimal-string served-ms 0)
       (real->decimal-string base-ms 0))))
 
+  ;; ------------- Round-3: install-map enumeration loudness -------------
+  ;;
+  ;; PLAN-A-install-map-loudness.md (amended, review round 1), pinned
+  ;; red-first here:
+  ;;   1. install-collection-roots sets an install-enumeration-diag record
+  ;;      (complete skip counts, capped detail lists): a skipped link
+  ;;      file, a rejected entry and an unlistable 'root dir are counted;
+  ;;      non-candidates (e.g. files under a 'root dir) are not skips;
+  ;;   2. build-install-map! emits the enumeration line + skip details
+  ;;      from that record, or the injected-roots line when the roots
+  ;;      came in via #:collection-roots, plus one per-root walk line
+  ;;      BEFORE the inventory loop — every new line carries the
+  ;;      ci-compiled-root: prefix;
+  ;;   3. a walk failure on a declared root is COUNTED-AND-LOUD: resolve
+  ;;      still succeeds (a coverage gap, never a fatal resolve failure —
+  ;;      the fail-closed integrity steps are untouched);
+  ;;   4. resolve parameterizes the enumeration record away: injected
+  ;;      roots never observe a stale record, nothing leaks outward.
+  (define enum-base (make-temporary-file "qcr-enum~a" 'directory))
+
+  ;; chmod 000 blocks non-root descent (uid-1000 CI runners); a root
+  ;; runner would sail through, so probe the actual behavior once and
+  ;; guard the permission fixtures on it (dynamic-wind restores the
+  ;; permissions even on assertion failure).
+  (define (chmod-blocks?)
+    (define probe (make-temporary-file "qcr-chmodprobe~a" 'directory enum-base))
+    (dynamic-wind (lambda () (system*/exit-code (find-executable-path "chmod") "000" probe))
+                  (lambda ()
+                    (with-handlers ([exn:fail? (lambda (_) #t)])
+                      (directory-list probe)
+                      #f))
+                  (lambda ()
+                    (system*/exit-code (find-executable-path "chmod") "u+w" probe)
+                    (delete-directory probe))))
+
+  (define (run-enumeration! paths links)
+    (parameterize ([current-library-collection-paths paths]
+                   [current-library-collection-links links])
+      (define rs (install-collection-roots))
+      (values rs (install-enumeration-diagnostics))))
+
+  (define (dir-string-normalize s)
+    (regexp-replace #rx"/+$" s ""))
+
+  (define (root-string-matches? rs p)
+    (define want (dir-string-normalize (path->string (simplify-path (path->complete-path p)))))
+    (for/or ([r (in-list (map path->string rs))])
+      (string=? (dir-string-normalize r) want)))
+
+  (test-case "enumeration diagnostics on a healthy pair of primary roots"
+    (define r0 (build-path enum-base "t0-r0"))
+    (define r1 (build-path enum-base "t0-r1"))
+    (make-directory* r0)
+    (make-directory* r1)
+    (define-values (rs diag) (run-enumeration! (list r0 r1) '()))
+    (check-true (install-enumeration-diag? diag))
+    (check-equal? (install-enumeration-diag-roots diag) 2)
+    (check-equal? (install-enumeration-diag-primary-count diag) 2)
+    (check-equal? (install-enumeration-diag-primary-missing diag) 0)
+    (check-equal? (install-enumeration-diag-link-count diag) 0)
+    (check-equal? (install-enumeration-diag-link-skip-count diag) 0)
+    (check-equal? (install-enumeration-diag-entry-skip-count diag) 0)
+    (check-equal? (install-enumeration-diag-root-skip-count diag) 0)
+    (check-equal? (install-enumeration-diag-link-skips diag) '())
+    (check-equal? (install-enumeration-diag-entry-skips diag) '())
+    (check-equal? (install-enumeration-diag-root-skips diag) '())
+    (check-equal? (length rs) 2))
+
+  (test-case "a missing primary path is counted without being dropped"
+    (define r0 (build-path enum-base "t0b-r0"))
+    (define vanished (build-path enum-base "t0b-vanished"))
+    (make-directory* r0)
+    (define-values (rs diag) (run-enumeration! (list r0 vanished) '()))
+    (check-equal? (install-enumeration-diag-primary-count diag) 2)
+    (check-equal? (install-enumeration-diag-primary-missing diag) 1)
+    ;; observation only: the missing path is still appended as a root
+    (check-equal? (install-enumeration-diag-roots diag) 2)
+    (check-true (root-string-matches? rs vanished) "the missing primary path must still be appended"))
+
+  (test-case "enumeration counts corrupt, shape-rejected and missing link files"
+    (define corrupt (build-path enum-base "t1-corrupt.rktd"))
+    (call-with-output-file corrupt #:exists 'truncate (lambda (o) (display "(unclosed" o)))
+    (define shape-bad (build-path enum-base "t1-shape.rktd"))
+    (call-with-output-file shape-bad #:exists 'truncate (lambda (o) (write '(flat-symbol) o)))
+    (define missing-link (build-path enum-base "t1-missing.rktd"))
+    (define good-link (build-path enum-base "t1-good.rktd"))
+    ;; the 'up element is the only spelling whose target exists under the
+    ;; production base rule (base = the link file spelled as a directory,
+    ;; so any ordinary element lands UNDER a file and can never exist);
+    ;; it exercises the resolvable-entry branch without changing control
+    ;; flow. Probe-verified on 8.10: real links.rktd entries are nested
+    ;; (id (elem ...)) and every real entry contract-violates today —
+    ;; which is exactly what the skip counts must make loud.
+    (call-with-output-file good-link #:exists 'truncate (lambda (o) (write '((t1lib up)) o)))
+    (define-values (rs diag) (run-enumeration! '() (list corrupt shape-bad missing-link good-link)))
+    (check-equal? (install-enumeration-diag-link-count diag) 4)
+    (check-equal? (install-enumeration-diag-link-skip-count diag) 3)
+    (check-equal? (length (install-enumeration-diag-link-skips diag)) 3)
+    (check-equal? (install-enumeration-diag-entry-skip-count diag) 0)
+    ;; the resolvable entry's target ('up = the link file's own
+    ;; directory) is still a declared root
+    (check-true (root-string-matches? rs enum-base) "the valid link file's target must stay a root")
+    (define (skip-reason p)
+      (define hit
+        (for/first ([s (in-list (install-enumeration-diag-link-skips diag))]
+                    #:when (equal? (car s) p))
+          (cadr s)))
+      hit)
+    (check-equal? (skip-reason missing-link) "missing or non-path link file")
+    (check-equal? (skip-reason shape-bad) "shape rejected (not a list of (element ...) pairs)")
+    ;; the accurate reason for a corrupt file is the actual read error,
+    ;; never the shape-gate string (review blocker 1)
+    (define corrupt-reason (skip-reason corrupt))
+    (check-true (and (string? corrupt-reason)
+                     (not (string=? corrupt-reason ""))
+                     (not (string=? corrupt-reason
+                                    "shape rejected (not a list of (element ...) pairs)")))
+                (format "corrupt link reason: ~s" corrupt-reason)))
+
+  (test-case "enumeration counts entry skips but keeps resolvable roots"
+    (define link-t2 (build-path enum-base "t2.rktd"))
+    (call-with-output-file link-t2
+                           #:exists 'truncate
+                           (lambda (o)
+                             (write '((t2lib up) (t2lib bad-symbol-element)
+                                                 (t2lib ("nested" "elements"))
+                                                 (t2lib "t2-missing-dir"))
+                                    o)))
+    (define-values (rs diag) (run-enumeration! '() (list link-t2)))
+    (check-equal? (install-enumeration-diag-entry-skip-count diag) 3)
+    (check-equal? (length (install-enumeration-diag-entry-skips diag)) 3)
+    (check-equal? (install-enumeration-diag-link-skip-count diag) 0)
+    (check-equal? (install-enumeration-diag-roots diag) 1)
+    ;; the 'up entry resolves to the link file's own directory: a real
+    ;; declared root survives alongside the skips
+    (check-true (root-string-matches? rs enum-base)
+                "the resolvable root must survive the bad entries")
+    ;; nested element list -> build-path contract violation (THE real
+    ;; links.rktd shape, probe-verified): counted with the exception
+    ;; message, the bad ENTRY as the path element
+    (define nested-skip
+      (for/first ([s (in-list (install-enumeration-diag-entry-skips diag))]
+                  #:when (equal? (car s) (list 't2lib (list "nested" "elements"))))
+        s))
+    (check-not-false nested-skip)
+    (check-true (and (string? (cadr nested-skip)) (not (string=? (cadr nested-skip) ""))))
+    ;; symbol element -> build-path raise -> counted with the exception
+    ;; message as the reason, the bad ENTRY as the path element
+    (define raise-skip
+      (for/first ([s (in-list (install-enumeration-diag-entry-skips diag))]
+                  #:when (equal? (car s) (list 't2lib 'bad-symbol-element)))
+        s))
+    (check-not-false raise-skip)
+    (check-true (and (string? (cadr raise-skip)) (not (string=? (cadr raise-skip) ""))))
+    (check-false (string-prefix? (cadr raise-skip) "missing: "))
+    ;; missing target dir -> counted with the LINK FILE as the path
+    ;; element and the accurate "missing: <dir>" reason
+    (define missing-skip
+      (for/first ([s (in-list (install-enumeration-diag-entry-skips diag))]
+                  #:when (equal? (car s) link-t2))
+        s))
+    (check-not-false missing-skip)
+    (check-true (string-prefix? (cadr missing-skip) "missing: ")
+                (format "missing-entry reason: ~s" (cadr missing-skip)))
+    (check-true (string-contains? (cadr missing-skip) "t2-missing-dir")))
+
+  ;; T3/T8 share the permission-fixture guard: on a root runner chmod 000
+  ;; does not block, so the fixtures would observe nothing.
+  (define enum-chmod-blocks? (chmod-blocks?))
+  (unless enum-chmod-blocks?
+    (eprintf
+     "SKIP install-map enumeration permission fixtures: chmod 000 does not block this runner\n"))
+
+  (when enum-chmod-blocks?
+    (test-case "enumeration counts a chmod-000 root dir as a root-skip"
+      ;; 'up lifts the target out from under the link file (see the T1
+      ;; note): the 'root branch then lists the locked dir, whose
+      ;; directory-list raises (probe-verified: chmod-000 blocks
+      ;; directory-list)
+      (define link-t3 (build-path enum-base "t3.rktd"))
+      (define locked (build-path enum-base "t3-locked"))
+      (make-directory* locked)
+      (call-with-output-file link-t3
+                             #:exists 'truncate
+                             (lambda (o) (write '((root up "t3-locked")) o)))
+      (dynamic-wind (lambda () (system*/exit-code (find-executable-path "chmod") "000" locked))
+                    (lambda ()
+                      (define-values (_rs diag) (run-enumeration! '() (list link-t3)))
+                      (check-equal? (install-enumeration-diag-root-skip-count diag) 1)
+                      (check-equal? (length (install-enumeration-diag-root-skips diag)) 1)
+                      (define skip (car (install-enumeration-diag-root-skips diag)))
+                      ;; subtype-agnostic: the reason is the actual (non-empty)
+                      ;; filesystem exception message, the path is the locked root
+                      (check-equal? (path->string (car skip))
+                                    (path->string (simplify-path (path->complete-path locked))))
+                      (check-true (and (string? (cadr skip)) (not (string=? (cadr skip) "")))))
+                    (lambda () (system*/exit-code (find-executable-path "chmod") "u+w" locked)))))
+
+  (test-case "install-walk-zos reports a stubbed walk failure without raising"
+    (define-values (zos raised? msg)
+      (parameterize ([install-walker (lambda (_)
+                                       (raise (exn:fail "simulated walk failure"
+                                                        (current-continuation-marks))))])
+        (install-walk-zos (build-path enum-base "t4-root"))))
+    (check-equal? zos '())
+    (check-true raised?)
+    (check-equal? msg "simulated walk failure"))
+
+  (test-case "a stubbed walk failure still resolves (counted-and-loud, decision 6)"
+    (define t5-root (build-path enum-base "t5-root"))
+    (make-directory* t5-root)
+    (define out (open-output-string))
+    (define r5
+      (parameterize ([current-error-port out]
+                     [install-walker (lambda (_)
+                                       (raise (exn:fail "simulated walk failure"
+                                                        (current-continuation-marks))))])
+        (resolve-compiled-root! #:final-dir final-dir
+                                #:checkout checkout-b
+                                #:trusted-producer-labels '("q-trusted-producer")
+                                #:map-dir (build-path enum-base "t5-cmap")
+                                #:install-map-dir (build-path enum-base "t5-install-map")
+                                #:collection-roots (list t5-root))))
+    (check-true (eq? (compiled-root-reason r5) #t) (reason->string (compiled-root-reason r5)))
+    (define log (get-output-string out))
+    (check-true (string-contains? log "0 members, 0 links, inventory e3b0c44298fc")
+                "the empty-inventory totals line must stay byte-identical")
+    (check-true (string-contains? log "walk-raised yes: simulated walk failure"))
+    (check-true (string-contains? log "enumeration roots injected (#:collection-roots): 1 roots")))
+
+  (test-case "resolve isolates a stale enumeration diagnostic (no leak)"
+    (define t6-root (build-path enum-base "t6-root"))
+    (make-directory* t6-root)
+    (define stale-skip (list (list "stale-path" "stale reason")))
+    (define stale (install-enumeration-diag 99 9 9 9 9 stale-skip 9 stale-skip 9 stale-skip))
+    (define before (install-enumeration-diagnostics))
+    (define out (open-output-string))
+    (define r6
+      (parameterize ([current-error-port out]
+                     [install-enumeration-diagnostics stale])
+        (resolve-compiled-root! #:final-dir final-dir
+                                #:checkout checkout-b
+                                #:trusted-producer-labels '("q-trusted-producer")
+                                #:map-dir (build-path enum-base "t6-cmap")
+                                #:install-map-dir (build-path enum-base "t6-install-map")
+                                #:collection-roots (list t6-root))))
+    (check-true (eq? (compiled-root-reason r6) #t) (reason->string (compiled-root-reason r6)))
+    (define log (get-output-string out))
+    (check-true (string-contains? log "enumeration roots injected (#:collection-roots): 1 roots"))
+    (check-false (string-contains? log "install map enumeration")
+                 "the stale record must not produce an enumeration line")
+    (check-false (string-contains? log "link-skip") "the stale record must not be emitted")
+    (check-false (string-contains? log "entry-skip") "the stale record must not be emitted")
+    (check-false (string-contains? log "root-skip") "the stale record must not be emitted")
+    (check-true (string-contains? log "walk-raised no"))
+    (check-equal? (install-enumeration-diagnostics) before "no diagnostic may leak outward"))
+
+  (test-case "build-install-map! emits the full enumeration line and skip details"
+    (define t7-root (build-path enum-base "t7-root"))
+    (make-directory* t7-root)
+    (define synthetic
+      (install-enumeration-diag 1
+                                1
+                                0
+                                2
+                                1
+                                (list (list "qcr-link" "missing or non-path link file"))
+                                0
+                                '()
+                                0
+                                '()))
+    (define out (open-output-string))
+    (define inv
+      (parameterize ([current-error-port out]
+                     [install-enumeration-diagnostics synthetic])
+        (build-install-map! #:map-dir (build-path enum-base "t7-install-map")
+                            #:collection-roots (list t7-root))))
+    (define log (get-output-string out))
+    (check-equal? (hash-ref inv 'members) 0)
+    (check-true
+     (string-contains?
+      log
+      "install map enumeration: 1 roots, primary 1 (0 missing), 2 link files, 1 link skips, 0 entry skips, 0 root skips"))
+    (check-true (string-contains? log "link-skip qcr-link: missing or non-path link file"))
+    (check-true (string-contains? log "walk-raised no"))
+    (check-true (string-contains? log "0 members, 0 links, inventory e3b0c44298fc")))
+
+  (when enum-chmod-blocks?
+    (test-case "the real walker reports (not swallows) a chmod-000 descent"
+      (define locked-root (build-path enum-base "t8-locked"))
+      (make-directory* locked-root)
+      (dynamic-wind (lambda () (system*/exit-code (find-executable-path "chmod") "000" locked-root))
+                    (lambda ()
+                      (define-values (zos raised? msg) (install-walk-zos locked-root))
+                      (check-equal? zos '())
+                      (check-true raised?)
+                      (check-true (and (string? msg) (not (string=? msg "")))))
+                    (lambda ()
+                      (system*/exit-code (find-executable-path "chmod") "u+w" locked-root)))))
+
   (test-case "CLI resolve+launch carry the install map: flags payload and record counters"
     (define colls (make-install-coll! "cli" 'install-cli 'source-cli))
     (stamp-install-fresh! colls)
