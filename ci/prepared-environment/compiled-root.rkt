@@ -693,6 +693,17 @@
   (define lk-zo (build-path map-dir "compiled" "install-load-keys_rkt.zo"))
   (unless (file-exists? lk-zo)
     (error 'build-install-map! "compiled install transfer module missing: ~a" lk-zo))
+  ;; W1a observability (smoke-8: install-map-hits=0 across ~260k unmapped
+  ;; loads with the map active in CI): the member count must be visible in
+  ;; the resolve log so empty enumeration is distinguishable from a
+  ;; serving/spelling mismatch without shipping the map. sha256-bytes
+  ;; returns the hex digest STRING (see the per-load guards), used here
+  ;; directly.
+  (eprintf "ci-compiled-root: install map ~a: ~a members, ~a links, inventory ~a\n"
+           (path->string (simplify-path (path->complete-path map-dir)))
+           (length inventoried)
+           (length mapped)
+           (substring inventory-digest 0 (min 12 (string-length inventory-digest))))
   ;; immutability: revoke all write bits recursively (POSIX chmod)
   (unless (zero? (system*/exit-code (find-executable-path "chmod") "-R" "a-w" map-dir))
     (error 'build-install-map! "failed to revoke write permissions: ~a" map-dir))

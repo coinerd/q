@@ -643,6 +643,19 @@ jobs:
           path: ${{ runner.temp }}/compiled-root-map/
           if-no-files-found: ignore
 
+      # W1a install-map observability (smoke-8: install-map-hits=0 with
+      # the map active): upload the job-local installation map (per-zo
+      # links + inventory + transfer module) so an empty enumeration is
+      # distinguishable from a serving/spelling mismatch without another
+      # round-trip. Read-only artifact; never consumed as evidence input.
+      - name: Upload compiled-root install map
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compiled-root-install-map-${{ github.run_id }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/compiled-root-install-map/
+          if-no-files-found: ignore
+
       # v1.00.30 W0 review-fix: shard-side run-SHA attestation.  The
       # aggregate step must never stamp a SHA onto shard evidence itself
       # (that made the binding self-referential); each shard records the
