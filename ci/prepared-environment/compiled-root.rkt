@@ -2,6 +2,13 @@
 
 ;; q/ci/prepared-environment/compiled-root.rkt — v1.00.30 W3
 ;;
+;; Round-3 amendment (install-map enumeration loudness,
+;; PLAN-A-install-map-loudness.md): enumeration and walk failures are
+;; counted-and-loud (install-enumeration-diag, install-walk-zos). A walk
+;; failure on a declared root is a COVERAGE gap reported on the
+;; ci-compiled-root: log channel, never a resolve failure; all
+;; fail-closed integrity steps are untouched.
+;;
 ;; Trusted compiled-root prototype: relocation-safe producer and
 ;; consumer/resolver for an IMMUTABLE, read-only compiled root outside
 ;; the checkout (Racket 8.10 `current-compiled-file-roots` semantics).
@@ -190,7 +197,13 @@
          compiled-root-install-map-dir
          ;; W1a: exposed for hermetic fixture drivers in the test suite
          build-install-map!
+         ;; side effect: sets install-enumeration-diagnostics on every call
          install-collection-roots
+         ;; round-3 observability: enumeration diagnostics + walk seam
+         (struct-out install-enumeration-diag)
+         install-enumeration-diagnostics
+         install-walk-zos
+         install-walker
          with-compiled-root
          reason->string
          ;; v1.00.32 W2 repair (trial c01 window-2, run 41271542715):
@@ -297,7 +310,49 @@
 (define (reset-telemetry! [t (compiled-root-telemetry 0 0 0 0 "none")])
   (telemetry t)
   ;; W1a: the additive per-root counters reset with the envelope struct
-  (telemetry-map-counters (compiled-root-map-counters 0 0 0)))
+  (telemetry-map-counters (compiled-root-map-counters 0 0 0))
+  ;; round-3: a stale enumeration record must not survive a reset
+  (install-enumeration-diagnostics #f))
+
+;; ------------------------------------------------- enumeration diagnostics
+;;
+;; Round-3 amendment (install-map enumeration loudness): the resolve log
+;; must attribute an empty or small install map to its cause. Every
+;; DECLARED enumeration candidate that gets dropped is counted here — a
+;; link file that is unreadable/missing/shape-rejected, an entry whose
+;; path fails to resolve or whose target is missing, and a 'root dir
+;; that fails to list — while non-candidates (files under a 'root dir)
+;; are not skips. The skip counts are complete; the per-skip detail
+;; LISTS are capped so a pathological environment cannot flood the log.
+
+(struct install-enumeration-diag
+        (roots ; COUNT of deduped declared roots
+         primary-count ; primary collection paths seen
+         primary-missing ; primary paths absent on disk (observation only)
+         link-count ; collection link files examined
+         link-skip-count ; link files dropped (complete count)
+         link-skips ; capped (path reason) detail pairs
+         entry-skip-count ; entries dropped (complete count)
+         entry-skips ; capped (path reason) detail pairs
+         root-skip-count ; 'root dirs that failed to list (complete count)
+         root-skips) ; capped (path reason) detail pairs
+  #:transparent)
+
+(define install-enumeration-diagnostics (make-parameter #f))
+
+(define install-diag-skip-cap 8)
+(define install-diag-reason-max 96)
+
+(define (install-diag-truncate s)
+  (if (> (string-length s) install-diag-reason-max)
+      (substring s 0 install-diag-reason-max)
+      s))
+
+;; capped append: counts stay complete, detail lists stop at the cap
+(define (install-diag-add-skip skips path reason)
+  (if (< (length skips) install-diag-skip-cap)
+      (append skips (list (list path (install-diag-truncate reason))))
+      skips))
 
 (define (reason->string r)
   (if (eq? r #t)
@@ -554,73 +609,145 @@
 ;;   "every reachable zo is inventoried" goal. Missing entries are
 ;;   skipped, never fatal: an uninstall-only partial environment must
 ;;   still yield a valid (possibly smaller) inventory.
+;;   Round 3: every dropped candidate is counted and — capped —
+;;   detailed in the install-enumeration-diagnostics record set on every
+;;   call: a link file that is unreadable/missing/shape-rejected, an
+;;   entry whose path fails to resolve or whose target is missing, and
+;;   a 'root dir that fails to list. Skips are dropped DECLARED
+;;   candidates; non-candidates (files under a 'root dir) are not skips.
 (define (install-collection-roots)
   (define roots '())
+  (define primary-count 0)
+  (define primary-missing 0)
+  (define link-count 0)
+  (define link-skip-count 0)
+  (define link-skips '())
+  (define entry-skip-count 0)
+  (define entry-skips '())
+  (define root-skip-count 0)
+  (define root-skips '())
   (for ([p (in-list (current-library-collection-paths))])
+    (set! primary-count (add1 primary-count))
+    (unless (directory-exists? p)
+      (set! primary-missing (add1 primary-missing)))
     (set! roots (cons p roots)))
-  (for ([f (in-list (current-library-collection-links))]
-        #:when (and (path? f) (file-exists? f)))
-    (define entries
-      (with-handlers ([exn:fail? (lambda (_) '())])
-        (file->value f)))
-    (when (and (list? entries) (andmap (lambda (e) (and (pair? e) (list? (cdr e)))) entries))
-      (define base (path->directory-path (simplify-path (path->complete-path f))))
-      (for ([e (in-list entries)])
-        (define dir
-          (with-handlers ([exn:fail? (lambda (_) #f)])
-            (simplify-path (path->complete-path (apply build-path
-                                                       base
-                                                       (for/list ([c (in-list (cdr e))])
-                                                         (if (bytes? c)
-                                                             (bytes->path-element c)
-                                                             c)))))))
-        (when (and dir (directory-exists? dir))
-          (if (eq? (car e) 'root)
-              (for ([d (in-list (with-handlers ([exn:fail:filesystem? (lambda (_) '())])
+  (for ([f (in-list (current-library-collection-links))])
+    (set! link-count (add1 link-count))
+    (cond
+      [(and (path? f) (file-exists? f))
+       (define entries
+         (with-handlers ([exn:fail? (lambda (ex)
+                                      (set! link-skip-count (add1 link-skip-count))
+                                      (set! link-skips
+                                            (install-diag-add-skip link-skips f (exn-message ex)))
+                                      '())])
+           (file->value f)))
+       (if (and (list? entries) (andmap (lambda (e) (and (pair? e) (list? (cdr e)))) entries))
+           (let ([base (path->directory-path (simplify-path (path->complete-path f)))])
+             (for ([e (in-list entries)])
+               (define-values (dir dir-raise)
+                 (with-handlers ([exn:fail? (lambda (ex) (values #f (exn-message ex)))])
+                   (values
+                    (simplify-path (path->complete-path (apply build-path
+                                                               base
+                                                               (for/list ([c (in-list (cdr e))])
+                                                                 (if (bytes? c)
+                                                                     (bytes->path-element c)
+                                                                     c)))))
+                    #f)))
+               (cond
+                 [dir-raise
+                  (set! entry-skip-count (add1 entry-skip-count))
+                  (set! entry-skips (install-diag-add-skip entry-skips e dir-raise))]
+                 [(directory-exists? dir)
+                  (if (eq? (car e) 'root)
+                      (for ([d (in-list
+                                (with-handlers
+                                    ([exn:fail:filesystem?
+                                      (lambda (ex)
+                                        (set! root-skip-count (add1 root-skip-count))
+                                        (set! root-skips
+                                              (install-diag-add-skip root-skips dir (exn-message ex)))
+                                        '())])
                                   (directory-list dir)))]
-                    #:when (directory-exists? (build-path dir d)))
-                (set! roots (cons (simplify-path (path->complete-path (build-path dir d))) roots)))
-              (set! roots (cons dir roots)))))))
-  (remove-duplicates (reverse roots)))
+                            #:when (directory-exists? (build-path dir d)))
+                        (set! roots
+                              (cons (simplify-path (path->complete-path (build-path dir d))) roots)))
+                      (set! roots (cons dir roots)))]
+                 [else
+                  (set! entry-skip-count (add1 entry-skip-count))
+                  (set! entry-skips
+                        (install-diag-add-skip entry-skips f (format "missing: ~a" dir)))])))
+           (begin
+             (set! link-skip-count (add1 link-skip-count))
+             (set! link-skips
+                   (install-diag-add-skip link-skips
+                                          f
+                                          "shape rejected (not a list of (element ...) pairs)"))))]
+      [else
+       (set! link-skip-count (add1 link-skip-count))
+       (set! link-skips (install-diag-add-skip link-skips f "missing or non-path link file"))]))
+  (define deduped-roots (remove-duplicates (reverse roots)))
+  (install-enumeration-diagnostics (install-enumeration-diag (length deduped-roots)
+                                                             primary-count
+                                                             primary-missing
+                                                             link-count
+                                                             link-skip-count
+                                                             link-skips
+                                                             entry-skip-count
+                                                             entry-skips
+                                                             root-skip-count
+                                                             root-skips))
+  deduped-roots)
 
-;; install-reachable-zos
-;;   Every reachable zo under ROOT: a compiled/ member whose un-munged
-;;   sibling source exists (the source lives in the PARENT of the
-;;   compiled/ directory). Returns (list source-abs-string zo-abs-string)
-;;   pairs in sorted, deterministic order. A zo that is itself a symlink
-;;   is skipped (its bytes are someone else's inventory); a disappearing
-;;   path is skipped, never fatal.
-(define (install-reachable-zos root)
-  (define abs-root (simplify-path (path->complete-path root)))
-  (define pairs '())
-  (define (zo->src zo)
-    (define name (path->string (file-name-from-path zo)))
-    (define src-name
-      (cond
-        [(regexp-match? #rx"_rkt[.]zo$" name) (regexp-replace #rx"_rkt[.]zo$" name ".rkt")]
-        [(regexp-match? #rx"[.]zo$" name) (regexp-replace #rx"[.]zo$" name "")]
-        [else #f]))
-    (and src-name
-         (let ([p (build-path (path->directory-path (path-only zo)) 'up src-name)])
-           (and (file-exists? p) p))))
-  (define (walk! d)
-    (define zos
-      ;; fold-files raises PLAIN exn:fail for "path disappeared" (a root
-      ;; or intermediate removed mid-walk), not an exn:fail:filesystem
-      ;; subtype — probe-verified, so the catch must be exn:fail?.
-      (with-handlers ([exn:fail? (lambda (_) '())])
-        (find-files (lambda (p) (regexp-match? #rx"[.]zo$" (path->string p))) d)))
-    (for ([p (in-list zos)]
-          #:unless (link-exists? p)
-          #:when (file-exists? p)
-          #:when (zo->src p))
-      (define src (zo->src p))
-      (set! pairs
-            (cons (list (path->string (simplify-path (path->complete-path src)))
-                        (path->string (simplify-path (path->complete-path p))))
-                  pairs))))
-  (walk! abs-root)
-  (sort (remove-duplicates pairs) string<? #:key car))
+;; install-walker
+;;   The deterministic walk seam for tests: a one-argument walker
+;;   returning the raw .zo paths under a root. Production never
+;;   parameterizes it (#f = the real find-files walk).
+(define install-walker (make-parameter #f))
+
+;; install-zo->src
+;;   The un-munged sibling source of a zo path, or #f when the name is
+;;   not a compiled form or the sibling source is missing.
+(define (install-zo->src zo)
+  (define name (path->string (file-name-from-path zo)))
+  (define src-name
+    (cond
+      [(regexp-match? #rx"_rkt[.]zo$" name) (regexp-replace #rx"_rkt[.]zo$" name ".rkt")]
+      [(regexp-match? #rx"[.]zo$" name) (regexp-replace #rx"[.]zo$" name "")]
+      [else #f]))
+  (and src-name
+       (let ([p (build-path (path->directory-path (path-only zo)) 'up src-name)])
+         (and (file-exists? p) p))))
+
+;; install-walk-zos
+;;   The per-root walk step of the install-map enumeration with the
+;;   failure made VISIBLE: returns (values zos raised? message) — '() +
+;;   #t + the truncated exception message on failure. The catch breadth is
+;;   UNCHANGED (exn:fail?): fold-files raises PLAIN exn:fail for "path
+;;   disappeared" (a root or intermediate removed mid-walk), not an
+;;   exn:fail:filesystem subtype — probe-verified. A walk failure on a
+;;   declared root is a counted-and-loud COVERAGE gap, not a resolve
+;;   failure (round-3 decision 6).
+(define (install-walk-zos root)
+  (define walker
+    (or (install-walker)
+        (lambda (d) (find-files (lambda (p) (regexp-match? #rx"[.]zo$" (path->string p))) d))))
+  (with-handlers ([exn:fail? (lambda (ex) (values '() #t (install-diag-truncate (exn-message ex))))])
+    (values (walker root) #f #f)))
+
+;; install-zos->pairs
+;;   The per-zo filtering of the walked zos (unchanged mechanics): skip
+;;   links, disappearing paths and zos without an un-munged sibling
+;;   source; return (list source-abs-string zo-abs-string) pairs.
+(define (install-zos->pairs zos)
+  (for/list ([p (in-list zos)]
+             #:unless (link-exists? p)
+             #:when (file-exists? p)
+             #:when (install-zo->src p))
+    (define src (install-zo->src p))
+    (list (path->string (simplify-path (path->complete-path src)))
+          (path->string (simplify-path (path->complete-path p))))))
 
 ;; build-install-map!
 ;;   Resolve-time install-map materialization (job-local, deterministic,
@@ -629,8 +756,12 @@
 ;;   transfer module (same authenticate-then-eval discipline as the
 ;;   checkout table), revoke write permission, and return the inventory
 ;;   hash (map-dir, canonical inventory digest, member count, transfer
-;;   field). Any failure raises — the resolver converts it to a
-;;   fail-closed resolve.
+;;   field). Round 3: before the inventory loop the enumeration context
+;;   is emitted on the ci-compiled-root: channel — skip counts + capped
+;;   detail lines from the install-enumeration-diagnostics record, or
+;;   the injected-roots line, plus one walk-outcome line per root — so
+;;   the diagnosis survives later fail-closed raises. Any failure
+;;   raises — the resolver converts it to a fail-closed resolve.
 (define (build-install-map! #:map-dir map-dir #:collection-roots roots)
   ;; fresh materialization: a previous job's links must never leak
   ;; non-inventoried members into this inventory
@@ -638,9 +769,50 @@
     (system*/exit-code (find-executable-path "chmod") "-R" "u+w" map-dir)
     (delete-directory/files map-dir))
   (make-directory* map-dir)
+  ;; round-3 observability: the enumeration context rides the
+  ;; install-enumeration-diagnostics parameter (set by
+  ;; install-collection-roots; #f when the roots were injected — the
+  ;; injected spelling is logged instead, so an empty map is
+  ;; attributable either way). All new lines carry the ci-compiled-root:
+  ;; prefix so CI log diagnosis can grep it.
+  (define diag (install-enumeration-diagnostics))
+  (if diag
+      (let ([d diag])
+        (eprintf (string-append "ci-compiled-root: install map enumeration:"
+                                " ~a roots, primary ~a (~a missing), ~a link files,"
+                                " ~a link skips, ~a entry skips, ~a root skips\n")
+                 (install-enumeration-diag-roots d)
+                 (install-enumeration-diag-primary-count d)
+                 (install-enumeration-diag-primary-missing d)
+                 (install-enumeration-diag-link-count d)
+                 (install-enumeration-diag-link-skip-count d)
+                 (install-enumeration-diag-entry-skip-count d)
+                 (install-enumeration-diag-root-skip-count d))
+        (for ([s (in-list (install-enumeration-diag-link-skips d))])
+          (eprintf "ci-compiled-root:   link-skip ~a: ~a\n" (car s) (cadr s)))
+        (for ([s (in-list (install-enumeration-diag-entry-skips d))])
+          (eprintf "ci-compiled-root:   entry-skip ~a: ~a\n" (car s) (cadr s)))
+        (for ([s (in-list (install-enumeration-diag-root-skips d))])
+          (eprintf "ci-compiled-root:   root-skip ~a: ~a\n" (car s) (cadr s))))
+      (eprintf "ci-compiled-root: enumeration roots injected (#:collection-roots): ~a roots\n"
+               (length roots)))
+  ;; per-root walk outcome BEFORE the inventory loop: the diagnosis must
+  ;; survive later fail-closed raises (walk-raised yes = a coverage gap
+  ;; logged loudly; the resolve itself still succeeds, decision 6)
   (define members
     (for/list ([root (in-list roots)])
-      (install-reachable-zos root)))
+      (define abs-root (simplify-path (path->complete-path root)))
+      (define-values (zos walk-raised? walk-msg) (install-walk-zos abs-root))
+      (define root-pairs (install-zos->pairs zos))
+      (eprintf "ci-compiled-root: root ~a: ~a zos, ~a reachable, walk-raised ~a~a\n"
+               (path->string abs-root)
+               (length zos)
+               (length root-pairs)
+               (if walk-raised? "yes" "no")
+               (if walk-raised?
+                   (string-append ": " walk-msg)
+                   ""))
+      root-pairs))
   (define pairs (sort (remove-duplicates (apply append members)) string<? #:key car))
   ;; inventory FIRST (digests before links): a zo that disappears between
   ;; inventory and linking makes the resolve fail closed at the link step
@@ -883,11 +1055,15 @@
     ;; (never a partially verified two-map activation).
     (define validated+
       (if install-map-dir
-          (hash-set validated
-                    'install-map
-                    (build-install-map! #:map-dir install-map-dir
-                                        #:collection-roots
-                                        (or install-roots (install-collection-roots))))
+          ;; round-3: the enumeration record never leaks into or out of
+          ;; this branch — injected roots must not observe a stale
+          ;; record, and parameterize unwinds on raise (no leak path)
+          (parameterize ([install-enumeration-diagnostics #f])
+            (hash-set validated
+                      'install-map
+                      (build-install-map! #:map-dir install-map-dir
+                                          #:collection-roots
+                                          (or install-roots (install-collection-roots)))))
           validated))
     (compiled-root validated+
                    (simplify-path (path->complete-path final-dir))

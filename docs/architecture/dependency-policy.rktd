@@ -441,6 +441,10 @@
        (risk
         . "Test cohort measurement report builder (census/final-cohort aggregation, per-row verdict binding); grew with the v1.00.28 measurement campaign; score ~20888")
        (owner . "tools"))
+      ("ci/prepared-environment/compiled-root.rkt"
+       (risk
+        . "Trusted compiled-root producer/consumer: launch-root verification, per-load digest table, install-map enumeration/build with round-3 loud enumeration/walk diagnostics; grew across the W1a C-lane repair rounds (#9876-#9888) by authorized scoped rounds; score ~22010")
+       (owner . "ci"))
       ("info.rkt"
        (risk
         . "Package metadata (package definition, compile-omit-paths) — not decomposable; the score is churn-driven, not size or complexity: touched by nearly every release/version-bump commit (713) against 30 LOC; score ~21390")
