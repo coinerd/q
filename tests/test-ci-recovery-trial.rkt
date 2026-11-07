@@ -896,7 +896,7 @@
                              "--arch"
                              "x64"
                              "--recipe-revision"
-                             "trial-addon-relative-r1"
+                             "trial-addon-relative-r2"
                              "--policy-fingerprint"
                              "policy")
                        flags))))
@@ -1551,9 +1551,9 @@
   (check-false (string-contains? ci "--addon-store \"${PLTADDONDIR")
                "installed-store identity measurement must not survive (smoke 41192722012 divergence)")
   ;; The digest recipe is unchanged — same strength, new measurement point.
-  (check-equal? (length (regexp-match* #rx"trial-addon-relative-r1" ci))
+  (check-equal? (length (regexp-match* #rx"trial-addon-relative-r2" ci))
                 3
-                "the r1 recipe revision must be used by all three emit sites")
+                "the r2 recipe revision must be used by all three emit sites")
   ;; The pack ships hidden files (include-hidden-files: true): the default
   ;; silently pruned them, which is exactly the smoke-run divergence, and
   ;; the producer↔consumer digest equality is the permanent completeness
@@ -1577,9 +1577,8 @@
      (regexp-match
       #px"(?s:      - name: Resolve the verified compiled root \\(W4 activation\\)\n(.*?)      - name:)"
       ci)))
-  (check-true
-   (string-contains? resolve-block "--install-map-dir \"$RUNNER_TEMP/compiled-root-install-map\"")
-   "the CI resolve step must activate the job-local install map (two verified map roots)")
-  (check-false
-   (string-contains? resolve-block "mkdir -p \"$RUNNER_TEMP/compiled-root-install-map\"")
-   "resolve self-creates the install map (no redundant workflow mkdir)"))
+  (check-true (string-contains? resolve-block
+                                "--install-map-dir \"$RUNNER_TEMP/compiled-root-install-map\"")
+              "the CI resolve step must activate the job-local install map (two verified map roots)")
+  (check-false (string-contains? resolve-block "mkdir -p \"$RUNNER_TEMP/compiled-root-install-map\"")
+               "resolve self-creates the install map (no redundant workflow mkdir)"))

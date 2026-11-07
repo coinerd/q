@@ -95,7 +95,7 @@ runs:
       with:
         path: ${{ steps.tuple.outputs.addon_path }}
         key: >-
-          racket-addon-v3-${{ runner.os }}-${{ inputs.architecture }}-${{ inputs.variant }}-
+          racket-addon-v4-${{ runner.os }}-${{ inputs.architecture }}-${{ inputs.variant }}-
           ${{ inputs.racket-version }}-${{ steps.tuple.outputs.lock-digest }}
 
     - name: Install reviewed dependencies and compile q plus fmt
@@ -121,7 +121,8 @@ runs:
           raco pkg install --name q --auto --batch --no-setup --no-docs "$PWD"
           racket ci/verify-racket-package-lock.rkt
         fi
-        raco setup --no-docs --jobs 4 --pkgs q fmt
+        lock_pkgs="$(racket -e '(string-join (sort (hash-keys (hash-ref (hash-ref (hash-ref (file->value "ci/racket-package-lock.rktd") (quote runtimes)) (version)) (quote packages))) string<?) " ")')"
+        raco setup --no-docs --jobs 4 --pkgs q $lock_pkgs
         raco fmt --help >/dev/null
         racket -e '(require quickcheck fmt) (displayln "producer package store health check passed")'
 

@@ -601,7 +601,7 @@
                     "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W2 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
-                    "1f29aacf23b7293f10948c0f49c09ca53429bc0e5d0deecb7491e93d39caf78e"
+                    "9f02151bfbea399625d87630d9ebd6dbfffe0619abf01496c8e550efce4eadf8"
                     "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
       ;; re-stamped by the v1.00.30 W0 wave (BUG-0073): the pipefail fix changed
       ;; prepare_action_sha256 inside fast_env_verification_contract
@@ -620,6 +620,8 @@
       ;; 41192722012 proved upload-artifact silently drops hidden files, so the shipped
       ;; artifact could diverge from the bound identity basis; prepare_action_sha256
       ;; re-recorded and the artifact SHA256SUMS re-stamped in the same commit
+      ;; re-stamped again by repair round C: prepare_action_sha256 and the round-C note
+      ;; changed inside fast_env_verification_contract (lock-closure recipe + cache key v4)
       (define j (call-with-input-file cp read-json))
       (check-equal? (hash-ref j 'wave) (format "v~a-w2" ci-topology-version))
       (check-equal? (sort (map ~a (hash-ref j 'policy_pin)) string<?)

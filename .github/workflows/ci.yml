@@ -266,7 +266,7 @@ jobs:
         shell: bash
         env:
           RACKET_VERSION: '8.10'
-          RECIPE_REVISION: 'trial-addon-relative-r1'
+          RECIPE_REVISION: 'trial-addon-relative-r2'
           POLICY_FINGERPRINT: 'addon-store-v2|pltaddon-explicit|no-workspace-bytecode'
         run: |
           set -euo pipefail
@@ -447,7 +447,7 @@ jobs:
             --out "$RUNNER_TEMP/compiled-root-map/shard-${{ matrix.shard }}.identity.json" \
             --lock-file ci/racket-package-lock.rktd --racket-version '8.10' \
             --os "${{ runner.os }}" --os-image "${ImageOS:-unknown}:${ImageVersion:-unknown}" \
-            --arch 'x64' --recipe-revision 'trial-addon-relative-r1' \
+            --arch 'x64' --recipe-revision 'trial-addon-relative-r2' \
             --policy-fingerprint 'addon-store-v2|pltaddon-explicit|no-workspace-bytecode'
 
       # W1 telemetry contract: normalize the prepared-environment outcome
@@ -896,7 +896,7 @@ jobs:
               --out aggregate-restore/identity.json \
               --lock-file ci/racket-package-lock.rktd --racket-version '8.10' \
               --os "${{ runner.os }}" --os-image "${ImageOS:-unknown}:${ImageVersion:-unknown}" \
-              --arch 'x64' --recipe-revision 'trial-addon-relative-r1' \
+              --arch 'x64' --recipe-revision 'trial-addon-relative-r2' \
               --policy-fingerprint 'addon-store-v2|pltaddon-explicit|no-workspace-bytecode'
             racket scripts/ci/ci-recovery-trial.rkt stamp-producer-manifest \
               --shard 0 --out aggregate-restore/producer.json \

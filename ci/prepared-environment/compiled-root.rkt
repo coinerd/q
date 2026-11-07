@@ -904,15 +904,24 @@
 ;;   collection paths (each element is a collection root) plus every
 ;;   root declared by an existing collection LINK FILE
 ;;   (current-library-collection-links): entries of the form
-;;   (collection-or-root element ...) relative to the link file's
-;;   directory, where element is a path element (bytes/symbol), and
+;;   (collection-or-root element ...) or the nested spelling
+;;   (collection-or-root (element ...)) — an entry is nested iff its
+;;   cdr is exactly one sub-list — relative to the link file's PARENT
+;;   DIRECTORY, where element is a path element (bytes/symbol), and
 ;;   'root makes every directory ELEMENT of the target a collection
-;;   root. Probed on 8.10: the primary paths alone miss every package
-;;   collection (typed/racket lives under a pkgs root declared in the
-;;   link file), so the link files are load-bearing for the
-;;   "every reachable zo is inventoried" goal. Missing entries are
-;;   skipped, never fatal: an uninstall-only partial environment must
-;;   still yield a valid (possibly smaller) inventory.
+;;   root. The base is resolved complete-path first (so path-only is
+;;   total, worst case /), then path-only, then simplify-path; the old
+;;   file-as-directory base made every ordinary element land UNDER a
+;;   file, hence unresolvable. Round-C probe on a unix-style install:
+;;   204/204 real entries are nested with byte-string elements (166
+;;   with a 'root id) and all 204 targets exist under the
+;;   parent-of-link-file base. Probed on 8.10: the primary paths alone
+;;   miss every package collection (typed/racket lives under a pkgs
+;;   root declared in the link file), so the link files are
+;;   load-bearing for the "every reachable zo is inventoried" goal.
+;;   Missing entries are skipped, never fatal: an uninstall-only
+;;   partial environment must still yield a valid (possibly smaller)
+;;   inventory.
 ;;   Round 3: every dropped candidate is counted and — capped —
 ;;   detailed in the install-enumeration-diagnostics record set on every
 ;;   call: a link file that is unreadable/missing/shape-rejected, an
@@ -947,18 +956,25 @@
                                       '())])
            (file->value f)))
        (if (and (list? entries) (andmap (lambda (e) (and (pair? e) (list? (cdr e)))) entries))
-           (let ([base (path->directory-path (simplify-path (path->complete-path f)))])
+           (let ([base (simplify-path (path-only (path->complete-path f)))])
              (for ([e (in-list entries)])
+               ;; round C: nested (id (elem ...)) un-nests to elems — the
+               ;; real links.rktd shape (probe: 204/204 nested) — while a
+               ;; flat (id elem ...) keeps (cdr e); () degrades to elems ()
+               (define elems
+                 (let ([rest (cdr e)])
+                   (if (and (pair? rest) (null? (cdr rest)) (list? (car rest)))
+                       (car rest)
+                       rest)))
                (define-values (dir dir-raise)
                  (with-handlers ([exn:fail? (lambda (ex) (values #f (exn-message ex)))])
-                   (values
-                    (simplify-path (path->complete-path (apply build-path
-                                                               base
-                                                               (for/list ([c (in-list (cdr e))])
-                                                                 (if (bytes? c)
-                                                                     (bytes->path-element c)
-                                                                     c)))))
-                    #f)))
+                   (values (simplify-path (path->complete-path (apply build-path
+                                                                      base
+                                                                      (for/list ([c (in-list elems)])
+                                                                        (if (bytes? c)
+                                                                            (bytes->path-element c)
+                                                                            c)))))
+                           #f)))
                (cond
                  [dir-raise
                   (set! entry-skip-count (add1 entry-skip-count))
