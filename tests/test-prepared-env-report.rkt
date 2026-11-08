@@ -350,12 +350,25 @@
           2
           'unmapped-loads
           0
+          ;; Round D additive diagnostics, exactly as the real record grew
+          ;; them after unmapped-loads; the strict assessor is field-only
+          'unmapped-distinct-sum
+          6
+          'unmapped-path-count
+          3
+          'unmapped-paths
+          (list "poison/a.rkt" "poison/b.rkt" "poison/c.rkt")
+          'unmapped-paths-truncated
+          #f
           'raw-datum
           (string-append
            "(compiled-root-launch-telemetry (mode . \"verified-root-hit\") (exit-code . 0)"
            " (wall-ms . 90000) (root-hits . 3) (fallbacks . 0) (loads . 12)"
            " (bytes-served . 1048576) (mechanism . \"external-compiled-root(map-dir symlinks)\")"
-           " (checkout-map-hits . 1) (install-map-hits . 2) (unmapped-loads . 0))")))
+           " (checkout-map-hits . 1) (install-map-hits . 2) (unmapped-loads . 0)"
+           " (unmapped-distinct-sum . 6) (unmapped-path-count . 3)"
+           " (unmapped-paths \"poison/a.rkt\" \"poison/b.rkt\" \"poison/c.rkt\")"
+           " (unmapped-paths-truncated . #f))")))
 
 (define (w1-launcher-off [digest digest-d] #:exit-code [exit-code 0])
   (w1-launcher #:mode "global-off" #:hits 0 #:fallbacks 0 #:digest digest #:exit-code exit-code))
@@ -1530,7 +1543,16 @@
        (w1-envelope #:shards (list (w1-shard 0) (w1-shard 1 #:launcher (w1-launcher #:exit-code 3)))))
       (define-values (code-refused verdict-refused out-refused) (trial-assess-verdict p-refused))
       (check-true (positive? code-refused))
-      (check-equal? (hash-ref verdict-refused 'reasons) (list "launcher-exit-code-nonzero")))
+      (check-equal? (hash-ref verdict-refused 'reasons) (list "launcher-exit-code-nonzero"))
+      ;; Round D: the record's new diagnostics stay additive — a ready C
+      ;; trial stays ready AND the envelope JSON round-trips the sample
+      ;; array as strings.
+      (define round-d-launcher (hash-ref (first (hash-ref (read-jsexpr p-ready) 'shards)) 'launcher))
+      (check-equal? (hash-ref round-d-launcher 'unmapped-distinct-sum) 6)
+      (check-equal? (hash-ref round-d-launcher 'unmapped-path-count) 3)
+      (check-equal? (hash-ref round-d-launcher 'unmapped-paths)
+                    (list "poison/a.rkt" "poison/b.rkt" "poison/c.rkt"))
+      (check-equal? (hash-ref round-d-launcher 'unmapped-paths-truncated) #f))
 
     (test-case "trial-assess: A/B root-off trials classify honestly as ready-root-off (global-off is legitimate)"
       (for ([treatment (in-list (list "A" "B"))])
