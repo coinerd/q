@@ -1618,7 +1618,13 @@
              (compiled-root-map-counters c (add1 i) u)))]
          ;; Unmapped loads: a real file in neither table is served
          ;; (compiled) by the module system WITHOUT a digest check —
-         ;; counted here, never silent.
+         ;; counted here, never silent. Round D: this guard stays
+         ;; counts-only DELIBERATELY — in-process loads count toward
+         ;; unmapped-loads but contribute no samples and no distincts
+         ;; (counts-only asymmetry): the per-child map-counter files are
+         ;; the mechanism that carries the capped sample set and the
+         ;; distinct sum, and they exist only in the bootstrapped child
+         ;; tree; distinct-sum therefore covers child-tree loads only.
          [else
           (telemetry-map-counters
            (match-let ([(compiled-root-map-counters c i u) (telemetry-map-counters)])
@@ -1772,6 +1778,12 @@
   ;; zero snapshot AT STARTUP (a zero-hit child leaves an aggregatable
   ;; file). Telemetry stays best-effort (fail-open); the per-load
   ;; digest checks above stay fail-closed regardless.
+  ;; Round D: the datum grew two additive pairs after unmapped-loads —
+  ;; (unmapped-distinct . d), the COMPLETE distinct count, and
+  ;; (unmapped-paths . ps), a capped first-seen sample list (≤16 per
+  ;; child, each ≤96 chars). The launcher's in-process guard stays
+  ;; counts-only (see its comment below); these files are what carry
+  ;; the sample set and the distinct sum for the child tree.
   (define map-counters-segment
     (string-append
      " (define q-hits 0)"
@@ -1779,6 +1791,17 @@
      " (define q-i-hits 0)"
      " (define q-i-bytes 0)"
      " (define q-unmapped 0)"
+     ;; Round D: capped samples beside the complete distinct count —
+     ;; the cap stops SAMPLES, never counts. compiled-root-unmapped-
+     ;; sample-cap and the 96-char per-sample cap (mirroring install-
+     ;; diag-reason-max) are baked literals: the segment is
+     ;; self-contained racket/base.
+     " (define q-um-cap 16)"
+     " (define q-um-seen (hash))"
+     " (define q-um-distinct 0)"
+     " (define q-um-samples '())"
+     " (define (q-um-truncate p)"
+     "  (if (> (string-length p) 96) (substring p 0 96) p))"
      " (define q-write-tel! (and q-tel-file (q-tel-writer q-tel-file)))"
      " (define q-map-file"
      "  (with-handlers ([exn:fail? (lambda (_) #f)])"
@@ -1790,14 +1813,16 @@
      " (define q-write-map!"
      "  (and q-map-file"
      "       (let ([tmp (string->path (string-append (path->string q-map-file) \".part\"))])"
-     "        (lambda (c i u)"
+     "        (lambda (c i u d ps)"
      "         (with-handlers ([exn:fail? void])"
      "          (call-with-output-file tmp"
      "                                 (lambda (out)"
      "                                   (write (list 'compiled-root-map-telemetry"
      "                                                (cons 'checkout-map-hits c)"
      "                                                (cons 'install-map-hits i)"
-     "                                                (cons 'unmapped-loads u))"
+     "                                                (cons 'unmapped-loads u)"
+     "                                                (cons 'unmapped-distinct d)"
+     "                                                (cons 'unmapped-paths ps))"
      "                                          out))"
      "                                 #:exists 'truncate)"
      "          (rename-file-or-directory tmp q-map-file #t))))))"
@@ -1805,16 +1830,24 @@
      "  (set! q-hits (add1 q-hits))"
      "  (set! q-bytes (+ q-bytes b))"
      "  (when q-write-tel! (q-write-tel! q-hits q-hits q-bytes))"
-     "  (when q-write-map! (q-write-map! q-hits q-i-hits q-unmapped)))"
+     "  (when q-write-map!"
+     "   (q-write-map! q-hits q-i-hits q-unmapped q-um-distinct q-um-samples)))"
      " (define (q-count-install! b)"
      "  (set! q-i-hits (add1 q-i-hits))"
      "  (set! q-i-bytes (+ q-i-bytes b))"
-     "  (when q-write-map! (q-write-map! q-hits q-i-hits q-unmapped)))"
-     " (define (q-count-unmapped!)"
+     "  (when q-write-map!"
+     "   (q-write-map! q-hits q-i-hits q-unmapped q-um-distinct q-um-samples)))"
+     " (define (q-count-unmapped! p)"
      "  (set! q-unmapped (add1 q-unmapped))"
-     "  (when q-write-map! (q-write-map! q-hits q-i-hits q-unmapped)))"
+     "  (unless (hash-ref q-um-seen p #f)"
+     "   (set! q-um-seen (hash-set q-um-seen p #t))"
+     "   (set! q-um-distinct (add1 q-um-distinct))"
+     "   (when (< (length q-um-samples) q-um-cap)"
+     "    (set! q-um-samples (append q-um-samples (list (q-um-truncate p))))))"
+     "  (when q-write-map!"
+     "   (q-write-map! q-hits q-i-hits q-unmapped q-um-distinct q-um-samples)))"
      " (when q-write-tel! (q-write-tel! 0 0 0))"
-     " (when q-write-map! (q-write-map! 0 0 0))"))
+     " (when q-write-map! (q-write-map! 0 0 0 0 '()))"))
   (list
    "-e"
    (format
@@ -1965,7 +1998,7 @@
      "     (q-count-install! (file-size (car iz-hit)))]"
      "    [else"
      "     (when (and path (file-exists? path))"
-     "      (q-count-unmapped!))])"
+     "      (q-count-unmapped! canon))])"
      "   (orig-load path modname))))")
     (path->string (simplify-path (path->complete-path compiled-root-manifest-module-path)))
     (path->string (simplify-path (path->complete-path compiled-root-transfer-auth-module-path)))
@@ -2135,28 +2168,63 @@
 ;;   silently; a contract-named file that fails to parse is skipped
 ;;   LOUDLY. Never fatal: telemetry must not break a test run, but it is
 ;;   never silently wrong either.
+;;   Round D: returns FIVE values — checkout, install, unmapped,
+;;   distinct-sum, paths. distinct-sum is the Σ of the per-child
+;;   COMPLETE distinct counts (0 for old 4-element datums); paths is
+;;   the deduped string<?-sorted union of the per-child sample lists
+;;   (each sample truncated to the 96-char cap, mirroring
+;;   install-diag-reason-max). The union is NOT capped here: the
+;;   AGGREGATE sample cap (128) and the unmapped-paths-truncated flag
+;;   are applied where the union meets the launch record
+;;   (write-launch-telemetry!), so this value stays the complete union
+;;   and the record's path-count is exact.
 (define (aggregate-compiled-root-map-counters hits-dir)
-  (for/fold ([checkout 0]
-             [install 0]
-             [unmapped 0])
-            ([f (in-list (directory-list hits-dir))]
-             #:when (compiled-root-map-counters-filename? f))
-    (with-handlers ([exn:fail?
-                     (lambda (e)
-                       (eprintf "ci-compiled-root: ignoring unreadable per-root counter ~a: ~a\n"
-                                (path->string f)
-                                (exn-message e))
-                       (values checkout install unmapped))])
-      (define datum (file->value (build-path hits-dir f)))
-      (match datum
-        [(list 'compiled-root-map-telemetry
-               (cons 'checkout-map-hits c)
-               (cons 'install-map-hits i)
-               (cons 'unmapped-loads u))
-         (values (+ checkout c) (+ install i) (+ unmapped u))]
-        [_
-         (eprintf "ci-compiled-root: ignoring malformed per-root counter ~a\n" (path->string f))
-         (values checkout install unmapped)]))))
+  (define-values (checkout install unmapped distinct raw-paths)
+    (for/fold ([checkout 0]
+               [install 0]
+               [unmapped 0]
+               [distinct 0]
+               [raw-paths '()])
+              ([f (in-list (directory-list hits-dir))]
+               #:when (compiled-root-map-counters-filename? f))
+      (with-handlers ([exn:fail?
+                       (lambda (e)
+                         (eprintf "ci-compiled-root: ignoring unreadable per-root counter ~a: ~a\n"
+                                  (path->string f)
+                                  (exn-message e))
+                         (values checkout install unmapped distinct raw-paths))])
+        (define datum (file->value (build-path hits-dir f)))
+        (match datum
+          [(list 'compiled-root-map-telemetry
+                 (cons 'checkout-map-hits c)
+                 (cons 'install-map-hits i)
+                 (cons 'unmapped-loads u)
+                 (cons 'unmapped-distinct d)
+                 (cons 'unmapped-paths ps))
+           (values (+ checkout c)
+                   (+ install i)
+                   (+ unmapped u)
+                   (+ distinct d)
+                   (append raw-paths (filter string? ps)))]
+          ;; OLD 4-element datums (pre-round-D roots): a 0/'()
+          ;; contribution to the new fields.
+          [(list 'compiled-root-map-telemetry
+                 (cons 'checkout-map-hits c)
+                 (cons 'install-map-hits i)
+                 (cons 'unmapped-loads u))
+           (values (+ checkout c) (+ install i) (+ unmapped u) distinct raw-paths)]
+          [_
+           (eprintf "ci-compiled-root: ignoring malformed per-root counter ~a\n" (path->string f))
+           (values checkout install unmapped distinct raw-paths)]))))
+  (values checkout
+          install
+          unmapped
+          distinct
+          (sort (remove-duplicates (for/list ([p (in-list raw-paths)])
+                                     (if (> (string-length p) 96)
+                                         (substring p 0 96)
+                                         p)))
+                string<?)))
 
 ;; eager-fallback-compile!
 ;;   The ONE eager current-source fallback: raco make in the job-local
@@ -2343,10 +2411,12 @@
       (error 'ci-compiled-root "missing required option --~a" name))
     (p))
 
-  (define (write-launch-telemetry! mode exit-code wall-ms served [map-counters (list 0 0 0)])
+  (define (write-launch-telemetry! mode exit-code wall-ms served [map-counters (list 0 0 0 0 '())])
     (when (telemetry-file)
       (define t (telemetry-snapshot))
       (define mc (telemetry-map-counters))
+      (define raw-paths (list-ref map-counters 4))
+      (define path-count (length raw-paths))
       (call-with-output-file
        (telemetry-file)
        (lambda (out)
@@ -2375,7 +2445,18 @@
                 (cons 'install-map-hits
                       (+ (compiled-root-map-counters-install-map mc) (list-ref map-counters 1)))
                 (cons 'unmapped-loads
-                      (+ (compiled-root-map-counters-unmapped mc) (list-ref map-counters 2))))
+                      (+ (compiled-root-map-counters-unmapped mc) (list-ref map-counters 2)))
+                ;; Round D additive diagnostics: capped unmapped-load path
+                ;; samples. distinct-sum is COMPLETE (Σ per-child
+                ;; unmapped-distinct); the sample union is capped at 128
+                ;; (sorted, each ≤96 chars) to keep the record bounded,
+                ;; path-count is the pre-cap union size, and the flag
+                ;; tells the reader the union was cut. The assessor
+                ;; never reads these keys.
+                (cons 'unmapped-distinct-sum (list-ref map-counters 3))
+                (cons 'unmapped-path-count path-count)
+                (cons 'unmapped-paths (take raw-paths (min 128 path-count)))
+                (cons 'unmapped-paths-truncated (> path-count 128)))
           out))
        #:exists 'truncate)))
 
@@ -2525,11 +2606,14 @@
                 (call-with-values (lambda () (aggregate-compiled-root-child-telemetry hits-dir)) list)
                 (list 0 0 0)))
           ;; W1a install-map repair: per-root counter files (best-effort;
-          ;; a missing hits dir keeps them 0, like the hit counters)
+          ;; a missing hits dir keeps them 0, like the hit counters).
+          ;; Round D: five values now — checkout install unmapped
+          ;; distinct-sum paths (the complete sample union; the record
+          ;; caps it).
           (define map-counters
             (if hits-dir
                 (call-with-values (lambda () (aggregate-compiled-root-map-counters hits-dir)) list)
-                (list 0 0 0)))
+                (list 0 0 0 0 '())))
           (values code "verified-root-hit" served map-counters)]
          [else
           ;; Pass-through: no flags file (lane off or failed resolution —
@@ -2545,7 +2629,23 @@
                     [(not valid-flags?) "no-flags-current-source"]
                     [else "unmapped-child"])
                   (list 0 0 0)
-                  (list 0 0 0))]))
+                  (list 0 0 0 0 '()))]))
      (define wall-ms (inexact->exact (floor (- (current-inexact-milliseconds) t0))))
+     ;; Round D diagnostics: one summary line plus the first ≤8 aggregate
+     ;; samples, so a poisoned shard NAMES the unmapped set in the log
+     ;; the shard already tees. Counts stay complete; the samples are
+     ;; the capped identification aid.
+     (define um-paths (list-ref map-counters 4))
+     (eprintf
+      "ci-compiled-root: launch: mode=~a exit=~a hits=~a install=~a unmapped=~a distinct=~a paths=~a\n"
+      mode
+      exit-code
+      (list-ref map-counters 0)
+      (list-ref map-counters 1)
+      (list-ref map-counters 2)
+      (list-ref map-counters 3)
+      (length um-paths))
+     (for ([s (in-list (take um-paths (min 8 (length um-paths))))])
+       (eprintf "ci-compiled-root:   unmapped-sample ~a\n" s))
      (write-launch-telemetry! mode exit-code wall-ms served map-counters)
      (exit exit-code)]))

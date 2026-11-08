@@ -23,6 +23,7 @@
 (require racket/cmdline
          racket/file
          racket/format
+         racket/list
          racket/match
          racket/path
          racket/port
@@ -35,6 +36,7 @@
          racket/runtime-path)
 
 (module+ test
+  (define-runtime-path compiled-root-source "../ci/prepared-environment/compiled-root.rkt")
   (define tmp-base (make-temporary-file "qcr-e2e~a" 'directory))
 
   ;; Nested git commands must not inherit the caller's git plumbing. A git hook
@@ -774,6 +776,57 @@
     (check-false (string-contains? boot-expr "(dynamic-require lk-path")
                  "bootstrap must never require the transfer module by path"))
 
+  (test-case "round-D bootstrap pins: distinct tracking, canon pass, cap, 5-element defaults"
+    ;; Observability round D: the child map-counters segment tracks the
+    ;; COMPLETE distinct count plus a capped sample list, the miss site
+    ;; passes the canonical path, and BOTH launcher-side defaults for the
+    ;; aggregated map-counters shape are 5-element (checkout install
+    ;; unmapped distinct paths).
+    (define boot-expr (car (reverse (compiled-root-launch-arguments root-b))))
+    ;; per-child state + datum field order (writer and reader pin the
+    ;; same order: unmapped-distinct BEFORE unmapped-paths)
+    (check-true (string-contains? boot-expr "q-um-distinct")
+                "bootstrap must track the complete distinct count")
+    (check-true (string-contains? boot-expr "q-um-seen")
+                "bootstrap must dedupe sample paths through a seen hash")
+    (check-true (string-contains? boot-expr "'unmapped-distinct")
+                "the map datum must carry the unmapped-distinct field")
+    (check-true (string-contains? boot-expr "'unmapped-paths")
+                "the map datum must carry the unmapped-paths field")
+    ;; the miss site passes the CANONICAL path (canon is non-#f whenever
+    ;; path is non-#f and the branch is file-exists-guarded, so the
+    ;; counter takes canon alone — no unreachable fallback argument)
+    (check-true (string-contains? boot-expr "(q-count-unmapped! canon)")
+                "the miss site must pass the canonical path to the counter")
+    (check-false (regexp-match? #rx"q-count-unmapped![)]" boot-expr)
+                 "the counter takes canon: no zero-arg call survives")
+    ;; the per-child sample cap is a baked literal (the segment is
+    ;; self-contained racket/base; compiled-root-unmapped-sample-cap
+    ;; never crosses a require boundary)
+    (check-true (string-contains? boot-expr "q-um-cap 16")
+                "the per-child sample cap must be the baked 16 literal")
+    ;; per-sample truncation mirrors install-diag-reason-max inline
+    (check-true (string-contains? boot-expr "(substring p 0 96)")
+                "the segment must inline the 96-char per-sample truncation")
+    ;; the writer arity grew to five positional fields
+    (check-true (string-contains? boot-expr "lambda (c i u d ps)")
+                "q-write-map! must take (c i u d ps)")
+    (check-true (string-contains? boot-expr "(q-write-map! 0 0 0 0 '())")
+                "the startup zero write must be 5-argument")
+    (check-true (>= (length (regexp-match* #rx"q-um-distinct q-um-samples" boot-expr)) 3)
+                "all three counting call sites must pass distinct + samples")
+    ;; the launcher-side defaults: the optional map-counters default AND
+    ;; the pass-through values form are both the 5-element list
+    (define source-text (file->string compiled-root-source))
+    (check-true (string-contains? source-text "[map-counters (list 0 0 0 0 '())]")
+                "write-launch-telemetry!'s default must be the 5-element list")
+    (check-equal? (length (regexp-match* #rx"[(]list 0 0 0 0 '[(][)]" source-text))
+                  3
+                  "three 5-element defaults: telemetry! arg, no-hits-dir, pass-through")
+    ;; the in-process guard stays counts-only, and says so
+    (check-true (string-contains? source-text "counts-only")
+                "the in-process guard's counts-only asymmetry must be documented"))
+
   ;; W1 performance repair round: the child telemetry round trip. The
   ;; child bootstrap names its counter files and the parent aggregator
   ;; (aggregate-compiled-root-child-telemetry) must accept them. Two
@@ -858,6 +911,64 @@
     (check-false (string-contains? (get-output-string noise) "ignoring")
                  (format "hit telemetry must be accepted, not skipped: ~a"
                          (get-output-string noise))))
+
+  (test-case "child map datum: mapped zero-datum shape, unmapped probe carries the canonical sample"
+    ;; Round D: the per-child map counter datum grew two additive
+    ;; fields (unmapped-distinct, unmapped-paths). NOTE: every
+    ;; bootstrapped child loads the runtime's own racket/base through
+    ;; the guarded current-load, so the startup ZERO datum is observed
+    ;; structurally only (pinned in the boot-expr test above); these
+    ;; end-to-end pins are the classification and the sample set.
+    (define zero-tel (build-path tmp-base "tel-map-zero"))
+    (make-directory* zero-tel)
+    (define-values (zcode ztranscript)
+      (run-telemetry-child! root-b (marker-abs-path checkout-b) zero-tel))
+    (check-equal? zcode 0 (format "mapped child failed: ~a" ztranscript))
+    (define zero-map
+      (for/first ([f (in-list (directory-list zero-tel))]
+                  #:when (compiled-root-map-counters-filename? f))
+        (file->value (build-path zero-tel f))))
+    (check-true (pair? zero-map) "the mapped child must leave a map counter file")
+    (check-equal? (length zero-map) 6 "the datum is tag + five additive fields")
+    (check-true (>= (cdr (list-ref zero-map 1)) 1) "fixture: the marker load counted as a hit")
+    (check-equal? (list-ref zero-map 2) '(install-map-hits . 0) "no install loads in this child")
+    ;; complete distinct counting: every unmapped load in this child is
+    ;; a distinct real file (the runtime load plus nothing else), and
+    ;; the runtime's own base load IS counted (>= 1)
+    (check-equal? (cdr (list-ref zero-map 3))
+                  (cdr (list-ref zero-map 4))
+                  "unmapped-loads and the COMPLETE distinct count agree")
+    (check-true (>= (cdr (list-ref zero-map 4)) 1)
+                "the runtime load passes through the guarded current-load and is counted")
+    (check-true (and (list? (cdr (list-ref zero-map 5)))
+                     (andmap string? (cdr (list-ref zero-map 5)))
+                     (<= (length (cdr (list-ref zero-map 5))) (cdr (list-ref zero-map 4))))
+                "samples: strings, at most one per distinct unmapped load")
+    (define probe-tel (build-path tmp-base "tel-map-probe"))
+    (make-directory* probe-tel)
+    (define probe-src (build-path tmp-base "map-probe-child.rkt"))
+    (call-with-output-file probe-src
+                           (lambda (o) (display "(module qcr-mapprobe racket/base (void))\n" o)))
+    (define-values (pcode ptranscript) (run-telemetry-child! root-b probe-src probe-tel))
+    (check-equal? pcode 0 (format "probe child failed: ~a" ptranscript))
+    (define probe-map
+      (for/first ([f (in-list (directory-list probe-tel))]
+                  #:when (compiled-root-map-counters-filename? f))
+        (file->value (build-path probe-tel f))))
+    (check-true (pair? probe-map) "the unmapped child must leave a map counter file")
+    (check-equal? (length probe-map) 6 "probe datum is tag + five additive fields")
+    (define probe-canon (path->string (simplify-path (path->complete-path probe-src) #t)))
+    (check-equal? (list-ref probe-map 1) '(checkout-map-hits . 0) "no mapped loads: pure probe")
+    (check-equal? (list-ref probe-map 2) '(install-map-hits . 0) "no install loads: pure probe")
+    (check-equal? (cdr (list-ref probe-map 3))
+                  (cdr (list-ref probe-map 4))
+                  "unmapped-loads and the COMPLETE distinct count agree")
+    (define probe-paths (cdr (list-ref probe-map 5)))
+    (check-true (and (pair? probe-paths) (equal? (first probe-paths) probe-canon))
+                "the FIRST sample is the probe's canonical path (first-seen order)")
+    (check-true (and (member probe-canon probe-paths) #t) "the probe path is sampled")
+    (check-true (andmap (lambda (p) (<= (string-length p) 96)) probe-paths)
+                "every per-child sample respects the 96-char truncation"))
 
   (test-case "transfer module mutation after verification fails the child launch closed"
     ;; the load-key transfer module carries its own startup canary: the
@@ -2398,6 +2509,82 @@
                 "install-map hits must be counted (alpha + beta closure)")
     (check-true (>= (compiled-root-map-counters-unmapped mc) 1) "unmapped loads must be counted"))
 
+  (test-case "map aggregator folds 6-element datums, tolerates old 4-element, loud-skips junk"
+    ;; Round D: the per-child map datum grew (unmapped-distinct . d) and
+    ;; (unmapped-paths . ps) after unmapped-loads. The aggregator sums
+    ;; the distinct counter across children, unions the sample paths,
+    ;; keeps accepting OLD 4-element datums as a 0/'() contribution, and
+    ;; still skips contract-named garbage LOUDLY.
+    (define dir (build-path tmp-base "map-agg-fold"))
+    (make-directory* dir)
+    (define (put! name datum)
+      (call-with-output-file (build-path dir name) (lambda (o) (write datum o)) #:exists 'truncate))
+    (put! "q-compiled-root-map-new-a.rktd"
+          (list 'compiled-root-map-telemetry
+                '(checkout-map-hits . 3)
+                '(install-map-hits . 2)
+                '(unmapped-loads . 5)
+                '(unmapped-distinct . 4)
+                '(unmapped-paths . ("b" "a"))))
+    (put! "q-compiled-root-map-new-b.rktd"
+          (list 'compiled-root-map-telemetry
+                '(checkout-map-hits . 1)
+                '(install-map-hits . 1)
+                '(unmapped-loads . 1)
+                '(unmapped-distinct . 2)
+                '(unmapped-paths . ("c" "a"))))
+    (put! "q-compiled-root-map-old.rktd"
+          (list 'compiled-root-map-telemetry
+                '(checkout-map-hits . 7)
+                '(install-map-hits . 6)
+                '(unmapped-loads . 5)))
+    (put! "q-compiled-root-map-junk.rktd" '(something-else))
+    (define noise (open-output-string))
+    (define-values (c i u d ps)
+      (parameterize ([current-error-port noise])
+        (aggregate-compiled-root-map-counters dir)))
+    (check-equal? (list c i u d) (list 11 9 11 6) "sums: checkout install unmapped distinct")
+    (check-equal? ps (list "a" "b" "c") "sample union must be deduped and sorted")
+    (check-true (string-contains? (get-output-string noise)
+                                  "ignoring malformed per-root counter q-compiled-root-map-junk.rktd")
+                "contract-named garbage must be skipped loudly"))
+
+  (test-case "map aggregator: complete distinct sum, sorted union, 96-char sample truncation"
+    ;; Caps: the child stops SAMPLES at its cap, never counts; the
+    ;; aggregator's union carries every distinct transmitted path and
+    ;; the distinct sum stays COMPLETE (uncapped). Per-sample truncation
+    ;; mirrors install-diag-reason-max so a long path cannot blow up the
+    ;; record.
+    (define dir (build-path tmp-base "map-agg-caps"))
+    (make-directory* dir)
+    (define long-path (string-append "poison/very-long/" (make-string 120 #\x) "unmapped.rkt"))
+    (for ([n (in-range 4)])
+      (call-with-output-file (build-path dir (format "q-compiled-root-map-caps-~a.rktd" n))
+                             (lambda (o)
+                               (write (list 'compiled-root-map-telemetry
+                                            '(checkout-map-hits . 0)
+                                            '(install-map-hits . 0)
+                                            (cons 'unmapped-loads (* 10 (add1 n)))
+                                            (cons 'unmapped-distinct 10)
+                                            (cons 'unmapped-paths
+                                                  (for/list ([j (in-range 10)])
+                                                    (if (and (zero? n) (zero? j))
+                                                        long-path
+                                                        (format "poison/gen-~a-~a.rkt" n j)))))
+                                      o))
+                             #:exists 'truncate))
+    (define-values (c i u d ps)
+      (parameterize ([current-error-port (open-output-string)])
+        (aggregate-compiled-root-map-counters dir)))
+    (check-equal? c 0)
+    (check-equal? i 0)
+    (check-equal? u 100 "unmapped-loads sums normally")
+    (check-equal? d 40 "the distinct sum counts COMPLETE per-child totals")
+    (check-equal? (length ps) 40 "the union carries every distinct transmitted path")
+    (check-equal? ps (sort (remove-duplicates ps) string<?) "the union is sorted string<?")
+    (check-not-false (member (substring long-path 0 96) ps) "the long path is truncated to 96 chars")
+    (check-false (member long-path ps) "no over-cap path survives untruncated"))
+
   (test-case "direct-zo and stale-zo behaviors unchanged under activation"
     (define colls (make-install-coll! "stale" 'install-stale 'source-stale))
     (define alpha-src (list-ref colls 1))
@@ -2950,7 +3137,130 @@
     ;; NEW additive keys
     (check-true (>= (field 'checkout-map-hits) 1) "checkout-map-hits missing/zero")
     (check-true (>= (field 'install-map-hits) 2) "install-map-hits missing/zero")
-    (check-true (exact-nonnegative-integer? (field 'unmapped-loads)) "unmapped-loads key missing"))
+    (check-true (exact-nonnegative-integer? (field 'unmapped-loads)) "unmapped-loads key missing")
+    ;; Round D additive diagnostics (the assessor never reads them)
+    (check-true (exact-nonnegative-integer? (field 'unmapped-distinct-sum))
+                "unmapped-distinct-sum key missing or mistyped")
+    (check-true (exact-nonnegative-integer? (field 'unmapped-path-count))
+                "unmapped-path-count key missing or mistyped")
+    (check-true (and (list? (field 'unmapped-paths)) (andmap string? (field 'unmapped-paths)))
+                "unmapped-paths key missing or mistyped")
+    (check-true (boolean? (field 'unmapped-paths-truncated))
+                "unmapped-paths-truncated key missing or mistyped")
+    (check-equal? (field 'unmapped-path-count)
+                  (length (field 'unmapped-paths))
+                  "uncapped union and sample list agree on this small launch"))
+
+  (test-case "launch record caps the aggregate sample union at 128 with the truncation flag"
+    ;; Round D aggregate cap: 12 fixture datums x 12 distinct paths each
+    ;; exceed the 128 aggregate cap. The launched child copies the
+    ;; fixtures into ITS OWN per-launch telemetry directory, so the REAL
+    ;; launcher aggregates them and writes the capped record end-to-end.
+    (define colls (make-install-coll! "caps" 'install-caps 'source-caps))
+    (stamp-install-fresh! colls)
+    (define alpha-src (list-ref colls 1))
+    (define caps-flags (build-path install-base "caps-flags.rktd"))
+    (define caps-tel (build-path install-base "caps-tel.rktd"))
+    (define resolve-code
+      (system*/exit-code (find-executable-path "racket")
+                         (path->string ci-cli-runtime-path)
+                         "resolve"
+                         "--root"
+                         (path->string final-dir)
+                         "--checkout"
+                         (path->string checkout-b)
+                         "--trusted-label"
+                         "q-trusted-producer"
+                         "--install-map-dir"
+                         (path->string (build-path install-base "caps-install-map"))
+                         "--collection-root"
+                         (path->string (list-ref colls 0))
+                         "--flags-file"
+                         (path->string caps-flags)))
+    (check-equal? resolve-code 0 "caps resolve must succeed")
+    (define fix-dir (build-path install-base "caps-fixtures"))
+    (make-directory* fix-dir)
+    (for ([n (in-range 12)])
+      (call-with-output-file (build-path fix-dir (format "q-compiled-root-map-fixture-~a.rktd" n))
+                             (lambda (o)
+                               (write (list 'compiled-root-map-telemetry
+                                            '(checkout-map-hits . 1)
+                                            '(install-map-hits . 0)
+                                            '(unmapped-loads . 12)
+                                            (cons 'unmapped-distinct 12)
+                                            (cons 'unmapped-paths
+                                                  (for/list ([j (in-range 12)])
+                                                    (format "fixture/poison-~a-~a.rkt" n j))))
+                                      o))
+                             #:exists 'truncate))
+    ;; the child env carries the telemetry dir; the child expr copies the
+    ;; fixtures into it, then runs the mapped install member so the
+    ;; launch is a real verified-root-hit launch
+    (define child-expr
+      (format (string-append "(begin (require racket/file)"
+                             " (define td (getenv \"Q_COMPILED_ROOT_TELEMETRY_DIR\"))"
+                             " (define fx (string->path ~s))"
+                             " (for ([f (in-list (directory-list fx))])"
+                             "  (define dst (build-path (string->path td) f))"
+                             "  (when (file-exists? dst) (delete-file dst))"
+                             "  (copy-file (build-path fx f) dst))"
+                             " (dynamic-require (string->path ~s) 'iv))")
+              (path->string fix-dir)
+              (path->string alpha-src)))
+    (define child-env (make-environment-variables))
+    (for ([n (in-list (environment-variables-names (current-environment-variables)))])
+      (environment-variables-set! child-env
+                                  n
+                                  (environment-variables-ref (current-environment-variables) n)))
+    (environment-variables-set! child-env #"Q_CI_COMPILED_ROOT" #"auto")
+    (define launch-log (open-output-string))
+    (define launch-code
+      (parameterize ([current-output-port launch-log]
+                     [current-error-port launch-log]
+                     [current-environment-variables child-env])
+        (system*/exit-code (find-executable-path "racket")
+                           (path->string ci-cli-runtime-path)
+                           "launch"
+                           "--flags-file"
+                           (path->string caps-flags)
+                           "--telemetry-file"
+                           (path->string caps-tel)
+                           "--"
+                           "racket"
+                           "-e"
+                           child-expr)))
+    (check-equal? launch-code 0 "the caps launch must succeed")
+    (define tel (file->value caps-tel))
+    (define (field k)
+      (define pair (assq k (cdr tel)))
+      (and pair (cdr pair)))
+    (check-equal? (field 'mode) "verified-root-hit")
+    (check-equal? (field 'unmapped-paths-truncated) #t "the union exceeded the cap")
+    (check-equal? (length (field 'unmapped-paths)) 128 "the record keeps exactly the cap")
+    (check-true (>= (field 'unmapped-path-count) 144) "path-count is the pre-cap union size")
+    (check-equal? (field 'unmapped-paths)
+                  (sort (field 'unmapped-paths) string<?)
+                  "the capped sample list is sorted")
+    (check-true (andmap (lambda (s) (<= (string-length s) 96)) (field 'unmapped-paths))
+                "every recorded sample respects the per-sample cap")
+    (check-true (>= (field 'unmapped-distinct-sum) 144) "the distinct sum is complete, never capped")
+    ;; diagnostics log lines: one summary line + first <=8 samples
+    (define transcript (get-output-string launch-log))
+    (define summary-rx
+      (regexp (string-append
+               "ci-compiled-root: launch: mode=verified-root-hit exit=[0-9]+ hits=[0-9]+"
+               " install=[0-9]+ unmapped=[0-9]+ distinct=[0-9]+ paths=[0-9]+")))
+    (check-true (regexp-match? summary-rx transcript)
+                "the launch summary line must name mode/exit/hits/install/unmapped/distinct/paths")
+    (define sample-lines
+      (length (regexp-match* #rx"ci-compiled-root:   unmapped-sample .+" transcript)))
+    (check-true (and (>= sample-lines 1) (<= sample-lines 8))
+                (format (string-append "the log prints between one and eight sample lines; got ~a"
+                                       " transcript-tail: ~a")
+                        sample-lines
+                        (substring transcript
+                                   (max 0 (- (string-length transcript) 700))
+                                   (string-length transcript)))))
 
   (test-case "resolve replaces a dangling map symlink (link-exists? pin)"
     (define checkout-dl (make-checkout! "consumer-dangling" 'producer-fixture))

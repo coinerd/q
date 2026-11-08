@@ -377,7 +377,12 @@
    (string-append "(compiled-root-launch-telemetry (mode . ~s) (exit-code . ~a) (wall-ms . 90000)"
                   " (root-hits . ~a) (fallbacks . ~a) (loads . 12) (bytes-served . 1048576)"
                   " (mechanism . \"external-compiled-root(map-dir symlinks)\")"
-                  " (checkout-map-hits . 1) (install-map-hits . 2) (unmapped-loads . 0))")
+                  " (checkout-map-hits . 1) (install-map-hits . 2) (unmapped-loads . 0)"
+                  ;; Round D additive diagnostics, exactly as the real
+                  ;; write-launch-telemetry! emits them
+                  " (unmapped-distinct-sum . 6) (unmapped-path-count . 3)"
+                  " (unmapped-paths \"poison/a.rkt\" \"poison/b.rkt\" \"poison/c.rkt\")"
+                  " (unmapped-paths-truncated . #f))")
    mode
    exit-code
    hits
@@ -630,6 +635,12 @@
       (check-equal? (hash-ref launcher 'checkout-map-hits) 1)
       (check-equal? (hash-ref launcher 'install-map-hits) 2)
       (check-equal? (hash-ref launcher 'unmapped-loads) 0)
+      ;; Round D additive diagnostics map 1:1 into the envelope
+      (check-equal? (hash-ref launcher 'unmapped-distinct-sum) 6)
+      (check-equal? (hash-ref launcher 'unmapped-path-count) 3)
+      (check-equal? (hash-ref launcher 'unmapped-paths)
+                    (list "poison/a.rkt" "poison/b.rkt" "poison/c.rkt"))
+      (check-equal? (hash-ref launcher 'unmapped-paths-truncated) #f)
       (check-equal? (hash-ref launcher 'producer-manifest-digest) digest-d))
     ;; the strict W1 assessor accepts the adapter's envelope
     (define verdict (assess-trial-envelope envelope))
