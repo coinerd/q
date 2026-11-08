@@ -27,39 +27,58 @@
 ;;
 ;; Proven semantics (probe-verified on Racket 8.10 in this wave):
 ;;   - A zo under an explicit current-compiled-file-roots entry is
-;;     consulted for a source S UNCONDITIONALLY: the 'modify-seconds
-;;     freshness gate governs the source-ADJACENT default compiled
-;;     directory, not external roots. W1a-repair (coordinator trial c01
-;;     window-2, run 41271542715): root-on activation pins
-;;     use-compiled-file-check to 'exists — mtime comparison is
-;;     structurally wrong for restored roots (fresh checkout mtimes are
-;;     always newer than producer-era zo mtimes), and freshness is
-;;     established by the same-commit source-sha gate plus per-load
-;;     content digests instead.
-;;     W1a install-map repair (PLAN-W1-INSTALL-MAP.md) re-probing,
+;;     consulted for a source S through the roots list. Round E
+;;     (PLAN-E-same-last-root.md) REMOVES the W1a-repair global
+;;     'exists pin (trial c01 window-2, run 41271542715) — the default
+;;     'modify-seconds governs — and appends the classic lane 'same as
+;;     the LAST root: launch roots are (checkout-map install-map
+;;     'same), absolute maps FIRST, 'same LAST, with the
+;;     RHS-before-assignment discipline on any future append. W1a
+;;     install-map repair (PLAN-W1-INSTALL-MAP.md) re-probing,
 ;;     deterministic marker probes on 8.10 (pinned in
 ;;     tests/test-compiled-root.rkt):
-;;     * CORRECTED invariant — the 'exists pin is GLOBAL: it governs
-;;       EVERY compiled-file candidate, including the source-adjacent
-;;       default 'same lookup. With the pin active a STALE
-;;       source-adjacent zo is served without any freshness comparison
-;;       (probe: a 10-seconds-older adjacent zo, distinct bytes, served
-;;       under 'exists). Every pin site below therefore states the
-;;       global effect; identity rests entirely on the resolve-time
-;;       source-sha gate and the per-load content digests, never on
-;;       mtime semantics.
-;;     * CORRECTED invariant — 'modify-seconds gating of ROOT-DERIVED
-;;       candidates is NOT reproducible in isolation on 8.10: an
-;;       external-root candidate is served even with a strictly newer
-;;       source, with or without its .dep sidecar (probe matrix). The
-;;       historical zero-root-hits attribution to mtime comparison
-;;       (trial c01 window-2) is superseded by the W2 analysis of the
-;;       same trial (H0 bootstrap-only child / H1 no hit channel / H2
+;;     * Round-E corrected FRESHNESS invariant (probed on this 8.10
+;;       environment in this wave; supersedes the earlier "'exists is
+;;       GLOBAL" and "not reproducible in isolation" readings): EVERY
+;;       compiled-file candidate — root-derived or source-adjacent,
+;;       file or symlink member, with or without its .dep sidecar — is
+;;       accepted only when its mtime is >= the source's, under BOTH
+;;       check modes ('exists and 'modify-seconds probed identical).
+;;       A fresh clone's sources are strictly newer than producer-era
+;;       payload zos, so without help every map-covered load would be
+;;       refused and recompiled from source in memory — byte-identical
+;;       (the resolve-time digest gate pins the source) but a silent
+;;       lane no-op. The guard's HIT PATH therefore ALIGNS each
+;;       digest-verified source's mtime with its payload zo (mtime
+;;       forcing for byte-identical content — the safety contract
+;;       below) lazily, per load, before the default handler's
+;;       candidate search — in the parent and in every bootstrapped
+;;       child — keeping map members in the accepted regime; identity
+;;       still rests on the resolve-time source-sha gate plus per-load
+;;       digests, and the fresh-clone pin (sources stamped +60 s newer
+;;       after resolve, root member still served, no lazy recompile)
+;;       stays the safety net. The historical zero-root-hits
+;;       attribution to mtime comparison (trial c01 window-2) is
+;;       superseded by the W2 analysis of the same trial (H0
+;;       bootstrap-only child / H1 no hit channel / H2
 ;;       non-inheriting grandchildren — see
-;;       tests/test-compiled-root-runner-inheritance.rkt). The 'exists
-;;       pin stays as defense in depth: no lookup freshness can ever
-;;       gate a verified root member, whichever of the two readings of
-;;       8.10 internals holds on a given shape.
+;;       tests/test-compiled-root-runner-inheritance.rkt).
+;;     * Round-E re-justification for 'same LAST + the default check
+;;       (plan review checklist A; motivation evidence: round-D
+;;       unmapped-path samples, trials.json smoke-13 run 42508692637 —
+;;       ~70/76 sampled unmapped union paths are the run-tests harness's
+;;       own ephemeral /var/tmp fixtures, recompiled per child): 'same
+;;       last serves only FRESH same-run compilations of sources no map
+;;       covers. It cannot shadow a map member the maps still offer:
+;;       the maps sit FIRST and win the candidate search, and a
+;;       map-covered load's digest row is consulted before any
+;;       orig-load (file->bytes / sha256-file on the mapped member;
+;;       all-or-nothing activation). It never serves stale-over-newer:
+;;       under the candidate gate a source-adjacent zo older than its
+;;       source is refused and recompiled, never served (the old global
+;;       'exists pin WITH 'same present would have served that stale zo
+;;       unconditionally — the literally rejected design; pinned red in
+;;       tests/test-compiled-root.rkt).
 ;;     * Map-first: when several root entries carry a member, the FIRST
 ;;       current-compiled-file-roots entry wins (probe: root+same,
 ;;       per-zo root served, adjacent never consulted).
@@ -129,11 +148,14 @@
 ;;     published root is made read-only; consumers never write to it.
 ;;
 ;; W1a install map (PLAN-W1-INSTALL-MAP.md):
-;;   - Launch roots become (list checkout-map install-map) — absolute
-;;     paths, map-first order (first existing zo wins; the checkout
-;;     payload shadows install for manifest-covered sources). No 'same,
-;;     no relative entries, no defaults consulted. Any future append
-;;     must use the RHS-before-assignment form
+;;   - Round-E amended launch roots: (list checkout-map install-map
+;;     'same) — absolute paths, absolute maps FIRST, 'same LAST
+;;     (first-match wins: the checkout payload shadows install for
+;;     manifest-covered sources and both maps shadow 'same, whose fresh
+;;     same-run compilations are the only thing it can serve — see the
+;;     Round-E re-justification above). No relative entries, no bare
+;;     defaults consulted. Any future append must use the
+;;     RHS-before-assignment form
 ;;     (append (list ...) (current-compiled-file-roots)).
 ;;   - The install map is built at resolve time (job-local,
 ;;     deterministic, immutable, chmod a-w like the payload): every
@@ -1334,13 +1356,16 @@
          'resolve-compiled-root!
          "consumer source digest mismatch for ~a — current source changed since the producer build"
          (hash-ref e 'path)))
-      ;; W4 (W3 review deferral): the resolver no longer MUTATES the
-      ;; consumer checkout. Mtime aging (which also wrote seconds into
-      ;; zo-mtime-ms fields) is removed: the W3 probe proved external
-      ;; roots are consulted unconditionally per lookup, so freshness
-      ;; is not load-bearing, and identity is proven by digests. As the
-      ;; coherence belt, the consumer's on-disk byte count is compared
-      ;; against the manifest entry at resolve time.
+      ;; W4 (W3 review deferral): the resolver itself does not mutate
+      ;; the consumer checkout. Mtime aging (which also wrote seconds
+      ;; into zo-mtime-ms fields) was removed HERE under the premise
+      ;; that external roots are consulted unconditionally per lookup.
+      ;; Round E corrects that premise (candidate acceptance IS
+      ;; mtime-gated on this 8.10 — header freshness invariant), and
+      ;; the alignment moved to the GUARD'S HIT PATH (lazy, per load,
+      ;; byte-identical content only). As the coherence belt, the
+      ;; consumer's on-disk byte count is compared against the manifest
+      ;; entry at resolve time.
       (unless (consumer-source-bytes-match? consumer-src e)
         (error
          'resolve-compiled-root!
@@ -1361,7 +1386,19 @@
                "manifest member ~s is not the compiled form of source ~s"
                (hash-ref e 'zo)
                (hash-ref e 'path)))
-      (define lookup-dir (build-path map-dir (substring (path->string consumer-src) 1) "compiled"))
+      ;; Round E layout correction (W1 latent bug exposed by the
+      ;; Round-E pins): the checkout map must splice the source
+      ;; DIRECTORY under the map dir — the probe-verified lookup is
+      ;; R/<abs source dir minus the leading slash>/compiled/<munged>.zo
+      ;; (the same layout build-install-map! documents and uses).
+      ;; Splicing the source FILE path — the pre-Round-E spelling — kept
+      ;; the member name as a directory, the exact wrong-layout shape
+      ;; that never serves, so checkout-map members were silently never
+      ;; consulted (loads fell through to compile-from-source).
+      (define lookup-dir
+        (build-path map-dir
+                    (substring (path->string (or (path-only consumer-src) (string->path "/"))) 1)
+                    "compiled"))
       (make-directory* lookup-dir)
       ;; W4 rollback-drill finding: map dirs can be re-entered (shard
       ;; retries, shared map dirs). Remapping must be idempotent: same
@@ -1396,6 +1433,42 @@
          (when (or (file-exists? link-path) (link-exists? link-path))
            (delete-file link-path))
          (make-file-or-directory-link link-target link-path)]))
+    ;; Round E: bake the mapped-path key table as a COMPILED module next
+    ;; to the map dir (the install transfer module pattern, review
+    ;; mirrored): one (mapped-spelling . (payload-zo digest)) pair per
+    ;; spelling per manifest source, both the RAW and the link-blind
+    ;; canonical spellings the child's canon produces. The child inserts
+    ;; these at startup with hash inserts only (O(1) syscalls, no
+    ;; per-entry interpreted path surgery — the in-bootstrap build was
+    ;; measured ~0.85 ms/entry interpreted). Authentication mirrors the
+    ;; install transfer module: launch arguments bake this module's zo
+    ;; digest and the child authenticate-then-evals the bytes before any
+    ;; guarded load. Resolve-time re-entry is idempotent (truncate +
+    ;; raco make, same as the links above).
+    (define cl-src (build-path map-dir "checkout-load-keys.rkt"))
+    (define cl-triples
+      (for/list ([e (in-list (hash-ref validated 'sources))])
+        (define consumer-src-e (build-path abs-checkout (hash-ref e 'path)))
+        (define src-dir-e (or (path-only consumer-src-e) (string->path "/")))
+        (define mapped-e
+          (build-path map-dir
+                      (substring (path->string src-dir-e) 1)
+                      "compiled"
+                      (file-name-from-path (string->path (hash-ref e 'zo)))))
+        (define payload-e (path->string (build-path final-dir (hash-ref e 'zo))))
+        (define digest-e (hash-ref e 'zo-digest))
+        (list (cons (path->string mapped-e) (list payload-e digest-e))
+              (cons (path->string (simplify-path (path->complete-path mapped-e) #f))
+                    (list payload-e digest-e)))))
+    (call-with-output-file cl-src
+                           #:exists 'truncate
+                           (lambda (o)
+                             (write `(module checkout-load-keys racket/base
+                                       (provide compiled-root-mapped-key-table)
+                                       (define compiled-root-mapped-key-table ',(append* cl-triples)))
+                                    o)))
+    (unless (zero? (system*/exit-code (find-executable-path "raco") "make" "-j" "1" cl-src))
+      (error 'resolve-compiled-root! "raco make failed for the checkout mapped-path table"))
     ;; W1a install-map repair: build the install map AFTER the checkout
     ;; mapping verified — any failure here fails the whole resolve closed
     ;; (never a partially verified two-map activation).
@@ -1427,32 +1500,31 @@
 ;; compiled-root-activate-parameters
 ;;   Parameter values that route THIS racket's module lookups through
 ;;   the mapping directories. In-process activation returns two values.
-;;   W1a-repair (coordinator trial c01 window-2, run 41271542715): the
-;;   check mode is 'exists, never 'modify-seconds. Under
-;;   'modify-seconds a compiled file older than its source is ignored,
-;;   and restored roots can never satisfy that comparison BY DESIGN
-;;   (fresh checkout mtimes are always newer than producer-era zo
-;;   mtimes) — mtime comparison is structurally wrong for restored
-;;   roots. Under root-on, freshness is established by the same-commit
-;;   source-sha gate plus per-load content digests: any mutated zo
-;;   fails closed via the sha256 check (install-compiled-root-toctou-guard!).
-;;   W1a install-map repair — GLOBAL PIN EFFECT (probe-verified): pinning
-;;   use-compiled-file-check to 'exists affects EVERY compiled-file
-;;   candidate lookup in this process, INCLUDING source-adjacent default
-;;   'same lookups: a stale source-adjacent zo is served without any
-;;   freshness comparison while the pin is active. That is accepted at
-;;   activation because the roots list excludes 'same entirely (no
-;;   source-adjacent candidate is ever consulted under root-on) and
-;;   identity is digest-proven; any future change that reintroduces
-;;   'same alongside the pin must re-justify this note.
+;;   Round E (PLAN-E-same-last-root.md): the roots are (checkout-map
+;;   install-map 'same) — absolute maps FIRST, the source-adjacent
+;;   classic lane LAST — and the check mode is the DEFAULT
+;;   'modify-seconds, returned explicitly so activation always pins the
+;;   default deterministically regardless of ambient caller state: the
+;;   global 'exists pin is REMOVED. Verified-map serving is NOT
+;;   mtime-gated thanks to activation-time alignment: every candidate
+;;   is mtime-gated on this 8.10 under BOTH check modes, so activation
+;;   aligns each digest-verified source's mtime with its payload zo
+;;   (mtime forcing, byte-identical content only — the safety
+;;   contract), and the fresh-clone pin is the safety net; 'same-served
+;;   loads keep exactly the legacy freshness gate. Safety
+;;   re-justification (header Round-E bullet): 'same serves only fresh
+;;   same-run compilations of sources no map covers — it cannot shadow
+;;   a map member the maps still offer (maps first; the digest row is
+;;   consulted before any orig-load) and never serves stale-over-newer.
 (define (compiled-root-activate-parameters root)
   (unless (eq? (compiled-root-reason root) #t)
     (error 'compiled-root-activate-parameters "root not resolved"))
   (define install-dir (compiled-root-install-map-dir root))
-  (values (if install-dir
-              (list (compiled-root-map-dir root) install-dir)
-              (list (compiled-root-map-dir root)))
-          'exists))
+  (values (append (if install-dir
+                      (list (compiled-root-map-dir root) install-dir)
+                      (list (compiled-root-map-dir root)))
+                  '(same))
+          'modify-seconds))
 
 ;; compiled-root-load-keys
 ;;   The load-path spellings the TOCTOU guard recognizes for a source.
@@ -1510,6 +1582,15 @@
 ;;   maps an incoming source path back to its published payload member
 ;;   via the manifest and re-digests the actual bytes behind the
 ;;   consumer's mapping symlink before the module can execute.
+;;   Round E: this digest-first ordering plus the trailing 'same root
+;;   have one probed interaction to know: for a map-covered source
+;;   whose mapped member vanishes mid-run, the loader reroutes to the
+;;   fresh 'same candidate BEFORE any digest row is consulted (probed
+;;   on 8.10), so the load continues with fresh source bytes, is
+;;   counted unmapped loudly, and content continuity holds; 'same
+;;   never serves stale bytes over a newer source ('modify-seconds).
+;;   The digest fail-closed path itself stays pinned by the mutation
+;;   canary below (mismatch raises before orig-load).
 ;;   Mutation after validation (TOCTOU canary) fails closed here.
 ;;   Loads that DO arrive as published-root paths (direct zo requires)
 ;;   are covered by the secondary by-zo table.
@@ -1536,6 +1617,28 @@
                                             #t))))])
       (values k
               (list (path->string (build-path final-dir (hash-ref e 'zo))) (hash-ref e 'zo-digest)))))
+  ;; Round E: root-served members arrive as the MAPPED ZO PATH (probe:
+  ;; a serving candidate hands current-load the candidate path — the
+  ;; arrival spelling the install tables already cover), so the guard
+  ;; must also key the checkout map's mapped member paths; the digest
+  ;; checks the exact bytes behind the serving symlink. Keys mirror
+  ;; resolve-compiled-root!'s link spelling: source DIRECTORY spliced
+  ;; under the map dir, "compiled" mode subdir, munged member name.
+  (define map-dir (compiled-root-map-dir root))
+  (define by-checkout-zo
+    (for*/hash ([e (in-list entries)]
+                [mapped (in-value
+                         (path->string
+                          (build-path
+                           map-dir
+                           (substring (path->string (or (path-only (build-path checkout-dir
+                                                                               (hash-ref e 'path)))
+                                                        (string->path "/")))
+                                      1)
+                           "compiled"
+                           (file-name-from-path (string->path (hash-ref e 'zo))))))]
+                [k (in-list (compiled-root-load-keys mapped))])
+      (values k (list mapped (hash-ref e 'zo-digest)))))
   ;; W1a install-map repair: the install table, same mechanics (equal?
   ;; keys over raw + link-blind simplified spellings; first-match).
   ;; Values keep the same (list zo-path digest) shape, where the zo path
@@ -1548,12 +1651,13 @@
                     [k (in-list (compiled-root-load-keys (list-ref e 0)))])
           (values k (list (list-ref e 1) (list-ref e 2))))
         #f))
-  ;; Probe-verified on 8.10 (W1a install-map repair): under root-on the
-  ;; module system hands current-load the MAPPED ZO PATH for
-  ;; install-served loads (unlike checkout-map members, which arrive as
-  ;; consumer source paths), so the guard must also key the mapped
-  ;; member paths — the digest checks the exact bytes behind the
-  ;; serving symlink either way.
+  ;; Probe-verified on 8.10 (W1a install-map repair; arrival spellings
+  ;; corrected by the Round-E probes): under root-on the module system
+  ;; hands current-load the MAPPED ZO PATH for SERVED loads — install
+  ;; and checkout alike — while SOURCE-path arrivals happen only when no
+  ;; candidate is accepted (compile-from-source), so the guard must also
+  ;; key the mapped member paths — the digest checks the exact bytes
+  ;; behind the serving symlink either way.
   (define by-install-zo
     (if install-inv
         (for*/hash ([e (in-list (hash-ref install-inv 'mapped))]
@@ -1576,12 +1680,23 @@
              (let ([rel (find-relative-path root-path p)])
                (define digest (hash-ref by-zo (string->path (path->string rel)) #f))
                (and digest (list (path->string (build-path final-dir (path->string rel))) digest)))))
+       ;; Round E: the checkout map's mapped-path spellings (root-served
+       ;; members arrive as the serving candidate's path — see the
+       ;; by-checkout-zo table), tried only when the source-path table
+       ;; misses.
+       (define chit
+         (and (not hit)
+              (for*/first ([k (in-list (compiled-root-load-keys path))]
+                           [v (in-value (hash-ref by-checkout-zo k #f))]
+                           #:when v)
+                v)))
        ;; W1a install-map repair: the install table lookup (source-path
        ;; keys first, then the probe-verified mapped-zo-path spellings
        ;; the module system actually delivers under root-on), tried only
        ;; when the checkout tables miss.
        (define ihit
          (and (not hit)
+              (not chit)
               (or (and by-install-src
                        (for*/first ([k (in-list (compiled-root-load-keys path))]
                                     [v (in-value (hash-ref by-install-src k #f))]
@@ -1595,6 +1710,30 @@
        (cond
          [hit
           (match-define (list zo-path digest) hit)
+          (define bs (file->bytes zo-path))
+          (unless (string=? (sha256-bytes bs) digest)
+            (error 'compiled-root-toctou "payload mutated after verification: ~a" path))
+          ;; Round E hit-path freshness alignment: the arriving source
+          ;; (a by-src hit — path IS the source spelling) is aligned AT
+          ;; its payload zo's mtime so the candidate search inside
+          ;; orig-load finds a fresh member under the default check
+          ;; (byte-identical content only; both must exist).
+          (when (and (file-exists? path) (file-exists? zo-path))
+            (define q-sm (file-or-directory-modify-seconds path))
+            (define q-zm (file-or-directory-modify-seconds zo-path))
+            (when (> q-sm q-zm)
+              (file-or-directory-modify-seconds path q-zm)))
+          (telemetry (match-let ([(compiled-root-telemetry h f l b m) (telemetry)])
+                       (compiled-root-telemetry (add1 h) f (add1 l) (+ b (bytes-length bs)) m)))
+          (telemetry-map-counters
+           (match-let ([(compiled-root-map-counters c i u) (telemetry-map-counters)])
+             (compiled-root-map-counters (add1 c) i u)))]
+         ;; Round E: mapped-path arrivals for checkout members
+         ;; digest-check the bytes behind the serving symlink and count
+         ;; under the checkout-map counter (the same canary the
+         ;; install-served branch applies).
+         [chit
+          (match-define (list zo-path digest) chit)
           (define bs (file->bytes zo-path))
           (unless (string=? (sha256-bytes bs) digest)
             (error 'compiled-root-toctou "payload mutated after verification: ~a" path))
@@ -1710,26 +1849,48 @@
             (rebuild with the current producer)"))
   (define lk-zo-path (path->string (build-path root-dir (string->path (hash-ref lk-info 'zo)))))
   ;; W1a install-map repair: the install map inventory (resolve-time,
-  ;; consumer-local). When present, the launch roots become (list
-  ;; checkout-map install-map) — absolute paths, MAP-FIRST (probe: the
-  ;; first entry wins) — and the child authenticates the install
-  ;; transfer module exactly like the checkout one (baked zo digest,
-  ;; authenticate-then-eval, table fetched by module name).
+  ;; consumer-local). Round E: the launch roots are (list checkout-map
+  ;; install-map 'same) — absolute paths, absolute maps FIRST, 'same
+  ;; LAST (probe: the first entry wins) — and the child authenticates
+  ;; the install transfer module exactly like the checkout one (baked
+  ;; zo digest, authenticate-then-eval, table fetched by module name).
   (define install-inv (hash-ref (compiled-root-manifest root) 'install-map #f))
   (define install-dir (and install-inv (hash-ref install-inv 'map-dir)))
   (define install-lk (and install-inv (hash-ref install-inv 'load-keys)))
+  ;; Round E: the resolve-baked checkout mapped-path table (COMPILED,
+  ;; next to the map dir). When present it is authenticated exactly like
+  ;; the other transfer modules; roots without one (manual test structs,
+  ;; older resolves) launch with an empty mapped table — source-path
+  ;; arrivals still hit tbl.
+  (define cl-zo-path
+    (path->string (build-path (compiled-root-map-dir root) "compiled" "checkout-load-keys_rkt.zo")))
+  (define cl-segment
+    (if (file-exists? cl-zo-path)
+        (string-append
+         (format
+          " (define cl-path (string->path ~s)) (auth! cl-path ~s \"checkout mapped-path table\")"
+          cl-zo-path
+          (sha256-file cl-zo-path))
+         " (define ctbl-zo"
+         "  (let ([ht (make-hash)])"
+         "   (for ([e (in-list (dynamic-require ''checkout-load-keys 'compiled-root-mapped-key-table))])"
+         "    (unless (hash-has-key? ht (car e))"
+         "     (hash-set! ht (car e) (cdr e))))"
+         "   ht))")
+        " (define ctbl-zo (hasheq))"))
   (define il-zo-path
     (and install-lk
          (path->string (build-path (string->path install-dir)
                                    (string->path (hash-ref install-lk 'zo))))))
-  ;; Segment 1: launch roots + install transfer table. The checkout-map
-  ;; entry is FIRST in both shapes; the install entry is appended, never
-  ;; prepended (any future append must use the RHS-before-assignment
-  ;; form (append (list ...) (current-compiled-file-roots))).
+  ;; Segment 1: launch roots + install transfer table. Round E: the
+  ;; checkout-map entry is FIRST, the install entry is appended, 'same
+  ;; LAST — (list checkout-map install 'same) in both shapes (any
+  ;; future append must use the RHS-before-assignment form
+  ;; (append (list ...) (current-compiled-file-roots))).
   (define roots-install-segment
     (if install-dir
         (string-append
-         (format "(current-compiled-file-roots (list (string->path ~s) (string->path ~s)))"
+         (format "(current-compiled-file-roots (list (string->path ~s) (string->path ~s) 'same))"
                  (path->string (compiled-root-map-dir root))
                  install-dir)
          (format " (define il-path (string->path ~s))" il-zo-path)
@@ -1764,7 +1925,7 @@
          "    (unless (hash-has-key? ht k)"
          "     (hash-set! ht k (list (cadr e) (caddr e)))))"
          "   ht))")
-        (string-append (format "(current-compiled-file-roots (list (string->path ~s)))"
+        (string-append (format "(current-compiled-file-roots (list (string->path ~s) 'same))"
                                (path->string (compiled-root-map-dir root)))
                        " (define itbl #f)"
                        " (define itbl-zo #f)")))
@@ -1876,29 +2037,35 @@
      ;; module's bytes and execute EXACTLY those bytes (see
      ;; transfer-auth.rkt), then fetch the COMPILED table from the
      ;; declared module — the module system never re-opens lk-path.
-     ;; use-compiled-file-check below is 'exists, so the zo inside
-     ;; the immutable root is used regardless of mtimes.
+     ;; no use-compiled-file-check pin below (Round E removed the
+     ;; global 'exists pin): the default 'modify-seconds governs, and
+     ;; PROBED on 8.10 every candidate — root-derived and adjacent — IS
+     ;; mtime-gated under both modes (accepted iff cand-mtime >=
+     ;; src-mtime). Mapped members stay fresh via the lazy hit-path
+     ;; mtime alignment in the guard below (digest-verified
+     ;; precondition).
      " (define lk-path (string->path ~s))"
      " (auth! lk-path ~s)"
      ;; W1a install-map repair: the launch roots + (when the resolve
      ;; carried an install map) the authenticated install transfer
      ;; table are spliced in here — see roots-install-segment below.
      "~a"
-     ;; W1a-repair (trial c01 window-2, run 41271542715): 'exists,
-     ;; never 'modify-seconds — mtime comparison is structurally
-     ;; wrong for restored roots (fresh checkout mtimes are always
-     ;; newer than producer-era zo mtimes, so every root member
-     ;; would be judged stale). Freshness comes from the same-commit
-     ;; source-sha gate; any mutated zo fails closed via the
-     ;; per-load sha256 check below.
-     ;; W1a install-map repair — GLOBAL PIN EFFECT (probe-verified):
-     ;; this pin governs EVERY compiled-file candidate lookup in the
-     ;; child, including source-adjacent default 'same lookups (a stale
-     ;; adjacent zo is served without any freshness comparison while
-     ;; the pin is active). The roots list excludes 'same entirely, so
-     ;; no source-adjacent candidate is consulted under root-on and
-     ;; identity stays digest-proven.
-     " (use-compiled-file-check 'exists)"
+     ;; Round E (PLAN-E-same-last-root.md): the W1a global 'exists pin
+     ;; is REMOVED — the default 'modify-seconds governs this child.
+     ;; PROBED on 8.10: every candidate (root-derived and adjacent) is
+     ;; mtime-gated under both modes, so mapped members stay fresh via
+     ;; the lazy hit-path mtime alignment below (aligned only after the
+     ;; digest verifies byte-identical content — the header's own
+     ;; safety-contract clause, extended to load time; the resolver
+     ;; already forced mtimes at resolve). Freshness rests on the
+     ;; same-commit source-sha gate
+     ;; plus the per-load sha256 check below, and any mutated zo still
+     ;; fails closed. The roots segment above appends 'same LAST: it
+     ;; serves only fresh same-run compilations of sources no map covers
+     ;; — never a stale source-adjacent zo ('modify-seconds refuses
+     ;; older-than-source candidates, unlike the rejected
+     ;; 'exists-with-'same design) and never a map member (the digest
+     ;; checks below fail closed before orig-load).
      " (define checkout-dir (string->path ~s))"
      " (define root-dir (string->path ~s))"
      " (define tbl"
@@ -1934,6 +2101,12 @@
      "       (path->string (build-path root-dir (string->path (cadr e))))"
      "       (caddr e)))))"
      "   ht))"
+     ;; Round E: the checkout map's mapped-path twin table comes from the
+     ;; RESOLVE-BAKED COMPILED module (checkout-load-keys, authenticated
+     ;; above via the cl-segment): the child only INSERTS the pre-computed
+     ;; (mapped-spelling . (payload-zo digest)) pairs — hash inserts only,
+     ;; O(1) syscalls, no per-entry interpreted path surgery.
+     "~a"
      ;; v1.00.32 W2 repair: hit counting. Q_COMPILED_ROOT_TELEMETRY_DIR
      ;; (exported by `launch`) turns every bootstrapped process in the
      ;; child tree into a counter: one temporary file per process,
@@ -1979,15 +2152,26 @@
      "   (define canon"
      "    (and path (path->string (simplify-path (path->complete-path path) #t))))"
      "   (define hit (and canon (hash-ref tbl canon #f)))"
+     "   (define c-zo-hit"
+     "    (and canon (not hit) (hash-ref ctbl-zo canon #f)))"
      "   (define i-hit"
-     "    (and canon (not hit) itbl (hash-ref itbl canon #f)))"
+     "    (and canon (not hit) (not c-zo-hit) itbl (hash-ref itbl canon #f)))"
      "   (define iz-hit"
-     "    (and canon (not hit) (not i-hit) itbl-zo (hash-ref itbl-zo canon #f)))"
+     "    (and canon (not hit) (not c-zo-hit) (not i-hit) itbl-zo (hash-ref itbl-zo canon #f)))"
      "   (cond"
      "    [hit"
      "     (unless (string=? (sha256-file (cadr hit)) (caddr hit))"
      "      (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path))"
+     "     (when (and (file-exists? (car hit)) (file-exists? (cadr hit)))"
+     "      (define q-sm (file-or-directory-modify-seconds (car hit)))"
+     "      (define q-zm (file-or-directory-modify-seconds (cadr hit)))"
+     "      (when (> q-sm q-zm)"
+     "       (file-or-directory-modify-seconds (car hit) q-zm)))"
      "     (q-count! (file-size (cadr hit)))]"
+     "    [c-zo-hit"
+     "     (unless (string=? (sha256-file (car c-zo-hit)) (cadr c-zo-hit))"
+     "      (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path))"
+     "     (q-count! (file-size (car c-zo-hit)))]"
      "    [i-hit"
      "     (unless (string=? (sha256-file (car i-hit)) (cadr i-hit))"
      "      (error 'compiled-root-toctou \"payload mutated after verification: ~~a\" path))"
@@ -2012,6 +2196,7 @@
     (path->string (path->directory-path (simplify-path (path->complete-path (compiled-root-checkout
                                                                              root)))))
     root-dir
+    cl-segment
     compiled-root-child-telemetry-prefix
     compiled-root-child-telemetry-suffix
     map-counters-segment)))
@@ -2258,6 +2443,12 @@
 ;;   eager raco make output is usable — the pre-repair
 ;;   (current-compiled-file-roots '()) parameterize was no-compiled
 ;;   semantics and made the eager output unusable.
+;;   Round E freshness alignment is HIT-PATH LAZY: each digest-verified
+;;   source is aligned AT its payload zo's mtime inside the guard's hit
+;;   branch (see install-compiled-root-toctou-guard!) right before the
+;;   default handler's candidate search — never a per-child upfront
+;;   walk (children that load nothing pay nothing), never touching the
+;;   installation (install members are deliberately not aligned).
 (define (with-compiled-root root checkout modules thunk)
   (if (and (eq? (compiled-root-reason root) #t)
            ;; W1a: symlink verification at activation (digest/bytes only,
@@ -2268,26 +2459,29 @@
       ;; imperative install to this dynamic extent (W3 review deferral,
       ;; fixed in W4): the TOCTOU wrapper is active for the thunk and
       ;; unwound on return — exceptions included.
-      ;; W1a-repair (coordinator trial c01 window-2, run 41271542715):
-      ;; 'exists, never 'modify-seconds — under root-on, freshness is
-      ;; established by the same-commit source-sha gate plus per-load
-      ;; content digests (any mutated zo fails closed via the sha256
-      ;; check), while mtime comparison is structurally wrong for
-      ;; restored roots: a fresh checkout's source mtimes are always
-      ;; newer than producer-era root zo mtimes, so 'modify-seconds
-      ;; judges every root member stale (zero-root-hits).
-      ;; W1a install-map repair — GLOBAL PIN EFFECT (probe-verified):
-      ;; the 'exists pin governs EVERY compiled-file candidate lookup in
-      ;; this dynamic extent, including source-adjacent default 'same
-      ;; lookups; the roots list below excludes 'same entirely, so no
-      ;; source-adjacent candidate is ever consulted under root-on and
-      ;; identity stays digest-proven.
+      ;; Round E (PLAN-E-same-last-root.md): the W1a global 'exists pin
+      ;; is REMOVED — the default 'modify-seconds governs this dynamic
+      ;; extent (parameterized explicitly so activation is deterministic
+      ;; regardless of ambient caller state). Verified-map members still
+      ;; serve: the guard's hit path LAZILY ALIGNS each digest-verified
+      ;; source's mtime with its payload zo (the header freshness
+      ;; invariant — candidate acceptance is mtime-gated on this 8.10
+      ;; under BOTH check modes, and only byte-identical sources are
+      ;; ever aligned), while identity rests on the same-commit
+      ;; source-sha gate plus per-load content digests (any mutated zo
+      ;; fails closed via the sha256 check). The roots append 'same
+      ;; LAST: it cannot shadow a map member the maps still offer (the
+      ;; maps sit first and win the candidate search; the digest row is
+      ;; consulted before any orig-load) and never serves
+      ;; stale-over-newer (the candidate gate refuses older-than-source
+      ;; adjacent candidates).
       (parameterize ([current-compiled-file-roots
                       (let ([install-dir (compiled-root-install-map-dir root)])
-                        (if install-dir
-                            (list (compiled-root-map-dir root) install-dir)
-                            (list (compiled-root-map-dir root))))]
-                     [use-compiled-file-check 'exists]
+                        (append (if install-dir
+                                    (list (compiled-root-map-dir root) install-dir)
+                                    (list (compiled-root-map-dir root)))
+                                '(same)))]
+                     [use-compiled-file-check 'modify-seconds]
                      [current-load (current-load)])
         (install-compiled-root-toctou-guard! root)
         (telemetry (match-let ([(compiled-root-telemetry h f l b _) (telemetry)])
