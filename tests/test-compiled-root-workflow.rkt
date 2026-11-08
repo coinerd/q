@@ -313,9 +313,8 @@
     (check-true
      (string-contains? step "--install-map-dir \"$RUNNER_TEMP/compiled-root-install-map\"")
      "the resolve invocation must activate the job-local install map (two verified map roots)")
-    (check-false
-     (string-contains? step "mkdir -p \"$RUNNER_TEMP/compiled-root-install-map\"")
-     "resolve self-creates the install map (no redundant workflow mkdir)")
+    (check-false (string-contains? step "mkdir -p \"$RUNNER_TEMP/compiled-root-install-map\"")
+                 "resolve self-creates the install map (no redundant workflow mkdir)")
     (define run-match (regexp-match #px"(?s:        run: \\|\n(.*))" step))
     (check-not-false run-match)
     (define script (string-replace (cadr run-match) "${{ matrix.shard }}" "0"))
@@ -948,7 +947,7 @@
                "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100"))
   (check-true (string-contains? benchmark-text "--paginate --slurp")))
 (test-case "trial identity recipe is shared by producer and two installed consumers"
-  (check-equal? (length (regexp-match* #rx"trial-addon-relative-r1" ci-text)) 3)
+  (check-equal? (length (regexp-match* #rx"trial-addon-relative-r2" ci-text)) 3)
   (check-equal? (length (regexp-match* #rx"--addon-store" ci-text)) 2))
 
 ;; ---------------------------------------- compiled-root exclusivity: narrowed

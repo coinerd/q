@@ -2636,22 +2636,27 @@
     (call-with-output-file shape-bad #:exists 'truncate (lambda (o) (write '(flat-symbol) o)))
     (define missing-link (build-path enum-base "t1-missing.rktd"))
     (define good-link (build-path enum-base "t1-good.rktd"))
-    ;; the 'up element is the only spelling whose target exists under the
-    ;; production base rule (base = the link file spelled as a directory,
-    ;; so any ordinary element lands UNDER a file and can never exist);
-    ;; it exercises the resolvable-entry branch without changing control
-    ;; flow. Probe-verified on 8.10: real links.rktd entries are nested
-    ;; (id (elem ...)) and every real entry contract-violates today —
-    ;; which is exactly what the skip counts must make loud.
-    (call-with-output-file good-link #:exists 'truncate (lambda (o) (write '((t1lib up)) o)))
+    (make-directory* (build-path enum-base "t1-target"))
+    ;; Round C, probe-verified (P1: real links.rktd = 204/204 nested
+    ;; (id (elem ...)) entries, all byte-string elements, 166 with a
+    ;; 'root id; P2: under the parent-of-link-file base all 204 targets
+    ;; exist with 0 raises; P3: the collection-path cross-check stayed
+    ;; inconclusive in this env, superseded by P2's 204/204 evidence):
+    ;; the base is the link file's PARENT directory, so the nested
+    ;; spelling resolves like the flat one and both land on the same
+    ;; created target dir.
+    (call-with-output-file good-link
+                           #:exists 'truncate
+                           (lambda (o) (write '((t1lib "t1-target") (t1lib (#"t1-target"))) o)))
     (define-values (rs diag) (run-enumeration! '() (list corrupt shape-bad missing-link good-link)))
     (check-equal? (install-enumeration-diag-link-count diag) 4)
     (check-equal? (install-enumeration-diag-link-skip-count diag) 3)
     (check-equal? (length (install-enumeration-diag-link-skips diag)) 3)
     (check-equal? (install-enumeration-diag-entry-skip-count diag) 0)
-    ;; the resolvable entry's target ('up = the link file's own
-    ;; directory) is still a declared root
-    (check-true (root-string-matches? rs enum-base) "the valid link file's target must stay a root")
+    ;; both spellings resolve to the created target (flat + un-nested
+    ;; nested): the valid link file's target is still a declared root
+    (check-true (root-string-matches? rs (build-path enum-base "t1-target"))
+                "the valid link file's target must stay a root")
     (define (skip-reason p)
       (define hit
         (for/first ([s (in-list (install-enumeration-diag-link-skips diag))]
@@ -2683,19 +2688,16 @@
     (check-equal? (length (install-enumeration-diag-entry-skips diag)) 3)
     (check-equal? (install-enumeration-diag-link-skip-count diag) 0)
     (check-equal? (install-enumeration-diag-roots diag) 1)
-    ;; the 'up entry resolves to the link file's own directory: a real
-    ;; declared root survives alongside the skips
-    (check-true (root-string-matches? rs enum-base)
+    ;; the 'up entry now resolves to the link file's PARENT directory
+    ;; under the round-C base rule: a real declared root survives
+    ;; alongside the skips
+    (check-true (root-string-matches? rs (build-path enum-base 'up))
                 "the resolvable root must survive the bad entries")
-    ;; nested element list -> build-path contract violation (THE real
-    ;; links.rktd shape, probe-verified): counted with the exception
-    ;; message, the bad ENTRY as the path element
-    (define nested-skip
-      (for/first ([s (in-list (install-enumeration-diag-entry-skips diag))]
-                  #:when (equal? (car s) (list 't2lib (list "nested" "elements"))))
-        s))
-    (check-not-false nested-skip)
-    (check-true (and (string? (cadr nested-skip)) (not (string=? (cadr nested-skip) ""))))
+    ;; nested element list ("nested" "elements") is THE real links.rktd
+    ;; shape (round-C probe P1): under the parent-of-link-file base it
+    ;; un-nests and resolves to enum-base/nested/elements, which does
+    ;; not exist, so it lands in the missing bucket keyed by the link
+    ;; file — asserted with the file-keyed pair below
     ;; symbol element -> build-path raise -> counted with the exception
     ;; message as the reason, the bad ENTRY as the path element
     (define raise-skip
@@ -2705,16 +2707,21 @@
     (check-not-false raise-skip)
     (check-true (and (string? (cadr raise-skip)) (not (string=? (cadr raise-skip) ""))))
     (check-false (string-prefix? (cadr raise-skip) "missing: "))
-    ;; missing target dir -> counted with the LINK FILE as the path
-    ;; element and the accurate "missing: <dir>" reason
-    (define missing-skip
-      (for/first ([s (in-list (install-enumeration-diag-entry-skips diag))]
-                  #:when (equal? (car s) link-t2))
+    ;; missing targets -> counted with the LINK FILE as the path element
+    ;; and the accurate "missing: <dir>" reason; TWO file-keyed skips
+    ;; now exist in entry order: the nested elements first, then
+    ;; t2-missing-dir
+    (define file-keyed-skips
+      (for/list ([s (in-list (install-enumeration-diag-entry-skips diag))]
+                 #:when (equal? (car s) link-t2))
         s))
-    (check-not-false missing-skip)
-    (check-true (string-prefix? (cadr missing-skip) "missing: ")
-                (format "missing-entry reason: ~s" (cadr missing-skip)))
-    (check-true (string-contains? (cadr missing-skip) "t2-missing-dir")))
+    (check-equal? (length file-keyed-skips) 2)
+    (check-true (string-prefix? (cadr (car file-keyed-skips)) "missing: ")
+                (format "nested-missing reason: ~s" (cadr (car file-keyed-skips))))
+    (check-true (string-contains? (cadr (car file-keyed-skips)) "nested/elements"))
+    (check-true (string-prefix? (cadr (cadr file-keyed-skips)) "missing: ")
+                (format "missing-entry reason: ~s" (cadr (cadr file-keyed-skips))))
+    (check-true (string-contains? (cadr (cadr file-keyed-skips)) "t2-missing-dir")))
 
   ;; T3/T8 share the permission-fixture guard: on a root runner chmod 000
   ;; does not block, so the fixtures would observe nothing.
@@ -2725,16 +2732,14 @@
 
   (when enum-chmod-blocks?
     (test-case "enumeration counts a chmod-000 root dir as a root-skip"
-      ;; 'up lifts the target out from under the link file (see the T1
-      ;; note): the 'root branch then lists the locked dir, whose
-      ;; directory-list raises (probe-verified: chmod-000 blocks
-      ;; directory-list)
+      ;; the flat entry resolves directly to the locked dir under the
+      ;; parent-of-link-file base (round C): the 'root branch then lists
+      ;; the locked dir, whose directory-list raises (probe-verified:
+      ;; chmod-000 blocks directory-list)
       (define link-t3 (build-path enum-base "t3.rktd"))
       (define locked (build-path enum-base "t3-locked"))
       (make-directory* locked)
-      (call-with-output-file link-t3
-                             #:exists 'truncate
-                             (lambda (o) (write '((root up "t3-locked")) o)))
+      (call-with-output-file link-t3 #:exists 'truncate (lambda (o) (write '((root "t3-locked")) o)))
       (dynamic-wind (lambda () (system*/exit-code (find-executable-path "chmod") "000" locked))
                     (lambda ()
                       (define-values (_rs diag) (run-enumeration! '() (list link-t3)))
