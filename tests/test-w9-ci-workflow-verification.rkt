@@ -368,7 +368,7 @@
     (define contract (hash-ref cp 'fast_env_verification_contract))
     (check-equal?
      (hash-ref contract 'prepare_action_sha256)
-     "8636bfd4021ed664ffa793e1b897886ad6e7725c96428778ef05f4089995fe6f"
+     "ec609681f1790b61017662f9fb71f5e30be67ee6b923a539d432461dae73a536"
      (string-append
       "manifest/OS/Racket/lockfile verification steps must stay byte-identical"
       " (re-stamped by v1.00.30 W0 BUG-0073: pipefail added before the step-summary tee;"
@@ -389,7 +389,10 @@
       " producer lock — raco setup now consumes the exact reviewed package list"
       " derived from ci/racket-package-lock.rktd instead of the hardcoded q fmt"
       " pair, and the addon cache key bumped racket-addon-v3 to racket-addon-v4"
-      " because the produced store content changes)"))
+      " because the produced store content changes; amended before merge: the"
+      " lock_pkgs capture uses displayln — bare racket -e prints the string's"
+      " quoted representation, which raco setup rejected as mangled package"
+      " names in the first PR run's fast-env)"))
     (check-equal?
      (hash-ref contract 'setup_action_sha256)
      "4873bec295c1bc47964f71304e027ece91a5a003b1db6dcdb477c87ebec51fb0"

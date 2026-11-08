@@ -601,7 +601,7 @@
                     "dag-checkpoint.json"))
       (check-true (file-exists? cp) "W2 dag-checkpoint.json must exist")
       (check-equal? (sha256-hex cp)
-                    "9f02151bfbea399625d87630d9ebd6dbfffe0619abf01496c8e550efce4eadf8"
+                    "987bf1dfa6e1aed160221555b2106ca248bdd268bf76d5c3425e5d99315213cd"
                     "W2 dag-checkpoint.json must stay byte-for-byte the recorded checkpoint")
       ;; re-stamped by the v1.00.30 W0 wave (BUG-0073): the pipefail fix changed
       ;; prepare_action_sha256 inside fast_env_verification_contract
