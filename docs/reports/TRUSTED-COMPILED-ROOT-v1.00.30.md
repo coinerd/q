@@ -281,11 +281,15 @@ Historic sections and artifact history are left untouched.
 ### Two-root launch design
 
 - Root-on children launch with `current-compiled-file-roots` bound to
-  `(list checkout-map install-map)` — absolute paths, map-first order: the first existing
+  `(list checkout-map install-map 'same)` — absolute paths, map-first order: the first existing
   zo wins, so the checkout payload shadows the install map for manifest-covered sources,
   and the install map serves the installation closure (typed/racket etc.) that the
-  checkout payload never covers. No `'same`, no relative entries, no defaults are
-  consulted under root-on. The roots shape is pinned identically for the `-e` launch
+  checkout payload never covers. **Round E amendment (PR #9893, 2026-11-09):** the
+  trailing `'same` root serves only fresh same-run compilations of sources NO map covers
+  (the run-tests harness's ephemeral /var/tmp fixtures) under the default
+  'modify-seconds freshness check — it can never shadow a map member or serve a
+  stale-over-newer adjacent zo. No relative entries, no defaults beyond the trailing
+  'same are consulted under root-on. The roots shape is pinned identically for the `-e` launch
   string and the flags payload in `tests/test-compiled-root.rkt`.
 - The install map is built at **resolve time**, job-local, deterministic and immutable
   (`chmod -R a-w`, like the published payload): every reachable installation zo is
@@ -353,11 +357,16 @@ Two header invariants of the v1.00.30 W3 text above were disproved by W1a probes
 corrected in the proven-semantics header of `ci/prepared-environment/compiled-root.rkt`,
 restated at every pin site:
 
-- The `'exists` freshness pin is **GLOBAL**: it governs every compiled-file candidate,
-  including source-adjacent default `'same` lookups — a stale adjacent zo is served
-  without any freshness comparison while the pin is active. Root-on therefore excludes
-  `'same` entirely, and identity rests entirely on the resolve-time source-sha gate and
-  the per-load content digests, never on mtime semantics.
+- The `'exists` freshness pin was **GLOBAL** until the Round E amendment (PR #9893): it governed every compiled-file candidate,
+  including source-adjacent default `'same` lookups — a stale adjacent zo was served
+  without any freshness comparison while the pin was active; root-on therefore excluded
+  `'same` entirely, and identity rested entirely on the resolve-time source-sha gate and
+  the per-load content digests, never on mtime semantics. **Amended:** the pin is removed;
+  the default 'modify-seconds check governs (PROBED on 8.10: every candidate — root-derived
+  and source-adjacent — is mtime-gated under both modes), mapped members stay fresh via
+  lazy hit-path mtime alignment (digest-verified precondition), and the trailing `'same`
+  serves only fresh same-run compilations of unmapped sources (the ephemeral harness
+  fixtures) with baseline parity for their freshness semantics.
 - `'modify-seconds` gating of root-derived candidates is **not reproducible in
   isolation** on 8.10 (an external-root candidate is served even with a strictly newer
   source, with or without its `.dep` sidecar); the historical zero-root-hits attribution
