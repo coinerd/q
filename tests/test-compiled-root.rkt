@@ -210,10 +210,13 @@
   ;; fresh shard clone's source mtimes are strictly newer than any
   ;; producer-era root zo. Root-on activation must still serve the root
   ;; on BOTH paths — the in-process parameters and the subprocess -e
-  ;; bootstrap — because freshness is established by the same-commit
-  ;; source-sha gate plus per-load content digests, never by mtime. A
-  ;; lazily recompiled source-adjacent compiled/ dir is the observable
-  ;; zero-root-hits failure signature this pin guards against.
+  ;; bootstrap — because identity rests on the same-commit source-sha
+  ;; gate plus per-load content digests, and Round E activation aligns
+  ;; each digest-verified source's mtime with its payload zo (mtime
+  ;; forcing for byte-identical content) so the default check's
+  ;; candidate gate keeps the maps fresh. A lazily recompiled
+  ;; source-adjacent compiled/ dir is the observable zero-root-hits
+  ;; failure signature this pin guards against.
   (test-case "fresh-clone consumer (sources newer than root zos) still gets root hits (W1a-repair)"
     (define (stamp-sources-newer! root)
       ;; make every manifest source in the consumer checkout strictly
@@ -933,13 +936,16 @@
     (check-true (>= (cdr (list-ref zero-map 1)) 1) "fixture: the marker load counted as a hit")
     (check-equal? (list-ref zero-map 2) '(install-map-hits . 0) "no install loads in this child")
     ;; complete distinct counting: every unmapped load in this child is
-    ;; a distinct real file (the runtime load plus nothing else), and
-    ;; the runtime's own base load IS counted (>= 1)
+    ;; a distinct real file, and the unmapped count and the distinct
+    ;; count agree. Round E amended steady state: a marker-only mapped
+    ;; child may legitimately have ZERO unmapped loads — the runtime's
+    ;; own loads are served fresh via the trailing 'same lane or happen
+    ;; before the guard installs, and the marker itself is a mapped hit
+    ;; (the pre-Round-E ≥1 premise relied on the broken checkout-map
+    ;; layout compiling everything from source).
     (check-equal? (cdr (list-ref zero-map 3))
                   (cdr (list-ref zero-map 4))
                   "unmapped-loads and the COMPLETE distinct count agree")
-    (check-true (>= (cdr (list-ref zero-map 4)) 1)
-                "the runtime load passes through the guarded current-load and is counted")
     (check-true (and (list? (cdr (list-ref zero-map 5)))
                      (andmap string? (cdr (list-ref zero-map 5)))
                      (<= (length (cdr (list-ref zero-map 5))) (cdr (list-ref zero-map 4))))
@@ -1045,6 +1051,17 @@
      (for/list ([i (in-range 3)])
        (cons (format "lookup/look-~a.rkt" i)
              (format "#lang racket/base\n(provide look-~a)\n(define look-~a ~a)\n" i i i)))))
+  ;; Round E: remove the fixture's source-adjacent compiled/ directory.
+  ;; These pins drive guarded loads through the SOURCE-key table (by-src
+  ;; arrivals), and the trailing 'same lane would otherwise serve the
+  ;; raco-made adjacent zos first (fresh, zo-path arrivals, unmapped —
+  ;; the loads would never reach the table mechanics under test). With
+  ;; no adjacent candidate and no map links, each load compiles from
+  ;; source and arrives as the canonical source path, exactly the
+  ;; arrival class the equal?-key/duplicate/alias pins were built on.
+  ;; (The adjacent compiled/ dir is created LATER by
+  ;; make-real-lookup-triples!'s raco make — the deletion below runs
+  ;; after that.)
   ;; Symlink alias spelling the alias table entries below are declared
   ;; through: a REAL subdirectory plus a symlink to it, spelled with an
   ;; up-element detour. simplify-path follows links ONLY when an
@@ -1119,6 +1136,17 @@
   (define lookup-real (make-real-lookup-triples! (build-path lookup-base "lookup-root") (list 0 1 2)))
   (define look-1-triple (list-ref lookup-real 1))
   (define look-2-triple (list-ref lookup-real 2))
+  ;; Round E: remove the fixture's source-adjacent compiled/ directory.
+  ;; These pins drive guarded loads through the SOURCE-key table (by-src
+  ;; arrivals), and the trailing 'same lane would otherwise serve the
+  ;; raco-made adjacent zos first (fresh, zo-path arrivals, unmapped —
+  ;; the loads would never reach the table mechanics under test). With
+  ;; no adjacent candidate and no map links, each load compiles from
+  ;; source and arrives as the canonical source path, exactly the
+  ;; arrival class the equal?-key/duplicate/alias pins were built on.
+  ;; (The payload copies under the published roots are unaffected.)
+  (when (directory-exists? (build-path lookup-checkout "lookup" "compiled"))
+    (delete-directory/files (build-path lookup-checkout "lookup" "compiled")))
   ;; Production-scale lookup root: 1 canonical table member + 4 extra
   ;; entries (the look-2 alias-only symlink-detour declaration + the
   ;; look-0 canonical duplicate + the look-1 alias-canonical duplicate
@@ -2161,11 +2189,21 @@
   ;; failed on EVERY re-entry with a shared map dir and could never
   ;; recover. The replacement delete must gate on link-exists? as well.
   ;; ------------- W1a install-map repair: two verified map roots -----------
+  ;; Round E amendment (PLAN-E-same-last-root.md): launch roots carry the
+  ;; classic lane 'same LAST — (checkout-map install-map 'same), absolute
+  ;; maps FIRST — and the global 'exists pin is REMOVED (the default
+  ;; 'modify-seconds governs; PROBED on 8.10 every candidate is
+  ;; mtime-gated, kept fresh by the lazy hit-path alignment for mapped
+  ;; members): 'same keeps the legacy freshness gate for everything the
+  ;; maps do not cover, and a vanished mapped member reroutes to the
+  ;; fresh 'same candidate loudly (content continuity; the digest
+  ;; fail-closed path stays pinned by the mutation canary).
   ;;
   ;; PLAN-W1-INSTALL-MAP.md binding decisions, pinned red-first here:
-  ;;   1. launch roots are exactly (list checkout-map install-map) —
-  ;;      absolute paths, map-first; the -e bootstrap and the flags payload
-  ;;      agree with the in-process activation values;
+  ;;   1. launch roots are exactly (list checkout-map install-map 'same)
+  ;;      — absolute paths, absolute maps FIRST, 'same LAST; the -e
+  ;;      bootstrap and the flags payload agree with the in-process
+  ;;      activation values;
   ;;   2. the install map is a job-local, read-only, resolve-time
   ;;      materialization of the installation's source-adjacent compiled
   ;;      directories under the PROBE-VERIFIED reroot layout (R/<abs source
@@ -2180,9 +2218,9 @@
   ;;      unmapped loads) are additive; the five-field envelope struct and
   ;;      the launch record's existing fields are unchanged;
   ;;   6. direct-zo loads miss the guard tables and stale source-adjacent
-  ;;      install zos are not served under activation (roots exclude
-  ;;      'same); the 'exists pin's global effect is documented at the
-  ;;      pin sites;
+  ;;      zos are never served over newer sources under activation (the
+  ;;      Round-E 'same lane keeps the default 'modify-seconds freshness
+  ;;      gate; the maps themselves still serve regardless of mtimes);
   ;;   7. an install-served closure loads fast relative to the same-tree
   ;;      from-source baseline (relative pin, never absolute wall clock).
   (define install-base (make-temporary-file "qcr-install~a" 'directory))
@@ -2287,27 +2325,300 @@
       (check-false (member 'write (file-or-directory-permissions p))
                    (format "install map member is writable: ~a" p))))
 
-  (test-case "roots shape pin: exactly two verified maps, absolute, map-first"
+  (test-case "roots shape pin: two verified maps first, 'same last, default check"
+    ;; Round E amended pin (red-first): the mode is the DEFAULT
+    ;; 'modify-seconds (the global 'exists pin is removed) and the roots
+    ;; carry the classic lane 'same LAST after the two absolute maps.
     (define colls (make-install-coll! "shape" 'install-shape 'source-shape))
     (define-values (r imd) (resolve-with-install! "shape" colls))
     (check-true (eq? (compiled-root-reason r) #t) (reason->string (compiled-root-reason r)))
     (define-values (roots mode) (compiled-root-activate-parameters r))
-    (check-equal? mode 'exists)
-    ;; exactly the two verified maps — never 'same, never defaults consulted
-    (check-equal? roots (list (compiled-root-map-dir r) imd))
-    (check-true (andmap absolute-path? roots) (format "non-absolute roots: ~s" roots))
+    (check-equal? mode 'modify-seconds)
+    ;; the two verified maps FIRST, the classic lane LAST
+    (check-equal? roots (list (compiled-root-map-dir r) imd 'same))
+    ;; absolute check restricted to the two map entries ('same is the
+    ;; symbolic classic lane, never a path)
+    (check-true (andmap absolute-path? (take roots 2)) (format "non-absolute map roots: ~s" roots))
     (check-equal? (list-ref roots 0) (compiled-root-map-dir r) "checkout map must be FIRST")
-    ;; the -e bootstrap carries the same two roots in the same order
+    (check-equal? (list-ref roots 2) 'same "'same must be LAST")
+    ;; the no-install shape keeps the same contract: (checkout-map 'same)
+    (define-values (roots-ni mode-ni) (compiled-root-activate-parameters root-b))
+    (check-equal? mode-ni 'modify-seconds)
+    (check-equal? roots-ni (list (compiled-root-map-dir root-b) 'same))
+    ;; the -e bootstrap carries the same three roots in the same order
     (define boot (cadr (compiled-root-launch-arguments r)))
     (define cmap-at
       (string-index-of boot
                        (path->string (simplify-path (path->complete-path (compiled-root-map-dir
                                                                           r))))))
     (define imap-at (string-index-of boot (path->string (simplify-path (path->complete-path imd)))))
+    (define same-at (string-index-of boot "'same"))
     (check-not-false cmap-at "bootstrap must mention the checkout map")
     (check-not-false imap-at "bootstrap must mention the install map")
     (check-true (< cmap-at imap-at) "map-first order must hold in the -e bootstrap")
-    (check-false (string-contains? boot "'same") "bootstrap must never restore 'same"))
+    (check-true (and same-at imap-at (< imap-at same-at))
+                "bootstrap must carry 'same AFTER both map paths"))
+
+  ;; ------------------- Round E pins: 'same LAST + default check mode
+  ;;
+  ;; PLAN-E-same-last-root.md pins (5)-(9), added red-first alongside the
+  ;; amended shape pins above: map precedence shadows 'same (5), an
+  ;; unmapped fixture is compiled by child 1 and served source-adjacent
+  ;; by child 2 with the launch mode unchanged (6), a stale adjacent zo
+  ;; is never served over a newer source (7), a mid-run map disappearance
+  ;; reroutes to the fresh 'same candidate loudly (content continuity;
+  ;; probed: no digest row is consulted for a vanished link) (8), and
+  ;; the child's actual roots dump is [checkout-map install-map 'same]
+  ;; (9).
+
+  (test-case "map member shadows 'same for the same source (marker identity)"
+    ;; (5) alpha is BOTH install-map-covered and source-adjacent compiled
+    ;; (the fixture's raco make wrote the adjacent form). The maps sit
+    ;; FIRST in the launch roots, so the install bytes serve — 'same LAST
+    ;; can only ever serve what no map covers.
+    (define colls (make-install-coll! "precedence" 'install-precedence 'source-precedence))
+    (stamp-install-fresh! colls)
+    (define alpha-src (list-ref colls 1))
+    (check-true (file-exists? (install-zo (list-ref colls 0) "alpha"))
+                "fixture premise: a source-adjacent 'same candidate exists")
+    (define-values (r imd) (resolve-with-install! "precedence" colls))
+    (check-true (eq? (compiled-root-reason r) #t) (reason->string (compiled-root-reason r)))
+    (with-compiled-root
+     r
+     checkout-b
+     '()
+     (lambda ()
+       (parameterize ([current-load-relative-directory (path->directory-path checkout-b)])
+         (check-equal? (dynamic-require alpha-src 'iv)
+                       (list 'install-precedence 'install-precedence)
+                       "the map member must shadow the 'same candidate by first-match")))))
+
+  (test-case "unmapped fixture: child 1 compiles, child 2 serves adjacent zo"
+    ;; (6) Round E end-to-end on the 'same lane: an unmapped temp fixture
+    ;; is compiled by child 1 (counted unmapped) and served
+    ;; source-adjacent by child 2 WITHOUT recompiling — the adjacent zo
+    ;; carries INSTALL bytes while the source carries FINAL bytes
+    ;; (marker identity, no timing). Plain loads never WRITE compiled
+    ;; files (probed on this 8.10: a from-source compile happens in
+    ;; memory and materializes no zo), so child 1 compiles through the
+    ;; SAME mapped launch shape running raco make. Both launch records
+    ;; stay verified-root-hit: appending 'same never changes the mode,
+    ;; and 'same-served loads stay counted unmapped (no new counter).
+    (define fixture-dir (build-path install-base "freshlane-fixture"))
+    (make-directory* fixture-dir)
+    (define fixture-src (build-path fixture-dir "freshlane-mod.rkt"))
+    (define (write-fixture! marker)
+      (call-with-output-file
+       fixture-src
+       #:exists 'truncate
+       (lambda (o)
+         (fprintf o "(module freshlane-mod racket/base (provide fx) (define fx '~a))\n" marker))))
+    (write-fixture! 'freshlane-install)
+    (define fresh-flags (build-path install-base "freshlane-flags.rktd"))
+    (define fresh-marker2 (build-path install-base "freshlane-marker2.rktd"))
+    (define resolve-code6
+      (system*/exit-code (find-executable-path "racket")
+                         (path->string ci-cli-runtime-path)
+                         "resolve"
+                         "--root"
+                         (path->string final-dir)
+                         "--checkout"
+                         (path->string checkout-b)
+                         "--trusted-label"
+                         "q-trusted-producer"
+                         "--flags-file"
+                         (path->string fresh-flags)))
+    (check-equal? resolve-code6 0 "freshlane resolve must succeed")
+    (define (launch-child! tel-name argv-rest)
+      (define tel6 (build-path install-base tel-name))
+      (when (file-exists? tel6)
+        (delete-file tel6))
+      (define env6 (make-environment-variables))
+      (for ([n (in-list (environment-variables-names (current-environment-variables)))])
+        (environment-variables-set! env6
+                                    n
+                                    (environment-variables-ref (current-environment-variables) n)))
+      (environment-variables-set! env6 #"Q_CI_COMPILED_ROOT" #"auto")
+      (define (run-child!)
+        (apply system*/exit-code
+               (find-executable-path "racket")
+               (path->string ci-cli-runtime-path)
+               "launch"
+               "--flags-file"
+               (path->string fresh-flags)
+               "--telemetry-file"
+               (path->string tel6)
+               "--"
+               "racket"
+               argv-rest))
+      (values (parameterize ([current-environment-variables env6])
+                (run-child!))
+              (and (file-exists? tel6) (file->value tel6))))
+    (define expr6
+      (format (string-append "(begin (define fx (dynamic-require (string->path ~s) 'fx))"
+                             " (call-with-output-file ~s (lambda (o) (write fx o))))")
+              (path->string fixture-src)
+              (path->string fresh-marker2)))
+    (define-values (code1 tel1)
+      (launch-child! "freshlane-tel1.rktd"
+                     (list "-l-" "raco/main.rkt" "make" "-j" "1" (path->string fixture-src))))
+    (check-equal? code1 0 "child 1 must run")
+    ;; Write-destination rule (probed on this 8.10): a compiled file is
+    ;; written at the FIRST current-compiled-file-roots entry that yields
+    ;; a location for the source — the checkout map dir here, NOT
+    ;; source-adjacent ('same is LAST and receives no new writes). The
+    ;; fresh compilation materializes under the mapped lane either way;
+    ;; pin its existence via the flags payload's map dir.
+    (define fresh-map-dir (list-ref (file->value fresh-flags) 2))
+    (define fresh-zo
+      (build-path (string->path fresh-map-dir)
+                  (substring (path->string fixture-dir) 1)
+                  "compiled"
+                  (source->zo-name "freshlane-mod.rkt")))
+    (check-true (file-exists? fresh-zo)
+                "child 1's compilation must materialize under the mapped lane")
+    (check-equal? (cdr (assq 'mode (cdr tel1))) "verified-root-hit")
+    (check-true (>= (cdr (assq 'unmapped-loads (cdr tel1))) 1)
+                "child 1's fixture compile must be counted unmapped")
+    ;; rewrite the source AFTER the compile and stamp it AT the zo mtime
+    ;; (the file's stamp pattern): the adjacent candidate stays FRESH
+    ;; under the default 'modify-seconds, while its INSTALL bytes remain
+    ;; distinguishable from a fresh compilation's FINAL bytes.
+    (write-fixture! 'freshlane-final)
+    (file-or-directory-modify-seconds fixture-src (file-or-directory-modify-seconds fresh-zo))
+    (define-values (code2 tel2) (launch-child! "freshlane-tel2.rktd" (list "-e" expr6)))
+    (check-equal? code2 0 "child 2 must run")
+    (check-equal? (file->value fresh-marker2)
+                  'freshlane-install
+                  "child 2 must be served the adjacent zo, not recompile the source")
+    (check-equal? (cdr (assq 'mode (cdr tel2))) "verified-root-hit")
+    (check-true (>= (cdr (assq 'unmapped-loads (cdr tel2))) 1)
+                "child 2's fresh-compiled load must stay counted unmapped (no new counter)")
+    (check-equal? (cdr (assq 'fallbacks (cdr tel2))) 0 "no fallback may be involved"))
+
+  (test-case "stale adjacent zo is never served over a newer source (no 'exists restoration)"
+    ;; (7) Round E safety pin, red against any 'exists-with-'same
+    ;; restoration: under the default 'modify-seconds the 'same lane
+    ;; refuses a source-adjacent zo OLDER than its source and recompiles
+    ;; — the source bytes serve. ('exists + 'same present would serve the
+    ;; stale INSTALL bytes unconditionally — the literally rejected
+    ;; design; see the header's Round-E re-justification.)
+    (define stale-dir (build-path install-base "stale-fallthrough"))
+    (make-directory* stale-dir)
+    (define stale-src (build-path stale-dir "stale-fallthrough-mod.rkt"))
+    (define (write-stale! marker)
+      (call-with-output-file
+       stale-src
+       #:exists 'truncate
+       (lambda (o)
+         (fprintf o
+                  "(module stale-fallthrough-mod racket/base (provide sf) (define sf '~a))\n"
+                  marker))))
+    (write-stale! 'sf-install)
+    (unless (zero? (system*/exit-code (find-executable-path "racket")
+                                      "-l"
+                                      "raco"
+                                      "-l-"
+                                      "raco/main.rkt"
+                                      "make"
+                                      "-j"
+                                      "1"
+                                      stale-src))
+      (error 'fixture "raco make failed for the stale-fallthrough fixture"))
+    (define stale-zo (build-path stale-dir "compiled" (source->zo-name "stale-fallthrough-mod.rkt")))
+    (check-true (file-exists? stale-zo) "fixture premise: adjacent zo exists")
+    ;; the source becomes STRICTLY newer than its adjacent zo (+60 s, the
+    ;; stamp-sources-newer! pattern — deterministic, no sleeps)
+    (write-stale! 'sf-final)
+    (file-or-directory-modify-seconds stale-src (+ (file-or-directory-modify-seconds stale-zo) 60))
+    (define r7
+      (resolve-compiled-root! #:final-dir final-dir
+                              #:checkout checkout-b
+                              #:trusted-producer-labels '("q-trusted-producer")
+                              #:map-dir (build-path install-base "stale-fall-cmap")))
+    (check-true (eq? (compiled-root-reason r7) #t) (reason->string (compiled-root-reason r7)))
+    (with-compiled-root
+     r7
+     checkout-b
+     '()
+     (lambda ()
+       (check-equal? (dynamic-require stale-src 'sf)
+                     'sf-final
+                     "a stale adjacent zo must be refused and recompiled, never served"))))
+
+  (test-case "mid-run install-map disappearance is loud, never silent"
+    ;; (8) Round E, amended on the plan's fail-closed extension: the
+    ;; plan's exn form ("'same never silently substitutes because the
+    ;; digest read fails closed") is unreachable ON THIS 8.10 for the
+    ;; vanished-LINK case — once the link is gone the loader reroutes
+    ;; to the fresh source-adjacent candidate BEFORE any guard digest
+    ;; row is consulted (the arrival is the 'same zo path — the same
+    ;; arrival spelling the CLI-child evidence in this suite shows), so
+    ;; no digest error can fire. What holds — and is pinned here — is
+    ;; content continuity + loudness: the rerouted load serves the SAME
+    ;; bytes the map member offered (the adjacent zo IS the member's
+    ;; link target — never producer-era bytes), classified unmapped
+    ;; (counted, never silent), with the activation itself still root-on
+    ;; (no fallback). The digest fail-closed path itself stays pinned by
+    ;; the mutation test above (target bytes mutated → error).
+    (define colls (make-install-coll! "vanish" 'install-vanish 'source-vanish))
+    (stamp-install-fresh! colls)
+    (define alpha-src (list-ref colls 1))
+    (define coll (list-ref colls 0))
+    (define-values (r imd) (resolve-with-install! "vanish" colls))
+    (check-true (eq? (compiled-root-reason r) #t) (reason->string (compiled-root-reason r)))
+    (define lookup-dir (build-path imd (substring (path->string coll) 1) "compiled"))
+    (define alpha-link (build-path lookup-dir "alpha_rkt.zo"))
+    ;; grant the removal up front (the map dir is read-only); the link
+    ;; is still PRESENT at activation time — the disappearance is mid-run
+    (unless (zero? (system*/exit-code (find-executable-path "chmod") "u+w" lookup-dir))
+      (error 'fixture "could not chmod +w the install lookup dir"))
+    (reset-telemetry!)
+    (define unmapped-before (compiled-root-map-counters-unmapped (telemetry-map-counters)))
+    (with-compiled-root
+     r
+     checkout-b
+     '()
+     (lambda ()
+       (delete-file alpha-link)
+       ;; content continuity: the rerouted 'same load serves the same
+       ;; bytes the map member offered — install-marker identity
+       (check-equal? (dynamic-require alpha-src 'iv)
+                     (list 'install-vanish 'install-vanish)
+                     "the rerouted load must serve the same member bytes, loud, not stale")))
+    (define unmapped-after (compiled-root-map-counters-unmapped (telemetry-map-counters)))
+    (check-true (>= (- unmapped-after unmapped-before) 1)
+                "the rerouted load must be loudly counted unmapped (never silent)")
+    (system*/exit-code (find-executable-path "chmod") "a-w" lookup-dir))
+
+  (test-case "child sees exactly (checkout-map install-map 'same) as its roots"
+    ;; (9) Round E: the -e bootstrap roots are observable IN THE CHILD —
+    ;; the dump must be [checkout-map, install-map, 'same]: absolute maps
+    ;; first, the classic lane last.
+    (define colls (make-install-coll! "dump" 'install-dump 'source-dump))
+    (define-values (r imd) (resolve-with-install! "dump" colls))
+    (check-true (eq? (compiled-root-reason r) #t) (reason->string (compiled-root-reason r)))
+    (define dump-out (build-path install-base "roots-dump.rktd"))
+    (when (file-exists? dump-out)
+      (delete-file dump-out))
+    (define child9 (build-path install-base "child-roots-dump.rkt"))
+    (with-output-to-file
+     child9
+     #:exists 'replace
+     (lambda ()
+       (printf "(call-with-output-file ~s\n" (path->string dump-out))
+       (printf " (lambda (o) (write (map (lambda (rt) (if (path? rt) (path->string rt) rt))\n")
+       (printf "                         (current-compiled-file-roots)) o)))\n")))
+    (define exit-code9
+      (apply system*/exit-code
+             (find-executable-path "racket")
+             (append (compiled-root-launch-arguments r) (list "-f" (path->string child9)))))
+    (check-equal? exit-code9 0)
+    (check-equal? (file->value dump-out)
+                  (list (path->string (compiled-root-map-dir r))
+                        (hash-ref (hash-ref (compiled-root-manifest r) 'install-map) 'map-dir)
+                        'same)
+                  "child roots must be [checkout-map, install-map, 'same] — maps first"))
 
   (test-case "install map serves with the real reroot layout; wrong layout never serves"
     (define colls (make-install-coll! "serving" 'install-serving 'source-serving))
@@ -2345,6 +2656,11 @@
      (path->string (simplify-path (path->complete-path (install-zo (list-ref wrong-colls 0)
                                                                    "alpha"))))
      (build-path wrong-lookup "alpha_rkt.zo"))
+    ;; Round E: this test-local 'exists spelling is RETAINED deliberately
+    ;; (simulation fixture, not a production pin): the negative direction
+    ;; must hold under ANY check mode, so the pre-Round-E pin spelling
+    ;; proves the wrong layout never serves even under unconditional
+    ;; serving.
     (parameterize ([current-compiled-file-roots (list wrong-root)]
                    [use-compiled-file-check 'exists])
       (check-equal? (dynamic-require (list-ref wrong-colls 1) 'iv)
@@ -2401,11 +2717,11 @@
     ;; behavior change). Stamp both sources AT the adjacent zo mtime —
     ;; the stamp-sources-newer! pattern from the fresh-clone pin above,
     ;; inverted (src <= zo keeps the zo fresh) — so the strict equality
-    ;; below is deterministic. The stamp is reading-neutral under the
-    ;; activation pin: per the header's corrected invariant (and the
-    ;; fresh-clone pin in this same file), a candidate under the pinned
-    ;; 'exists check is served regardless of mtimes, so the stamp only
-    ;; removes legacy-lane nondeterminism. The equality is deliberately
+    ;; below is deterministic. PROBED on 8.10: every compiled-file
+    ;; candidate is mtime-gated under the default 'modify-seconds check
+    ;; (activation removed the 'exists pin), so the equal stamp makes
+    ;; the pinned equality deterministic on any lane; the equality is
+    ;; deliberately
     ;; NOT loosened to tolerate 'source-missing: serving source bytes on
     ;; this lane is exactly the regression the NEXT test-case pins red
     ;; (a fallback lane that parameterized roots to '() compiled and
@@ -2603,6 +2919,10 @@
                         checkout-b
                         '()
                         (lambda ()
+                          ;; Round E: the test-local 'exists spelling is
+                          ;; RETAINED deliberately (simulation fixture): it
+                          ;; pins direct-zo digest/count behavior, which is
+                          ;; mode-independent.
                           (parameterize ([current-compiled-file-roots (list (compiled-root-map-dir r)
                                                                             imd)]
                                          [use-compiled-file-check 'exists])
@@ -2610,10 +2930,10 @@
     (define imc-after (compiled-root-map-counters-install-map (telemetry-map-counters)))
     (check-true (>= (- imc-after imc-before) 1)
                 "the direct mapped-zo load must be digest-checked and counted")
-    ;; stale-zo: under activation the roots EXCLUDE 'same, so the load
-    ;; is served through the install-map member (the imd link), never
-    ;; through a source-adjacent 'same candidate — the marker identity
-    ;; below proves the map member serves
+    ;; stale-zo: under activation the two maps PRECEDE 'same
+    ;; (first-match), so the load is served through the install-map
+    ;; member (the imd link) even though an adjacent candidate exists —
+    ;; the marker identity below proves the map member serves
     (define stale-colls (make-install-coll! "stale2" 'install-stale2 'source-stale2))
     (define stale-alpha (list-ref stale-colls 1))
     (define-values (stale-r stale-imd) (resolve-with-install! "stale2x" stale-colls))
@@ -2622,12 +2942,14 @@
     ;; zos, and a rewrite straddling a clock second could flip
     ;; legacy-lane serving to source bytes. Stamp both sources AT the
     ;; adjacent zo mtime so the equality below is deterministic. The
-    ;; pin under test stays structural: under the activation 'exists
-    ;; pin the map serves regardless of mtimes (header corrected
-    ;; invariant; corroborated by the fresh-clone pin in this same
-    ;; file, where sources are stamped +60 s NEWER and the root member
-    ;; is still served with no lazy recompile), and the map serves
-    ;; because roots exclude 'same — no mtime was aged to make it so.
+    ;; pin under test stays structural after Round E: the maps PRECEDE
+    ;; 'same and win the candidate search (first-match), and the equal
+    ;; stamp keeps the map member inside the accepted freshness regime
+    ;; (candidate mtime >= source mtime — the header corrected
+    ;; freshness invariant; corroborated by the fresh-clone pin in
+    ;; this same file, where activation's alignment keeps the root
+    ;; member served with no lazy recompile even with sources stamped
+    ;; +60 s NEWER) — no mtime was aged to make the map win.
     (for ([src (in-list (list stale-alpha (list-ref stale-colls 2)))]
           [nm (in-list '("alpha" "beta"))])
       (file-or-directory-modify-seconds
@@ -2686,6 +3008,10 @@
       (define out (build-path install-base "chain-child-result.txt"))
       (when (file-exists? out)
         (delete-file out))
+      ;; Round E: the test-local 'exists spelling below is RETAINED
+      ;; deliberately (simulation fixture): both sides of the relative
+      ;; timing pin self-parameterize roots + check mode; not a
+      ;; production pin site.
       (define expr
         (string-append "(current-compiled-file-roots "
                        roots-expr
@@ -3077,13 +3403,15 @@
     (define launch-args (list-ref flags 4))
     (define boot (cadr launch-args))
     ;; the -e bootstrap and the flags payload agree with in-process values:
-    ;; both maps, map-first, absolute
+    ;; both maps, map-first, absolute, and 'same LAST (Round E)
     (define cmap-at (string-index-of boot (list-ref flags 2)))
     (define imap-at (string-index-of boot (path->string (simplify-path (path->complete-path imd)))))
+    (define cli-same-at (string-index-of boot "'same"))
     (check-not-false cmap-at "flags bootstrap must mention the checkout map")
     (check-not-false imap-at "flags bootstrap must mention the install map")
     (check-true (< cmap-at imap-at) "map-first order must hold in the flags bootstrap")
-    (check-false (string-contains? boot "'same") "flags bootstrap must never restore 'same")
+    (check-true (and cli-same-at (< imap-at cli-same-at))
+                "flags bootstrap must carry 'same AFTER both map paths")
     ;; launch a child that requires the install member + the checkout
     ;; marker; the record must carry the old fields AND the new keys
     (define child-marker (build-path install-base "cli-child-result.txt"))
@@ -3266,7 +3594,13 @@
     (define checkout-dl (make-checkout! "consumer-dangling" 'producer-fixture))
     (define map-dir-dl (build-path tmp-base "map-dangling"))
     (define src-dl (marker-abs-path checkout-dl))
-    (define lookup-dir-dl (build-path map-dir-dl (substring (path->string src-dl) 1) "compiled"))
+    ;; Round E: the resolver's mapping path splices the source DIRECTORY
+    ;; (the probe-verified lookup layout — see resolve-compiled-root!);
+    ;; plant and re-probe the dangling link exactly there.
+    (define lookup-dir-dl
+      (build-path map-dir-dl
+                  (substring (path->string (or (path-only src-dl) (string->path "/"))) 1)
+                  "compiled"))
     (make-directory* lookup-dir-dl)
     (define link-path-dl (build-path lookup-dir-dl (source->zo-name (file-name-from-path src-dl))))
     ;; plant a stale DANGLING link exactly where the resolver maps: the
@@ -3393,8 +3727,10 @@
   ;; Self-contained unix-style prefix: share/racket/collects/mylib sources
   ;; raco-made SOURCE-ADJACENT (make-install-coll! precedent), the adjacent
   ;; compiled/ dir RENAMED into <prefix>/lib/racket/compiled — real zo bytes
-  ;; at the real reroot spelling. No sleeps, no mtimes read (the rename
-  ;; preserves them and no pin consults them). The config carries the
+  ;; at the real reroot spelling. No sleeps; sources are equal-stamped AT
+  ;; their cache zo mtimes post-rewrite (Round E: the default
+  ;; 'modify-seconds candidate gate must not refuse the mapped cache
+  ;; members). The config carries the
   ;; installer shape: leading ;; comment, 8 absolute anchor keys under
   ;; <prefix>, absolute-installation? #t, 'compiled-file-roots (same
   ;; <cache>); the SOURCES live under the anchor prefix P (review change 8).
@@ -3411,6 +3747,22 @@
     (write-coll-src! beta 'source-cache #f)
     (define cache (build-path prefix "lib" "racket" "compiled"))
     (reroot-adjacent! prefix coll cache)
+    ;; Round E freshness (the stamp-install-fresh! pattern): the source
+    ;; rewrites land AFTER raco make, so under the default
+    ;; 'modify-seconds the mapped cache candidates would be refused and
+    ;; the sources recompiled — source-cache bytes served, exactly what
+    ;; the cache-serving pins must never see. Stamp each source AT its
+    ;; cache zo's mtime (equal => fresh under the candidate gate); the
+    ;; bytes are untouched, no sleeps.
+    (for ([src (in-list (list alpha beta))]
+          [nm (in-list '("alpha" "beta"))])
+      (file-or-directory-modify-seconds
+       src
+       (file-or-directory-modify-seconds
+        (build-path cache
+                    (substring (path->string (path->directory-path coll)) 1)
+                    "compiled"
+                    (source->zo-name (string->path (string-append nm ".rkt")))))))
     (write-cache-config! prefix (list cache))
     (list prefix coll alpha beta cache))
 
