@@ -30,7 +30,10 @@
          "../extensions/gsd/verification-job.rkt")
 
 (define probe-source-text
-  "#lang racket/base\n(require rackunit \"../source.rkt\")\n(provide evidence-suite)\n(define evidence-suite (test-suite \"suite\" (test-case \"target\" (check-equal? (answer) 1))))\n(module+ test (require rackunit/text-ui) (exit (run-tests evidence-suite)))\n")
+  (string-append
+   "#lang racket/base\n(require rackunit \"../source.rkt\")\n(provide evidence-suite)\n"
+   "(define evidence-suite (test-suite \"suite\" (test-case \"target\" (check-equal? (answer) 1))))\n"
+   "(module+ test (require rackunit/text-ui) (exit (run-tests evidence-suite)))\n"))
 (define unfixed-source-text "#lang racket/base\n(provide answer)\n(define (answer) 0)\n")
 (define fixed-source-text "#lang racket/base\n(provide answer)\n(define (answer) 1)\n")
 
