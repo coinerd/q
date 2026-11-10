@@ -22,6 +22,7 @@
          "evidence-runner-coverage.rkt"
          (rename-in "author-scope.rkt" [frozen-author-files frozen-files])
          "../../util/json/checksum.rkt"
+         (only-in "../../runtime/settings.rkt" load-settings setting-ref*)
          "../../scripts/gsd-evidence-probe-runner.rkt")
 (provide valid-red-checkpoint?
          capture-red-checkpoint!
@@ -29,7 +30,11 @@
          begin-red-test-author!
          begin-red-implementation!
          verify-red-checkpoint-green!
-         frozen-author-files)
+         frozen-author-files
+         structured-red-wait-default-seconds
+         structured-red-wait-floor-seconds
+         structured-red-wait-seconds
+         structured-red-wait-ms)
 
 (define-runtime-path adapter "../../scripts/gsd-evidence-probe-runner.rkt")
 (define (need value message)
@@ -49,6 +54,36 @@
         "dirty execution checkout")
   (need (committed-delivery-snapshot repo) "missing committed source"))
 (define frozen-author-files frozen-files)
+;; #9897 (v1.00.32 W1): the structured-RED probe wait was hardcoded at 60 s
+;; (both the registry verification-wait and the job's #:timeout-ms kill),
+;; which killed legitimate probes on slow hosts (solo cost 26.5 s; >60 s
+;; under load). The wait is SETTINGS-DERIVED now: key
+;; gsd.structured-red-wait-seconds, default 300 (the default-exec-limits
+;; 120/300 family), read via setting-ref* against the merged config and
+;; floor-clamped at 60 s. ONE derived value drives BOTH the wait and the
+;; kill so a slow probe is killed by the single registry timeout, not
+;; double-killed. Invalid values keep the default: a typo'd settings file
+;; must never crash a checkpoint. Absent/unloadable settings resolve the
+;; same way.
+(define structured-red-wait-default-seconds 300)
+(define structured-red-wait-floor-seconds 60)
+(define (structured-red-wait-seconds settings)
+  (define raw (and settings (setting-ref* settings '(gsd structured-red-wait-seconds) #f)))
+  (cond
+    [(not (exact-positive-integer? raw))
+     (unless (eq? raw #f)
+       (log-warning
+        "red-checkpoint: gsd.structured-red-wait-seconds has invalid value ~s — using default ~a"
+        raw
+        structured-red-wait-default-seconds))
+     structured-red-wait-default-seconds]
+    [(< raw structured-red-wait-floor-seconds) structured-red-wait-floor-seconds]
+    [else raw]))
+(define (structured-red-wait-ms base)
+  (define settings
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (load-settings base)))
+  (* 1000.0 (structured-red-wait-seconds settings)))
 (define (begin-red-test-author! base plan wave repo attempt fence #:guard guard)
   (locked base
           plan
@@ -325,6 +360,7 @@
                  (save root (hasheq 'status "intent" 'checkpoint checkpoint))
                  (need (guard) "stale guard before structured RED")
                  (define registry (current-gsd-verification-registry))
+                 (define wait-ms (structured-red-wait-ms base))
                  (define identity
                    (verification-identity (path->string (path->complete-path base))
                                           (format "W~a" wave)
@@ -338,9 +374,9 @@
                                           (path->string (find-executable-path "racket"))
                                           (list (path->string adapter)
                                                 (path->string (path->complete-path module)))
-                                          #:timeout-ms 60000.0)))
+                                          #:timeout-ms wait-ms)))
                  (need (start-result-started? started) "structured job is not fresh")
-                 (define job (verification-wait registry (start-result-job-id started) 60000.0))
+                 (define job (verification-wait registry (start-result-job-id started) wait-ms))
                  (need (and (eq? (verification-job-state job) 'completed)
                             (equal? (verification-job-exit-code job) 0)
                             (verification-job-reaped? job)
