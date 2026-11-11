@@ -55,8 +55,11 @@ Released 2026-11-11.
   merges 2058bda7/5dcb72f1/0f6239ea). Autonomous acceptance (the canary's
   item 3) remains NOT PROVEN; a canary re-run is a separate owner decision
   and is now engineering-unblocked by these fixes.
-- Milestone: #898. No activation, release-gate, or workflow-protection
-  changes in this release.
+- Milestone #898. Activation states in this release, named explicitly:
+  nothing in v1.00.32 is activated — the GSD autonomy fixes are dormant
+  until a campaign runs, the compiled-root serving machinery remains merged
+  but not activated (owner decision), and no scheduler state was activated.
+  No release-gate or workflow-protection changes.
 ## v1.00.31 — 2026-09-25
 
 Released 2026-09-25.
