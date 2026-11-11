@@ -422,6 +422,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+**v1.00.32** — User-Visible Changes
+
 **v1.00.31** — Wave-delivery integrity: PERMANENT over the frozen 13-row register; v1.00.30 W4 DELIVERED
 
 **v1.00.29** — User-Visible Changes
