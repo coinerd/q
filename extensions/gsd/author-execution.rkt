@@ -219,6 +219,21 @@
                    guard))
   result)
 
+;; #9898 satisfied-implementation detection: the attempt branch carries every
+;; frozen non-test target committed since the checkpoint baseline (the prior
+;; invocation's owner commits) and present at HEAD. A never-touched target or
+;; a deleted one keeps this #f, so genuinely empty phases still dispatch and
+;; still hit the no-progress guard.
+(define (implementation-committed? repo files checkpoint)
+  (define baseline (hash-ref (hash-ref checkpoint 'checkpoint) 'baseline-head))
+  (define changed
+    (string-split (git repo "diff" "--name-only" "--no-renames" baseline "HEAD" "--") "\n"))
+  (for/and ([path (in-list files)]
+            #:unless (string-prefix? path "tests/"))
+    (and (member path changed)
+         (regexp-match? #px"^[0-9]{6} blob [0-9a-f]{40}\t" (git repo "ls-tree" "HEAD" "--" path))
+         #t)))
+
 (define (run-proactive-author-phases! base
                                       plan
                                       wave
@@ -258,11 +273,32 @@
        (need (equal? (hash-ref checkpoint 'status) "red-ready")
              (format "preimplementation RED refused: ~s" checkpoint))
        (validate-red-checkpoint! base plan wave repo attempt fence #:guard guard)
-       (begin-red-implementation! base plan wave repo attempt fence #:guard guard)
-       (define implemented (dispatch 'implementation))
-       (when (eq? (wave-execution-outcome-kind implemented) 'done)
-         (validate-red-checkpoint! base plan wave repo attempt fence #:guard guard)
-         (verify-red-checkpoint-green! base plan wave repo attempt fence #:guard guard))
+       ;; #9898: a retry attempt whose red-ready checkpoint revalidates may
+       ;; already carry the committed implementation on the attempt branch
+       ;; (the prior invocation died after the owner commit but before the
+       ;; wave completed). Dispatching the implementation phase into that
+       ;; completed work can only produce an empty phase commit, which the
+       ;; no-progress guard terminally fails — losing the committed,
+       ;; GREEN-verifiable deliverable — or refuse at the at-most-once launch
+       ;; marker. Detect the satisfied state first: every frozen non-test
+       ;; target committed since the checkpoint baseline and present at HEAD.
+       ;; Satisfied attempts skip the implementation dispatch and resume at
+       ;; the owned GREEN verification; unsatisfied attempts keep the
+       ;; ordinary fail-closed dispatch below.
+       (define implemented
+         (cond
+           [(implementation-committed? repo files checkpoint)
+            (verify-red-checkpoint-green! base plan wave repo attempt fence #:guard guard)
+            (wave-execution-outcome
+             'done
+             "Implementation already committed on the attempt branch; owned GREEN verification resumed")]
+           [else
+            (begin-red-implementation! base plan wave repo attempt fence #:guard guard)
+            (define dispatched (dispatch 'implementation))
+            (when (eq? (wave-execution-outcome-kind dispatched) 'done)
+              (validate-red-checkpoint! base plan wave repo attempt fence #:guard guard)
+              (verify-red-checkpoint-green! base plan wave repo attempt fence #:guard guard))
+            dispatched]))
        ;; Only ordinary full Verify may turn this terminal outcome into a
        ;; receipt. No checkpoint or candidate-only run is a GREEN receipt.
        implemented])))
