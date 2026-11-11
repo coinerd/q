@@ -4,7 +4,7 @@
 ;; @boundary unit
 ;; @timeout 120
 ;; tests/test-gsd-red-checkpoint-instance-key.rkt — #9899 evidence suite
-;; (v1.00.32 W3).
+;; (milestone-#898 W3).
 ;;
 ;; The RED checkpoint location was deterministic in (base attempt fence)
 ;; alone. A campaign attempt that failed mid-phase and was superseded or

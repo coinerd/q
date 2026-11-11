@@ -6,7 +6,7 @@
 ;; @isolation temp-dir
 ;; @timeout 480
 ;; @covers extensions/gsd/author-execution.rkt extensions/gsd/red-checkpoint.rkt
-;; #9898 (v1.00.32 W2): an infra/timeout retry whose red-ready checkpoint
+;; #9898 (milestone-#898 W2): an infra/timeout retry whose red-ready checkpoint
 ;; revalidates against an attempt branch that ALREADY carries the committed
 ;; implementation must resume to the owned GREEN verification with a done
 ;; author-phase outcome. It must not re-dispatch the implementation phase

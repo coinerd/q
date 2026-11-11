@@ -4,7 +4,7 @@
 ;; @suite ci
 ;; @boundary integration
 ;;
-;; tests/test-ci-recovery-trial.rkt — v1.00.32 W2 (trusted experiment wave)
+;; tests/test-ci-recovery-trial.rkt — milestone-#898 W2 (trusted experiment wave)
 ;;
 ;; Offline contract for the thin workflow evidence adapter
 ;; scripts/ci/ci-recovery-trial.rkt: the trusted-dispatch validation, the
@@ -1015,7 +1015,7 @@
                                 #:created-at-utc "2026-10-30T10:30:00Z"
                                 #:out-dir (build-path dir "trial")))))
 
-  ;; ------------------------------------- v1.00.32 W2 repair: REAL layouts
+  ;; ------------------------------------- milestone-#898 W2 repair: REAL layouts
 
   (test-case "collect: the REAL nested producer-artifact layout binds (not flat-only)"
     ;; A pattern download nests each artifact below its own name under the

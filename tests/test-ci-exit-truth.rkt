@@ -260,7 +260,7 @@
     (check-true (string-contains? ci-yml "Stamp shard run SHA (shard-side attestation)")
                 "the fast suite must stamp the run SHA shard-side before upload")
 
-    ;; -- v1.00.32 W2: the prepared-aggregate candidate (trusted trial only) --
+    ;; -- milestone-#898 W2: the prepared-aggregate candidate (trusted trial only) --
     ;; The experiment wires a trial-only prepared-environment restore into
     ;; test-aggregate. The truth verifier is UNCHANGED: the bundle producer
     ;; still mints the green claim, verify-result-truth still gates it with

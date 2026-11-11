@@ -1,4 +1,4 @@
-<!-- verified-against: 1.00.31 -->
+<!-- verified-against: 1.00.32 -->
 # Agent Harness Runbook
 
 **Scope:** Operating manual for the q-agent self-hosting harness — how to run

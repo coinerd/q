@@ -307,7 +307,7 @@ consumer deletes what it cannot prove.
 
 Every module under `extensions/gsd/` is classified (domain, effects,
 parameters, dependencies) and the declared effects must match the source. At
-v1.00.31 that is 113 modules (W4 added the read-only ownership predicate); the
+v1.00.32 that is 113 modules (W4 added the read-only ownership predicate); the
 number is asserted against the directory listing by the inventory test, so it
 cannot drift silently. The rules that keep the contract single-owner:
 
@@ -328,7 +328,7 @@ cannot drift silently. The rules that keep the contract single-owner:
   are boundary-only adapters whose removal is scheduled for v1.00.40 after
   external callers migrate; internal retry/authorization consumes typed data.
 
-## Simplification campaign (v1.00.31): measured before/after
+## Simplification campaign (v1.00.32): measured before/after
 
 This section records only values that are reproducible in the tree. "Before"
 is the branch base for the slice named in the row; every number below is

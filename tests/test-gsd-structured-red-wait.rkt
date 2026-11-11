@@ -3,12 +3,12 @@
 ;; @suite extensions
 ;; @boundary unit
 ;; @timeout 120
-;; tests/test-gsd-structured-red-wait.rkt — #9897 evidence suite (v1.00.32 W1).
+;; tests/test-gsd-structured-red-wait.rkt — #9897 evidence suite (milestone-#898 W1).
 ;;
 ;; The structured-RED probe launch inside capture-red-checkpoint! waited on
 ;; a HARDCODED 60 s verification-wait with a matching 60 s #:timeout-ms kill.
 ;; Legitimate probes cost more under load (solo cost 26.5 s; 2 of 4 probes
-;; killed in the v1.00.32 W2 canary), so slow hosts were wave-failed on
+;; killed in the W2 canary), so slow hosts were wave-failed on
 ;; wall-clock alone. The flip under test:
 ;;
 ;;   gsd.structured-red-wait-seconds — default 300 (the default-exec-limits

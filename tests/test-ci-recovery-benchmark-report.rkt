@@ -5,7 +5,7 @@
 ;; @isolation process
 ;; @boundary unit
 ;;
-;; W2 (v1.00.32): tests-first contract for
+;; W2 (milestone #898): tests-first contract for
 ;; scripts/run-tests/ci-recovery-benchmark-report.rkt — the controlled
 ;; A/B/C CI-recovery benchmark report (wave contract:
 ;; .planning/waves/W2-controlled-experiment-and-prepared-aggregate-candidate.md,

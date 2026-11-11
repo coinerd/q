@@ -918,7 +918,7 @@
     (check-true (regexp-match? #rx"verified root hit" transcript) transcript)))
 
 ;; ---------------------------------------------------------------------------
-;; v1.00.32 W2 — trusted CI-recovery benchmark wiring (isolated experiment)
+;; milestone-#898 W2 — trusted CI-recovery benchmark wiring (isolated experiment)
 ;;
 ;; The A/B/C harness reuses the ACTUAL required CI path by calling ci.yml as
 ;; a reusable workflow from .github/workflows/ci-recovery-benchmark.yml
@@ -1139,7 +1139,7 @@
                    "ci-recovery-trial-${{ inputs.trial-id }}-attempt-${{ inputs.trial-attempt }}")
  "one evidence artifact per trial attempt")
 
-;; ------------------------- v1.00.32 W2 repair: report interop + identity
+;; ------------------------- milestone-#898 W2 repair: report interop + identity
 
 ;; The collected evidence must be DIRECTLY consumable by the report CLI
 ;; (docs/reports/CI-RECOVERY-EXPERIMENT.md §4): the adapter writes the
