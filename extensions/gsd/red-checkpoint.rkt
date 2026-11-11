@@ -23,13 +23,21 @@
          (rename-in "author-scope.rkt" [frozen-author-files frozen-files])
          "../../util/json/checksum.rkt"
          (only-in "../../runtime/settings.rkt" load-settings setting-ref*)
-         "../../scripts/gsd-evidence-probe-runner.rkt")
+         "../../scripts/gsd-evidence-probe-runner.rkt"
+         ;; #9899 (v1.00.32 W3): the per-campaign-instance checkpoint
+         ;; component is read from the durable campaign record through the
+         ;; same repository boundary every other reader uses.
+         (only-in "campaign-state.rkt" campaign-record-created-at)
+         (only-in "campaign-repository.rkt" load-campaign-record))
 (provide valid-red-checkpoint?
          capture-red-checkpoint!
          validate-red-checkpoint!
          begin-red-test-author!
          begin-red-implementation!
          verify-red-checkpoint-green!
+         ;; #9899 (v1.00.32 W3): instance-aware checkpoint location.
+         campaign-instance
+         location-key
          frozen-author-files
          structured-red-wait-default-seconds
          structured-red-wait-floor-seconds
@@ -54,7 +62,8 @@
         "dirty execution checkout")
   (need (committed-delivery-snapshot repo) "missing committed source"))
 (define frozen-author-files frozen-files)
-;; #9897 (v1.00.32 W1): the structured-RED probe wait was hardcoded at 60 s
+;; #9897 (v1.00.32 W1) precedes the #9899 instance-key block below.
+;; The structured-RED probe wait was hardcoded at 60 s
 ;; (both the registry verification-wait and the job's #:timeout-ms kill),
 ;; which killed legitimate probes on slow hosts (solo cost 26.5 s; >60 s
 ;; under load). The wait is SETTINGS-DERIVED now: key
@@ -132,22 +141,51 @@
              (git repo "diff-tree" "-m" "--no-commit-id" "--name-only" "--no-renames" "-r" commit)
              "\n"))])
       (need (member path allowed) (format "phase changed forbidden path ~s" path)))))
-(define (location-key base plan wave attempt fence)
+;; #9899 (v1.00.32 W3): the checkpoint location was deterministic in
+;; (base attempt fence) alone. A campaign attempt that failed mid-phase and
+;; was superseded/recreated kept the same plan-id (it hashes the plan
+;; manifest) and the same attempt fence, so the recreated incarnation
+;; re-derived the SAME root and the poisoned state there ("no completed RED
+;; checkpoint; do not relaunch") refused every relaunch forever. The hash
+;; input now carries a per-campaign-instance component: the durable record's
+;; created-at (the record already stores it — nothing is minted or
+;; migrated), so a recreated campaign lands on a fresh checkpoint namespace
+;; while retries within one instance keep their stable location. A base
+;; that resolves no durable record stays instance-less and keeps the legacy
+;; hash input byte-for-byte, so old-format checkpoint locations (no
+;; instance component) remain loadable; the change affects only where NEW
+;; checkpoints are written, and only for records that carry the identity.
+(define (campaign-instance base plan)
+  ;; An unresolvable identity (including a plan-id that has not yet passed
+  ;; the location guard) stays instance-less: the legacy derivation and its
+  ;; "invalid attempt identity" refusal remain the single failure point.
+  (define rec
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      ;; Read-only load: no stale-snapshot sweep from a checkpoint path.
+      ;; An unreadable store resolves instance-less the same way an absent
+      ;; settings file resolves default — it must never crash a checkpoint.
+      (and (hex? plan 64) (load-campaign-record base plan #:sweep-stale? #f))))
+  (and rec (number->string (campaign-record-created-at rec))))
+(define (location-key base plan wave attempt fence instance)
   (need (and (hex? plan 64)
              (exact-nonnegative-integer? wave)
              (nonblank? attempt)
-             (exact-nonnegative-integer? fence))
+             (exact-nonnegative-integer? fence)
+             (or (not instance) (nonblank? instance)))
         "invalid attempt identity")
   (define root
-    (build-path (simplify-path (build-path (current-owned-proof-root) 'up))
-                "red-checkpoints"
-                plan
-                (format "W~a" wave)
-                (sha256-string
-                 (format "~a:~a:~a" (path->string (path->complete-path base)) attempt fence))))
+    (build-path
+     (simplify-path (build-path (current-owned-proof-root) 'up))
+     "red-checkpoints"
+     plan
+     (format "W~a" wave)
+     (sha256-string
+      (if instance
+          (format "~a:~a:~a:~a" (path->string (path->complete-path base)) attempt fence instance)
+          (format "~a:~a:~a" (path->string (path->complete-path base)) attempt fence)))))
   root)
 (define (locked base plan wave attempt fence thunk)
-  (define root (location-key base plan wave attempt fence))
+  (define root (location-key base plan wave attempt fence (campaign-instance base plan)))
   (for ([path (list root (build-path root "checkpoint.json") (build-path root "checkpoint.lock"))])
     (need (not (link-exists? path)) "linked checkpoint resource"))
   (make-directory* root)
