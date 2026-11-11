@@ -208,5 +208,4 @@
 (module+ main
   ;; Anchored self path + resolved `(test)` submodule path: CWD-independent
   ;; under `raco test`, direct `racket`, and grouped in-process execution.
-  (dynamic-require (make-resolved-module-path (cons (simple-form-path this-test-file) '(test)))
-                   #f))
+  (dynamic-require (make-resolved-module-path (cons (simple-form-path this-test-file) '(test))) #f))

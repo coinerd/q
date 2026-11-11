@@ -82,7 +82,7 @@
                        (check-false (result-is-error? r))
                        (check-true (hash-has-key? (result-details r) 'scanned)))))
 
-;; ============================================================
+    ;; ============================================================
     ;; R97: absolute emission must not disturb budget accounting
     ;; ============================================================
 
@@ -117,8 +117,8 @@
       (with-temp-dir (λ (dir)
                        (for ([i (in-range 50)])
                          (create-file dir (format "file~a.txt" i)))
-                       (define r (tool-find (hasheq 'path (path->string dir)
-                                                 'max-results 10 'max-depth 10)))
+                       (define r
+                         (tool-find (hasheq 'path (path->string dir) 'max-results 10 'max-depth 10)))
                        (check-false (result-is-error? r))
                        (define d (result-details r))
                        (check-equal? (hash-ref d 'total-found) 50)
@@ -126,8 +126,6 @@
                        (check-true (hash-ref d 'truncated?))
                        (check-true (>= (hash-ref d 'scanned) 50))
                        ;; path-base metadata declares the absolute namespace
-                       (check-equal? (hash-ref d 'path-base) 'absolute)))))
-
-)
+                       (check-equal? (hash-ref d 'path-base) 'absolute))))))
 
 (run-tests scan-budget-tests)

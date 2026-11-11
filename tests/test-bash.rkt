@@ -182,4 +182,6 @@
 ;; W2: both suites in this file must actually run. `bash-tests` was defined but
 ;; never executed, so its assertions could not fail. Nest both suites in one
 ;; runner invocation (no test deleted or weakened).
-(run-tests (test-suite "bash-tool" bash-tests destructive-filter-tests))
+(run-tests (test-suite "bash-tool"
+             bash-tests
+             destructive-filter-tests))

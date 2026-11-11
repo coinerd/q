@@ -108,8 +108,8 @@
                "the surviving checkout v5 pin must be upgraded")
   (check-false (string-contains? content "actions/download-artifact@v7")
                "superseded download-artifact@v7 must be upgraded to the v8 SHA")
-  (check-false (string-contains? content (string-append "actions/download-artifact@"
-                                                        download-artifact-v801-sha))
-               "superseded download-artifact v8.0.1 must be upgraded to the canonical v8 SHA")
+  (check-false
+   (string-contains? content (string-append "actions/download-artifact@" download-artifact-v801-sha))
+   "superseded download-artifact v8.0.1 must be upgraded to the canonical v8 SHA")
   (check-false (string-contains? content "actions/upload-artifact@v4")
                "superseded upload-artifact@v4 must be upgraded to the v7 SHA"))

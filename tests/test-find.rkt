@@ -243,8 +243,7 @@
                        (define r (tool-find (hasheq 'path (path->string dir))))
                        (check-false (result-is-error? r))
                        (define d (result-details r))
-                       (check-equal? (hash-ref d 'search-root)
-                                     (path->string (simple-form-path dir)))
+                       (check-equal? (hash-ref d 'search-root) (path->string (simple-form-path dir)))
                        (check-true (absolute-path? (hash-ref d 'search-root)))
                        ;; R97: output namespace declared in metadata
                        (check-equal? (hash-ref d 'path-base #f) 'absolute))))
@@ -261,20 +260,21 @@
     ;; BUG-13 regression: find with path="." must not crash.
     ;; R97: results are absolute even for a dot root.
     (test-case "find with relative path '.' does not crash and returns absolute results"
-      (with-temp-dir (λ (dir)
-                       (create-file dir "alpha.txt")
-                       (create-file dir "sub/beta.txt")
-                       (define orig-cd (current-directory))
-                       (dynamic-wind (lambda () (current-directory dir))
-                                     (lambda ()
-                                       (define r (tool-find (hasheq 'path ".")))
-                                       (check-false (result-is-error? r))
-                                       (define c (result-content r))
-                                       (check-true (andmap string? c))
-                                       (check-not-false (member (path->string (build-path dir "alpha.txt")) c))
-                                       (check-not-false (member (path->string (build-path dir "sub")) c))
-                                       (check-not-false (member (path->string (build-path dir "sub/beta.txt")) c)))
-                                     (lambda () (current-directory orig-cd))))))
+      (with-temp-dir
+       (λ (dir)
+         (create-file dir "alpha.txt")
+         (create-file dir "sub/beta.txt")
+         (define orig-cd (current-directory))
+         (dynamic-wind (lambda () (current-directory dir))
+                       (lambda ()
+                         (define r (tool-find (hasheq 'path ".")))
+                         (check-false (result-is-error? r))
+                         (define c (result-content r))
+                         (check-true (andmap string? c))
+                         (check-not-false (member (path->string (build-path dir "alpha.txt")) c))
+                         (check-not-false (member (path->string (build-path dir "sub")) c))
+                         (check-not-false (member (path->string (build-path dir "sub/beta.txt")) c)))
+                       (lambda () (current-directory orig-cd))))))
 
     (test-case "truncated is false when results fit"
       (with-temp-dir (λ (dir)
@@ -298,8 +298,7 @@
                        (define found (car (result-content r)))
                        (check-equal? found (path->string (build-path dir "docs/contracts/spec.txt")))
                        ;; The roundtrip: found path is openable by read AS-IS.
-                       (check-true (string-contains? (read-found-text found)
-                                                     "R97-DOCS-SENTINEL")))))
+                       (check-true (string-contains? (read-found-text found) "R97-DOCS-SENTINEL")))))
 
     ;; R97: relative (dot) root and absolute (non-dot) root agree.
     (test-case "R97: dot root and absolute root produce identical absolute results"
@@ -316,8 +315,8 @@
                                        (check-absolute-results! r-dot)
                                        (check-absolute-results! r-abs)
                                        (check-equal? (sort (result-content r-dot) string<?)
-                                       (sort (result-content r-abs) string<?)))
-                       (lambda () (current-directory orig-cd))))))
+                                                     (sort (result-content r-abs) string<?)))
+                                     (lambda () (current-directory orig-cd))))))
 
     ;; R97: absolute root OUTSIDE the current working directory is still
     ;; openable; spaces and Unicode survive the roundtrip.
@@ -330,8 +329,7 @@
                        (check-false (result-is-error? r))
                        (check-absolute-results! r)
                        (define c (result-content r))
-                       (define found
-                         (findf (lambda (s) (string-suffix? s "note.txt")) c))
+                       (define found (findf (lambda (s) (string-suffix? s "note.txt")) c))
                        (check-not-false found)
                        (check-true (string-contains? found "dir with spaces"))
                        (check-true (string-contains? found "ünïcodé-データ"))
@@ -342,52 +340,49 @@
     ;; not depend on the current directory, and a conflicting same-named
     ;; relative path must not shadow the found file.
     (test-case "R97: CWD switched after find still resolves (conflicting decoy ignored)"
-      (with-temp-dir (λ (docs-root)
-                       ;; fixture: docs/contracts/spec.txt (the true target)
-                       (create-file docs-root "docs/contracts/spec.txt" "docs-contracts-sentinel")
-                       ;; conflicting file that the OLD root-relative result
-                       ;; "contracts/spec.txt" would resolve to from a new cwd
-                       (define r (tool-find (hasheq 'path (path->string docs-root))))
-                       (check-false (result-is-error? r))
-                       (define found
-                         (findf (lambda (s) (string-suffix? s "docs/contracts/spec.txt"))
-                                (result-content r)))
-                       (check-not-false found)
-                       (with-temp-dir (λ (other-cwd)
-                                        (create-file other-cwd "contracts/spec.txt" "decoy-sentinel")
-                                        (define orig-cd (current-directory))
-                                        (dynamic-wind (lambda () (current-directory other-cwd))
-                                                      (lambda ()
-                                                        ;; absolute result resolves to the
-                                                        ;; docs sentinel, not the decoy
-                                                        (check-true (string-contains?
-                                                                     (read-found-text found)
-                                                                     "docs-contracts-sentinel")))
-                                                      (lambda () (current-directory orig-cd))))))))
+      (with-temp-dir
+       (λ (docs-root)
+         ;; fixture: docs/contracts/spec.txt (the true target)
+         (create-file docs-root "docs/contracts/spec.txt" "docs-contracts-sentinel")
+         ;; conflicting file that the OLD root-relative result
+         ;; "contracts/spec.txt" would resolve to from a new cwd
+         (define r (tool-find (hasheq 'path (path->string docs-root))))
+         (check-false (result-is-error? r))
+         (define found
+           (findf (lambda (s) (string-suffix? s "docs/contracts/spec.txt")) (result-content r)))
+         (check-not-false found)
+         (with-temp-dir (λ (other-cwd)
+                          (create-file other-cwd "contracts/spec.txt" "decoy-sentinel")
+                          (define orig-cd (current-directory))
+                          (dynamic-wind (lambda () (current-directory other-cwd))
+                                        (lambda ()
+                                          ;; absolute result resolves to the
+                                          ;; docs sentinel, not the decoy
+                                          (check-true (string-contains? (read-found-text found)
+                                                                        "docs-contracts-sentinel")))
+                                        (lambda () (current-directory orig-cd))))))))
 
     ;; R97: '..' in the requested root never leaks into results.
     (test-case "R97: '..' in root path is normalized; results stay absolute"
-      (with-temp-dir (λ (dir)
-                       (create-file dir "s/inner.txt")
-                       (create-file dir "top.txt")
-                       (define orig-cd (current-directory))
-                       (dynamic-wind (lambda () (current-directory dir))
-                                     (lambda ()
-                                       (define r1 (tool-find (hasheq 'path "s/..")))
-                                       (check-false (result-is-error? r1))
-                                       (check-absolute-results! r1)
-                                       ;; top.txt, s, s/inner.txt
-                                       (check-equal? (length (result-content r1)) 3)
-                                       ;; absolute argument with '..' behaves the same
-                                       (define r2
-                                         (tool-find
-                                          (hasheq 'path
-                                                  (path->string (build-path dir "s" "..")))))
-                                       (check-false (result-is-error? r2))
-                                       (check-absolute-results! r2)
-                                       (check-equal? (sort (result-content r1) string<?)
-                                                     (sort (result-content r2) string<?)))
-                       (lambda () (current-directory orig-cd))))))
+      (with-temp-dir
+       (λ (dir)
+         (create-file dir "s/inner.txt")
+         (create-file dir "top.txt")
+         (define orig-cd (current-directory))
+         (dynamic-wind
+          (lambda () (current-directory dir))
+          (lambda ()
+            (define r1 (tool-find (hasheq 'path "s/..")))
+            (check-false (result-is-error? r1))
+            (check-absolute-results! r1)
+            ;; top.txt, s, s/inner.txt
+            (check-equal? (length (result-content r1)) 3)
+            ;; absolute argument with '..' behaves the same
+            (define r2 (tool-find (hasheq 'path (path->string (build-path dir "s" "..")))))
+            (check-false (result-is-error? r2))
+            (check-absolute-results! r2)
+            (check-equal? (sort (result-content r1) string<?) (sort (result-content r2) string<?)))
+          (lambda () (current-directory orig-cd))))))
 
     ;; R97: directory results — read correctly rejects them with an error.
     (test-case "R97: directory results are rejected by read"

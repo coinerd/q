@@ -81,7 +81,8 @@
                      [current-llm-distill-fn mock-distill-error])
         (define results (auto-distill '("msg-1") '() 'exploration))
         (check-true (and (list? results) (= (length results) 1)) "Should fall back on LLM error")
-        (check-equal? (task-conclusion-category (car results)) 'provenance
+        (check-equal? (task-conclusion-category (car results))
+                      'provenance
                       "Fallback should be the deterministic provenance record")))))
 
 ;; ═══════════════════════════════════════════════════════════════
