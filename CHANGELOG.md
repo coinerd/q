@@ -1,3 +1,65 @@
+## v1.00.32 — 2026-11-11
+
+Released 2026-11-11.
+
+> v1.00.32: GSD autonomy robustness — fix the three engine defects the W2
+> acceptance canary found (structured-RED probe wait, infra-retry routing,
+> checkpoint location identity) with RED-first tests and full protected
+> delivery, and ship the planning reconciliation deliverables.
+
+### User-Visible Changes
+- The GSD red-checkpoint's structured-RED probe wait is settings-derived:
+  new key `gsd.structured-red-wait-seconds` (default 300 s, floor 60 s,
+  invalid values fall back to the default with a warning). One derived
+  value drives both the registry verification-wait and the job kill
+  timeout — probes on slow hosts are no longer wave-failed on wall-clock
+  alone (#9897).
+- Infra/timeout retries that resume over already-committed work now route
+  directly to GREEN verification instead of re-dispatching the
+  implementation phase into completed work and terminally failing "phase
+  made no progress" (#9898).
+- RED checkpoint locations are namespaced by the campaign instance (the
+  record's created-at): a recreated campaign lands on a fresh checkpoint
+  namespace instead of inheriting a poisoned one (#9899).
+
+### Breaking / Behavior Changes
+- New settings key `gsd.structured-red-wait-seconds` (default 300, floor
+  60). Operators who pinned checkpoint paths by the old formula must
+  re-derive: new checkpoints for recreated campaigns write to a
+  created-at-derived namespace; existing/legacy locations remain loadable
+  and nothing is migrated.
+
+### Migration Notes
+- No data migration is required. Old RED checkpoints (pre-instance) remain
+  readable; the instance-aware formula applies only to NEW checkpoints.
+- The tier-ownership matrix artifact is version-scoped:
+  `artifacts/tier-ownership/v1.00.32-w0/` replaces the v1.00.31-w0
+  artifact for drift enforcement.
+
+### Testing
+- New suites: test-gsd-structured-red-wait (7/7),
+  test-gsd-author-retry-satisfied (3/3; RED proven in both observed canary
+  failure modes with a real-git fixture, a real structured-RED probe and a
+  candidate GREEN probe), test-gsd-red-checkpoint-instance-key (5/5; legacy
+  pin + distinct-instance + same-instance stability). Full fast suite green
+  on each exact committed tree; milestone-gate 75/75 on the release
+  artifact.
+- Also ships the planning reconciliation deliverables:
+  docs/reports/PLANNING-RECONCILIATION-2026-10-31.md and
+  docs/reports/CONTRACT-CLAIMS-AUDIT-2026-11-09.md with content-contract
+  tests (PR #9900, merge 562cce30).
+
+### Operational / Release
+- The three defects fixed here were found by the W2 acceptance canary and
+  filed as issues #9897/#9898/#9899 (delivered by PRs #9904/#9905/#9906,
+  merges 2058bda7/5dcb72f1/0f6239ea). Autonomous acceptance (the canary's
+  item 3) remains NOT PROVEN; a canary re-run is a separate owner decision
+  and is now engineering-unblocked by these fixes.
+- Milestone #898. Activation states in this release, named explicitly:
+  nothing in v1.00.32 is activated — the GSD autonomy fixes are dormant
+  until a campaign runs, the compiled-root serving machinery remains merged
+  but not activated (owner decision), and no scheduler state was activated.
+  No release-gate or workflow-protection changes.
 ## v1.00.31 — 2026-09-25
 
 Released 2026-09-25.

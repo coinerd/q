@@ -5,7 +5,7 @@
 
 (define collection "q")
 (define pkg-name "q")
-(define version "1.00.31")
+(define version "1.00.32")
 (define pkg-desc "A local-first, extensible coding agent runtime")
 
 ;; Owned regression evidence authenticates structured RackUnit assertions at runtime.

@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; tests/test-compiled-root-runner-inheritance.rkt — v1.00.32 W2 repair
+;; tests/test-compiled-root-runner-inheritance.rkt — milestone-#898 W2 repair
 ;;
 ;; Child-inheritance hit counting: a 2-file suite run through the REAL
 ;; runner under root-on — launched exactly the way ci.yml launches a shard
@@ -8,7 +8,7 @@
 ;; scripts/run-tests.rkt <files> --jobs N`) — must produce REAL root hits
 ;; in the launcher record.
 ;;
-;; Confirmed mechanism (v1.00.32 W2 trial c01 window-2, run 41271542715):
+;; Confirmed mechanism (milestone-#898 W2 trial c01 window-2, run 41271542715):
 ;;   H0  the launcher's mapped child `racket -e <bootstrap> <script> <args>`
 ;;       never loads <script> at all (a Racket init option such as -e
 ;;       suppresses the implicit positional-file load), so the root-on

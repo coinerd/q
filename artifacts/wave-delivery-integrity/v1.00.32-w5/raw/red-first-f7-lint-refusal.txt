@@ -1,0 +1,76 @@
+provenance-note: ci-recovery/v1.00.30-w0/baseline.json: canonical form not enforced on historical artifacts
+provenance-note: ci-recovery/v1.00.30-w0/required-claims.json: canonical form not enforced on historical artifacts
+provenance-note: ci-recovery/v1.00.30-w0/tee-audit.json: canonical form not enforced on historical artifacts
+provenance-note: ci-recovery/v1.00.30-w0/traffic-feasibility.json: canonical form not enforced on historical artifacts
+provenance-note: ci-recovery/v1.00.30-w1/guard-canaries.json: canonical form not enforced on historical artifacts
+provenance-note: ci-recovery/v1.00.30-w1/reference.json: canonical form not enforced on historical artifacts
+provenance-note: ci-recovery/v1.00.30-w2/containment.json: canonical form not enforced on historical artifacts
+provenance-note: ci-recovery/v1.00.30-w2/rollback-drill.json: canonical form not enforced on historical artifacts
+provenance-note: ci-recovery/v1.00.30-w3/identity-matrix.json: canonical form not enforced on historical artifacts
+provenance-note: ci-recovery/v1.00.30-w3/resolution-proof.json: canonical form not enforced on historical artifacts
+provenance-note: ci-topology/v1.00.26-w0/graph-snapshot.json: canonical form not enforced on historical artifacts
+provenance-note: ci-topology/v1.00.26-w1/dag-checkpoint.json: canonical form not enforced on historical artifacts
+provenance-note: ci-topology/v1.00.26-w2/dag-checkpoint.json: canonical form not enforced on historical artifacts
+provenance-note: ci-topology/v1.00.26-w3/dag-checkpoint.json: canonical form not enforced on historical artifacts
+provenance-note: ci-topology/v1.00.26-w4/shard-measurement.json: canonical form not enforced on historical artifacts
+provenance-note: proof-graph/v1.00.29-w0: /home/user/src/q-agent/wt-v10031-w5/artifacts/proof-graph/v1.00.29-w0/evidence/jobs-34450089330.json is not bound by SHA256SUMS (historical directory)
+provenance-note: proof-graph/v1.00.29-w0: /home/user/src/q-agent/wt-v10031-w5/artifacts/proof-graph/v1.00.29-w0/evidence/jobs-34450964386.json is not bound by SHA256SUMS (historical directory)
+provenance-note: proof-graph/v1.00.29-w0: /home/user/src/q-agent/wt-v10031-w5/artifacts/proof-graph/v1.00.29-w0/evidence/jobs-34453069107.json is not bound by SHA256SUMS (historical directory)
+provenance-note: proof-graph/v1.00.29-w0: /home/user/src/q-agent/wt-v10031-w5/artifacts/proof-graph/v1.00.29-w0/evidence/run-34450089330.json is not bound by SHA256SUMS (historical directory)
+provenance-note: proof-graph/v1.00.29-w0: /home/user/src/q-agent/wt-v10031-w5/artifacts/proof-graph/v1.00.29-w0/evidence/run-34450964386.json is not bound by SHA256SUMS (historical directory)
+provenance-note: proof-graph/v1.00.29-w0: /home/user/src/q-agent/wt-v10031-w5/artifacts/proof-graph/v1.00.29-w0/evidence/run-34453069107.json is not bound by SHA256SUMS (historical directory)
+provenance-note: proof-graph/v1.00.29-w0/claims.json: canonical form not enforced on historical artifacts
+provenance-note: proof-graph/v1.00.29-w0/critical-path.json: canonical form not enforced on historical artifacts
+provenance-note: proof-graph/v1.00.29-w0/delivery-verifier-benchmark.json: canonical form not enforced on historical artifacts
+provenance-note: proof-graph/v1.00.29-w0/duplicate-classification.json: canonical form not enforced on historical artifacts
+provenance-note: proof-graph/v1.00.29-w0/full-regression-decomposition.json: canonical form not enforced on historical artifacts
+provenance-note: proof-graph/v1.00.29-w0/graph.json: canonical form not enforced on historical artifacts
+provenance-note: proof-graph/v1.00.29-w0/workflow-inventory.json: canonical form not enforced on historical artifacts
+provenance-note: proof-graph/v1.00.29-w3: has no SHA256SUMS (historical directory)
+provenance-note: proof-graph/v1.00.29-w6/consumers.json: canonical form not enforced on historical artifacts
+provenance-note: proof-graph/v1.00.29-w6/setup-savings.json: canonical form not enforced on historical artifacts
+provenance-note: proof-graph/v1.00.29-w7/replay-results.json: canonical form not enforced on historical artifacts
+provenance-note: proof-graph/v1.00.29-w9/removals.json: canonical form not enforced on historical artifacts
+provenance-note: test-consolidation/v1.00.28-w5/adequacy.json: canonical form not enforced on historical artifacts
+provenance-note: test-consolidation/v1.00.28-w5/candidates.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.24-w3: has no SHA256SUMS (historical directory)
+provenance-note: test-runtime/v1.00.28-w1: SHA256SUMS entry for artifacts/test-runtime/v1.00.28-w1/wait-audit.json no longer matches the committed bytes (historical drift)
+provenance-note: test-runtime/v1.00.28-w1/wait-audit.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.28-w2/fixture-census.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.28-w2/git-fixture-experiment.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.28-w2/stress-evidence.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.28-w4/group-safe-report.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.28-w4/parity-matrix.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.28-w6/l0-samples.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.28-w6/l1-samples.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.28-w7/comparison.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.28-w7/fast-runtime-census.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.28-w7/removed-since-baseline.json: canonical form not enforced on historical artifacts
+provenance-note: test-runtime/v1.00.28-w7/fast-runtime-census.json/q_sha: recorded head bed47f9461f5312fa34702b044221c9717f39a05 is not an ancestor of the tip (historical pinned record)
+provenance-note: test-runtime/v1.00.29-w1: has no SHA256SUMS (historical directory)
+provenance-note: test-runtime/v1.00.29-w1/wait-audit.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.27-w0/ownership-matrix.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.27-w2/overlap-review.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.27-w3/ci-grouped.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.27-w3/ci-subprocess.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.27-w3/grouped-expansion.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.27-w4/local-p90.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.27-w4/local-p90.json/implementation-sha: recorded head aa96e61a50ce7fc3f9935993ad25ab24715ccb7b is not an ancestor of the tip (historical pinned record)
+provenance-note: tier-ownership/v1.00.28-w0: SHA256SUMS entry for ownership-matrix.json no longer matches the committed bytes (historical drift)
+provenance-note: tier-ownership/v1.00.28-w0/ownership-matrix.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.28-w2/overlap-review.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.28-w3/fast-integration-review.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.28-w3/inventory-reconciliation.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.29-w0/ownership-matrix.json: canonical form not enforced on historical artifacts
+provenance-note: tier-ownership/v1.00.29-w2/overlap-review.json: canonical form not enforced on historical artifacts
+provenance-note: wave-delivery-integrity/v1.00.31-w0/failure-register.json: canonical form not enforced on historical artifacts
+provenance-note: wave-delivery-integrity/v1.00.31-w0/w4-reproduction.json: canonical form not enforced on historical artifacts
+provenance-note: wave-delivery-integrity/v1.00.31-w1/invocation-matrix.json: canonical form not enforced on historical artifacts
+provenance-note: wave-delivery-integrity/v1.00.31-w2/evidence-integrity-matrix.json: canonical form not enforced on historical artifacts
+provenance-note: wave-delivery-integrity/v1.00.31-w3/precondition-matrix.json: canonical form not enforced on historical artifacts
+provenance-note: wave-delivery-integrity/v1.00.31-w4/api-contract.json: canonical form not enforced on historical artifacts
+provenance-note: wave-delivery-integrity/v1.00.31-w4/approval-contract.json: canonical form not enforced on historical artifacts
+provenance-drift: f7-repro/v1.00.31-w5: declares artifact files but binds no SHA256SUMS
+provenance-drift: f7-repro/v1.00.31-w5/rollback-drill.json/recorded-head: recorded head 8299409c9cf6330a85e66cbe5a9ba445bf739d27 is not an ancestor of the wave tip 38773504df9fcb9ab3e13a261a37480474399f1a (stale provenance)
+provenance-drift: f7-repro/v1.00.31-w5: prose value 260 ms disagrees with structured timing 245/245/247/256 (sources: prose at /steps/0/observed vs timing.*-ms)
+provenance-drift: wave-delivery-integrity/v1.00.31-w5: declares artifact files but binds no SHA256SUMS

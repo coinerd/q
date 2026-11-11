@@ -214,7 +214,7 @@
                 (hasheq 'consumer "ci:smoke" 'honors-global-switch #t))))
 
 ;; ---------------------------------------------------------------------------
-;; W1 (v1.00.32) strict trial assessment helpers — ci-recovery-trial-evidence@1
+;; W1 (milestone #898) strict trial assessment helpers — ci-recovery-trial-evidence@1
 ;;
 ;; The shared schema/CLI/API contract built tests-first here is documented
 ;; for the workflow and report owners in docs/reports/CI-RECOVERY-EVIDENCE.md.
@@ -1501,7 +1501,7 @@
       (rejects (list 1 2 3) "bad-not-object.json"))
 
     ;; ---------------------------------------------------------------
-    ;; W1 (v1.00.32): strict trial assessment (--trial-assess and the
+    ;; W1 (milestone #898): strict trial assessment (--trial-assess and the
     ;; exported pure function assess-trial-envelope). Shared contract
     ;; for the workflow and report owners; see
     ;; docs/reports/CI-RECOVERY-EVIDENCE.md. Fixtures are synthetic.
