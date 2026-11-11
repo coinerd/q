@@ -208,7 +208,7 @@ bin/q --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-bin/q --version            # q version 1.00.31
+bin/q --version            # q version 1.00.32
 raco test tests/           # run the full test suite
 ```
 
