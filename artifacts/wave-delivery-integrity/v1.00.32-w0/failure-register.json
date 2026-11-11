@@ -1,0 +1,129 @@
+{
+  "schema": "wave-delivery-integrity-register/1",
+  "plan": "v1.00.31 - GSD Wave Delivery Integrity",
+  "milestone": 896,
+  "plan-file": ".planning/PLAN-v1.00.31-GSD-WAVE-DELIVERY-INTEGRITY.md",
+  "plan-sha256": "db92d1ab6e04356985b6f56ca911c9eb6ac1c4a06df7cc3b9e42184e76c3598d",
+  "register-source": "Failure-mode register (frozen; each wave closes its row)",
+  "frozen": true,
+  "row-count": 13,
+  "rows": [
+    {
+      "id": "F1",
+      "mode": "Declared workflow/action invocation ≠ actual script CLI",
+      "observed": "`.github/actions/prepare-racket-environment/action.yml:146-149` calls `scripts/ci/compiled-root.rkt build --out … --checkout … --trusted-label …`; the CLI has no `--out` and requires `--module`/`--final-dir`. Reproduced: `compiled-root: unknown switch: --out`, exit 1, under `set -euo pipefail`. The compiled-root lane could never activate in CI.",
+      "evidence-gap": "`tests/test-compiled-root-workflow.rkt:225` asserts only the substring `\"scripts/ci/compiled-root.rkt build\"`; nothing executes or exactly matches the declared invocation.",
+      "structural-fix": "Every workflow/action → script invocation is **executed or exactly matched** by a test; substring assertions are banned for invocations",
+      "owning-wave": "W1",
+      "refusal": "Red test; unknown-switch / missing-argument is a wave failure"
+    },
+    {
+      "id": "F2",
+      "mode": "Authored, unreproducible content digest",
+      "observed": "Evidence `content-digest` `542f7cbb…` is unreproducible; the true digest at the tip is `a7ad71fb…`.",
+      "evidence-gap": "The digest is **authored by hand** in the evidence datum; no tool recomputes and compares it before a wave may claim verification. `gsd-wave-gate` only compares the argument it is given to the recorded value.",
+      "structural-fix": "Digest is computed by tooling at the exact head and written by that tool; the gate/verifier recomputes and refuses a mismatch",
+      "owning-wave": "W2",
+      "refusal": "Typed refusal `digest-mismatch`"
+    },
+    {
+      "id": "F3",
+      "mode": "Evidence/review head ≠ verified head",
+      "observed": "Evidence `implementation-sha` is `bbb6500a`, but the receipt-verified head and tree are `ce13d038` / `fc80fa2e`. Review `reviewed-sha` matches the wrong head.",
+      "evidence-gap": "No guard binds `implementation-sha`/`reviewed-sha` to the durable receipt head.",
+      "structural-fix": "`implementation-sha` and `reviewed-sha` must equal the durable receipt head",
+      "owning-wave": "W2",
+      "refusal": "Typed refusal `head-binding-mismatch`"
+    },
+    {
+      "id": "F4",
+      "mode": "Record commit touches non-evidence paths",
+      "observed": "The \"evidence\" commit `ce13d038` also changed `README.md` and `tests/test-w9-ci-workflow-verification.rkt`.",
+      "evidence-gap": "Nothing requires the record commit to touch only `docs/reports/gsd-wave-{evidence,reviews,validation}/`; `require_receipt_tip` only refuses *post*-receipt source drift, and here the receipt head already contained the mix.",
+      "structural-fix": "The final record commit must be evidence-only; a mixed commit is refused with a precise file list",
+      "owning-wave": "W2",
+      "refusal": "Typed refusal `impure-record-commit`"
+    },
+    {
+      "id": "F5",
+      "mode": "Wave recorded verified / ladder attempted with an unpushed branch",
+      "observed": "The branch was never pushed; `/go` died with `wave-blocked (delivery command failed (git, exit 128))`.",
+      "evidence-gap": "The verify receipt (`verify-with-delivery-receipt`) records only a **local** branch/head/tree; there is no precondition that the branch exists on `origin` before a receipt or ladder step is attempted, and git 128 is surfaced without diagnosis.",
+      "structural-fix": "Push precondition before any receipt is recorded and before any ladder step; git failures classified",
+      "owning-wave": "W3",
+      "refusal": "Typed refusal `branch-not-published` / `remote-ref-missing`"
+    },
+    {
+      "id": "F6",
+      "mode": "Delivery-tool GitHub API route wrong (resolver head filter)",
+      "observed": "`scripts/gsd-delivery.py:437` resolves PRs with `head={owner}/{repo}:{branch}` instead of `head={owner}:{branch}`, so `resolve_existing_pr`/`resolve_merged_pr` always return none and the `governance` ladder action can never succeed.",
+      "evidence-gap": "Delivery-tool GitHub API routes are untested against the API contract; `tests/test-gsd-delivery-controller.py` binds its fakes with the **same wrong key** (line 862 etc.), so the suite mirrors the bug.",
+      "structural-fix": "Route construction covered by API-contract fixtures that mirror the **real** API, plus one coordinator-owned live-contract check",
+      "owning-wave": "W4",
+      "refusal": "Typed refusal; `governance` proven end-to-end"
+    },
+    {
+      "id": "F7",
+      "mode": "Recorded provenance head stale / artifacts internally inconsistent",
+      "observed": "`artifacts/ci-recovery/v1.00.30-w4/*` and the report are pinned to stale head `8299409c`; `rollback-drill.json` is internally inconsistent (phase prose 260/245 ms vs `eager-fallback-ms` 247/256 ms).",
+      "evidence-gap": "No lint checks that recorded head/provenance fields agree with the committed tree or with each other.",
+      "structural-fix": "Determinism + consistency lint: recorded head/tree must match the commit; cross-artifact timings must agree",
+      "owning-wave": "W5",
+      "refusal": "Typed refusal `provenance-drift`"
+    },
+    {
+      "id": "F8",
+      "mode": "Opaque failure surfacing (bare exit code)",
+      "observed": "",
+      "evidence-gap": "",
+      "structural-fix": "Every delivery/ladder subprocess failure maps to a typed reason with the command, exit code and class",
+      "owning-wave": "W3",
+      "refusal": "Typed `wave-blocked` reason with diagnosis"
+    },
+    {
+      "id": "F9",
+      "mode": "Wave marked DONE while delivery is pending (observed: v1.00.30 W4 was `[DONE]`/`Status: DONE` while `delivery-w4.rktd` is `delivery-pending`, breaching the frozen contract \"never mark this wave complete while delivery is pending\"; live instance corrected 2026-09-20 — campaign record W4 → `pending`, plan index → `[Inbox]`, doc header → `Status: Inbox`, `delivery-w4.rktd` unchanged)",
+      "observed": "",
+      "evidence-gap": "",
+      "structural-fix": "The completion path refuses `done` unless the delivery journal for that wave reads `delivered` (or an explicit typed carry-forward is recorded); the plan-index bracket and the wave-doc header stay in lockstep with the journal",
+      "owning-wave": "W3",
+      "refusal": "Typed refusal `delivery-pending-cannot-complete`"
+    },
+    {
+      "id": "F10",
+      "mode": "A status rollback (a wave going `done` → non-done) leaves its completion event in the derived outbox; `reconcile-completion-outbox!` appends only for `done` waves and never prunes, so the ledger leads the durable record — the inverse of its stated invariant (\"may only lag the durable commit, never lead (no invented DONE)\")",
+      "observed": "",
+      "evidence-gap": "",
+      "structural-fix": "Rollback/un-completion prunes the affected waves' derived outbox events, or reconcile becomes two-way and drops events whose wave is no longer `done`; the invariant is asserted by a test that rolls a wave back",
+      "owning-wave": "W3",
+      "refusal": "Typed refusal `outbox-leads-record`"
+    },
+    {
+      "id": "F11",
+      "mode": "Unsatisfiable merge gate (second-account GitHub approval demanded in a single-account repository)",
+      "observed": "The delivery ladder's `merge()` gate called `independent_approval(reviews, author, head)`, requiring a native GitHub review by a non-author human at the exact head; GitHub refuses author self-approval and this repository has the single account `coinerd`, so the filter can never match. The ladder stop-typed `awaiting-review` forever while 13/13 required checks were green and `mergeable_state: clean` — observed live on v1.00.30 W3 (#9721/#9722), v1.00.31 W0 (#9731) and v1.00.31 W3 binding (#9743). The tool's own `status` proof states native GitHub approval counts are deliberately NOT required, so the merge ladder was the lone inconsistent outlier.",
+      "evidence-gap": "The unsatisfiable approval form was never tested as satisfiable: no fixture proved the gate reachable, so a policy-shaped defect survived every green suite.",
+      "structural-fix": "Amended approval contract: a recorded operator authorization in the evidence record's `merge-authorization` object (operator, wave, verified implementation head, action, source) plus the APPROVED independent non-author schema-2 review artifact bound to the verified implementation head; both refusal directions enforced by tested code and the unsatisfiable second-account requirement removed",
+      "owning-wave": "W4",
+      "refusal": "Typed refusals `no-operator-authorization` / `no-review-artifact` / `head-binding-mismatch`"
+    },
+    {
+      "id": "F12",
+      "mode": "Gate accepts sentinel placeholders as evidence",
+      "observed": "**Gate accepts sentinel placeholders as evidence.** `scripts/gsd-wave-gate.rkt` validates identity and narrative fields with `non-empty-string?` alone, so the literal sentinel `\"PENDING\"` satisfies `review.reviewer`, `review.timestamp`, `review.scope`, `review.report`, `remaining-items[].owner`/`rationale` and `red-first.command`/`failure`. A staged draft can therefore be \"finalized\" by flipping only `status`/`verdict`/`content-digest`/`planning-sync` and the four `result` fields and still pass the strict gate, publishing a record that asserts an independent review which never happened. Observed live in this wave's own W0 binding draft, whose `prepare` output carries exactly those sentinels; `gsd-delivery.py`'s finalized `read_staged_trio` never inspects the reviewer at all",
+      "evidence-gap": "The strict gate validated identity and narrative fields with `non-empty-string?` alone, so the literal sentinel `PENDING` satisfied every field the gate inspected; no fixture proved that a sentinel-carrying draft is refused, so the placeholder path survived every green suite.",
+      "structural-fix": "Sentinel/placeholder values are refused structurally: a deny-list rejects `PENDING`/TODO-style placeholders in every identity and narrative field, with substantive minimum-content checks on the review `scope`/`report` and on `red-first.failure`, so \"finalized\" is unreachable without genuine content; both directions tested (sentinel draft refused, real-content draft accepted)",
+      "owning-wave": "W2",
+      "refusal": "Typed refusal `placeholder-evidence`"
+    },
+    {
+      "id": "F13",
+      "mode": "Frozen contract can be stale while every gate reports clean",
+      "observed": "**The frozen contract can be stale while every gate reports clean.** `seed-and-bind-plan-snapshot!` (`q/extensions/gsd/plan-snapshot.rkt:230`) reuses an existing snapshot verbatim — `(or existing (make-plan-snapshot! …))` — so a snapshot is captured once per plan-id and never refreshed. The campaign plan-id hashes the wave-doc contents and the plan index rows, **not the plan body**, and the failure-mode register plus the approval contract live in the body. `classify-snapshot-drift` compares the LIVE mirror against the snapshot, so if the mirror itself is stale the comparison is clean. Net effect: a plan-body amendment neither changes the plan-id nor refreshes the snapshot, and nothing detects that the frozen contract differs from the plan actually being executed. Observed live in this campaign: the v1.00.31 snapshot froze a plan body that lacked F12 and still carried the superseded F11 wording, while the plan-id, `classify-snapshot-drift` and plan validation all reported clean; it was found only because an independent review grepped the snapshot for F12",
+      "evidence-gap": "The plan-id hashes the wave-doc contents and the plan index rows, not the plan body, so a plan-body amendment changed neither the plan-id nor the snapshot; drift detection compared the live mirror against the snapshot, and with a stale mirror both sides agreed.",
+      "structural-fix": "Plan-body changes re-freeze the snapshot (or the plan-id covers the plan body's hash), and drift detection compares the **authored** plan against the frozen contract, so \"what is frozen\" cannot silently diverge from \"what is executed\"; amending the plan without a refreshed snapshot is refused",
+      "owning-wave": "W5",
+      "refusal": "Typed refusal `frozen-contract-stale`"
+    }
+  ]
+}

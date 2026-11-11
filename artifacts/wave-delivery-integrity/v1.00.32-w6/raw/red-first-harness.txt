@@ -1,0 +1,13 @@
+# W6 red-first baseline — adversarial rehearsal test with the harness present and the matrix artifact absent
+# command: raco test tests/test-wave-integrity-adversarial.rkt
+# head: e2f3dee74fe85c2b7d5f3a0cd3b7a5521f4c90f4
+
+raco test: "tests/test-wave-integrity-adversarial.rkt"
+open-input-file: cannot open input file
+  path: /home/user/src/q-agent/wt-v10031-w6/tests/artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json
+  system error: Datei oder Verzeichnis nicht gefunden; errno=2
+  context...:
+   body of "/home/user/src/q-agent/wt-v10031-w6/scripts/ci/inject-wave-defect.rkt"
+   /usr/share/racket/pkgs/compiler-lib/compiler/commands/test.rkt:201:16
+test-wave-integrity-adversarial.rkt: raco test: test raised an exception
+exit=1
