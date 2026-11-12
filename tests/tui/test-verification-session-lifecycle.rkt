@@ -144,8 +144,12 @@
       (check-equal? (progress-id (unbox sb)) "r102-incarnation-1|vj-1|vkey-A" "identity stored")
       (check-equal? (hash-ref (ui-state-verification-progress (unbox sb)) 'job-id #f) 'vj-1)
       ;; a DIFFERENT job's terminal must not clear the foreground progress
-      (reduce! sb (ident-event 'gsd.verification.completed (completed-payload 'vj-2 'failed 3 #:vkey "vkey-B")))
-      (check-equal? (progress-id (unbox sb)) "r102-incarnation-1|vj-1|vkey-A" "mismatched terminal keeps progress")
+      (reduce! sb
+               (ident-event 'gsd.verification.completed
+                            (completed-payload 'vj-2 'failed 3 #:vkey "vkey-B")))
+      (check-equal? (progress-id (unbox sb))
+                    "r102-incarnation-1|vj-1|vkey-A"
+                    "mismatched terminal keeps progress")
       (check-true (string-contains? (ui-state-status-message (unbox sb)) "W0 verifying")
                   "status still shows the running verification")
       (check-equal? (length (verification-entries (unbox sb)))
@@ -161,11 +165,15 @@
       (reduce! sb (ident-event 'gsd.verification.started (started-payload 'vj-1 #:vkey "vkey-A")))
       (reduce! sb (ident-event 'gsd.verification.started (started-payload 'vj-2 #:vkey "vkey-B")))
       (check-equal? (progress-id (unbox sb)) "r102-incarnation-1|vj-2|vkey-B" "B owns the foreground")
-      (reduce! sb (ident-event 'gsd.verification.completed (completed-payload 'vj-1 'failed 3 #:vkey "vkey-A")))
+      (reduce! sb
+               (ident-event 'gsd.verification.completed
+                            (completed-payload 'vj-1 'failed 3 #:vkey "vkey-A")))
       (check-equal? (progress-id (unbox sb))
                     "r102-incarnation-1|vj-2|vkey-B"
                     "late A terminal cannot clear B")
-      (reduce! sb (ident-event 'gsd.verification.completed (completed-payload 'vj-2 'failed 3 #:vkey "vkey-B")))
+      (reduce! sb
+               (ident-event 'gsd.verification.completed
+                            (completed-payload 'vj-2 'failed 3 #:vkey "vkey-B")))
       (check-false (ui-state-verification-progress (unbox sb)) "B's own terminal clears"))
 
     (test-case "duplicate terminal delivery is deduped to exactly one UI transition"
@@ -211,13 +219,15 @@
       ;; queued event from the old session (generation 1)
       (reduce! sb (ident-event 'gsd.verification.started (started-payload 'vj-1 #:gen 1)))
       (check-false (ui-state-verification-progress (unbox sb)) "stale start cannot resurrect")
-      (reduce! sb (ident-event 'gsd.verification.completed (completed-payload 'vj-1 'failed 3 #:gen 1)))
+      (reduce! sb
+               (ident-event 'gsd.verification.completed (completed-payload 'vj-1 'failed 3 #:gen 1)))
       (check-equal? (length (verification-entries (unbox sb)))
                     0
                     "stale terminal from an old session is dropped entirely")
       ;; same-generation events still work
       (reduce! sb (ident-event 'gsd.verification.started (started-payload 'vj-9 #:gen 5)))
-      (check-true (hash? (ui-state-verification-progress (unbox sb))) "current-generation start applies"))
+      (check-true (hash? (ui-state-verification-progress (unbox sb)))
+                  "current-generation start applies"))
 
     (test-case "identity-less legacy terminal never clears identified newer progress"
       (define sb (box (initial-ui-state #:session-id "S1")))
@@ -226,7 +236,9 @@
       (reduce! sb
                (ident-event 'gsd.verification.completed
                             (hasheq 'wave 0 'verdict "reject" 'reason "legacy" 'elapsed-sec 1.0)))
-      (check-equal? (progress-id (unbox sb)) "r102-incarnation-1|vj-1|vkey-A" "identified progress survives")
+      (check-equal? (progress-id (unbox sb))
+                    "r102-incarnation-1|vj-1|vkey-A"
+                    "identified progress survives")
       (check-true (string-contains? (ui-state-status-message (unbox sb)) "W0 verifying")
                   "running status survives the legacy terminal")
       (check-equal? (length (verification-entries (unbox sb)))
@@ -244,12 +256,14 @@
       (reduce! sb
                (ident-event 'gsd.verification.completed
                             (hasheq 'wave 0 'verdict "approve" 'elapsed-sec 2.0)))
-      (check-false (ui-state-verification-progress (unbox sb)) "legacy terminal clears legacy progress"))
+      (check-false (ui-state-verification-progress (unbox sb))
+                   "legacy terminal clears legacy progress"))
 
     (test-case "duplicate subscriptions on a REAL bus yield exactly-once transitions"
       (define bus (make-event-bus))
       (define sb (box (initial-ui-state #:session-id "S1")))
-      (define (bridge evt) (reduce! sb evt))
+      (define (bridge evt)
+        (reduce! sb evt))
       (subscribe! bus bridge)
       (subscribe! bus bridge) ; the duplicate subscription defect shape
       (publish! bus (ident-event 'gsd.verification.started (started-payload 'vj-1)))
@@ -270,12 +284,14 @@
                 (set-status-message
                  (set-attachment-generation
                   (set-verification-progress
-                   (reduce!-state sb (ident-event 'session.started (hasheq 'session-id "S-B"))) #f)
+                   (reduce!-state sb (ident-event 'session.started (hasheq 'session-id "S-B")))
+                   #f)
                   2)
                  #f))
       (check-false (ui-state-verification-progress (unbox sb)) "switch cleared A's progress")
       ;; queued events from A (generation 1) arrive late
-      (reduce! sb (ident-event 'gsd.verification.completed (completed-payload 'vj-1 'failed 3 #:gen 1)))
+      (reduce! sb
+               (ident-event 'gsd.verification.completed (completed-payload 'vj-1 'failed 3 #:gen 1)))
       (check-equal? (length (verification-entries (unbox sb))) 0 "queued A terminal dropped")
       (reduce! sb (ident-event 'gsd.verification.started (started-payload 'vj-1 #:gen 1)))
       (check-false (ui-state-verification-progress (unbox sb)) "queued A start dropped")
@@ -283,16 +299,18 @@
       (set-box! sb (set-attachment-generation (unbox sb) 3))
       (reduce! sb (ident-event 'gsd.verification.started (started-payload 'vj-4 #:gen 3)))
       (check-equal? (progress-id (unbox sb)) "r102-incarnation-1|vj-4|vkey-A")
-      (reduce! sb (ident-event 'gsd.verification.completed (completed-payload 'vj-4 'failed 3 #:gen 3)))
+      (reduce! sb
+               (ident-event 'gsd.verification.completed (completed-payload 'vj-4 'failed 3 #:gen 3)))
       (check-false (ui-state-verification-progress (unbox sb))))
 
-    (test-case "session switch clears foreign-session verification state in the reducer"
+    (test-case "identified verification survives a foreign-session switch"
       (define sb (box (initial-ui-state #:session-id "S1")))
       (reduce! sb (ident-event 'gsd.verification.started (started-payload 'vj-1) #:session "S1"))
       (check-true (hash? (ui-state-verification-progress (unbox sb))))
       (reduce! sb (ident-event 'session.started (hasheq 'session-id "S2") #:session "S2"))
-      (check-false (ui-state-verification-progress (unbox sb))
-                   "a different session attach clears the foreign verification progress")
+      (check-equal? (progress-id (unbox sb))
+                    "r102-incarnation-1|vj-1|vkey-A"
+                    "W4: identified process-owned verification survives a session switch")
       ;; same-session resume keeps the progress (reattach does not drop it)
       (define sb2 (box (initial-ui-state #:session-id "S1")))
       (reduce! sb2 (ident-event 'gsd.verification.started (started-payload 'vj-1) #:session "S1"))
@@ -342,9 +360,10 @@
       (define st (unbox (cmd-ctx-state-box cctx)))
       (check-false (ui-state-verification-progress st) "stop/error cleared the cached progress")
       (check-true (> (ui-state-attachment-generation st) 0) "restore carried a fresh generation")
-      (check-true (string-contains? (ui-state-status-message st) "running (detached)")
-                  (format "still-running job stays attributable with an explicit detached status, got ~v"
-                          (ui-state-status-message st)))
+      (check-true
+       (string-contains? (ui-state-status-message st) "running (detached)")
+       (format "still-running job stays attributable with an explicit detached status, got ~v"
+               (ui-state-status-message st)))
       (check-false (hash-ref (or (ui-state-verification-progress st) (hash)) 'started-ms #f)
                    "no cached elapsed clock is restored")
       ;; the registry job itself is untouched: clearing is never cancellation
@@ -355,7 +374,11 @@
     (test-case "restore over a terminal job appends the observed registry verdict, never a false completion"
       (define reg (make-verification-registry))
       (define ident
-        (verification-identity "camp-r102b" "W0" "suite" (path->string (current-directory)) "profile"))
+        (verification-identity "camp-r102b"
+                               "W0"
+                               "suite"
+                               (path->string (current-directory))
+                               "profile"))
       (define r (verification-start! reg ident "/bin/sh" (list "-c" "( exit 3 )")))
       (verification-cancel! reg (start-job-id r))
       (define state0
@@ -372,41 +395,64 @@
                  'registry-incarnation
                  (verification-registry-incarnation reg))))
       (define cctx
-        (cmd-ctx (box state0) (box #t) #f #f (box #f) #f (box #f) #f (box "") (box #f) #f (box #f) (box #f)))
+        (cmd-ctx (box state0)
+                 (box #t)
+                 #f
+                 #f
+                 (box #f)
+                 #f
+                 (box #f)
+                 #f
+                 (box "")
+                 (box #f)
+                 #f
+                 (box #f)
+                 (box #f)))
       (parameterize ([current-gsd-verification-registry reg])
         (execute-extension-command cctx state0 (hasheq 'campaign-token 'r102-token 'text "starting")))
       (define st (unbox (cmd-ctx-state-box cctx)))
       (check-false (ui-state-verification-progress st))
-      (check-true
-       (for/or ([entry (in-list (ui-state-transcript st))])
-         (and (hash-ref (transcript-entry-meta entry) 'verification #f)
-              (string-contains? (transcript-entry-text entry) "cancelled")))
-       "the observed terminal record (cancelled) is reported, not a fabricated completion")
+      (check-true (for/or ([entry (in-list (ui-state-transcript st))])
+                    (and (hash-ref (transcript-entry-meta entry) 'verification #f)
+                         (string-contains? (transcript-entry-text entry) "cancelled")))
+                  "the observed terminal record (cancelled) is reported, not a fabricated completion")
       (verification-close-registry! reg))
 
     (test-case "restore after registry recreation clears without inventing facts"
       (define old-reg (make-verification-registry))
       (define state0
-        (set-verification-progress
-         (initial-ui-state #:session-id "S1")
-         (hasheq 'wave
-                 0
-                 'started-ms
-                 1000.0
-                 'identity-key
-                 "old-incarnation|vj-1|vkey"
-                 'job-id
-                 'vj-1
-                 'registry-incarnation
-                 (verification-registry-incarnation old-reg))))
+        (set-verification-progress (initial-ui-state #:session-id "S1")
+                                   (hasheq 'wave
+                                           0
+                                           'started-ms
+                                           1000.0
+                                           'identity-key
+                                           "old-incarnation|vj-1|vkey"
+                                           'job-id
+                                           'vj-1
+                                           'registry-incarnation
+                                           (verification-registry-incarnation old-reg))))
       (define cctx
-        (cmd-ctx (box state0) (box #t) #f #f (box #f) #f (box #f) #f (box "") (box #f) #f (box #f) (box #f)))
+        (cmd-ctx (box state0)
+                 (box #t)
+                 #f
+                 #f
+                 (box #f)
+                 #f
+                 (box #f)
+                 #f
+                 (box "")
+                 (box #f)
+                 #f
+                 (box #f)
+                 (box #f)))
       (parameterize ([current-gsd-verification-registry (make-verification-registry)])
         (execute-extension-command cctx state0 (hasheq 'campaign-token 'r102-token 'text "starting")))
       (define st (unbox (cmd-ctx-state-box cctx)))
       (check-false (ui-state-verification-progress st))
-      (check-false (ui-state-status-message st)
-                   "foreign-incarnation jobs are cleared, never guessed")
+      (check-true (string-contains? (or (ui-state-status-message st) "")
+                                    "foreign registry incarnation")
+                  "foreign-incarnation jobs are explicitly reported, never silently cleared")
       (check-true (> (ui-state-attachment-generation st) 0)))))
 
 ;; verification-job / start-result accessors used above are required at the

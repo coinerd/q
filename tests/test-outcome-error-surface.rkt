@@ -24,19 +24,13 @@
          "../extensions/gsd/wave-runner-port.rkt"
          "../extensions/gsd/events.rkt"
          (only-in "../extensions/gsd/core.rkt" reset-all-gsd-state!)
-         (only-in "../extensions/gsd/wave-outcome-reporting.rkt"
-                  emit-wave-outcome-error!)
+         (only-in "../extensions/gsd/wave-outcome-reporting.rkt" emit-wave-outcome-error!)
          (only-in "../extensions/gsd-planning.rkt" gsd-planning-extension)
          (only-in "../extensions/api.rkt" extension-hooks make-extension-registry)
          (only-in "../extensions/context.rkt" make-extension-ctx)
          (only-in "../tools/tool.rkt" make-tool-registry)
          (only-in "../util/event/event-bus.rkt" make-event-bus subscribe!)
-         (only-in "../util/event/event.rkt"
-                  event?
-                  event-ev
-                  event-payload
-                  event-time
-                  make-event)
+         (only-in "../util/event/event.rkt" event? event-ev event-payload event-time make-event)
          "../tui/state.rkt"
          (only-in "tui/event-simulator.rkt"
                   make-test-event
@@ -76,27 +70,27 @@
 
 (define (r93-capture-outcome-error-event! wave kind message)
   (define bus (make-event-bus))
-  (define ctx (make-extension-ctx #:session-id "outcome-err-route"
-                                  #:session-dir "/tmp"
-                                  #:event-bus bus
-                                  #:extension-registry (make-extension-registry)
-                                  #:tool-registry (make-tool-registry)
-                                  #:command-registry (box (hash))))
+  (define ctx
+    (make-extension-ctx #:session-id "outcome-err-route"
+                        #:session-dir "/tmp"
+                        #:event-bus bus
+                        #:extension-registry (make-extension-registry)
+                        #:tool-registry (make-tool-registry)
+                        #:command-registry (box (hash))))
   (define captured (box #f))
-  (dynamic-wind
-   (lambda () (void))
-   (lambda ()
-     ;; install the REAL production bridge (the extension's register-tools
-     ;; hook wires extensions/gsd/events.rkt to the session bus) ...
-     ((hash-ref (extension-hooks gsd-planning-extension) 'register-tools) ctx (hasheq))
-     ;; ... subscribe through it, capturing the runtime event the TUI consumes
-     (subscribe! bus (lambda (evt) (set-box! captured evt)))
-     (emit-wave-outcome-error! wave kind message)
-     (unbox captured))
-   (lambda ()
-     ;; restore module-load defaults so later cases are unaffected
-     (set-gsd-event-bus! void)
-     (reset-all-gsd-state!))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  ;; install the REAL production bridge (the extension's register-tools
+                  ;; hook wires extensions/gsd/events.rkt to the session bus) ...
+                  ((hash-ref (extension-hooks gsd-planning-extension) 'register-tools) ctx (hasheq))
+                  ;; ... subscribe through it, capturing the runtime event the TUI consumes
+                  (subscribe! bus (lambda (evt) (set-box! captured evt)))
+                  (emit-wave-outcome-error! wave kind message)
+                  (unbox captured))
+                (lambda ()
+                  ;; restore module-load defaults so later cases are unaffected
+                  (set-gsd-event-bus! void)
+                  (reset-all-gsd-state!))))
 
 ;; Simulates the JSON transport round trip: every object key arrives as a
 ;; string at every nesting level (wrapper AND inner outcome fields).
@@ -104,7 +98,9 @@
   (cond
     [(hash? v)
      (for/hash ([(k val) (in-hash v)])
-       (values (if (symbol? k) (symbol->string k) k)
+       (values (if (symbol? k)
+                   (symbol->string k)
+                   k)
                (r93-keys->strings val)))]
     [(pair? v) (map r93-keys->strings v)]
     [else v]))
@@ -270,8 +266,7 @@
                                     ;; non-hash payloads used to crash the flat hash-ref
                                     "not-a-hash-at-all"))])
         (define next
-          (apply-event-to-state (fresh-state)
-                                (make-test-event "gsd.wave.outcome-error" payload)))
+          (apply-event-to-state (fresh-state) (make-test-event "gsd.wave.outcome-error" payload)))
         (check-equal? (transcript-types next) '(system-error) (format "payload ~v" payload))
         (check-true (string-contains? (first (transcript-texts next)) "wave outcome: unknown")
                     (format "honest unknown fallback for payload ~v" payload))))
@@ -294,8 +289,9 @@
       (define next
         (apply-event-to-state
          st
-         (make-test-event "gsd.wave.outcome-error"
-                          (hasheq "wave" 1 "kind" "stalled" "level" "error" "message" "flat string control"))))
+         (make-test-event
+          "gsd.wave.outcome-error"
+          (hasheq "wave" 1 "kind" "stalled" "level" "error" "message" "flat string control"))))
       (check-equal? (transcript-types next) '(system-error))
       (define text (first (transcript-texts next)))
       (check-true (string-contains? text "wave 1"))

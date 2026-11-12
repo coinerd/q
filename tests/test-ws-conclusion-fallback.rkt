@@ -12,7 +12,11 @@
          "../runtime/context-assembly/state-aware-builder.rkt"
          "../runtime/context-assembly/context-floor.rkt"
          "../runtime/context-assembly/task-conclusion.rkt"
-         (only-in "../util/message/protocol-types.rkt" make-message make-text-part message-content message-id)
+         (only-in "../util/message/protocol-types.rkt"
+                  make-message
+                  make-text-part
+                  message-content
+                  message-id)
          (only-in "../util/content/content-parts.rkt" text-part-text))
 
 ;; Helpers
@@ -157,10 +161,8 @@
 ;; provenance (never [Conclusion]), and a genuine insight sharing the origin
 ;; still wins. ──
 
-(require (only-in "../runtime/context-assembly/auto-distillation.rkt"
-                  generate-fallback-conclusions)
-         (only-in "../runtime/context-assembly/task-conclusion.rkt"
-                  provenance-kind?))
+(require (only-in "../runtime/context-assembly/auto-distillation.rkt" generate-fallback-conclusions)
+         (only-in "../runtime/context-assembly/task-conclusion.rkt" provenance-kind?))
 
 (define (make-fallback-conclusion msg-id)
   ;; The real writer output (timestamp pinned for deterministic ids only).
@@ -183,19 +185,17 @@
     (for/list ([m (tiered-context-tier-a tc)])
       (text-part-text (car (message-content m)))))
   (check-true
-   (ormap (λ (t) (string-contains?
-                  t
-                  (string-append "[Source provenance replaces context] (unverified) "
-                                 "Source message ws-1 retained as provenance; "
-                                 "no distilled insight available.")))
+   (ormap (λ (t)
+            (string-contains? t
+                              (string-append "[Source provenance replaces context] (unverified) "
+                                             "Source message ws-1 retained as provenance; "
+                                             "no distilled insight available.")))
           tier-a-texts)
    "fallback replacement must be labeled provenance with the honest record text")
-  (check-false (ormap (λ (t) (string-contains? t "[Conclusion replaces context]"))
-                      tier-a-texts)
+  (check-false (ormap (λ (t) (string-contains? t "[Conclusion replaces context]")) tier-a-texts)
                "fallback must not render as [Conclusion]")
   ;; The raw WS content must never leak into the replacement.
-  (check-false (ormap (λ (t) (string-contains? t (make-string 100 #\x)))
-                      tier-a-texts)
+  (check-false (ormap (λ (t) (string-contains? t (make-string 100 #\x))) tier-a-texts)
                "no source excerpt may leak into the provenance replacement"))
 
 (test-case "R99b: genuine insight sharing the origin wins in excluded WS path"
@@ -212,7 +212,8 @@
   (define tier-a-texts
     (for/list ([m (tiered-context-tier-a tc)])
       (text-part-text (car (message-content m)))))
-  (check-true (ormap (λ (t) (string-contains? t "[Conclusion replaces context] Curated summary of ws-1"))
+  (check-true (ormap (λ (t)
+                       (string-contains? t "[Conclusion replaces context] Curated summary of ws-1"))
                      tier-a-texts)
               "genuine insight wins the replacement")
   (check-false (ormap (λ (t) (string-contains? t "[Source provenance replaces context]"))

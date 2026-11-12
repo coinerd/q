@@ -151,15 +151,17 @@
   (define repo (build-path root "q"))
   (define cwd (path->string repo))
   (define private (build-path root "private"))
-  (with-handlers ([void (lambda (e)
-                          (eprintf "fixture error raw: ~s\n" e)
-                          (when (exn? e)
-                            (for ([k (in-list (continuation-mark-set->context (exn-continuation-marks e)))]
-                                  [i (in-naturals)]
-                                  #:when (< i 12))
-                              (eprintf "  at: ~s\n" k)))
-                          (with-handlers ([exn:fail? void]) (delete-directory/files root))
-                          (raise e))])
+  (with-handlers ([void
+                   (lambda (e)
+                     (eprintf "fixture error raw: ~s\n" e)
+                     (when (exn? e)
+                       (for ([k (in-list (continuation-mark-set->context (exn-continuation-marks e)))]
+                             [i (in-naturals)]
+                             #:when (< i 12))
+                         (eprintf "  at: ~s\n" k)))
+                     (with-handlers ([exn:fail? void])
+                       (delete-directory/files root))
+                     (raise e))])
     (dynamic-wind
      (lambda ()
        (eprintf "fixture: pre\n")
@@ -677,13 +679,16 @@
                                   "completed"
                                   'successor-receipt-sha256
                                   (canonical-evidence-digest (hash-ref env 'r1)))])
-         (let loop ([a actual] [e expected] [path '()])
+         (let loop ([a actual]
+                    [e expected]
+                    [path '()])
            (cond
              [(and (hash? a) (hash? e))
               (for ([k (in-list (remove-duplicates (append (hash-keys a) (hash-keys e))))])
                 (loop (hash-ref a k 'absent) (hash-ref e k 'absent) (append path (list k))))]
              [(not (equal? a e))
-              (eprintf "MARKER-DIFF at ~s: actual=~s expected=~s\n" path
+              (eprintf "MARKER-DIFF at ~s: actual=~s expected=~s\n"
+                       path
                        (if (hash? a) '<hash> a)
                        (if (hash? e) '<hash> e))]))
          (check-equal? actual expected))

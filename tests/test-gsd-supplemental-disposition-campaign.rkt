@@ -179,7 +179,10 @@
      (check-equal? (length (find-files (lambda (p)
                                          (regexp-match? #rx"supplemental-disposition-.*[.]json$" p))
                                        private))
-                   (cond [third? 2] [second? 1] [else 0]))
+                   (cond
+                     [third? 2]
+                     [second? 1]
+                     [else 0]))
      (define approval (fixture-approve! ref))
      ((api 'install-supplemental-disposition!) base plan 1 ref approval)
      (define installed-private (files-under private))

@@ -425,10 +425,9 @@
           0
           (hasheq 'plan-id PLAN-ID 'wave 0 'issue-number 74 'board-field "Status" 'board-value "Done")
           port
-          #:delivery-reader
-          (lambda (_base _plan _wave)
-            (set-box! readbacks (add1 (unbox readbacks)))
-            (delivered-proof (make-string 40 #\e)))))
+          #:delivery-reader (lambda (_base _plan _wave)
+                              (set-box! readbacks (add1 (unbox readbacks)))
+                              (delivered-proof (make-string 40 #\e)))))
        (check-equal? (tracker-reconciliation-result-status result) 'blocked)
        (check-equal? (tracker-reconciliation-result-reason result)
                      "delivered handoff missing or merge SHA mismatch")
@@ -436,34 +435,33 @@
        (check-equal? (gh-log-state-calls state) '()))))
 
   (test-case "an issue bound to another campaign (same wave index, same issue) is not identity"
-    (with-temp-dir
-     (lambda (dir)
-       (seed-authoritative-delivery! dir)
-       (define-values (port state) (make-logging-github-port))
-       (define result
-         (reconcile-tracker-after-delivery!
-          dir
-          PLAN-ID
-          0
-          (hasheq 'plan-id
-                  (make-string 64 #\f)
-                  'wave
-                  0
-                  'issue-number
-                  74
-                  'board-field
-                  "Status"
-                  'board-value
-                  "Done")
-          port
-          #:delivery-reader (lambda _ (error 'test "readback must not be consulted"))))
-       ;; Identity is the exact plan-id + wave inside the binding; an issue
-       ;; number that belongs to another campaign — same wave index, same
-       ;; title — is never accepted.
-       (check-equal? (tracker-reconciliation-result-status result) 'blocked)
-       (check-equal? (tracker-reconciliation-result-reason result)
-                     "missing safe tracker issue binding")
-       (check-equal? (gh-log-state-calls state) '()))))
+    (with-temp-dir (lambda (dir)
+                     (seed-authoritative-delivery! dir)
+                     (define-values (port state) (make-logging-github-port))
+                     (define result
+                       (reconcile-tracker-after-delivery!
+                        dir
+                        PLAN-ID
+                        0
+                        (hasheq 'plan-id
+                                (make-string 64 #\f)
+                                'wave
+                                0
+                                'issue-number
+                                74
+                                'board-field
+                                "Status"
+                                'board-value
+                                "Done")
+                        port
+                        #:delivery-reader (lambda _ (error 'test "readback must not be consulted"))))
+                     ;; Identity is the exact plan-id + wave inside the binding; an issue
+                     ;; number that belongs to another campaign — same wave index, same
+                     ;; title — is never accepted.
+                     (check-equal? (tracker-reconciliation-result-status result) 'blocked)
+                     (check-equal? (tracker-reconciliation-result-reason result)
+                                   "missing safe tracker issue binding")
+                     (check-equal? (gh-log-state-calls state) '()))))
 
   (test-case "a delivery readback that fails authentication blocks with zero commands"
     (with-temp-dir
@@ -478,10 +476,9 @@
           0
           (hasheq 'plan-id PLAN-ID 'wave 0 'issue-number 74 'board-field "Status" 'board-value "Done")
           port
-          #:delivery-reader
-          (lambda (_base _plan _wave)
-            (set-box! readbacks (add1 (unbox readbacks)))
-            (error 'delivery-controller "authentication failed"))))
+          #:delivery-reader (lambda (_base _plan _wave)
+                              (set-box! readbacks (add1 (unbox readbacks)))
+                              (error 'delivery-controller "authentication failed"))))
        (check-equal? (tracker-reconciliation-result-status result) 'blocked)
        (check-equal? (tracker-reconciliation-result-reason result)
                      "authenticated delivery readback is not delivered")
@@ -496,26 +493,29 @@
        (define closes (box 0))
        (define close-allowed? (box #f))
        (define adapter
-         (make-github-adapter
-          (lambda (_params) (error 'fake "unsupported"))
-          (lambda (_number)
-            (set-box! closes (add1 (unbox closes)))
-            (unless (unbox close-allowed?)
-              (error 'fake "tracker refused issue close")))
-          (lambda (_params) (set-box! board-writes (add1 (unbox board-writes))))
-          (lambda (_params) (error 'fake "unsupported"))
-          (lambda (_params) (error 'fake "unsupported"))
-          (lambda (_n) #f)
-          (lambda (_n) #f)
-          (lambda (_k) #f)
-          (lambda (_t) #f)))
+         (make-github-adapter (lambda (_params) (error 'fake "unsupported"))
+                              (lambda (_number)
+                                (set-box! closes (add1 (unbox closes)))
+                                (unless (unbox close-allowed?)
+                                  (error 'fake "tracker refused issue close")))
+                              (lambda (_params) (set-box! board-writes (add1 (unbox board-writes))))
+                              (lambda (_params) (error 'fake "unsupported"))
+                              (lambda (_params) (error 'fake "unsupported"))
+                              (lambda (_n) #f)
+                              (lambda (_n) #f)
+                              (lambda (_k) #f)
+                              (lambda (_t) #f)))
        ;; A real port: the board correlation is journaled, the failed close is
        ;; not — so a retry replays the board and re-executes only the close.
        (define port (make-github-port adapter #:dry-run? #f))
        (define binding
          (hasheq 'plan-id PLAN-ID 'wave 0 'issue-number 74 'board-field "Status" 'board-value "Done"))
        (define first-pass
-         (reconcile-tracker-after-delivery! dir PLAN-ID 0 binding port
+         (reconcile-tracker-after-delivery! dir
+                                            PLAN-ID
+                                            0
+                                            binding
+                                            port
                                             #:delivery-reader (lambda _ (delivered-proof))))
        (check-equal? (tracker-reconciliation-result-status first-pass) 'blocked)
        (check-equal? (unbox board-writes) 1)
@@ -526,10 +526,14 @@
         'board-set-field)
        (set-box! close-allowed? #t)
        (define retry
-         (reconcile-tracker-after-delivery! dir PLAN-ID 0 binding port
+         (reconcile-tracker-after-delivery! dir
+                                            PLAN-ID
+                                            0
+                                            binding
+                                            port
                                             #:delivery-reader (lambda _ (delivered-proof))))
        (check-equal? (tracker-reconciliation-result-status retry) 'reconciled)
        (check-equal? (unbox board-writes) 1 "the board is never re-written externally")
        (check-equal? (unbox closes) 2)
-       (check-true
-        (gsd-github-command-result-already-done? (car (tracker-reconciliation-result-actions retry))))))))
+       (check-true (gsd-github-command-result-already-done?
+                    (car (tracker-reconciliation-result-actions retry))))))))

@@ -90,18 +90,19 @@
     (set-box! events-box (append (unbox events-box) (list (cons name wrapped))))
     (on-event name wrapped)
     (set-box! state-box
-              (apply-event-to-state (unbox state-box)
-                                    (event 1 name (current-inexact-milliseconds) sid "turn" wrapped))))
-  (dynamic-wind
-   (lambda () (set-gsd-event-bus! bus))
-   thunk
-   (lambda () (set-gsd-event-bus! void)))
+              (apply-event-to-state
+               (unbox state-box)
+               (event 1 name (current-inexact-milliseconds) sid "turn" wrapped))))
+  (dynamic-wind (lambda () (set-gsd-event-bus! bus)) thunk (lambda () (set-gsd-event-bus! void)))
   (unbox events-box))
 
 (define (events-of-name events name)
-  (for/list ([e (in-list events)] #:when (equal? (car e) name)) (cdr e)))
+  (for/list ([e (in-list events)]
+             #:when (equal? (car e) name))
+    (cdr e)))
 
-(define (event-data wrapped) (hash-ref wrapped 'data (hash)))
+(define (event-data wrapped)
+  (hash-ref wrapped 'data (hash)))
 
 ;; Capture log-warning output while thunk runs (secondary-failure
 ;; distinctness assertions).
@@ -110,23 +111,22 @@
   (define msgs (box '()))
   (define recv (make-log-receiver lg 'warning))
   (define pump
-    (thread
-     (lambda ()
-       (let loop ()
-         (define v (sync recv))
-         (set-box! msgs (cons (vector-ref v 1) (unbox msgs)))
-         (loop)))))
-  (dynamic-wind
-   (lambda () (current-logger lg))
-   thunk
-   (lambda ()
-     (sleep 0.05)
-     (kill-thread pump)))
+    (thread (lambda ()
+              (let loop ()
+                (define v (sync recv))
+                (set-box! msgs (cons (vector-ref v 1) (unbox msgs)))
+                (loop)))))
+  (dynamic-wind (lambda () (current-logger lg))
+                thunk
+                (lambda ()
+                  (sleep 0.05)
+                  (kill-thread pump)))
   (reverse (unbox msgs)))
 
 ;; The verify command runs from the fixture's git root (two-tier layout:
 ;; base-dir/q), normalized exactly as the verifier normalizes it.
-(define (fixture-run-cwd base) (checkout-key (build-path base "q")))
+(define (fixture-run-cwd base)
+  (checkout-key (build-path base "q")))
 
 ;; One observer-raise scenario, parameterized by the declared command, with
 ;; full assertions shared by the failed-job and exit-0 variants.
@@ -147,51 +147,48 @@
        "test-session"
        (lambda ()
          (with-handlers ([exn:test-pause? (lambda (e) (set-box! escaped e))])
-           (set-box! returned (run-delivery-verification base (load-plan** base '("q/ui-core/preferences.rkt")) 0)))))))
+           (set-box!
+            returned
+            (run-delivery-verification base (load-plan** base '("q/ui-core/preferences.rkt")) 0)))))))
   (check-true (exn:test-pause? (unbox escaped)) "the observer exception escapes the verifier")
   (check-true (eq? (unbox escaped) pause-obj) "the ORIGINAL exception object escapes (no re-wrap)")
-  (check-equal? (unbox returned) 'no-value "no delivery-verification value crosses an observer rejection")
+  (check-equal? (unbox returned)
+                'no-value
+                "no delivery-verification value crosses an observer rejection")
   (define completed (events-of-name events 'gsd.verification.completed))
   (check-equal? (length completed) 1 "exactly ONE terminal update despite the observer failure")
-  (values base
-          reg
-          state-box
-          (and (= (length completed) 1) (event-data (car completed)))
-          events))
+  (values base reg state-box (and (= (length completed) 1) (event-data (car completed))) events))
 
 ;; W4: seed an IDENTIFIED foreground verification progress through the REAL
 ;; reducer (the consumer half of the R102 identity contract) so the reattach
 ;; route under test sees exactly the production state shape.
 (define (seed-foreground-progress! state-box job-id incarnation)
-  (set-box!
-   state-box
-   (apply-event-to-state
-    (unbox state-box)
-    (event 1
-           'gsd.verification.started
-           (current-inexact-milliseconds)
-           "test-session"
-           "turn"
-           (hasheq 'wave
-                   4
-                   'timeout-sec
-                   60
-                   'start-ms
-                   1000.0
-                   'job-id
-                   job-id
-                   'registry-incarnation
-                   incarnation
-                   'verify-identity-key
-                   "idkey-w4")))))
+  (set-box! state-box
+            (apply-event-to-state (unbox state-box)
+                                  (event 1
+                                         'gsd.verification.started
+                                         (current-inexact-milliseconds)
+                                         "test-session"
+                                         "turn"
+                                         (hasheq 'wave
+                                                 4
+                                                 'timeout-sec
+                                                 60
+                                                 'start-ms
+                                                 1000.0
+                                                 'job-id
+                                                 job-id
+                                                 'registry-incarnation
+                                                 incarnation
+                                                 'verify-identity-key
+                                                 "idkey-w4")))))
 
 (define (terminal-events-suite)
   (test-suite "R102 terminal event identity contract (producer, public routes)"
 
     ;; ------------------------------------------------ observer raise: failed
     (test-case "terminal failed job + raising observer (typed pause): one terminal update, original exception escapes"
-      (define-values (base reg state-box data events)
-        (run-observer-raise-test! "( exit 3 )"))
+      (define-values (base reg state-box data events) (run-observer-raise-test! "( exit 3 )"))
       (check-equal? (hash-ref data 'state #f) 'failed)
       (check-equal? (hash-ref data 'exit-code #f) 3)
       (check-equal? (hash-ref data 'verdict #f) "reject")
@@ -214,8 +211,7 @@
 
     ;; ------------------------------------------ observer raise: exit 0
     (test-case "exit 0 + rejected (raising) observer is NOT workflow approval"
-      (define-values (base _reg _state-box data _events)
-        (run-observer-raise-test! "( exit 0 )"))
+      (define-values (base _reg _state-box data _events) (run-observer-raise-test! "( exit 0 )"))
       (check-equal? (hash-ref data 'state #f) 'completed)
       (check-equal? (hash-ref data 'exit-code #f) 0)
       (cleanup-tmp base))
@@ -232,7 +228,8 @@
           (call-with-verification-bus
            state-box
            "test-session"
-           (lambda () (run-delivery-verification base (load-plan** base '("q/ui-core/preferences.rkt")) 0)))))
+           (lambda ()
+             (run-delivery-verification base (load-plan** base '("q/ui-core/preferences.rkt")) 0)))))
       (define completed (events-of-name events 'gsd.verification.completed))
       (check-equal? (length completed) 1 "exactly one terminal update on timeout")
       (when (= (length completed) 1)
@@ -251,16 +248,18 @@
       (define reg (make-verification-registry))
       (define state-box (box (initial-ui-state #:session-id "test-session")))
       (define events
-        (parameterize ([current-gsd-verification-registry reg]
-                       [current-gsd-delivery-verify-command "( exit 0 )"]
-                       [current-gsd-delivery-verify-timeout-sec 60]
-                       [current-gsd-verification-attachment-generation 7]
-                       [current-gsd-verification-attempt-context
-                        (hasheq 'attempt-id "attempt-42" 'attempt-fence "af-9" 'coordinator-fence "cf-3")])
+        (parameterize
+            ([current-gsd-verification-registry reg]
+             [current-gsd-delivery-verify-command "( exit 0 )"]
+             [current-gsd-delivery-verify-timeout-sec 60]
+             [current-gsd-verification-attachment-generation 7]
+             [current-gsd-verification-attempt-context
+              (hasheq 'attempt-id "attempt-42" 'attempt-fence "af-9" 'coordinator-fence "cf-3")])
           (call-with-verification-bus
            state-box
            "test-session"
-           (lambda () (run-delivery-verification base (load-plan** base '("q/ui-core/preferences.rkt")) 0)))))
+           (lambda ()
+             (run-delivery-verification base (load-plan** base '("q/ui-core/preferences.rkt")) 0)))))
       (define started (events-of-name events 'gsd.verification.started))
       (define completed (events-of-name events 'gsd.verification.completed))
       (check-equal? (length started) 1)
@@ -302,9 +301,9 @@
                    (equal? (hash-ref (hash-ref wrapped 'data) 'session-attachment-generation #f) 101))
           (set-box! caller1-started #t))
         (set-box! state-box
-                  (apply-event-to-state (unbox state-box)
-                                        (event 1 name (current-inexact-milliseconds)
-                                               "test-session" "turn" wrapped))))
+                  (apply-event-to-state
+                   (unbox state-box)
+                   (event 1 name (current-inexact-milliseconds) "test-session" "turn" wrapped))))
       (define errors (box '()))
       (define (run-as generation attempt-id)
         (with-handlers ([exn:fail? (lambda (e) (set-box! errors (cons e (unbox errors))))])
@@ -313,44 +312,44 @@
                          [current-gsd-delivery-verify-timeout-sec 60]
                          [current-gsd-verification-attachment-generation generation]
                          [current-gsd-verification-attempt-context
-                          (hasheq 'attempt-id attempt-id
-                                  'attempt-fence (string-append "f" attempt-id)
-                                  'coordinator-fence (string-append "c" attempt-id))])
+                          (hasheq 'attempt-id
+                                  attempt-id
+                                  'attempt-fence
+                                  (string-append "f" attempt-id)
+                                  'coordinator-fence
+                                  (string-append "c" attempt-id))])
             (run-delivery-verification base (load-plan** base '("q/ui-core/preferences.rkt")) 0))))
-      (dynamic-wind
-       (lambda () (set-gsd-event-bus! bus))
-       (lambda ()
-         (define t1 (thread (lambda () (run-as 101 "A"))))
-         (define t2
-           (thread
-            (lambda ()
-              (let wait ([n 500])
-                (unless (or (unbox caller1-started) (zero? n))
-                  (sleep 0.02)
-                  (wait (sub1 n))))
-              (run-as 202 "B"))))
-         (check-not-false (sync/timeout 30 t1) "caller 1 finished")
-         (check-not-false (sync/timeout 30 t2) "caller 2 finished"))
-       (lambda () (set-gsd-event-bus! void)))
+      (dynamic-wind (lambda () (set-gsd-event-bus! bus))
+                    (lambda ()
+                      (define t1 (thread (lambda () (run-as 101 "A"))))
+                      (define t2
+                        (thread (lambda ()
+                                  (let wait ([n 500])
+                                    (unless (or (unbox caller1-started) (zero? n))
+                                      (sleep 0.02)
+                                      (wait (sub1 n))))
+                                  (run-as 202 "B"))))
+                      (check-not-false (sync/timeout 30 t1) "caller 1 finished")
+                      (check-not-false (sync/timeout 30 t2) "caller 2 finished"))
+                    (lambda () (set-gsd-event-bus! void)))
       (check-equal? (unbox errors) '() "no caller failed")
       (check-true (unbox caller1-started) "caller 1 started the owned job")
       (define all (unbox events-box))
-      (define (gen-of e) (hash-ref (event-data (cdr e)) 'session-attachment-generation #f))
-      (define (attempt-of e) (hash-ref (event-data (cdr e)) 'attempt-id #f))
+      (define (gen-of e)
+        (hash-ref (event-data (cdr e)) 'session-attachment-generation #f))
+      (define (attempt-of e)
+        (hash-ref (event-data (cdr e)) 'attempt-id #f))
       (define ev1-started
         (for/first ([e (in-list all)]
-                    #:when (and (equal? (car e) 'gsd.verification.started)
-                                (equal? (gen-of e) 101)))
+                    #:when (and (equal? (car e) 'gsd.verification.started) (equal? (gen-of e) 101)))
           (cdr e)))
       (define ev1-completed
         (for/first ([e (in-list all)]
-                    #:when (and (equal? (car e) 'gsd.verification.completed)
-                                (equal? (gen-of e) 101)))
+                    #:when (and (equal? (car e) 'gsd.verification.completed) (equal? (gen-of e) 101)))
           (cdr e)))
       (define ev2-started
         (for/first ([e (in-list all)]
-                    #:when (and (equal? (car e) 'gsd.verification.started)
-                                (equal? (gen-of e) 202)))
+                    #:when (and (equal? (car e) 'gsd.verification.started) (equal? (gen-of e) 202)))
           (cdr e)))
       (check-true (and ev1-started #t) "caller 1 started observed")
       (check-true (and ev1-completed #t) "caller 1 terminal observed")
@@ -375,7 +374,7 @@
                       (hash-ref (event-data ev2-started) 'job-id #f)
                       "one owned job, two entry bindings"))
       (check-equal? (length (for/list ([e (in-list all)]
-                                        #:when (equal? (car e) 'gsd.verification.completed))
+                                       #:when (equal? (car e) 'gsd.verification.completed))
                               e))
                     2
                     "each attached caller publishes exactly one terminal")
@@ -396,9 +395,9 @@
       (define (bus name wrapped)
         (set-box! events-box (append (unbox events-box) (list (cons name wrapped))))
         (set-box! state-box
-                  (apply-event-to-state (unbox state-box)
-                                        (event 1 name (current-inexact-milliseconds)
-                                               "test-session" "turn" wrapped)))
+                  (apply-event-to-state
+                   (unbox state-box)
+                   (event 1 name (current-inexact-milliseconds) "test-session" "turn" wrapped)))
         ;; runs synchronously at the started emission — after start-or-attach!,
         ;; BEFORE the producer's wait: kill out of band, reconcile
         ;; terminal+reaped, then REPLACE the handle for the same identity
@@ -420,15 +419,17 @@
       (define warnings
         (call-with-captured-warnings
          (lambda ()
-           (dynamic-wind
-            (lambda () (set-gsd-event-bus! bus))
-            (lambda ()
-              (parameterize ([current-gsd-verification-registry reg]
-                             [current-gsd-delivery-verify-command command]
-                             [current-gsd-delivery-verify-timeout-sec 60])
-                (with-handlers ([exn:fail? (lambda (e) (set-box! escaped e))])
-                  (run-delivery-verification base (load-plan** base '("q/ui-core/preferences.rkt")) 0))))
-            (lambda () (set-gsd-event-bus! void))))))
+           (dynamic-wind (lambda () (set-gsd-event-bus! bus))
+                         (lambda ()
+                           (parameterize ([current-gsd-verification-registry reg]
+                                          [current-gsd-delivery-verify-command command]
+                                          [current-gsd-delivery-verify-timeout-sec 60])
+                             (with-handlers ([exn:fail? (lambda (e) (set-box! escaped e))])
+                               (run-delivery-verification base
+                                                          (load-plan** base
+                                                                       '("q/ui-core/preferences.rkt"))
+                                                          0))))
+                         (lambda () (set-gsd-event-bus! void))))))
       (define events (unbox events-box))
       (check-equal? (unbox reconcile-state) 'orphan-recovered "replacement precondition held")
       (check-pred start-result? (unbox replacement))
@@ -444,10 +445,9 @@
         (check-equal? (hash-ref data 'registry-incarnation #f)
                       (verification-registry-incarnation reg))
         (check-false (hash-ref data 'approved? #t) "an orphan-recovered job never approves"))
-      (check-true
-       (for/or ([m (in-list warnings)])
-         (string-contains? (format "~a" m) "secondary"))
-       "the cancel failure is logged as a SECONDARY failure, distinct from the primary")
+      (check-true (for/or ([m (in-list warnings)])
+                    (string-contains? (format "~a" m) "secondary"))
+                  "the cancel failure is logged as a SECONDARY failure, distinct from the primary")
       (with-handlers ([exn:fail? void])
         (verification-close-registry! reg))
       (cleanup-tmp base))
@@ -461,13 +461,15 @@
       (check-pred verification-job? (verification-job-facts reg (start-result-job-id r1)))
       (verification-cancel! reg (start-result-job-id r1))
       (define r2 (verification-start! reg ident "/bin/sh" (list "-c" "( exit 0 )")))
-      (check-not-equal? (start-result-job-id r2) (start-result-job-id r1) "replacement got a fresh job id")
+      (check-not-equal? (start-result-job-id r2)
+                        (start-result-job-id r1)
+                        "replacement got a fresh job id")
       (define tomb (verification-job-facts reg (start-result-job-id r1)))
-      (check-true (verification-terminal-tombstone? tomb) "the replaced job is retained as a tombstone")
+      (check-true (verification-terminal-tombstone? tomb)
+                  "the replaced job is retained as a tombstone")
       (when (verification-terminal-tombstone? tomb)
         (check-equal? (verification-terminal-tombstone-state tomb) 'cancelled)
-        (check-equal? (verification-terminal-tombstone-replacement-id tomb)
-                      (start-result-job-id r2)))
+        (check-equal? (verification-terminal-tombstone-replacement-id tomb) (start-result-job-id r2)))
       (check-pred verification-job? (verification-job-facts reg (start-result-job-id r2)))
       (check-false (verification-job-facts reg 'vj-424242) "unknown job stays #f")
       (verification-close-registry! reg)
@@ -532,8 +534,9 @@
       (verification-cancel! reg (start-result-job-id r1))
       (verification-start! reg ident "/bin/sh" (list "-c" "( exit 0 )"))
       (define state-box (box (initial-ui-state #:session-id "test-session")))
-      (seed-foreground-progress!
-       state-box (start-result-job-id r1) (verification-registry-incarnation reg))
+      (seed-foreground-progress! state-box
+                                 (start-result-job-id r1)
+                                 (verification-registry-incarnation reg))
       (define restored
         (parameterize ([current-gsd-verification-registry reg])
           (reattach-verification-state (unbox state-box))))
@@ -554,8 +557,9 @@
       (define ident (delivery-verify-identity base 0 (fixture-run-cwd base) "( exit 0 )"))
       (define r (verification-start! reg ident "/bin/sh" (list "-c" "( sleep 30 )")))
       (define state-box (box (initial-ui-state #:session-id "test-session")))
-      (seed-foreground-progress!
-       state-box (start-result-job-id r) (verification-registry-incarnation reg))
+      (seed-foreground-progress! state-box
+                                 (start-result-job-id r)
+                                 (verification-registry-incarnation reg))
       (define detached
         (parameterize ([current-gsd-verification-registry reg])
           (reattach-verification-state (unbox state-box))))
@@ -565,11 +569,10 @@
       (define terminal
         (parameterize ([current-gsd-verification-registry reg])
           (reattach-verification-state (unbox state-box))))
-      (check-true
-       (for/or ([entry (in-list (ui-state-transcript terminal))]
-                #:when (hash-ref (transcript-entry-meta entry) 'detached #f))
-         (string-contains? (transcript-entry-text entry) "state cancelled"))
-       "the terminal registry record is rendered after the wait")
+      (check-true (for/or ([entry (in-list (ui-state-transcript terminal))]
+                           #:when (hash-ref (transcript-entry-meta entry) 'detached #f))
+                    (string-contains? (transcript-entry-text entry) "state cancelled"))
+                  "the terminal registry record is rendered after the wait")
       (with-handlers ([exn:fail? void])
         (verification-close-registry! reg))
       (cleanup-tmp base))))

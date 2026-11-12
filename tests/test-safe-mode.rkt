@@ -82,11 +82,10 @@
   (check-not-false (member "delete-lines" file-write-or-shell-exec))
   (parameterize ([current-safe-mode #t])
     (for ([name (in-list file-write-or-shell-exec)])
-      (check-false (allowed-tool? name)
-                   (format "~a must be denied by safe mode" name))))
+      (check-false (allowed-tool? name) (format "~a must be denied by safe mode" name))))
   ;; A custom allowlist is not an admission path: blocked-tools wins.
-  (parameterize ([current-safe-mode-config (make-safe-mode-config #:active #t
-                                                                   #:allowed-tools file-write-or-shell-exec)])
+  (parameterize ([current-safe-mode-config
+                  (make-safe-mode-config #:active #t #:allowed-tools file-write-or-shell-exec)])
     (check-true (safe-mode?))
     (for ([name (in-list file-write-or-shell-exec)])
       (check-false (allowed-tool? name)

@@ -28,10 +28,9 @@
       ;; records land in the shared top-level captured box.
       (define spill
         (install-stderr-guard!
-         #:on-error-record (lambda (msg captured-path)
-                             (set-box! captured
-                                       (append (unbox captured)
-                                               (list (list msg captured-path)))))))
+         #:on-error-record
+         (lambda (msg captured-path)
+           (set-box! captured (append (unbox captured) (list (list msg captured-path)))))))
       (check-true (string? (path->string spill)) "install returns a spill path")
       (check-true (stderr-guard-active?))
       (check-equal? (path->string (stderr-guard-spill-path)) (path->string spill))
@@ -57,7 +56,8 @@
       ;; BUG-0098/R98: the second argument is the guard's REAL spill path —
       ;; proof that this record was captured before surfacing.
       (for ([rec (in-list (unbox captured))])
-        (check-equal? (second rec) (stderr-guard-spill-path)
+        (check-equal? (second rec)
+                      (stderr-guard-spill-path)
                       "callback must receive the real spill path for a captured record"))
       (sync pump-thread)
       (check-false (unbox pump-saw)
@@ -85,11 +85,10 @@
 
     (test-case "BUG-0098/R98: spill-write failure passes #f capture status"
       (define captured (box '()))
-      (install-stderr-guard!
-       #:on-error-record (lambda (msg captured-path)
-                           (set-box! captured
-                                     (append (unbox captured)
-                                             (list (list msg captured-path))))))
+      (install-stderr-guard! #:on-error-record
+                             (lambda (msg captured-path)
+                               (set-box! captured
+                                         (append (unbox captured) (list (list msg captured-path))))))
       ;; Inject: close the guard's private spill port; the next write fails.
       (close-output-port (stderr-guard-spill-port))
       (log-error "bug0072-spill-failed-record")
@@ -98,26 +97,23 @@
       (check-true (pair? recs) "callback still invoked when capture fails")
       (when (pair? recs)
         (check-true (string-contains? (~a (first (last recs))) "bug0072-spill-failed-record"))
-        (check-false (second (last recs))
-                     "capture failure must be disclosed as #f, not a path"))
+        (check-false (second (last recs)) "capture failure must be disclosed as #f, not a path"))
       (restore-stderr-guard!))
 
     (test-case "BUG-0098/R98: callback failure disclosed in spill, guard survives"
       (define spill
-        (install-stderr-guard!
-         #:on-error-record (lambda (msg captured-path) (error "injected callback failure"))))
+        (install-stderr-guard! #:on-error-record (lambda (msg captured-path)
+                                                   (error "injected callback failure"))))
       (log-error "bug0072-callback-failure-record")
-      (check-true
-       (let loop ([n 0])
-         (or (string-contains? (file->string spill) "diagnostic surface FAILED")
-             (and (< n 100) (sleep 0.02) (loop (add1 n)))))
-       "failed surface attempt must be disclosed in the spill")
+      (check-true (let loop ([n 0])
+                    (or (string-contains? (file->string spill) "diagnostic surface FAILED")
+                        (and (< n 100) (sleep 0.02) (loop (add1 n)))))
+                  "failed surface attempt must be disclosed in the spill")
       (log-error "bug0072-after-failure-record")
-      (check-true
-       (let loop ([n 0])
-         (or (string-contains? (file->string spill) "bug0072-after-failure-record")
-             (and (< n 100) (sleep 0.02) (loop (add1 n)))))
-       "guard thread must keep draining after a callback failure")
+      (check-true (let loop ([n 0])
+                    (or (string-contains? (file->string spill) "bug0072-after-failure-record")
+                        (and (< n 100) (sleep 0.02) (loop (add1 n)))))
+                  "guard thread must keep draining after a callback failure")
       (restore-stderr-guard!))
 
     (test-case "BUG-0098/R98: teardown drains queued records without loss"
@@ -129,7 +125,8 @@
       (check-false (stderr-guard-active?))
       (check-true (string-contains? (file->string spill) "bug0072-teardown-queued-record")
                   "queued record must survive teardown, not vanish")
-      (check-equal? (file-or-directory-permissions spill) '(write read)
+      (check-equal? (file-or-directory-permissions spill)
+                    '(write read)
                     "spill stays owner-only (0600)"))
 
     (test-case "restore is idempotent and re-install works after restore"

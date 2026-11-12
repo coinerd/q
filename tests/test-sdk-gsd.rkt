@@ -16,8 +16,10 @@
 ;;   - Edge cases: no extension registry, no submit text, no session
 
 (require (only-in "../extensions/gsd/campaign-state.rkt"
-                  migrate-campaign! set-campaign-record-execution-policy!)
-         (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign!) rackunit
+                  migrate-campaign!
+                  set-campaign-record-execution-policy!)
+         (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign!)
+         rackunit
          racket/file
          racket/system
          "../interfaces/sdk.rkt"

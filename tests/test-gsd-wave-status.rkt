@@ -121,10 +121,8 @@
     (check-equal? (car key) 'unknown)
     (check-equal? (cadr key) (string-upcase (string-trim bad))))
   ;; Same claim compares equal; a different claim does not.
-  (check-equal? (wave-status-comparison-key "CANCELLED")
-                (wave-status-comparison-key "cancelled"))
-  (check-not-equal? (wave-status-comparison-key "CANCELLED")
-                    (wave-status-comparison-key "PENDING"))
+  (check-equal? (wave-status-comparison-key "CANCELLED") (wave-status-comparison-key "cancelled"))
+  (check-not-equal? (wave-status-comparison-key "CANCELLED") (wave-status-comparison-key "PENDING"))
   ;; Known spellings compare by canonical symbol, exactly as before.
   (check-eq? (wave-status-comparison-key "COMPLETED") 'done)
   (check-eq? (wave-status-comparison-key "Inbox") 'pending))

@@ -22,7 +22,8 @@
   (define grant (hash-ref contract 'task-approval))
   ;; The real kernel lock used by under-lock, not a fabricated semaphore.
   (define lock-path
-    (build-path (current-supplemental-authority-root) "supplemental-operations"
+    (build-path (current-supplemental-authority-root)
+                "supplemental-operations"
                 (string-append (hash-ref grant 'sha256) ".lock")))
   (define op-held (make-semaphore 0))
   (define authority-held (make-semaphore 0))
@@ -37,7 +38,8 @@
                   (async-channel-put result (proc)))))))
   (define (checked-result channel label)
     (define result (await channel label))
-    (when (exn? result) (raise result))
+    (when (exn? result)
+      (raise result))
     result)
   (dynamic-wind
    void
@@ -45,7 +47,8 @@
      (worker reader-result
              (lambda ()
                (call-with-file-lock/timeout
-                #f 'exclusive
+                #f
+                'exclusive
                 (lambda ()
                   (semaphore-post op-held)
                   (await authority-held 'authority-held)
@@ -63,20 +66,25 @@
                 (lambda ()
                   (semaphore-post authority-held)
                   (await reader-attempting 'reader-attempting)
-                  (stage-supplemental-evidence!
-                   (hash-ref facts 'root) fixture-plan 1
-                   (hash-ref receipt 'attempt-id) (hash-ref receipt 'attempt-fence)
-                   contract receipt (hash-ref receipt 'owned-proof)
-                   (hash-ref facts 'task) (hash-ref facts 'candidate))))))
+                  (stage-supplemental-evidence! (hash-ref facts 'root)
+                                                fixture-plan
+                                                1
+                                                (hash-ref receipt 'attempt-id)
+                                                (hash-ref receipt 'attempt-fence)
+                                                contract
+                                                receipt
+                                                (hash-ref receipt 'owned-proof)
+                                                (hash-ref facts 'task)
+                                                (hash-ref facts 'candidate))))))
      (check-true (supplemental-staged-evidence? (checked-result stage-result 'stage-completed)))
-     (check-equal? (hash-ref (checked-result reader-result 'reader-authority-section) 'state) "green-captured"))
+     (check-equal? (hash-ref (checked-result reader-result 'reader-authority-section) 'state)
+                   "green-captured"))
    (lambda () (custodian-shutdown-all workers))))
 
 (module+ test
   (test-case "staging authenticates proof without acquiring operation lock under authority"
     ;; Continue through real R1/publication/certification after the concurrent
     ;; stage: success is not a shortcut around the genuine fixture ladder.
-    (with-certified-promotion-fixture
-     (lambda (_facts) (void))
-     #:recovery? #t
-     #:before-stage exercise-lock-order)))
+    (with-certified-promotion-fixture (lambda (_facts) (void))
+                                      #:recovery? #t
+                                      #:before-stage exercise-lock-order)))

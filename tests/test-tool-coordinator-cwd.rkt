@@ -43,12 +43,12 @@
                    [else (~a part)]))
                ""))
 
-        (define (result-content-strings r)
-          (for/list ([part (in-list (tool-result-content r))])
-            (cond
-              [(string? part) part]
-              [(hash? part) (hash-ref part 'text "")]
-              [else (~a part)])))
+(define (result-content-strings r)
+  (for/list ([part (in-list (tool-result-content r))])
+    (cond
+      [(string? part) part]
+      [(hash? part) (hash-ref part 'text "")]
+      [else (~a part)])))
 
 (define (make-bash-tool)
   (make-tool "bash"
@@ -72,8 +72,10 @@
                      'required
                      '("path")
                      'properties
-                     (hasheq 'path (hasheq 'type "string" 'description "Root directory")
-                             'name (hasheq 'type "string" 'description "Glob")))
+                     (hasheq 'path
+                             (hasheq 'type "string" 'description "Root directory")
+                             'name
+                             (hasheq 'type "string" 'description "Glob")))
              tool-find))
 
 (define (make-real-read-tool)
@@ -173,76 +175,71 @@
          ;; exec-context working directory deliberately differs from root
          (define unrelated (make-temporary-file "q97-unrelated-~a" 'directory))
          (dynamic-wind
-           (lambda () (current-directory root))
-           (lambda ()
-             (define ctx
-               (make-exec-context
-                #:working-directory unrelated
-                #:permission-config (make-permissive-permission-config)))
-             ;; find via the ACTUAL scheduler with a relative docs root
-             (define find-call (make-tool-call "tc-find" "find" (hasheq 'path "docs")))
-             (define find-result
-               (car (scheduler-result-results
-                     (run-tool-batch (list find-call) reg #:exec-context ctx))))
-             (check-false (tool-result-is-error? find-result)
-                          (result-content-text find-result))
-             (define found
-               (findf (lambda (s) (string-suffix? s "docs/contracts/spec.txt"))
-                      (result-content-strings find-result)))
-             ;; R97: result must be an absolute path ...
-             (check-not-false found (format "expected absolute docs result, got: ~a"
-                                            (result-content-strings find-result)))
-             (when found
-               (check-true (string-prefix? found (path->string root))
-                           (format "result must live under the searched root: ~a" found))
-               ;; ... whose read returns the DOCS sentinel bytes, never the
-               ;; cwd-conflict sentinel from root/contracts/spec.txt.
-               (define read-call (make-tool-call "tc-read" "read" (hasheq 'path found)))
-               (define read-result
-                 (car (scheduler-result-results
-                       (run-tool-batch (list read-call) reg #:exec-context ctx))))
-               (check-false (tool-result-is-error? read-result)
-                            (result-content-text read-result))
-               (check-true (string-contains? (result-content-text read-result)
-                                             "docs-contracts-sentinel")
-                           (format "expected docs sentinel, got: ~a"
-                                   (result-content-text read-result)))
-               (check-false (string-contains? (result-content-text read-result)
-                                              "cwd-conflict-sentinel"))))
-           (lambda ()
-             (delete-directory/files unrelated #:must-exist? #f)))))
+          (lambda () (current-directory root))
+          (lambda ()
+            (define ctx
+              (make-exec-context #:working-directory unrelated
+                                 #:permission-config (make-permissive-permission-config)))
+            ;; find via the ACTUAL scheduler with a relative docs root
+            (define find-call (make-tool-call "tc-find" "find" (hasheq 'path "docs")))
+            (define find-result
+              (car (scheduler-result-results
+                    (run-tool-batch (list find-call) reg #:exec-context ctx))))
+            (check-false (tool-result-is-error? find-result) (result-content-text find-result))
+            (define found
+              (findf (lambda (s) (string-suffix? s "docs/contracts/spec.txt"))
+                     (result-content-strings find-result)))
+            ;; R97: result must be an absolute path ...
+            (check-not-false found
+                             (format "expected absolute docs result, got: ~a"
+                                     (result-content-strings find-result)))
+            (when found
+              (check-true (string-prefix? found (path->string root))
+                          (format "result must live under the searched root: ~a" found))
+              ;; ... whose read returns the DOCS sentinel bytes, never the
+              ;; cwd-conflict sentinel from root/contracts/spec.txt.
+              (define read-call (make-tool-call "tc-read" "read" (hasheq 'path found)))
+              (define read-result
+                (car (scheduler-result-results
+                      (run-tool-batch (list read-call) reg #:exec-context ctx))))
+              (check-false (tool-result-is-error? read-result) (result-content-text read-result))
+              (check-true
+               (string-contains? (result-content-text read-result) "docs-contracts-sentinel")
+               (format "expected docs sentinel, got: ~a" (result-content-text read-result)))
+              (check-false (string-contains? (result-content-text read-result)
+                                             "cwd-conflict-sentinel"))))
+          (lambda () (delete-directory/files unrelated #:must-exist? #f)))))
 
-    ;; CWD switched BETWEEN find and read, both through the scheduler:
-    ;; absolute results must resolve independent of CWD state changes.
-    (test-case "R97: CWD switched between scheduler find and scheduler read"
-      (with-temp-dir
-       (lambda (root)
-         (make-directory* (build-path root "docs" "contracts"))
-         (call-with-output-file (build-path root "docs" "contracts" "spec.txt")
-                                (lambda (out) (display "docs-between-sentinel" out))
-                                #:exists 'replace)
-         (define reg (make-tool-registry))
-         (register-tool! reg (make-find-tool))
-         (register-tool! reg (make-real-read-tool))
-         (define ctx (make-exec-context
-                      #:permission-config (make-permissive-permission-config)))
-         (define orig-cd (current-directory))
-         (dynamic-wind
-           (lambda () (current-directory root))
-           (lambda ()
-             (define find-result
-               (car (scheduler-result-results
-                     (run-tool-batch
-                      (list (make-tool-call "tc-find" "find" (hasheq 'path "docs")))
-                      reg #:exec-context ctx))))
-             (check-false (tool-result-is-error? find-result))
-             (define found
-               (findf (lambda (s) (string-suffix? s "docs/contracts/spec.txt"))
-                      (result-content-strings find-result)))
-             (check-not-false found)
-             ;; now switch the process CWD to a hostile decoy layout
-             (define decoy (make-temporary-file "q97-decoy-~a" 'directory))
-             (dynamic-wind
+      ;; CWD switched BETWEEN find and read, both through the scheduler:
+      ;; absolute results must resolve independent of CWD state changes.
+      (test-case "R97: CWD switched between scheduler find and scheduler read"
+        (with-temp-dir
+         (lambda (root)
+           (make-directory* (build-path root "docs" "contracts"))
+           (call-with-output-file (build-path root "docs" "contracts" "spec.txt")
+                                  (lambda (out) (display "docs-between-sentinel" out))
+                                  #:exists 'replace)
+           (define reg (make-tool-registry))
+           (register-tool! reg (make-find-tool))
+           (register-tool! reg (make-real-read-tool))
+           (define ctx (make-exec-context #:permission-config (make-permissive-permission-config)))
+           (define orig-cd (current-directory))
+           (dynamic-wind
+            (lambda () (current-directory root))
+            (lambda ()
+              (define find-result
+                (car (scheduler-result-results
+                      (run-tool-batch (list (make-tool-call "tc-find" "find" (hasheq 'path "docs")))
+                                      reg
+                                      #:exec-context ctx))))
+              (check-false (tool-result-is-error? find-result))
+              (define found
+                (findf (lambda (s) (string-suffix? s "docs/contracts/spec.txt"))
+                       (result-content-strings find-result)))
+              (check-not-false found)
+              ;; now switch the process CWD to a hostile decoy layout
+              (define decoy (make-temporary-file "q97-decoy-~a" 'directory))
+              (dynamic-wind
                (lambda ()
                  (make-directory* (build-path decoy "docs" "contracts"))
                  (call-with-output-file (build-path decoy "docs" "contracts" "spec.txt")
@@ -252,21 +249,17 @@
                (lambda ()
                  (define read-result
                    (car (scheduler-result-results
-                         (run-tool-batch
-                          (list (make-tool-call "tc-read" "read"
-                                                (hasheq 'path found)))
-                          reg #:exec-context ctx))))
-                 (check-false (tool-result-is-error? read-result)
-                              (result-content-text read-result))
+                         (run-tool-batch (list (make-tool-call "tc-read" "read" (hasheq 'path found)))
+                                         reg
+                                         #:exec-context ctx))))
+                 (check-false (tool-result-is-error? read-result) (result-content-text read-result))
                  (check-true (string-contains? (result-content-text read-result)
                                                "docs-between-sentinel")
                              (format "expected docs sentinel after CWD switch, got: ~a"
                                      (result-content-text read-result)))
-                 (check-false (string-contains? (result-content-text read-result)
-                                                "decoy-sentinel")))
+                 (check-false (string-contains? (result-content-text read-result) "decoy-sentinel")))
                (lambda ()
                  (current-directory orig-cd)
-                 (delete-directory/files decoy #:must-exist? #f)))))))))
-    ))
+                 (delete-directory/files decoy #:must-exist? #f)))))))))))
 
 (run-tests coordinator-cwd-tests)

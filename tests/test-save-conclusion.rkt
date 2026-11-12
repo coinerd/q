@@ -33,10 +33,9 @@
 (define (call-tool-with-events t args)
   (define events (box '()))
   (define ctx
-    (make-exec-context
-     #:event-publisher
-     (lambda (event-type payload)
-       (set-box! events (cons (cons event-type payload) (unbox events))))))
+    (make-exec-context #:event-publisher
+                       (lambda (event-type payload)
+                         (set-box! events (cons (cons event-type payload) (unbox events))))))
   (define result ((tool-execute t) args ctx))
   (values result (unbox events)))
 
@@ -151,8 +150,7 @@
         (check-eq? (task-conclusion-category c) cat-sym)))
 
     (test-case "R94: nonempty JSON string tag array passes schema and normalizes to symbols"
-      (define result
-        (pipeline-execute save-conclusion (hasheq 'content "t" 'tags '("alpha" "beta"))))
+      (define result (pipeline-execute save-conclusion (hasheq 'content "t" 'tags '("alpha" "beta"))))
       (check-false (tool-result-is-error? result))
       (define c (hash-ref (tool-result-details result) '_conclusion #f))
       (check-not-false c)
@@ -239,8 +237,7 @@
 
     (test-case "R94: missing/non-string content rejected at schema and handler"
       (check-exn exn:fail? (lambda () (validate-tool-args save-conclusion (hasheq))))
-      (check-exn exn:fail?
-                 (lambda () (validate-tool-args save-conclusion (hasheq 'content 42))))
+      (check-exn exn:fail? (lambda () (validate-tool-args save-conclusion (hasheq 'content 42))))
       (define-values (r1 e1) (call-tool-with-events save-conclusion (hasheq)))
       (check-true (tool-result-is-error? r1))
       (check-false (stored-conclusion r1))
@@ -252,12 +249,11 @@
 
     (test-case "R94: success emits exactly one deprecation event and stores the conclusion"
       (define-values (result events)
-        (call-tool-with-events
-         save-conclusion (hasheq 'content "ok" 'category "pattern" 'tags '("x"))))
+        (call-tool-with-events save-conclusion
+                               (hasheq 'content "ok" 'category "pattern" 'tags '("x"))))
       (check-false (tool-result-is-error? result))
       (check-equal? (length (deprecated-events events)) 1)
-      (check-eq? (task-conclusion-category
-                   (hash-ref (tool-result-details result) '_conclusion))
+      (check-eq? (task-conclusion-category (hash-ref (tool-result-details result) '_conclusion))
                  'pattern))))
 
 (run-tests suite)
@@ -273,29 +269,27 @@
                   valid-categories
                   stored-categories))
 
-(define-test-suite r99a-save-public-category-tests
-  (test-case "R99a: public predicate keeps exactly five categories; provenance not public"
-    (check-false (task-conclusion-category? 'provenance))
-    (check-true (stored-task-conclusion-category? 'provenance))
-    (check-false (member 'provenance valid-categories))
-    (check-not-false (member 'provenance stored-categories))
-    (check-false (stored-task-conclusion-category? 'mystery)))
-
-  (test-case "R99a: save_conclusion rejects symbol category 'provenance (side-effect free)"
-    (define-values (result events)
-      (call-tool-with-events save-conclusion (hasheq 'content "x" 'category 'provenance)))
-    (check-true (tool-result-is-error? result))
-    (check-false (stored-conclusion result))
-    (check-equal? (deprecated-events events) '()))
-
-  (test-case "R99a: save_conclusion rejects wire string category \"provenance\""
-    (define result (pipeline-execute save-conclusion (hasheq 'content "x" 'category "provenance")))
-    (check-true (tool-result-is-error? result))
-    (check-false (stored-conclusion result)))
-
-  (test-case "R99a: save_conclusion still accepts all five public categories"
-    (for ([cat (in-list '("fact" "decision" "pattern" "error-cause" "test-result"))])
-      (define result (pipeline-execute save-conclusion (hasheq 'content "x" 'category cat)))
-      (check-false (tool-result-is-error? result) (format "~a should be accepted" cat)))))
+(define-test-suite
+ r99a-save-public-category-tests
+ (test-case "R99a: public predicate keeps exactly five categories; provenance not public"
+   (check-false (task-conclusion-category? 'provenance))
+   (check-true (stored-task-conclusion-category? 'provenance))
+   (check-false (member 'provenance valid-categories))
+   (check-not-false (member 'provenance stored-categories))
+   (check-false (stored-task-conclusion-category? 'mystery)))
+ (test-case "R99a: save_conclusion rejects symbol category 'provenance (side-effect free)"
+   (define-values (result events)
+     (call-tool-with-events save-conclusion (hasheq 'content "x" 'category 'provenance)))
+   (check-true (tool-result-is-error? result))
+   (check-false (stored-conclusion result))
+   (check-equal? (deprecated-events events) '()))
+ (test-case "R99a: save_conclusion rejects wire string category \"provenance\""
+   (define result (pipeline-execute save-conclusion (hasheq 'content "x" 'category "provenance")))
+   (check-true (tool-result-is-error? result))
+   (check-false (stored-conclusion result)))
+ (test-case "R99a: save_conclusion still accepts all five public categories"
+   (for ([cat (in-list '("fact" "decision" "pattern" "error-cause" "test-result"))])
+     (define result (pipeline-execute save-conclusion (hasheq 'content "x" 'category cat)))
+     (check-false (tool-result-is-error? result) (format "~a should be accepted" cat)))))
 
 (run-tests r99a-save-public-category-tests)

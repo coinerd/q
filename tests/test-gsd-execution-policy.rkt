@@ -64,16 +64,16 @@
   (gsm-ctx-transition-to! ctx 'executing)
   (define result
     (parameterize ([current-gsd-ctx ctx])
-      (gsd-tool-guard
-       (hasheq 'tool-name
-               "delete-lines"
-               'tool-arguments
-               (hasheq 'path path-arg 'start-line 1 'end-line 3)))))
+      (gsd-tool-guard (hasheq 'tool-name
+                              "delete-lines"
+                              'tool-arguments
+                              (hasheq 'path path-arg 'start-line 1 'end-line 3)))))
   (gsm-ctx-reset! ctx)
   result)
 
 (test-case "delete-lines targeting a protected planning artifact is blocked in executing mode"
-  (define (action-of result) (hook-result-action result))
+  (define (action-of result)
+    (hook-result-action result))
   ;; Relative form.
   (check-eq? (action-of (executing-delete-lines-guard ".planning/PLAN.md")) 'block)
   ;; Absolute form.
@@ -92,8 +92,7 @@
   (check-eq? (hook-result-action (executing-delete-lines-guard "docs/gsd-guide.md")) 'pass)
   (check-eq? (hook-result-action (executing-delete-lines-guard "q/src/a.rkt")) 'pass)
   ;; Nested lookalikes are not the authoritative artifact.
-  (check-eq? (hook-result-action (executing-delete-lines-guard ".planning/notes/PLAN.md"))
-             'pass))
+  (check-eq? (hook-result-action (executing-delete-lines-guard ".planning/notes/PLAN.md")) 'pass))
 
 (test-case "the protected planning mutation target guard stays scoped to executing mode"
   ;; Pre-existing semantics: outside executing mode the mode policy rules and
@@ -104,11 +103,10 @@
   (gsm-ctx-transition-to! ctx 'idle)
   (define result
     (parameterize ([current-gsd-ctx ctx])
-      (gsd-tool-guard
-       (hasheq 'tool-name
-               "delete-lines"
-               'tool-arguments
-               (hasheq 'path ".planning/PLAN.md" 'start-line 1 'end-line 3)))))
+      (gsd-tool-guard (hasheq 'tool-name
+                              "delete-lines"
+                              'tool-arguments
+                              (hasheq 'path ".planning/PLAN.md" 'start-line 1 'end-line 3)))))
   (gsm-ctx-reset! ctx)
   (check-eq? (hook-result-action result) 'pass "idle mode keeps its existing tool policy"))
 
@@ -131,12 +129,12 @@
      (define ctx (make-gsd-context))
      (gsm-ctx-transition-to! ctx 'executing)
      (define result
-       (parameterize ([current-gsd-ctx ctx] [current-gsd-author-phase scope])
-         (gsd-tool-guard
-          (hasheq 'tool-name
-                  "delete-lines"
-                  'tool-arguments
-                  (hasheq 'path ".planning/PLAN.md" 'start-line 1 'end-line 3)))))
+       (parameterize ([current-gsd-ctx ctx]
+                      [current-gsd-author-phase scope])
+         (gsd-tool-guard (hasheq 'tool-name
+                                 "delete-lines"
+                                 'tool-arguments
+                                 (hasheq 'path ".planning/PLAN.md" 'start-line 1 'end-line 3)))))
      (gsm-ctx-reset! ctx)
      (check-eq? (hook-result-action result) 'block)
      (check-true (string-contains? (format "~a" (hook-result-payload result))

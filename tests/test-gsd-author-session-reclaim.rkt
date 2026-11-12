@@ -177,9 +177,10 @@
     (define-values (advanced? _) (checkpoint! #:session-live? #f))
     (check-true advanced?)
     (define j (journal))
-    (check-exn exn:fail?
-               (lambda ()
-                 (abandon-evidence-author-session! root plan 0 (hash-ref old 'tree) #:guard (lambda () #t))))
+    (check-exn
+     exn:fail?
+     (lambda ()
+       (abandon-evidence-author-session! root plan 0 (hash-ref old 'tree) #:guard (lambda () #t))))
     (check-equal? (journal) j)
     ;; A fresh campaign whose author DID land an edit before the loss: the
     ;; tree no longer matches the retained receipt — reconciliation event,
@@ -191,11 +192,10 @@
     ;; The MEASURED changed tree refuses: the author may have landed edits,
     ;; and that is a reconciliation event, never a silent reclaim.
     (define changed
-      (let ((repo (build-path root2 "q")))
+      (let ([repo (build-path root2 "q")])
         (git-quiet! repo "add" "-A")
-        (string-trim
-         (with-output-to-string
-           (lambda () (system* (find-executable-path "git") "write-tree"))))))
+        (string-trim (with-output-to-string (lambda ()
+                                              (system* (find-executable-path "git") "write-tree"))))))
     (check-true (and (string? changed) (= (string-length changed) 40)))
     (check-exn exn:fail?
                (lambda ()

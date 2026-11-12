@@ -55,8 +55,7 @@
     (values 0 "{\"number\":9763,\"state\":\"open\"}" ""))
   (define adapter (make-gh-cli-tracker-adapter #:live? #t #:repository "coinerd/q" #:runner runner))
   (check-exn exn:fail? (lambda () ((github-adapter-close-issue! adapter) 9763)))
-  (check-equal? (map (lambda (args) (take args 2)) calls)
-                '(("api" "repos/coinerd/q/issues/9763"))))
+  (check-equal? (map (lambda (args) (take args 2)) calls) '(("api" "repos/coinerd/q/issues/9763"))))
 
 (test-case "board mutation refuses absent project item and option IDs"
   (define calls 0)
@@ -183,8 +182,7 @@
 (define (graphql-sane? q)
   (define (scan i in-string? depth paren bracket)
     (cond
-      [(>= i (string-length q))
-       (and (not in-string?) (zero? depth) (zero? paren) (zero? bracket))]
+      [(>= i (string-length q)) (and (not in-string?) (zero? depth) (zero? paren) (zero? bracket))]
       [else
        (define c (string-ref q i))
        (cond
@@ -197,10 +195,7 @@
          [(char=? c #\[) (scan (add1 i) in-string? depth paren (add1 bracket))]
          [(char=? c #\]) (scan (add1 i) in-string? depth paren (sub1 bracket))]
          [else (scan (add1 i) in-string? depth paren bracket)])]))
-  (and (string? q)
-       (not (string-contains? q "{}"))
-       (not (string-contains? q "()"))
-       (scan 0 #f 0 0 0)))
+  (and (string? q) (not (string-contains? q "{}")) (not (string-contains? q "()")) (scan 0 #f 0 0 0)))
 
 (test-case "BUG-0074: the identity pre-read query is valid GraphQL and binds every verified identity field"
   (define calls '())
@@ -223,15 +218,14 @@
   ;; (b) Identity fields the readback verification depends on: item id,
   ;; project id, issue number, repository nameWithOwner, the bound Status
   ;; field, its option id and the option list for the membership pre-check.
-  (for ([needle
-         (in-list '("query($id:ID!){"
-                    "node(id:$id){"
-                    "... on ProjectV2Item{"
-                    "project{id}"
-                    "content{... on Issue{number repository{nameWithOwner}}}"
-                    "fieldValueByName(name:\"Status\"){"
-                    "... on ProjectV2ItemFieldSingleSelectValue{"
-                    "optionId"
-                    "field{... on ProjectV2SingleSelectField{id options{id}}}"))])
+  (for ([needle (in-list '("query($id:ID!){"
+                           "node(id:$id){"
+                           "... on ProjectV2Item{"
+                           "project{id}"
+                           "content{... on Issue{number repository{nameWithOwner}}}"
+                           "fieldValueByName(name:\"Status\"){"
+                           "... on ProjectV2ItemFieldSingleSelectValue{"
+                           "optionId"
+                           "field{... on ProjectV2SingleSelectField{id options{id}}}"))])
     (check-true (string-contains? query needle)
                 (format "query must contain identity field ~s" needle))))

@@ -21,8 +21,7 @@
          "../extensions/gsd/delivery-coordinator.rkt"
          "../extensions/gsd/delivery-finalize.rkt"
          "../extensions/gsd/review-dispatch.rkt"
-         (only-in "helpers/auto-review-owned-fixture.rkt"
-                  precompile-delivery-controller-scripts!))
+         (only-in "helpers/auto-review-owned-fixture.rkt" precompile-delivery-controller-scripts!))
 (define-runtime-path fixture-python "helpers/production-owned-review-fixture.py")
 (module+ test
   (test-case "default production coordinator invokes installed independent runner at exact head/generation and replays remote rejection"

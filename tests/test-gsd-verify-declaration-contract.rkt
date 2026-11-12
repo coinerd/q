@@ -50,8 +50,7 @@
                   delivery-verification-message
                   current-gsd-delivery-verify-command
                   current-gsd-git-runner)
-         (only-in "../extensions/gsd/composition-root.rkt"
-                  current-gsd-verification-registry)
+         (only-in "../extensions/gsd/composition-root.rkt" current-gsd-verification-registry)
          (only-in "../extensions/gsd/verification-job.rkt" make-verification-registry)
          (only-in "helpers/private-fixture-templates.rkt" call-with-private-git-environment))
 
@@ -79,10 +78,8 @@
       [(list "rev-parse" "--abbrev-ref" "HEAD") (list 0 "feature/issue-42-wave\n" "")]
       [(list "rev-parse" "--verify" _) (list 0 "main\n" "")]
       [(list "rev-parse" _ ...) (list 0 "deadbeef\n" "")]
-      [(list "diff" "--name-only" "HEAD")
-       (list 0 "ui-core/preferences.rkt\n" "")]
-      [(list "diff" "--name-only" _)
-       (list 0 "ui-core/preferences.rkt\n" "")]
+      [(list "diff" "--name-only" "HEAD") (list 0 "ui-core/preferences.rkt\n" "")]
+      [(list "diff" "--name-only" _) (list 0 "ui-core/preferences.rkt\n" "")]
       [(list "ls-files" "--others" "--exclude-standard") (list 0 "" "")]
       [(list "rev-list" _ ...) (list 0 "deadbeef\n" "")]
       [_ (list 1 "" "fake-git-facts: unhandled invocation\n")])))
@@ -107,10 +104,14 @@
 (define (extraction d)
   (verify-declaration-extraction d))
 
-(define (commands-of d) (hash-ref (extraction d) 'commands))
-(define (canonical-of d) (hash-ref (extraction d) 'canonical))
-(define (rejections-of d) (hash-ref (extraction d) 'rejections))
-(define (refusal-of d) (hash-ref (extraction d) 'refusal))
+(define (commands-of d)
+  (hash-ref (extraction d) 'commands))
+(define (canonical-of d)
+  (hash-ref (extraction d) 'canonical))
+(define (rejections-of d)
+  (hash-ref (extraction d) 'rejections))
+(define (refusal-of d)
+  (hash-ref (extraction d) 'refusal))
 
 (define (contract-suite)
   (test-suite "verify declaration contract (BUG-0075)"
@@ -120,12 +121,11 @@
     ;; ------------------------------------------------------------
     (test-case "parser preserves prose-before-bullets grammar (no '; ' flattening)"
       (define content
-        (string-append
-         "## Verify\n"
-         "The gates below must all pass before delivery.\n"
-         "- `racket scripts/run-tests.rkt --suite fast` green\n"
-         "- `raco fmt --check q/ui-core/preferences.rkt` clean\n"
-         "\n## Done\n- delivered\n"))
+        (string-append "## Verify\n"
+                       "The gates below must all pass before delivery.\n"
+                       "- `racket scripts/run-tests.rkt --suite fast` green\n"
+                       "- `raco fmt --check q/ui-core/preferences.rkt` clean\n"
+                       "\n## Done\n- delivered\n"))
       (define parsed (parse-wave-content content))
       (define verify (hash-ref parsed 'verify))
       ;; Bullet anchors must survive into the declaration: the normalizer's
@@ -137,8 +137,9 @@
       ;; ... and the normalizer therefore extracts the two commands, never
       ;; handing English to the shell.
       (define canonical (normalize-declared-verify verify))
-      (check-equal? canonical
-                    "racket scripts/run-tests.rkt --suite fast && raco fmt --check q/ui-core/preferences.rkt")
+      (check-equal?
+       canonical
+       "racket scripts/run-tests.rkt --suite fast && raco fmt --check q/ui-core/preferences.rkt")
       (check-false (string-contains? canonical "The gates below")))
 
     (test-case "extraction: prose-before-bullets yields the complete command list"
@@ -159,11 +160,10 @@
     ;; ------------------------------------------------------------
     (test-case "N declared gates produce N canonical markers in document order"
       (define declaration
-        (string-append
-         "- `raco make a.rkt`\n"
-         "- `raco fmt --check a.rkt`\n"
-         "- `racket tests/a.rkt`\n"
-         "- `racket scripts/run-tests.rkt --suite fast`\n"))
+        (string-append "- `raco make a.rkt`\n"
+                       "- `raco fmt --check a.rkt`\n"
+                       "- `racket tests/a.rkt`\n"
+                       "- `racket scripts/run-tests.rkt --suite fast`\n"))
       (define canonical (normalize-declared-verify declaration))
       (define stages (verify-command-stages canonical))
       (check-equal? (length stages) 4)
@@ -184,19 +184,16 @@
        0
        "zero"
        '("q/ui-core/preferences.rkt")
-       (string-append
-        "- `bash -c 'printf a > marker-a.txt'` first\n"
-        "- `bash -c 'test -f marker-a.txt && printf b > marker-b.txt'` second\n"
-        "- `bash -c 'test -f marker-b.txt'` third\n"))
+       (string-append "- `bash -c 'printf a > marker-a.txt'` first\n"
+                      "- `bash -c 'test -f marker-a.txt && printf b > marker-b.txt'` second\n"
+                      "- `bash -c 'test -f marker-b.txt'` third\n"))
       (write-state! base 0 "42")
       (define plan (load-plan* base))
       (define result (run-synthetic-verification base plan))
-      (check-true (delivery-verification-approved? result)
-                  (delivery-verification-message result))
+      (check-true (delivery-verification-approved? result) (delivery-verification-message result))
       (check-true (file-exists? (build-path base "q" "marker-a.txt"))
                   "gate 1 executed (fail-fast && chain)")
-      (check-true (file-exists? (build-path base "q" "marker-b.txt"))
-                  "gate 2 executed after gate 1")
+      (check-true (file-exists? (build-path base "q" "marker-b.txt")) "gate 2 executed after gate 1")
       (define detail (verify-evidence result))
       (check-true (string-contains? detail "gates=3") (format "detail: ~a" detail))
       (for ([marker (list "printf a > marker-a.txt"
@@ -210,9 +207,7 @@
     ;; ------------------------------------------------------------
     (test-case "unsupported span among valid gates is a named rejection carrying the span"
       (define declaration
-        (string-append
-         "- `racket tests/a.rkt` green\n"
-         "- `grep -L forbidden q/report.txt` clean\n"))
+        (string-append "- `racket tests/a.rkt` green\n" "- `grep -L forbidden q/report.txt` clean\n"))
       (define rejections (rejections-of declaration))
       (check-equal? (length rejections) 1)
       (check-equal? (hash-ref (car rejections) 'reason) 'grep-exit-semantics)
@@ -225,21 +220,18 @@
     (test-case "execution refuses an unsupported span visibly; nothing is launched"
       (define base (make-synthetic-repo))
       (write-plan! base 0 "Wave Zero" "zero")
-      (write-wave-doc!
-       base
-       0
-       "zero"
-       '("q/ui-core/preferences.rkt")
-       (string-append
-        "- `bash -c 'printf x > marker-x.txt'` valid gate\n"
-        "- `find q -name '*.rkt'` unsupported gate\n"))
+      (write-wave-doc! base
+                       0
+                       "zero"
+                       '("q/ui-core/preferences.rkt")
+                       (string-append "- `bash -c 'printf x > marker-x.txt'` valid gate\n"
+                                      "- `find q -name '*.rkt'` unsupported gate\n"))
       (write-state! base 0 "42")
       (define plan (load-plan* base))
       (define result (run-synthetic-verification base plan))
       (check-false (delivery-verification-approved? result))
       (define message (delivery-verification-message result))
-      (check-true (string-contains? message "unsupported-command")
-                  (format "message: ~a" message))
+      (check-true (string-contains? message "unsupported-command") (format "message: ~a" message))
       (check-true (string-contains? message "find q -name '*.rkt'")
                   (format "the original span must be named: ~a" message))
       (check-false (file-exists? (build-path base "q" "marker-x.txt"))
@@ -248,8 +240,7 @@
 
     (test-case "grep spans are refused, never rewritten to an inverted grep"
       (define declaration "- `grep -q forbidden q/report.txt` clean\n")
-      (check-equal? (hash-ref (car (rejections-of declaration)) 'reason)
-                    'grep-exit-semantics)
+      (check-equal? (hash-ref (car (rejections-of declaration)) 'reason) 'grep-exit-semantics)
       (check-equal? (canonical-of declaration) "")
       ;; no auto-rewrite: nothing containing "! grep" is produced anywhere
       (check-false (string-contains? (canonical-of declaration) "! grep")))
@@ -265,15 +256,17 @@
     (test-case "execution refuses prose-only bullets without launching or falling back"
       (define base (make-synthetic-repo))
       (write-plan! base 0 "Wave Zero" "zero")
-      (write-wave-doc! base 0 "zero" '("q/ui-core/preferences.rkt")
+      (write-wave-doc! base
+                       0
+                       "zero"
+                       '("q/ui-core/preferences.rkt")
                        "- criterion one.\n- criterion two.")
       (write-state! base 0 "42")
       (define plan (load-plan* base))
       (define result (run-synthetic-verification base plan))
       (check-false (delivery-verification-approved? result))
       (define message (delivery-verification-message result))
-      (check-true (string-contains? message "refusing prose-as-shell")
-                  (format "message: ~a" message))
+      (check-true (string-contains? message "refusing prose-as-shell") (format "message: ~a" message))
       (check-false (string-contains? message "compile-gate")
                    "zero accepted commands must not fall through to the compile gate")
       (cleanup-tmp base))
@@ -322,11 +315,9 @@
                     "test -f a.rkt && [ -f b.rkt ]"))
 
     (test-case "bash-only bracket and inverted spans are named rejections"
-      (check-equal? (hash-ref (car (rejections-of "- `[[ -f q/x.rkt ]]` exists"))
-                            'reason)
+      (check-equal? (hash-ref (car (rejections-of "- `[[ -f q/x.rkt ]]` exists")) 'reason)
                     'bash-only-construct)
-      (check-equal? (hash-ref (car (rejections-of "- `! grep -q x q/x.txt` clean"))
-                            'reason)
+      (check-equal? (hash-ref (car (rejections-of "- `! grep -q x q/x.txt` clean")) 'reason)
                     'inverted-command)
       (check-equal? (canonical-of "- `[[ -f q/x.rkt ]]`") ""))
 
@@ -349,22 +340,23 @@
              (display-to-file (if forbidden-present? "has FORBIDDENTOKEN here\n" "clean text\n")
                               probe
                               #:exists 'truncate))
-           (when unreadable? (file-or-directory-permissions probe #o000))
+           (when unreadable?
+             (file-or-directory-permissions probe #o000))
            (write-plan! base 0 "Wave Zero" "zero")
            (write-wave-doc!
             base
             0
             "zero"
             '("q/ui-core/preferences.rkt")
-            (string-append
-             "- `bash -c 'test \"$(grep -c FORBIDDENTOKEN probe.txt)\" -eq 0'`"
-             " no forbidden token\n"))
+            (string-append "- `bash -c 'test \"$(grep -c FORBIDDENTOKEN probe.txt)\" -eq 0'`"
+                           " no forbidden token\n"))
            (write-state! base 0 "42")
            (define plan (load-plan* base))
            (define result (run-synthetic-verification base plan))
            (verify-check result))
          (lambda ()
-           (when unreadable? (file-or-directory-permissions (build-path base "q" "probe.txt") #o644))
+           (when unreadable?
+             (file-or-directory-permissions (build-path base "q" "probe.txt") #o644))
            (cleanup-tmp base))))
       (check-true (car (negative-gate-check #t #f #f)) "absent forbidden token must pass")
       (check-false (car (negative-gate-check #t #t #f)) "present forbidden token must fail")
@@ -399,15 +391,17 @@
       (check-equal? (normalize-declared-verify "exit 0") "exit 0")
       (check-equal? (normalize-declared-verify "racket tests/test-foo.rkt")
                     "racket tests/test-foo.rkt")
-      (check-equal? (normalize-declared-verify "cd <project-base>/q && racket scripts/metrics.rkt --lint")
-                    "cd <project-base>/q && racket scripts/metrics.rkt --lint")
+      (check-equal?
+       (normalize-declared-verify "cd <project-base>/q && racket scripts/metrics.rkt --lint")
+       "cd <project-base>/q && racket scripts/metrics.rkt --lint")
       ;; metrics shorthand canonicalizes only as a bullet span; a bare legacy
       ;; single line passes through byte-for-byte
       (check-equal? (normalize-declared-verify "metrics.rkt --lint") "metrics.rkt --lint")
       (check-equal? (normalize-declared-verify "- `metrics.rkt --lint` green")
                     "racket scripts/metrics.rkt --lint")
       ;; retained review-proof authority: unfenced single-line compound shell
-      (define compound "i=0; while [ $i -lt 9000 ]; do printf '0123456789abcdef\\n'; i=$((i+1)); done")
+      (define compound
+        "i=0; while [ $i -lt 9000 ]; do printf '0123456789abcdef\\n'; i=$((i+1)); done")
       (check-equal? (normalize-declared-verify compound) compound))
 
     (test-case "retained W0 bash -c gate form normalizes byte-for-byte"
@@ -428,13 +422,16 @@
     (test-case "fenced shell keeps newlines and canonicalizes to the audited && grammar"
       (define declaration
         "```sh\nraco make a.rkt\nracket tests/a.rkt\nracket scripts/run-tests.rkt --suite fast\n```")
-      (define content-decl "raco make a.rkt\nracket tests/a.rkt\nracket scripts/run-tests.rkt --suite fast")
+      (define content-decl
+        "raco make a.rkt\nracket tests/a.rkt\nracket scripts/run-tests.rkt --suite fast")
       (check-equal? (normalize-declared-verify content-decl)
                     (string-replace content-decl "\n" " && "))
       ;; heredoc/compound content is preserved by the parser byte-for-byte
-      (define script "# compile\nraco make \\\n  x.rkt\ncat <<'EOF'\n\n## literal, not a heading\nEOF")
-      (check-equal? (hash-ref (parse-wave-content
-                               (string-append "## Verify\n```sh\n" script "\n```\n## Done\nfinished\n"))
+      (define script
+        "# compile\nraco make \\\n  x.rkt\ncat <<'EOF'\n\n## literal, not a heading\nEOF")
+      (check-equal? (hash-ref (parse-wave-content (string-append "## Verify\n```sh\n"
+                                                                 script
+                                                                 "\n```\n## Done\nfinished\n"))
                               'verify)
                     script))
 
@@ -445,7 +442,8 @@
       (check-equal? (normalize-declared-verify content)
                     "printf 'owned-output\\n' && printf 'second-stage\\n'")
       (check-equal?
-       (hash-ref (parse-wave-content "## Verify\n```sh\nprintf 'owned-output\\n'\nprintf 'second-stage\\n'\n```\n")
+       (hash-ref (parse-wave-content
+                  "## Verify\n```sh\nprintf 'owned-output\\n'\nprintf 'second-stage\\n'\n```\n")
                  'verify)
        content))
 
@@ -459,8 +457,7 @@
     (test-case "English prose lines in unfenced multiline sections are never launched"
       (define declaration "Run this:\nraco test x.rkt")
       (check-equal? (canonical-of declaration) "")
-      (check-equal? (hash-ref (car (rejections-of declaration)) 'reason)
-                    'prose-in-unfenced-multiline)
+      (check-equal? (hash-ref (car (rejections-of declaration)) 'reason) 'prose-in-unfenced-multiline)
       (check-equal? (hash-ref (car (rejections-of declaration)) 'span) "Run this:"))
 
     (test-case "the normalizer version is pinned and flows into extraction consumers"

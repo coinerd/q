@@ -99,12 +99,13 @@
         (define spec (find-spec name))
         (check-not-false spec)
         (define props (hash-ref (tool-spec-schema spec) 'properties))
-        (check-equal? (hash-ref (hash-ref props 'category) 'type) "string"
+        (check-equal? (hash-ref (hash-ref props 'category) 'type)
+                      "string"
                       (format "~a category stays string-typed" name))
         (define tags-prop (hash-ref props 'tags))
-        (check-equal? (hash-ref tags-prop 'type) "array"
-                      (format "~a tags stay array-typed" name))
-        (check-equal? (hash-ref (hash-ref tags-prop 'items) 'type) "string"
+        (check-equal? (hash-ref tags-prop 'type) "array" (format "~a tags stay array-typed" name))
+        (check-equal? (hash-ref (hash-ref tags-prop 'items) 'type)
+                      "string"
                       (format "~a tag items stay string-typed" name))))
 
     (test-case "tool-registry-contracts: R94 registry schema matches spec schema"
@@ -113,8 +114,7 @@
       (check-not-false t)
       (check-equal? (tool-schema t) (tool-spec-schema (find-spec "save-conclusion"))))
 
-    (test-case
-     "tool-registry-contracts: R94 registry pipeline accepts JSON string categories"
+    (test-case "tool-registry-contracts: R94 registry pipeline accepts JSON string categories"
       (define reg (save-conclusion-reg))
       (define t (lookup-tool reg "save-conclusion"))
       (for ([cat-str (in-list '("fact" "decision" "pattern" "error-cause" "test-result"))]
@@ -124,8 +124,7 @@
         (define result ((tool-execute t) args #f))
         (check-false (tool-result-is-error? result)
                      (format "string category ~a should succeed" cat-str))
-        (check-eq? (task-conclusion-category
-                     (hash-ref (tool-result-details result) '_conclusion))
+        (check-eq? (task-conclusion-category (hash-ref (tool-result-details result) '_conclusion))
                    cat-sym)))
 
     (test-case "tool-registry-contracts: R94 registry pipeline normalizes string tags"
@@ -135,37 +134,31 @@
       (check-true (validate-tool-args t args))
       (define result ((tool-execute t) args #f))
       (check-false (tool-result-is-error? result))
-      (check-equal?
-       (task-conclusion-relevance-tags (hash-ref (tool-result-details result) '_conclusion))
-       '(alpha beta)))
+      (check-equal? (task-conclusion-relevance-tags (hash-ref (tool-result-details result)
+                                                              '_conclusion))
+                    '(alpha beta)))
 
-    (test-case
-     "tool-registry-contracts: R94 symbol category is schema-rejected on the wire path"
+    (test-case "tool-registry-contracts: R94 symbol category is schema-rejected on the wire path"
       ;; The wire schema advertises string; internal symbol callers use the
       ;; handler boundary directly, not the schema-validated wire path.
       (define reg (save-conclusion-reg))
       (define t (lookup-tool reg "save-conclusion"))
-      (check-exn exn:fail?
-                 (lambda () (validate-tool-args t (hasheq 'content "x" 'category 'fact)))))
+      (check-exn exn:fail? (lambda () (validate-tool-args t (hasheq 'content "x" 'category 'fact)))))
 
-    (test-case
-     "tool-registry-contracts: R94 malformed values produce handler errors, no details"
+    (test-case "tool-registry-contracts: R94 malformed values produce handler errors, no details"
       (define reg (save-conclusion-reg))
       (define t (lookup-tool reg "save-conclusion"))
-      (for ([bad-args
-             (in-list (list (hasheq 'content "x" 'category "Fact")
-                            (hasheq 'content "x" 'category "")
-                            (hasheq 'content "x" 'category "nope")
-                            (hasheq 'content "x" 'tags (list "ok" 42))))])
+      (for ([bad-args (in-list (list (hasheq 'content "x" 'category "Fact")
+                                     (hasheq 'content "x" 'category "")
+                                     (hasheq 'content "x" 'category "nope")
+                                     (hasheq 'content "x" 'tags (list "ok" 42))))])
         (check-true (validate-tool-args t bad-args))
         (define result ((tool-execute t) bad-args #f))
         (check-true (tool-result-is-error? result))
-        (check-false (stored-conclusion result)
-                     "rejection must not store a conclusion")))
+        (check-false (stored-conclusion result) "rejection must not store a conclusion")))
 
     (test-case "tool-registry-contracts: R96 read spec declares bounded pagination"
-      (define read-spec
-        (findf (lambda (s) (string=? (tool-spec-name s) "read")) core-tool-specs))
+      (define read-spec (findf (lambda (s) (string=? (tool-spec-name s) "read")) core-tool-specs))
       (check-not-false read-spec)
       (when read-spec
         (define schema (tool-spec-schema read-spec))
@@ -195,8 +188,7 @@
       (define t (lookup-tool reg "read"))
       (check-not-false t)
       (when t
-        (define read-spec
-          (findf (lambda (s) (string=? (tool-spec-name s) "read")) core-tool-specs))
+        (define read-spec (findf (lambda (s) (string=? (tool-spec-name s) "read")) core-tool-specs))
         (check-equal? (tool-schema t) (tool-spec-schema read-spec))
         (define desc (tool-description t))
         (check-true (string-contains? desc "50000") "tool description documents byte cap")

@@ -228,8 +228,7 @@ Do the thing.
                       (check-equal? (length (gsd-plan-waves plan)) 1)
                       ;; The DECLARED target's content loads: files come from
                       ;; notes.md's annotated declaration.
-                      (check-equal? (gsd-wave-files (plan-wave-ref plan 0))
-                                    '("q/from-index.rkt")))
+                      (check-equal? (gsd-wave-files (plan-wave-ref plan 0)) '("q/from-index.rkt")))
                     (lambda () (rm-tmp-planning tmp))))
 
     (test-case "index entry whose target doc does not exist is a validation error (BUG-0023, W2)"

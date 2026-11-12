@@ -559,8 +559,7 @@
   (check-false (string-contains? text "Top conclusions (1 total")))
 
 (test-case "R99a: genuine insight sharing origin wins; provenance listed separately"
-  (define preamble
-    (build-state-awareness-preamble 'implementation (list r99a-fallback r99a-insight)))
+  (define preamble (build-state-awareness-preamble 'implementation (list r99a-fallback r99a-insight)))
   (define text (extract-text-from-messages (list preamble)))
   ;; Insight is the only Top conclusion
   (check-true (string-contains? text "Top conclusions (1 total, 1 shown)"))
@@ -584,7 +583,9 @@
                                       #:task-state 'implementation
                                       #:conclusions (list r99a-fallback r99a-insight)))
   (define tier-a-text (extract-text-from-messages (tiered-context-tier-a tc)))
-  (check-true (string-contains? tier-a-text "[Source provenance] (unverified) [Auto] Previously read file (origin: m1)"))
+  (check-true (string-contains?
+               tier-a-text
+               "[Source provenance] (unverified) [Auto] Previously read file (origin: m1)"))
   (check-true (string-contains? tier-a-text "[Conclusion] Curated insight text"))
   ;; the fallback is never rendered as a [Conclusion]
   (check-false (string-contains? tier-a-text "[Conclusion] [Auto] Previously read file")))
@@ -596,9 +597,11 @@
                                       #:task-state 'implementation
                                       #:conclusions (list r99a-prov r99a-insight)))
   (define tier-a-text (extract-text-from-messages (tiered-context-tier-a tc)))
-  (check-true (string-contains? tier-a-text "[Source provenance] (unverified) [Auto] provenance-category record"))
+  (check-true (string-contains? tier-a-text
+                                "[Source provenance] (unverified) [Auto] provenance-category record"))
   (define pos-insight (regexp-match-positions (regexp-quote "Curated insight text") tier-a-text))
-  (define pos-prov (regexp-match-positions (regexp-quote "[Source provenance] (unverified)") tier-a-text))
+  (define pos-prov
+    (regexp-match-positions (regexp-quote "[Source provenance] (unverified)") tier-a-text))
   (check-true (< (caar pos-insight) (caar pos-prov)) "insight entries precede provenance entries"))
 
 ;; ---------------------------------------------------------------------------
@@ -606,20 +609,18 @@
 ;; render exactly like the R99a matrix — labeled [Source provenance] (unverified)
 ;; in preamble and tier-A entries, never as Top conclusions / [Conclusion].
 ;; ---------------------------------------------------------------------------
-(require (only-in "../runtime/context-assembly/auto-distillation.rkt"
-                  generate-fallback-conclusions))
+(require (only-in "../runtime/context-assembly/auto-distillation.rkt" generate-fallback-conclusions))
 
-(define r99b-writer-record
-  (car (generate-fallback-conclusions (list "m1") 'implementation)))
+(define r99b-writer-record (car (generate-fallback-conclusions (list "m1") 'implementation)))
 
 (test-case "R99b: preamble renders the writer's provenance record labeled, never as Top conclusions"
-  (define preamble
-    (build-state-awareness-preamble 'implementation (list r99b-writer-record)))
+  (define preamble (build-state-awareness-preamble 'implementation (list r99b-writer-record)))
   (define text (extract-text-from-messages (list preamble)))
   (check-true (string-contains? text "[Source provenance]"))
   (check-true (string-contains? text "(unverified)"))
-  (check-true (string-contains? text
-                                "Source message m1 retained as provenance; no distilled insight available."))
+  (check-true (string-contains?
+               text
+               "Source message m1 retained as provenance; no distilled insight available."))
   (check-false (string-contains? text "Top conclusions (1 total"))
   (check-true (string-contains? text "No conclusions in memory")))
 
@@ -630,11 +631,13 @@
                                       #:task-state 'implementation
                                       #:conclusions (list r99b-writer-record r99a-insight)))
   (define tier-a-text (extract-text-from-messages (tiered-context-tier-a tc)))
-  (check-true (string-contains?
-               tier-a-text
-               "[Source provenance] (unverified) Source message m1 retained as provenance; no distilled insight available."))
+  (check-true
+   (string-contains?
+    tier-a-text
+    "[Source provenance] (unverified) Source message m1 retained as provenance; no distilled insight available."))
   (check-true (string-contains? tier-a-text "[Conclusion] Curated insight text"))
   (check-false (string-contains? tier-a-text "[Conclusion] Source message m1"))
   (define pos-insight (regexp-match-positions (regexp-quote "Curated insight text") tier-a-text))
-  (define pos-prov (regexp-match-positions (regexp-quote "[Source provenance] (unverified)") tier-a-text))
+  (define pos-prov
+    (regexp-match-positions (regexp-quote "[Source provenance] (unverified)") tier-a-text))
   (check-true (< (caar pos-insight) (caar pos-prov)) "insight entries precede provenance entries"))

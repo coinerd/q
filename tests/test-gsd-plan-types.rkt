@@ -90,15 +90,14 @@
 ;; spelling vocabulary to wave-status.rkt and keeps only its own legacy
 ;; row-vocabulary mapping (done -> completed, deferred -> skipped).
 (test-case "string->wave-status delegates the shared owner vocabulary (W5)"
-  (for ([pair (in-list '(("Inbox" pending)
-                         ("PENDING" pending)
-                         ("NOT STARTED" pending)
-                         ("In-Progress" in-progress)
-                         ("IN PROGRESS" in-progress)
-                         ("DONE" completed)
-                         ("COMPLETED" completed)
-                         ("FAILED" failed)
-                         ("DEFERRED" skipped)))])
+  (for ([pair (in-list '(("Inbox" pending) ("PENDING" pending)
+                                           ("NOT STARTED" pending)
+                                           ("In-Progress" in-progress)
+                                           ("IN PROGRESS" in-progress)
+                                           ("DONE" completed)
+                                           ("COMPLETED" completed)
+                                           ("FAILED" failed)
+                                           ("DEFERRED" skipped)))])
     (define spelling (car pair))
     (define expected (cadr pair))
     (check-eq? (string->wave-status spelling) expected spelling))
@@ -338,12 +337,11 @@
 
 (test-case "R75: prose-before-bullets keeps the bullet anchors for the normalizer"
   (define content
-    (string-append
-     "## Verify\n"
-     "The gates below must all pass.\n"
-     "- `racket a.rkt` green\n"
-     "- `raco make b.rkt` ok\n"
-     "\n## Done\n- delivered\n"))
+    (string-append "## Verify\n"
+                   "The gates below must all pass.\n"
+                   "- `racket a.rkt` green\n"
+                   "- `raco make b.rkt` ok\n"
+                   "\n## Done\n- delivered\n"))
   (define verify (hash-ref (parse-wave-content content) 'verify))
   (check-equal? verify
                 "The gates below must all pass.\n- `racket a.rkt` green\n- `raco make b.rkt` ok"))
@@ -354,8 +352,7 @@
   (check-true (string-contains? (hash-ref parsed 'verify-refusal "missing") "unclosed")))
 
 (test-case "R75: a section whose only fences are non-shell is a named refusal"
-  (define parsed
-    (parse-wave-content "## Verify\n```json\n{}\n```\n## Done\nfinished\n"))
+  (define parsed (parse-wave-content "## Verify\n```json\n{}\n```\n## Done\nfinished\n"))
   (check-equal? (hash-ref parsed 'verify) "")
   (check-true (string-contains? (hash-ref parsed 'verify-refusal "missing") "shell")))
 

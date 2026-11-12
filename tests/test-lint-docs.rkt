@@ -43,11 +43,9 @@
       ;; Strict punctuation removal leaves the two spaces around the removed
       ;; `##`; link comparison collapses the hyphen run (below).
       (check-equal? (heading->anchor "Verify grammar (`## Verify`)") "verify-grammar--verify")
-      (check-equal? (heading->anchor
-                     (format "Simplification campaign (v~a): measured before/after"
-                             q-version))
-                    (format "simplification-campaign-v~a-measured-beforeafter"
-                            (string-replace q-version "." "")))
+      (check-equal?
+       (heading->anchor (format "Simplification campaign (v~a): measured before/after" q-version))
+       (format "simplification-campaign-v~a-measured-beforeafter" (string-replace q-version "." "")))
       (check-equal?
        (heading->anchor "Adoption status — operational state after the waves in v1.00.04")
        "adoption-status--operational-state-after-the-waves-in-v10004"))

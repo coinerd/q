@@ -100,9 +100,8 @@
   (define d (build-path dir "trailing-junk"))
   (make-directory d)
   (write-bytes! (build-path d (planning-artifact-marker-filename 'plan-snapshot-staging))
-                (string-append
-                 "#hash((schema-version . 1) (kind . plan-snapshot-staging))"
-                 "\nnot ours\n"))
+                (string-append "#hash((schema-version . 1) (kind . plan-snapshot-staging))"
+                               "\nnot ours\n"))
   (check-false (authentic-planning-artifact-marker? d 'plan-snapshot-staging))
   (check-false (owned-planning-artifact-dir? d)))
 

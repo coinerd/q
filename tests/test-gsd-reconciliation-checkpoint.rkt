@@ -472,47 +472,44 @@
 
 (define (write-tracker-opt-in! dir plan-id)
   (make-directory* (build-path dir ".q"))
-  (call-with-output-file
-   (build-path dir ".q" "config.json")
-   (lambda (out)
-     (write-json
-      (hasheq 'gsd
-              (hasheq 'tracker
-                      (hasheq 'live
-                              #t
-                              'plan-id
-                              plan-id
-                              'wave
-                              0
-                              'repository
-                              "owner/repo"
-                              'issue-number
-                              74
-                              'board-field
-                              "Status"
-                              'board-value
-                              "Done"
-                              'project-item-id
-                              "PVTI_item"
-                              'project-id
-                              "PVT_project"
-                              'field-id
-                              "PVTSSF_status"
-                              'option-id
-                              "done123")))
-      out)
-     (newline out))
-   #:exists 'replace))
+  (call-with-output-file (build-path dir ".q" "config.json")
+                         (lambda (out)
+                           (write-json (hasheq 'gsd
+                                               (hasheq 'tracker
+                                                       (hasheq 'live
+                                                               #t
+                                                               'plan-id
+                                                               plan-id
+                                                               'wave
+                                                               0
+                                                               'repository
+                                                               "owner/repo"
+                                                               'issue-number
+                                                               74
+                                                               'board-field
+                                                               "Status"
+                                                               'board-value
+                                                               "Done"
+                                                               'project-item-id
+                                                               "PVTI_item"
+                                                               'project-id
+                                                               "PVT_project"
+                                                               'field-id
+                                                               "PVTSSF_status"
+                                                               'option-id
+                                                               "done123")))
+                                       out)
+                           (newline out))
+                         #:exists 'replace))
 
 (define (item-readback-json option-id)
   (format
-   (string-append
-    "{\"data\":{\"node\":{\"id\":\"PVTI_item\","
-    "\"project\":{\"id\":\"PVT_project\"},"
-    "\"content\":{\"number\":74,\"repository\":{\"nameWithOwner\":\"owner/repo\"}},"
-    "\"fieldValueByName\":{\"field\":{\"id\":\"PVTSSF_status\","
-    "\"options\":[{\"id\":\"inbox\"},{\"id\":\"inprogress\"},{\"id\":\"done123\"}]},"
-    "\"optionId\":\"~a\"}}}}}")
+   (string-append "{\"data\":{\"node\":{\"id\":\"PVTI_item\","
+                  "\"project\":{\"id\":\"PVT_project\"},"
+                  "\"content\":{\"number\":74,\"repository\":{\"nameWithOwner\":\"owner/repo\"}},"
+                  "\"fieldValueByName\":{\"field\":{\"id\":\"PVTSSF_status\","
+                  "\"options\":[{\"id\":\"inbox\"},{\"id\":\"inprogress\"},{\"id\":\"done123\"}]},"
+                  "\"optionId\":\"~a\"}}}}}")
    option-id))
 
 ;; Records every gh argv in `log`. The identity pre-read attests the item in
@@ -525,10 +522,8 @@
     (cond
       [(equal? (take argv 2) '("api" "graphql"))
        (values 0 (item-readback-json (if (= (length (unbox log)) 1) "inbox" "done123")) "")]
-      [(equal? (take argv 2) '("project" "item-edit"))
-       (values 0 "{\"id\":\"PVTI_item\"}" "")]
-      [else
-       (values 0 (format "{\"number\":74,\"state\":\"~a\"}" close-state) "")])))
+      [(equal? (take argv 2) '("project" "item-edit")) (values 0 "{\"id\":\"PVTI_item\"}" "")]
+      [else (values 0 (format "{\"number\":74,\"state\":\"~a\"}" close-state) "")])))
 
 (define (composition-reconciler dir plan-id log #:close-state [close-state "closed"])
   (resolve-live-tracker-reconciler
@@ -548,16 +543,15 @@
   (write-tracker-opt-in! dir pid)
   (define gh-log (box '()))
   (define on-delivered (box #f))
-  (run-delivery-finalization
-   dir
-   pid
-   rec
-   0
-   merge-sha
-   '()
-   #:on-delivered (lambda () (set-box! on-delivered #t))
-   #:tracker-reconciler (composition-reconciler dir pid gh-log)
-   #:delivery-reader (delivered-proof-for pid merge-sha))
+  (run-delivery-finalization dir
+                             pid
+                             rec
+                             0
+                             merge-sha
+                             '()
+                             #:on-delivered (lambda () (set-box! on-delivered #t))
+                             #:tracker-reconciler (composition-reconciler dir pid gh-log)
+                             #:delivery-reader (delivered-proof-for pid merge-sha))
   (check-true (unbox on-delivered) "a reconciled pass still runs the post-DONE bookkeeping")
   (check-equal? (campaign-wave-status (car (campaign-record-waves (load-campaign-record dir pid))))
                 'done)
@@ -596,16 +590,16 @@
   (with-intercepted-logging
    (lambda (entry) (set-box! warnings (cons (vector-ref entry 1) (unbox warnings))))
    (lambda ()
-     (run-delivery-finalization
-      dir
-      pid
-      rec
-      0
-      merge-sha
-      '()
-      #:on-delivered (lambda () (set-box! on-delivered #t))
-      #:tracker-reconciler (composition-reconciler dir pid gh-log #:close-state "open")
-      #:delivery-reader (delivered-proof-for pid merge-sha)))
+     (run-delivery-finalization dir
+                                pid
+                                rec
+                                0
+                                merge-sha
+                                '()
+                                #:on-delivered (lambda () (set-box! on-delivered #t))
+                                #:tracker-reconciler
+                                (composition-reconciler dir pid gh-log #:close-state "open")
+                                #:delivery-reader (delivered-proof-for pid merge-sha)))
    'warning)
   ;; The board mutation succeeded and was verified, but the close's response
   ;; did not attest state=closed: exactly the four commands of the composed
@@ -620,17 +614,14 @@
   (check-equal? (campaign-wave-status (car (campaign-record-waves (load-campaign-record dir pid))))
                 'done
                 "a tracker refusal can never move the delivered wave off done")
-  (check-true
-   (and
-    (findf
-     (lambda (msg)
-       (and (string? msg)
-            (regexp-match? #rx"tracker reconciliation blocked for plan" msg)
-            (regexp-match? #rx"wave 0" msg)
-            (regexp-match? #rx"wave remains delivered" msg)))
-     (unbox warnings))
-    #t)
-   "the refusal is visible to the operator")
+  (check-true (and (findf (lambda (msg)
+                            (and (string? msg)
+                                 (regexp-match? #rx"tracker reconciliation blocked for plan" msg)
+                                 (regexp-match? #rx"wave 0" msg)
+                                 (regexp-match? #rx"wave remains delivered" msg)))
+                          (unbox warnings))
+                   #t)
+              "the refusal is visible to the operator")
   (delete-directory/files dir #:must-exist? #f))
 
 (test-case "absent opt-in: finalization reconciles nothing, consults no readback, and still completes DONE"
@@ -643,18 +634,17 @@
   (with-intercepted-logging
    (lambda (entry) (set-box! warnings (cons (vector-ref entry 1) (unbox warnings))))
    (lambda ()
-     (run-delivery-finalization
-      dir
-      pid
-      rec
-      0
-      merge-sha
-      '()
-      #:on-delivered (lambda () (set-box! on-delivered #t))
-      #:delivery-reader
-      (lambda (_base _plan _wave)
-        (set-box! reader-consulted (add1 (unbox reader-consulted)))
-        (error 'test "no live tracker is configured"))))
+     (run-delivery-finalization dir
+                                pid
+                                rec
+                                0
+                                merge-sha
+                                '()
+                                #:on-delivered (lambda () (set-box! on-delivered #t))
+                                #:delivery-reader
+                                (lambda (_base _plan _wave)
+                                  (set-box! reader-consulted (add1 (unbox reader-consulted)))
+                                  (error 'test "no live tracker is configured"))))
    'warning)
   (check-true (unbox on-delivered) "completion is reachable with reconciliation simply unconfigured")
   (check-equal? (unbox reader-consulted)
@@ -662,11 +652,10 @@
                 "no reconciler is configured, so no authenticated readback is consulted")
   (check-equal? (campaign-wave-status (car (campaign-record-waves (load-campaign-record dir pid))))
                 'done)
-  (check-true
-   (and
-    (findf
-     (lambda (msg) (and (string? msg) (regexp-match? #rx"tracker reconciliation not-configured" msg)))
-     (unbox warnings))
-    #t)
-   "the unconfigured pass is visible to the operator")
+  (check-true (and (findf (lambda (msg)
+                            (and (string? msg)
+                                 (regexp-match? #rx"tracker reconciliation not-configured" msg)))
+                          (unbox warnings))
+                   #t)
+              "the unconfigured pass is visible to the operator")
   (delete-directory/files dir #:must-exist? #f))
