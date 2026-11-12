@@ -117,10 +117,7 @@
          ;; dangling link named "dangle" does not match the "match.txt" name
          ;; filter, so nothing is denied for it
          (check-equal? (hash-ref (tool-result-details r) 'denied #f)
-                      '()
-                      (format "no denial expected: ~a" (tool-result-details r))))))
-
-
-    ))
+                       '()
+                       (format "no denial expected: ~a" (tool-result-details r))))))))
 
 (run-tests early-term-tests)

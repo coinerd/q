@@ -20,10 +20,7 @@
          racket/file
          racket/path
          "../tools/builtins/find.rkt"
-         (only-in "../tools/tool.rkt"
-                  tool-result-content
-                  tool-result-details
-                  tool-result-is-error?)
+         (only-in "../tools/tool.rkt" tool-result-content tool-result-details tool-result-is-error?)
          "helpers/fixtures.rkt")
 
 (define (result-is-error? r)
@@ -136,8 +133,7 @@
     ;; must stay rejected (guard runs on the normalized root).
     (test-case "find rejects path normalizing to / via '..'"
       (define r (tool-find (hasheq 'path "/tmp/..")))
-      (check-true (result-is-error? r)
-                  (format "Expected error for /tmp/.., got: ~a" r)))
+      (check-true (result-is-error? r) (format "Expected error for /tmp/.., got: ~a" r)))
 
     ;; ============================================================
     ;; R97: symlink confinement and cycle defense
@@ -159,82 +155,76 @@
 
     ;; Symlink whose resolved target escapes the search root is DENIED.
     (test-case "R97: symlink target outside search root is denied"
-      (with-temp-dir (λ (dir)
-                       (create-file dir "keep.txt")
-                       (create-symlink dir "escape-link" "/etc/passwd")
-                       (define r (tool-find (hasheq 'path (path->string dir))))
-                       (check-false (result-is-error? r))
-                       (define c (result-strings r))
-                       (check-not-false (member (path->string (build-path dir "keep.txt")) c))
-                       (check-false (member (path->string (build-path dir "escape-link")) c)
-                                    "escaping symlink must not be emitted")
-                       (check-not-false (member "symlink-target-outside-root" (denied-reasons r))
-                                        (format "expected escape denial record, got: ~a"
-                                                (denied-reasons r)))
-                       (check-not-false (member (path->string (build-path dir "escape-link"))
-                                                (denied-paths r))))))
+      (with-temp-dir
+       (λ (dir)
+         (create-file dir "keep.txt")
+         (create-symlink dir "escape-link" "/etc/passwd")
+         (define r (tool-find (hasheq 'path (path->string dir))))
+         (check-false (result-is-error? r))
+         (define c (result-strings r))
+         (check-not-false (member (path->string (build-path dir "keep.txt")) c))
+         (check-false (member (path->string (build-path dir "escape-link")) c)
+                      "escaping symlink must not be emitted")
+         (check-not-false (member "symlink-target-outside-root" (denied-reasons r))
+                          (format "expected escape denial record, got: ~a" (denied-reasons r)))
+         (check-not-false (member (path->string (build-path dir "escape-link")) (denied-paths r))))))
 
     ;; Dangling symlink: structured denial record, never emitted, search
     ;; still succeeds (a stale link must not fail the whole scan).
     (test-case "R97: dangling symlink yields structured denial, not a crash"
-      (with-temp-dir (λ (dir)
-                       (create-file dir "solid.txt")
-                       (create-symlink dir "dangle-link"
-                                       (build-path dir "no-such-target-xyz"))
-                       (define r (tool-find (hasheq 'path (path->string dir))))
-                       (check-false (result-is-error? r)
-                                    (format "dangling link must not fail the search: ~a" r))
-                       (define c (result-strings r))
-                       (check-not-false (member (path->string (build-path dir "solid.txt")) c))
-                       (check-false (member (path->string (build-path dir "dangle-link")) c))
-                       (check-not-false (member "dangling-symlink" (denied-reasons r)))
-                       (check-not-false (member (path->string (build-path dir "dangle-link"))
-                                                (denied-paths r))))))
+      (with-temp-dir
+       (λ (dir)
+         (create-file dir "solid.txt")
+         (create-symlink dir "dangle-link" (build-path dir "no-such-target-xyz"))
+         (define r (tool-find (hasheq 'path (path->string dir))))
+         (check-false (result-is-error? r) (format "dangling link must not fail the search: ~a" r))
+         (define c (result-strings r))
+         (check-not-false (member (path->string (build-path dir "solid.txt")) c))
+         (check-false (member (path->string (build-path dir "dangle-link")) c))
+         (check-not-false (member "dangling-symlink" (denied-reasons r)))
+         (check-not-false (member (path->string (build-path dir "dangle-link")) (denied-paths r))))))
 
     ;; Directory symlink cycle: the cycle entry is never recursed into — no
     ;; results under the cycle link, bounded scan, search completes.
     (test-case "R97: directory symlink cycle is not traversed"
-      (with-temp-dir (λ (dir)
-                       (create-file dir "d1/inner.txt")
-                       (create-file dir "d1/sub/deep.txt")
-                       ;; loop back to the search root itself
-                       (create-symlink dir "d1/loop" dir)
-                       (define r (tool-find (hasheq 'path (path->string dir))))
-                       (check-false (result-is-error? r))
-                       (define c (result-strings r))
-                       ;; nothing from INSIDE the cycle is emitted (the
-                       ;; marker is the real fixture's cycle directory,
-                       ;; built from path pieces — no hardcoded prefix)
-                       (define cycle-marker
-                         (path->string (path->directory-path (build-path dir "d1" "loop"))))
-                       (check-false (findf (lambda (s) (string-contains? s cycle-marker)) c)
-                                    "cycle directory must not be traversed")
-                       ;; real subtree still found
-                       (check-not-false (member (path->string (build-path dir "d1/inner.txt")) c))
-                       (check-not-false (member (path->string (build-path dir "d1/sub/deep.txt")) c)))))
+      (with-temp-dir
+       (λ (dir)
+         (create-file dir "d1/inner.txt")
+         (create-file dir "d1/sub/deep.txt")
+         ;; loop back to the search root itself
+         (create-symlink dir "d1/loop" dir)
+         (define r (tool-find (hasheq 'path (path->string dir))))
+         (check-false (result-is-error? r))
+         (define c (result-strings r))
+         ;; nothing from INSIDE the cycle is emitted (the
+         ;; marker is the real fixture's cycle directory,
+         ;; built from path pieces — no hardcoded prefix)
+         (define cycle-marker (path->string (path->directory-path (build-path dir "d1" "loop"))))
+         (check-false (findf (lambda (s) (string-contains? s cycle-marker)) c)
+                      "cycle directory must not be traversed")
+         ;; real subtree still found
+         (check-not-false (member (path->string (build-path dir "d1/inner.txt")) c))
+         (check-not-false (member (path->string (build-path dir "d1/sub/deep.txt")) c)))))
 
     ;; Directory symlink to a sibling tree: recursion must stay confined to
     ;; the declared root even though the target is a real directory.
     (test-case "R97: directory symlink is never recursed into (escape defense)"
-      (with-temp-dir (λ (dir)
-                       (create-file dir "root-file.txt")
-                       (define sibling (make-temporary-file "q97-sibling-~a" 'directory))
-                       (dynamic-wind void
-                                     (lambda ()
-                                       (call-with-output-file
-                                        (build-path sibling "sibling-secret.txt")
-                                        (lambda (out) (display "sibling" out))
-                                        #:exists 'replace)
-                                       (create-symlink dir "sibling-link" sibling)
-                                       (define r (tool-find (hasheq 'path (path->string dir))))
-                                       (check-false (result-is-error? r))
-                                       (define c (result-strings r))
-                                       (check-false (findf (lambda (s) (string-contains? s
-                                                                "sibling-secret")) c)
-                                                    "must not descend through dir symlink")
-                                       (check-not-false
-                                        (member (path->string (build-path dir "root-file.txt")) c)))
-                                     (lambda ()
-                                       (delete-directory/files sibling #:must-exist? #f))))))))
+      (with-temp-dir
+       (λ (dir)
+         (create-file dir "root-file.txt")
+         (define sibling (make-temporary-file "q97-sibling-~a" 'directory))
+         (dynamic-wind void
+                       (lambda ()
+                         (call-with-output-file (build-path sibling "sibling-secret.txt")
+                                                (lambda (out) (display "sibling" out))
+                                                #:exists 'replace)
+                         (create-symlink dir "sibling-link" sibling)
+                         (define r (tool-find (hasheq 'path (path->string dir))))
+                         (check-false (result-is-error? r))
+                         (define c (result-strings r))
+                         (check-false (findf (lambda (s) (string-contains? s "sibling-secret")) c)
+                                      "must not descend through dir symlink")
+                         (check-not-false (member (path->string (build-path dir "root-file.txt")) c)))
+                       (lambda () (delete-directory/files sibling #:must-exist? #f))))))))
 
 (run-tests root-guard-tests)

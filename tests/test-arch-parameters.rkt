@@ -144,8 +144,7 @@
       ;; A phase can span model turns; it is not turn-local state, startup
       ;; configuration, or an injected callable. The owner dynamically binds
       ;; an immutable admission scope and unwinds it after dispatch.
-      (define module-entry
-        (assoc "extensions/gsd-planning/execution-policy.rkt" inventory))
+      (define module-entry (assoc "extensions/gsd-planning/execution-policy.rkt" inventory))
       (check-not-false module-entry)
       (check-equal? (and module-entry (assoc 'current-gsd-author-phase (cdr module-entry)))
                     '(current-gsd-author-phase . OTHER_REVIEWED)))
