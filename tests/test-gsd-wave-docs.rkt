@@ -25,8 +25,7 @@
          "../extensions/gsd/prompts.rkt"
          ;; W5: the lenient declared-wave-reference lexical grammar is owned by
          ;; planning-paths.rkt; wave-docs only re-exports the same binding.
-         (only-in "../extensions/gsd/planning-paths.rkt"
-                  declared-wave-doc-reference)
+         (only-in "../extensions/gsd/planning-paths.rkt" declared-wave-doc-reference)
          ;; W5/R-019: the typed unknown-status rejection lives in wave-status.
          (only-in "../extensions/gsd/wave-status.rkt"
                   exn:fail:wave-status?
@@ -310,10 +309,10 @@
                    "- [Inbox] W1: Next → waves/W1-next.md\n"))
   (call-with-output-file plan-path (lambda (out) (display plan-text out)) #:exists 'truncate)
   ;; The historical `pending` fallback made W0 selectable (and dispatched).
-  (check-exn exn:fail:wave-status?
-             (lambda () (next-inbox-wave test-dir)))
-  (define ex (with-handlers ([exn:fail:wave-status? values])
-               (next-inbox-wave test-dir)))
+  (check-exn exn:fail:wave-status? (lambda () (next-inbox-wave test-dir)))
+  (define ex
+    (with-handlers ([exn:fail:wave-status? values])
+      (next-inbox-wave test-dir)))
   (check-equal? (exn:fail:wave-status-value ex) "REWORK")
   (check-true (string-contains? (exn-message ex) "wave selection refused"))
   (check-true (string-contains? (exn-message ex) "W0"))
@@ -340,10 +339,8 @@
   (check-equal? (resolve-status-precedence "CANCELLED" "COMPLETED") "COMPLETED")
   ;; Comparison keys give an unknown spelling its own identity, so two
   ;; different typos never compare equal (the old `pending` fallback did).
-  (check-not-equal? (wave-status-comparison-key "CANCELLED")
-                    (wave-status-comparison-key "PENDING"))
-  (check-equal? (wave-status-comparison-key "CANCELLED")
-                (wave-status-comparison-key "cancelled"))
+  (check-not-equal? (wave-status-comparison-key "CANCELLED") (wave-status-comparison-key "PENDING"))
+  (check-equal? (wave-status-comparison-key "CANCELLED") (wave-status-comparison-key "cancelled"))
   (check-eq? (wave-status-comparison-key "COMPLETED") 'done))
 
 ;; ============================================================
@@ -647,5 +644,4 @@ Some description without status header.")
   (check-eq? wave-ref-path-from-target declared-wave-doc-reference)
   (check-equal? (wave-ref-path-from-target "→ waves/custom/nested-legal.md")
                 "waves/custom/nested-legal.md")
-  (check-equal? (wave-ref-path-from-target "see waves/W0-fine.md for details")
-                "waves/W0-fine.md"))
+  (check-equal? (wave-ref-path-from-target "see waves/W0-fine.md for details") "waves/W0-fine.md"))

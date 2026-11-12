@@ -23,15 +23,19 @@
 ;; returned text-content strings in order (a generated nonempty page joins
 ;; numbered lines/notice with LF and appends ONE final LF; JSON envelope and
 ;; details are excluded).
-(define (utf8-len s) (bytes-length (string->bytes/utf-8 s)))
-(define (page-text result) (apply string-append (tool-result-content result)))
+(define (utf8-len s)
+  (bytes-length (string->bytes/utf-8 s)))
+(define (page-text result)
+  (apply string-append (tool-result-content result)))
 
 ;; File with n lines "line 1".."line n", each terminated by suffix (default LF).
 (define (make-lines-file n [suffix "\n"])
   (define p (make-temporary-file "q-read-r96-~a"))
   (call-with-output-file p
-    #:exists 'truncate
-    (lambda (out) (for ([i (in-range 1 (add1 n))]) (fprintf out "line ~a~a" i suffix))))
+                         #:exists 'truncate
+                         (lambda (out)
+                           (for ([i (in-range 1 (add1 n))])
+                             (fprintf out "line ~a~a" i suffix))))
   p)
 
 ;; Collect the absolute 1-based line numbers shown on a page (drops any
@@ -255,33 +259,35 @@
 
     (test-case "R96: CRLF normalizes to LF (CR stripped only before LF)"
       (define p (make-temp-file ""))
-      (dynamic-wind (lambda ()
-                      (call-with-output-file p #:exists 'truncate
-                        (lambda (out) (write-bytes #"a\r\nb\r\n" out))))
-                    (lambda ()
-                      (define r (call-read (hasheq 'path p)))
-                      (check-false (tool-result-is-error? r))
-                      (check-equal? (hash-ref (tool-result-details r) 'total-lines) 2)
-                      (check-false (string-contains? (page-text r) "\r")))
-                    (lambda () (cleanup-path p))))
+      (dynamic-wind
+       (lambda ()
+         (call-with-output-file p #:exists 'truncate (lambda (out) (write-bytes #"a\r\nb\r\n" out))))
+       (lambda ()
+         (define r (call-read (hasheq 'path p)))
+         (check-false (tool-result-is-error? r))
+         (check-equal? (hash-ref (tool-result-details r) 'total-lines) 2)
+         (check-false (string-contains? (page-text r) "\r")))
+       (lambda () (cleanup-path p))))
 
     (test-case "R96: lone CR is unchanged"
       (define p (make-temp-file ""))
-      (dynamic-wind (lambda ()
-                      (call-with-output-file p #:exists 'truncate
-                        (lambda (out) (write-bytes #"a\rb\n" out))))
-                    (lambda ()
-                      (define r (call-read (hasheq 'path p)))
-                      (check-false (tool-result-is-error? r))
-                      (check-equal? (hash-ref (tool-result-details r) 'total-lines) 1)
-                      (check-true (string-contains? (page-text r) "1| a\rb")))
-                    (lambda () (cleanup-path p))))
+      (dynamic-wind
+       (lambda ()
+         (call-with-output-file p #:exists 'truncate (lambda (out) (write-bytes #"a\rb\n" out))))
+       (lambda ()
+         (define r (call-read (hasheq 'path p)))
+         (check-false (tool-result-is-error? r))
+         (check-equal? (hash-ref (tool-result-details r) 'total-lines) 1)
+         (check-true (string-contains? (page-text r) "1| a\rb")))
+       (lambda () (cleanup-path p))))
 
     (test-case "R96: invalid UTF-8 at boundary is replaced with ?"
       (define p (make-temp-file ""))
       (dynamic-wind (lambda ()
-                      (call-with-output-file p #:exists 'truncate
-                        (lambda (out) (write-bytes #"caf\xE9-line\nnext\n" out))))
+                      (call-with-output-file p
+                                             #:exists 'truncate
+                                             (lambda (out)
+                                               (write-bytes #"caf\xE9-line\nnext\n" out))))
                     (lambda ()
                       (define r (call-read (hasheq 'path p)))
                       (check-false (tool-result-is-error? r))
@@ -293,17 +299,17 @@
     (test-case "R96: emoji and combining chars count as their real UTF-8 bytes"
       (define p (make-temp-file ""))
       (dynamic-wind (lambda ()
-                      (call-with-output-file p #:exists 'truncate
-                        (lambda (out)
-                          (write-string "x\U0001F600y\n" out)
-                          (write-string "e\u0301\n" out))))
+                      (call-with-output-file p
+                                             #:exists 'truncate
+                                             (lambda (out)
+                                               (write-string "x\U0001F600y\n" out)
+                                               (write-string "e\u0301\n" out))))
                     (lambda ()
                       (define r (call-read (hasheq 'path p)))
                       (check-false (tool-result-is-error? r))
                       ;; "1| x\U0001F600y" = 3 + (1+4+1) + LF = 10;
                       ;; "2| e\u0301" = 3 + (1+2) + LF = 7
-                      (check-equal? (hash-ref (tool-result-details r) 'returned-byte)
-                                    (+ 10 7))
+                      (check-equal? (hash-ref (tool-result-details r) 'returned-byte) (+ 10 7))
                       (check-equal? (hash-ref (tool-result-details r) 'returned-byte)
                                     (utf8-len (page-text r)))
                       (check-true (string-contains? (page-text r) "x\U0001F600y")))
@@ -326,11 +332,12 @@
       (define target (make-temp-file ""))
       (dynamic-wind void
                     (lambda ()
-                      (call-with-output-file probe #:exists 'truncate
-                        (lambda (out)
-                          (write-string "s1\n" out)
-                          (write-string (make-string 60000 #\b) out)
-                          (write-string "\ns3\n" out)))
+                      (call-with-output-file probe
+                                             #:exists 'truncate
+                                             (lambda (out)
+                                               (write-string "s1\n" out)
+                                               (write-string (make-string 60000 #\b) out)
+                                               (write-string "\ns3\n" out)))
                       (define probe-r (call-read (hasheq 'path probe)))
                       (check-false (tool-result-is-error? probe-r))
                       (define notice (hash-ref (tool-result-details probe-r) 'notice #f))
@@ -340,10 +347,11 @@
                         ;; "1| " (3) + LF (1) + notice + its LF (notice-bytes+1) = 50000
                         (define a-len (- 50000 3 1 notice-bytes 1))
                         (check-true (> a-len 0))
-                        (call-with-output-file target #:exists 'truncate
-                          (lambda (out)
-                            (write-string (make-string a-len #\a) out)
-                            (write-string "\ns2\ns3\n" out)))
+                        (call-with-output-file target
+                                               #:exists 'truncate
+                                               (lambda (out)
+                                                 (write-string (make-string a-len #\a) out)
+                                                 (write-string "\ns2\ns3\n" out)))
                         (define r (call-read (hasheq 'path target)))
                         (check-false (tool-result-is-error? r))
                         (define d (tool-result-details r))
@@ -361,8 +369,10 @@
     (test-case "R96: first requested line larger than cap errors with line number + guidance"
       (define p (make-temp-file ""))
       (dynamic-wind (lambda ()
-                      (call-with-output-file p #:exists 'truncate
-                        (lambda (out) (write-string (make-string 60000 #\b) out))))
+                      (call-with-output-file p
+                                             #:exists 'truncate
+                                             (lambda (out)
+                                               (write-string (make-string 60000 #\b) out))))
                     (lambda ()
                       (define r (call-read (hasheq 'path p)))
                       (check-true (tool-result-is-error? r))
@@ -375,11 +385,12 @@
     (test-case "R96: later oversized line -> progress, then structured error at that offset"
       (define p (make-temp-file ""))
       (dynamic-wind (lambda ()
-                      (call-with-output-file p #:exists 'truncate
-                        (lambda (out)
-                          (write-string "s1\n" out)
-                          (write-string (make-string 60000 #\b) out)
-                          (write-string "\ns3\n" out))))
+                      (call-with-output-file p
+                                             #:exists 'truncate
+                                             (lambda (out)
+                                               (write-string "s1\n" out)
+                                               (write-string (make-string 60000 #\b) out)
+                                               (write-string "\ns3\n" out))))
                     (lambda ()
                       ;; Page 1 makes progress and points at the oversized line.
                       (define r1 (call-read (hasheq 'path p)))
@@ -399,7 +410,8 @@
       (define p (make-lines-file 5000))
       (dynamic-wind void
                     (lambda ()
-                      (let loop ([offset 1] [seen '()])
+                      (let loop ([offset 1]
+                                 [seen '()])
                         (define r (call-read (hasheq 'path p 'offset offset)))
                         (check-false (tool-result-is-error? r))
                         (define nums (append seen (page-line-numbers r)))
@@ -407,7 +419,8 @@
                         (if next
                             (loop next nums)
                             (begin
-                              (check-equal? nums (build-list 5000 add1)
+                              (check-equal? nums
+                                            (build-list 5000 add1)
                                             "pages cover 1..5000 exactly, in order")))))
                     (lambda () (cleanup-path p))))
 
@@ -417,8 +430,7 @@
                                  (hasheq 'path "x" 'offset 1 'limit 0)
                                  (hasheq 'path "x" 'offset 1 'limit -5)))])
         (define r (call-read args))
-        (check-true (tool-result-is-error? r)
-                    (format "invalid args rejected: ~v" args))))
+        (check-true (tool-result-is-error? r) (format "invalid args rejected: ~v" args))))
 
     (test-case "read with no path returns error"
       (define result (call-read (hasheq)))

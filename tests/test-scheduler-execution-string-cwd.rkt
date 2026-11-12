@@ -108,17 +108,15 @@
          (define batch
            (run-tool-batch (list (make-tool-call "r91-call" tool-name args))
                            registry
-                           #:exec-context (make-exec-context
-                                           #:working-directory exec-cwd
-                                           #:permission-config
-                                           (make-permissive-permission-config))))
+                           #:exec-context (make-exec-context #:working-directory exec-cwd
+                                                             #:permission-config
+                                                             (make-permissive-permission-config))))
          (car (scheduler-result-results batch)))
-       (define (result-text r) (format "~a ~a" (tool-result-content r) (tool-result-is-error? r)))
+       (define (result-text r)
+         (format "~a ~a" (tool-result-content r) (tool-result-is-error? r)))
        ;; 1. WRITE into sibling B (outside spawn roots) via trusted cwd B.
        (define write-result
-         (run-batch "write"
-                    (hasheq 'path (path->string target) 'content initial-content)
-                    owned-cwd))
+         (run-batch "write" (hasheq 'path (path->string target) 'content initial-content) owned-cwd))
        (check-false (tool-result-is-error? write-result) (result-text write-result))
        (check-true (file-exists? target))
        (check-equal? (file->string target) initial-content)

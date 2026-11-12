@@ -299,12 +299,10 @@
          (for ([to '(reserved launched verifying new-task permanent-approved)])
            (check-exn exn:fail? (lambda () (step! f to (hasheq)))))
          ;; Typed pending states are installed only by reconciliation.
-         (for ([to '(recover-pending-verified
-                     recover-pending-published
-                     recover-pending-receipt-certified
-                     recover-pending-registration)])
-           (check-exn #rx"pending recovery"
-                      (lambda () (step! f to (hasheq)))))
+         (for ([to '(recover-pending-verified recover-pending-published
+                                              recover-pending-receipt-certified
+                                              recover-pending-registration)])
+           (check-exn #rx"pending recovery" (lambda () (step! f to (hasheq)))))
          (check-equal? (hash-ref (load-supplemental-operation (fixture-grant f)) 'revision) 2))))
     (test-case "one exact finite lifecycle stores descriptors but asserts no live proof semantics"
       (with-fixture (lambda (f)
@@ -539,23 +537,30 @@
          (define threads
            (for/list ([g (in-list (list (fixture-grant f) grant2))]
                       [i (in-naturals)])
-             (thread
-              (lambda ()
-                (with-handlers ([exn:fail? (lambda (_) (channel-put results 'lost))])
-                  (transition-supplemental-operation! g 0 'proposal-approved 'reserved
-                                                      (hasheq 'allocation (hasheq 'id i)))
-                  (transition-supplemental-operation! g 1 'reserved 'launched
-                                                      (hasheq 'dispatch-id (number->string i)))
-                  (channel-put results 'dispatch))))))
-         (define outcomes (for/list ([i (in-range 2)]) (sync/timeout 10 results)))
+             (thread (lambda ()
+                       (with-handlers ([exn:fail? (lambda (_) (channel-put results 'lost))])
+                         (transition-supplemental-operation! g
+                                                             0
+                                                             'proposal-approved
+                                                             'reserved
+                                                             (hasheq 'allocation (hasheq 'id i)))
+                         (transition-supplemental-operation! g
+                                                             1
+                                                             'reserved
+                                                             'launched
+                                                             (hasheq 'dispatch-id (number->string i)))
+                         (channel-put results 'dispatch))))))
+         (define outcomes
+           (for/list ([i (in-range 2)])
+             (sync/timeout 10 results)))
          (for-each thread-wait threads)
          (check-equal? (count (lambda (v) (eq? v 'dispatch)) outcomes) 1)
          (check-equal? (hash-ref (load-supplemental-operation (fixture-grant f)) 'state) "launched")
-         (check-equal?
-          (count (lambda (n) (regexp-match? #px"\\.json$" n))
-                 (map path->string
-                      (directory-list (build-path (fixture-root f) "supplemental-operations"))))
-          1))))
+         (check-equal? (count (lambda (n) (regexp-match? #px"\\.json$" n))
+                              (map path->string
+                                   (directory-list (build-path (fixture-root f)
+                                                               "supplemental-operations"))))
+                       1))))
     (test-case "independent OS processes cannot both reserve the same grant"
       (with-fixture
        (lambda (f)

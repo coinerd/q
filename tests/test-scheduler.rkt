@@ -356,8 +356,7 @@
                     #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
   (check-equal? (length results) 1 "a blocked call still yields a result")
-  (check-true (tool-result-is-error? (car results))
-              "authorization failure must block, not execute")
+  (check-true (tool-result-is-error? (car results)) "authorization failure must block, not execute")
   (check-true (string-contains? (result-text (car results)) "tool-call-pre")
               "the block names the authorization hook"))
 
@@ -381,8 +380,7 @@
                     #:exec-context (make-test-exec-context)))
   (define results (scheduler-result-results sr))
   (check-equal? (length results) 1 "a blocked call still yields a result")
-  (check-true (tool-result-is-error? (car results))
-              "authorization failure must block, not execute")
+  (check-true (tool-result-is-error? (car results)) "authorization failure must block, not execute")
   ;; Non-authorization hooks keep the resilient contract: a tool-result
   ;; handler exception never deadlocks or fails the batch.
   (define hook2

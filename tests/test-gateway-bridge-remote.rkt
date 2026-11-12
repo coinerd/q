@@ -41,7 +41,7 @@
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          (only-in "../tools/tool.rkt" make-tool-registry lookup-tool)
          "../sandbox/gateway-bridge.rkt"
-         "helpers/fast-fixtures.rkt")  ; wait-until: deterministic test sync
+         "helpers/fast-fixtures.rkt") ; wait-until: deterministic test sync
 
 (define-runtime-path worker-main-path "../sandbox/worker-main.rkt")
 
@@ -187,22 +187,24 @@
       ;; Coordinator-owned worktree intent (the approval-visible scheduler
       ;; injection) is refused explicitly — never silently dispatched wd=#f.
       (define refused-owned
-        (execute-via-remote executor "bash"
+        (execute-via-remote executor
+                            "bash"
                             (hasheq 'command "echo hi" 'working-directory "/some/owned/worktree")
-                            'shell-exec 5000))
+                            'shell-exec
+                            5000))
       (check-equal? (ipc-response-status refused-owned) 'error)
-      (check-true (string-contains? (or (ipc-response-error-message refused-owned) "")
-                                    "refused"))
+      (check-true (string-contains? (or (ipc-response-error-message refused-owned) "") "refused"))
       (check-true (string-contains? (or (ipc-response-error-message refused-owned) "")
                                     "owned working directories"))
       ;; Misplaced trust fields are refused the same way.
       (define refused-trust
-        (execute-via-remote executor "bash"
+        (execute-via-remote executor
+                            "bash"
                             (hasheq 'command "echo hi" 'trusted-working-dir "/some/owned/worktree")
-                            'shell-exec 5000))
+                            'shell-exec
+                            5000))
       (check-equal? (ipc-response-status refused-trust) 'error)
-      (check-true (string-contains? (or (ipc-response-error-message refused-trust) "")
-                                    "refused"))
+      (check-true (string-contains? (or (ipc-response-error-message refused-trust) "") "refused"))
       ;; A policy refusal is not a transport failure: the executor stays usable.
       (define still-ok
         (execute-via-remote executor "bash" (hasheq 'command "echo clean") 'shell-exec 5000))

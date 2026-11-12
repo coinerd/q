@@ -52,9 +52,7 @@
                   set-campaign-fence-token!
                   set-campaign-record-execution-policy!
                   migrate-campaign!)
-         (only-in "../extensions/gsd/campaign-repository.rkt"
-                  persist-campaign!
-                  load-campaign-record)
+         (only-in "../extensions/gsd/campaign-repository.rkt" persist-campaign! load-campaign-record)
          (only-in "../extensions/gsd/campaign-decision.rkt"
                   campaign-views
                   campaign-delivery-view
@@ -108,13 +106,13 @@
 
 (define (record waves #:cancelled? [cancelled? #f])
   (make-campaign-record PLAN-ID
-                       (make-campaign-manifest 1 "decision fixture" '() '() "constraints")
-                       waves
-                       (and cancelled? (make-campaign-cancellation "stop" 0))
-                       0
-                       'test
-                       0
-                       0))
+                        (make-campaign-manifest 1 "decision fixture" '() '() "constraints")
+                        waves
+                        (and cancelled? (make-campaign-cancellation "stop" 0))
+                        0
+                        'test
+                        0
+                        0))
 
 (define (views rec
                #:pending [pending #f]
@@ -123,13 +121,7 @@
                #:lane [lane #f]
                #:message [message "pending delivery"]
                #:coordinator? [coordinator? #f])
-  (campaign-views rec
-                  '()
-                  stale?
-                  (campaign-delivery-view pending awaiting)
-                  lane
-                  message
-                  coordinator?))
+  (campaign-views rec '() stale? (campaign-delivery-view pending awaiting) lane message coordinator?))
 
 (define (lane idx
               #:author-pending? [author-pending? #f]
@@ -138,7 +130,14 @@
               #:author-repair? [author-repair? #f]
               #:author-running? [author-running? #f]
               #:review [review #f])
-  (campaign-lane-view idx #f author-pending? resumable? retained? author-repair? author-running? review))
+  (campaign-lane-view idx
+                      #f
+                      author-pending?
+                      resumable?
+                      retained?
+                      author-repair?
+                      author-running?
+                      review))
 
 ;; ============================================================
 ;; 1. Decision matrix — complete / launch / finalize
@@ -157,19 +156,19 @@
   (check-eq? (campaign-decision-code d) 'wave-launch))
 
 (test-case "an awaiting-delivery wave with an authenticated proof decides finalize with that proof"
-  (define d (decide-campaign-action
-             (views (record (list (wave 0 'awaiting-delivery) (wave 1 'pending)))
-                    #:awaiting (hash 0 SHA-40))))
+  (define d
+    (decide-campaign-action (views (record (list (wave 0 'awaiting-delivery) (wave 1 'pending)))
+                                   #:awaiting (hash 0 SHA-40))))
   (check-eq? (campaign-decision-kind d) 'finalize)
   (check-eq? (campaign-decision-wave-index d) 0)
   (check-equal? (campaign-decision-merge-sha d) SHA-40)
   (check-eq? (campaign-decision-code d) 'delivery-ready))
 
 (test-case "an awaiting-delivery wave WITHOUT a binding proof never finalizes or launches past it"
-  (define d (decide-campaign-action
-             (views (record (list (wave 0 'awaiting-delivery) (wave 1 'pending)))
-                    #:pending (cons 0 "implementation PR pending")
-                    #:lane (lane 0))))
+  (define d
+    (decide-campaign-action (views (record (list (wave 0 'awaiting-delivery) (wave 1 'pending)))
+                                   #:pending (cons 0 "implementation PR pending")
+                                   #:lane (lane 0))))
   (check-eq? (campaign-decision-kind d) 'block)
   (check-eq? (campaign-decision-wave-index d) 0)
   (check-not-eq? (campaign-decision-kind d) 'launch))
@@ -179,16 +178,15 @@
 ;; ============================================================
 
 (test-case "durable cancellation wins over launch"
-  (define d (decide-campaign-action
-             (views (record (list (wave 0 'pending)) #:cancelled? #t)
-                    #:pending (cons 0 "pending")
-                    #:lane (lane 0))))
+  (define d
+    (decide-campaign-action (views (record (list (wave 0 'pending)) #:cancelled? #t)
+                                   #:pending (cons 0 "pending")
+                                   #:lane (lane 0))))
   (check-eq? (campaign-decision-kind d) 'cancel)
   (check-eq? (campaign-decision-code d) 'campaign-cancelled))
 
 (test-case "a record that moved during the authenticated readback cancels with its own code"
-  (define d (decide-campaign-action
-             (views (record (list (wave 0 'pending))) #:stale? #t)))
+  (define d (decide-campaign-action (views (record (list (wave 0 'pending))) #:stale? #t)))
   (check-eq? (campaign-decision-kind d) 'cancel)
   (check-eq? (campaign-decision-code d) 'campaign-stale-readback))
 
@@ -197,11 +195,10 @@
 ;; ============================================================
 
 (define (pending-decision lane #:coordinator? [coordinator? #t])
-  (decide-campaign-action
-   (views (record (list (wave 0 'done)))
-          #:pending (cons 0 "no authenticated delivery proof")
-          #:lane lane
-          #:coordinator? coordinator?)))
+  (decide-campaign-action (views (record (list (wave 0 'done)))
+                                 #:pending (cons 0 "no authenticated delivery proof")
+                                 #:lane lane
+                                 #:coordinator? coordinator?)))
 
 (test-case "approved unlaunched supplemental task resumes the author lane"
   (define d (pending-decision (lane 0 #:author-pending? #t #:retained? #t)))
@@ -251,17 +248,16 @@
   (dynamic-wind void (lambda () (proc dir)) (lambda () (delete-directory/files dir))))
 
 (test-case "a retained block with no supplemental business preserves the primary cause"
-  (call-with-empty-root
-   (lambda (dir)
-     (define decision
-       (decide-campaign-action
-        (views (record (list (wave 0 'done)))
-               #:pending (cons 0 "no authenticated delivery proof")
-               #:lane (lane 0 #:retained? #t))))
-     (define outcome (run-campaign-block! dir PLAN-ID decision))
-     (check-eq? (campaign-outcome-kind outcome) 'blocked)
-     (check-false (campaign-outcome-typed outcome))
-     (check-true (string? (campaign-outcome-reason outcome))))))
+  (call-with-empty-root (lambda (dir)
+                          (define decision
+                            (decide-campaign-action (views (record (list (wave 0 'done)))
+                                                           #:pending
+                                                           (cons 0 "no authenticated delivery proof")
+                                                           #:lane (lane 0 #:retained? #t))))
+                          (define outcome (run-campaign-block! dir PLAN-ID decision))
+                          (check-eq? (campaign-outcome-kind outcome) 'blocked)
+                          (check-false (campaign-outcome-typed outcome))
+                          (check-true (string? (campaign-outcome-reason outcome))))))
 
 (test-case "a secondary seal failure cannot erase the primary cause or launch work"
   ;; An invalid campaign identity makes every supplemental probe/effect refuse;
@@ -269,16 +265,14 @@
   (call-with-empty-root
    (lambda (dir)
      (define decision
-       (decide-campaign-action
-        (views (record (list (wave 0 'done)))
-               #:pending (cons 0 "no authenticated delivery proof")
-               #:lane (lane 0 #:retained? #t))))
+       (decide-campaign-action (views (record (list (wave 0 'done)))
+                                      #:pending (cons 0 "no authenticated delivery proof")
+                                      #:lane (lane 0 #:retained? #t))))
      (define outcome
        (with-handlers ([exn:fail? (lambda (e) (error 'test "block raised: ~a" (exn-message e)))])
          (run-campaign-block! dir "not-a-plan-id" decision)))
      (check-eq? (campaign-outcome-kind outcome) 'blocked)
-     (check-equal? (campaign-outcome-reason outcome)
-                   (campaign-decision-message decision)))))
+     (check-equal? (campaign-outcome-reason outcome) (campaign-decision-message decision)))))
 
 ;; ============================================================
 ;; 5. Interpreter integration (real durable campaign)
@@ -310,46 +304,43 @@
   (hasheq 'status "delivery-pending" 'reason "implementation PR pending"))
 
 (test-case "a delivery-pending campaign blocks with the durable code and the handoff ledger"
-  (call-with-campaign
-   1
-   (lambda (dir rec)
-     (define plan (campaign-plan-id rec))
-     (define result
-       (run-campaign!
-        dir
-        rec
-        #:runner (lambda (_) 'ok)
-        #:verifier (lambda (_) #t)
-        #:delivery-reader pending-readable))
-     (check-eq? (campaign-result-status result) 'wave-blocked)
-     (check-eq? (campaign-result-code result) 'delivery-pending)
-     (check-true (hash? (campaign-result-diagnostics result)))
-     (check-eq? (hash-ref (campaign-result-diagnostics result) 'route) 'none)
-     ;; The pending handoff ledger was issued exactly once and never invents DONE.
-     (check-eq? (delivery-handoff-status dir plan 0) 'delivery-pending)
-     (check-equal? (campaign-result-completed-waves result) '())
-     (check-equal? (load-outbox dir plan) '()))))
+  (call-with-campaign 1
+                      (lambda (dir rec)
+                        (define plan (campaign-plan-id rec))
+                        (define result
+                          (run-campaign! dir
+                                         rec
+                                         #:runner (lambda (_) 'ok)
+                                         #:verifier (lambda (_) #t)
+                                         #:delivery-reader pending-readable))
+                        (check-eq? (campaign-result-status result) 'wave-blocked)
+                        (check-eq? (campaign-result-code result) 'delivery-pending)
+                        (check-true (hash? (campaign-result-diagnostics result)))
+                        (check-eq? (hash-ref (campaign-result-diagnostics result) 'route) 'none)
+                        ;; The pending handoff ledger was issued exactly once and never invents DONE.
+                        (check-eq? (delivery-handoff-status dir plan 0) 'delivery-pending)
+                        (check-equal? (campaign-result-completed-waves result) '())
+                        (check-equal? (load-outbox dir plan) '()))))
 
 (test-case "a live coordinator is consulted once for the blocked wave and cannot claim progress"
-  (call-with-campaign
-   1
-   (lambda (dir rec)
-     (define calls 0)
-     (define result
-       (run-campaign!
-        dir
-        rec
-        #:runner (lambda (_) 'ok)
-        #:verifier (lambda (_) #t)
-        #:delivery-reader pending-readable
-        #:delivery-coordinator (lambda (_b _p _w)
-                                 (set! calls (add1 calls))
-                                 (cons 'ok "claimed progress"))))
-     (check-equal? calls 1)
-     (check-eq? (campaign-result-status result) 'wave-blocked)
-     (check-eq? (campaign-result-code result) 'coordinator-step)
-     ;; No durable journal movement means no advance (no-spin law preserved).
-     (check-eq? (hash-ref (campaign-result-diagnostics result) 'route) 'coordinator-step))))
+  (call-with-campaign 1
+                      (lambda (dir rec)
+                        (define calls 0)
+                        (define result
+                          (run-campaign! dir
+                                         rec
+                                         #:runner (lambda (_) 'ok)
+                                         #:verifier (lambda (_) #t)
+                                         #:delivery-reader pending-readable
+                                         #:delivery-coordinator (lambda (_b _p _w)
+                                                                  (set! calls (add1 calls))
+                                                                  (cons 'ok "claimed progress"))))
+                        (check-equal? calls 1)
+                        (check-eq? (campaign-result-status result) 'wave-blocked)
+                        (check-eq? (campaign-result-code result) 'coordinator-step)
+                        ;; No durable journal movement means no advance (no-spin law preserved).
+                        (check-eq? (hash-ref (campaign-result-diagnostics result) 'route)
+                                   'coordinator-step))))
 
 (test-case "a cancelled campaign short-circuits before any readback, launch, or coordinator"
   (call-with-campaign
@@ -361,50 +352,56 @@
      (persist-campaign! dir latest)
      (define readbacks 0)
      (define result
-       (run-campaign!
-        dir
-        latest
-        #:runner (lambda (_) (error 'test "cancelled campaign must not launch"))
-        #:delivery-reader (lambda (_b _p _w)
-                            (set! readbacks (add1 readbacks))
-                            (hasheq 'status "delivery-pending" 'reason "implementation PR pending"))
-        #:delivery-coordinator (lambda (_b _p _w)
-                                 (error 'test "cancelled campaign must not coordinate"))))
+       (run-campaign! dir
+                      latest
+                      #:runner (lambda (_) (error 'test "cancelled campaign must not launch"))
+                      #:delivery-reader
+                      (lambda (_b _p _w)
+                        (set! readbacks (add1 readbacks))
+                        (hasheq 'status "delivery-pending" 'reason "implementation PR pending"))
+                      #:delivery-coordinator
+                      (lambda (_b _p _w) (error 'test "cancelled campaign must not coordinate"))))
      (check-eq? (campaign-result-status result) 'wave-cancelled)
      (check-eq? (campaign-result-code result) 'campaign-cancelled)
      (check-equal? readbacks 0))))
 
 (test-case "replay: a completed campaign is idempotent and never reruns implementation"
-  (call-with-campaign
-   1
-   (lambda (dir rec)
-     (define plan (campaign-plan-id rec))
-     ;; Mark the single wave done and give it an authenticated proof that is
-     ;; valid for the historical no-journal fixture seam.
-     (define done (load-campaign-record dir plan))
-     (set-campaign-wave-status! (car (campaign-record-waves done)) 'done)
-     (set-campaign-fence-token! done 7)
-     (persist-campaign! dir done)
-     (define delivered
-       (lambda (_b p w)
-         (hasheq 'status "delivered" 'plan-id p 'wave w 'merge-sha SHA-40)))
-     (define runs 0)
-     (define first
-       (run-campaign! dir done
-                      #:runner (lambda (_) (set! runs (add1 runs)) 'ok)
-                      #:delivery-reader delivered))
-     (check-eq? (campaign-result-status first) 'campaign-complete)
-     ;; The wave was already durable DONE: nothing was re-completed in this run.
-     (check-equal? (campaign-result-completed-waves first) '())
-     (define outbox-after-first (load-outbox dir plan))
-     (define second
-       (run-campaign! dir
-                      (load-campaign-record dir plan)
-                      #:runner (lambda (_) (set! runs (add1 runs)) 'ok)
-                      #:delivery-reader delivered))
-     (check-eq? (campaign-result-status second) 'campaign-complete)
-     (check-equal? runs 0 "implementation is never rerun after delivery")
-     (check-equal? (load-outbox dir plan) outbox-after-first "replay adds no duplicate completion event"))))
+  (call-with-campaign 1
+                      (lambda (dir rec)
+                        (define plan (campaign-plan-id rec))
+                        ;; Mark the single wave done and give it an authenticated proof that is
+                        ;; valid for the historical no-journal fixture seam.
+                        (define done (load-campaign-record dir plan))
+                        (set-campaign-wave-status! (car (campaign-record-waves done)) 'done)
+                        (set-campaign-fence-token! done 7)
+                        (persist-campaign! dir done)
+                        (define delivered
+                          (lambda (_b p w)
+                            (hasheq 'status "delivered" 'plan-id p 'wave w 'merge-sha SHA-40)))
+                        (define runs 0)
+                        (define first
+                          (run-campaign! dir
+                                         done
+                                         #:runner (lambda (_)
+                                                    (set! runs (add1 runs))
+                                                    'ok)
+                                         #:delivery-reader delivered))
+                        (check-eq? (campaign-result-status first) 'campaign-complete)
+                        ;; The wave was already durable DONE: nothing was re-completed in this run.
+                        (check-equal? (campaign-result-completed-waves first) '())
+                        (define outbox-after-first (load-outbox dir plan))
+                        (define second
+                          (run-campaign! dir
+                                         (load-campaign-record dir plan)
+                                         #:runner (lambda (_)
+                                                    (set! runs (add1 runs))
+                                                    'ok)
+                                         #:delivery-reader delivered))
+                        (check-eq? (campaign-result-status second) 'campaign-complete)
+                        (check-equal? runs 0 "implementation is never rerun after delivery")
+                        (check-equal? (load-outbox dir plan)
+                                      outbox-after-first
+                                      "replay adds no duplicate completion event"))))
 
 (test-case "lease contention names the lock path, holder, and live assessment"
   (call-with-campaign
@@ -412,20 +409,20 @@
    (lambda (dir rec)
      (define plan (campaign-plan-id rec))
      (define lease (acquire-lease dir plan #:session-id "holder-session"))
-     (dynamic-wind
-      void
-      (lambda ()
-        (define result (run-campaign! dir rec #:runner (lambda (_) (error 'test "must not run"))))
-        (check-eq? (campaign-result-status result) 'busy)
-        (check-eq? (campaign-result-code result) 'lease-busy)
-        (define d (campaign-result-diagnostics result))
-        (check-equal? (hash-ref d 'recorded-owner) "holder-session")
-        (check-eq? (hash-ref d 'lease-state) 'held-live)
-        (check-true (string? (hash-ref d 'lock-path)))
-        (check-true (file-exists? (string->path (hash-ref d 'lock-path))))
-        (check-true (string-contains? (render-campaign-stop-text result)
-                                      "Next action: inspect the lock holder")))
-      (lambda () (release-lease! lease))))))
+     (dynamic-wind void
+                   (lambda ()
+                     (define result
+                       (run-campaign! dir rec #:runner (lambda (_) (error 'test "must not run"))))
+                     (check-eq? (campaign-result-status result) 'busy)
+                     (check-eq? (campaign-result-code result) 'lease-busy)
+                     (define d (campaign-result-diagnostics result))
+                     (check-equal? (hash-ref d 'recorded-owner) "holder-session")
+                     (check-eq? (hash-ref d 'lease-state) 'held-live)
+                     (check-true (string? (hash-ref d 'lock-path)))
+                     (check-true (file-exists? (string->path (hash-ref d 'lock-path))))
+                     (check-true (string-contains? (render-campaign-stop-text result)
+                                                   "Next action: inspect the lock holder")))
+                   (lambda () (release-lease! lease))))))
 
 ;; ============================================================
 ;; 6. Crash-boundary and cross-process lease characterization
@@ -442,19 +439,17 @@
    1
    (lambda (dir rec)
      (define plan (campaign-plan-id rec))
-     (define lock-path
-       (build-path dir ".planning" "campaigns" (string-append plan ".lock")))
+     (define lock-path (build-path dir ".planning" "campaigns" (string-append plan ".lock")))
      ;; The child acquires the real OS lock, records the owner diagnostics, and
      ;; exits WITHOUT releasing. Process exit drops the advisory lock but the
      ;; stable lock FILE (holder evidence) remains on disk.
      (define child-code
-       (format
-        (string-append "(begin (require (file ~s)) "
-                       "(unless (acquire-lease ~s ~s #:session-id \"child-holder\") (exit 2)) "
-                       "(displayln 'acquired) (flush-output) (exit 0))")
-        (path->string (path->complete-path campaign-lease-module))
-        (path->string dir)
-        plan))
+       (format (string-append "(begin (require (file ~s)) "
+                              "(unless (acquire-lease ~s ~s #:session-id \"child-holder\") (exit 2)) "
+                              "(displayln 'acquired) (flush-output) (exit 0))")
+               (path->string (path->complete-path campaign-lease-module))
+               (path->string dir)
+               plan))
      (define child-log (build-path dir "child-lease.stdout"))
      (define child-log-port (open-output-file child-log #:exists 'truncate))
      (define-values (child _child-in _child-out _child-err)
@@ -464,8 +459,7 @@
      (define child-stdout (file->string child-log))
      (check-equal? (subprocess-status child) 0 (format "child failed: ~a" child-stdout))
      (check-true (string-contains? child-stdout "acquired"))
-     (check-true (file-exists? lock-path)
-                 "the diagnostic lock FILE survives the child process")
+     (check-true (file-exists? lock-path) "the diagnostic lock FILE survives the child process")
      (define recorded (call-with-input-file lock-path read))
      (check-equal? (hash-ref recorded 'owner #f) "child-holder")
      ;; The child is gone, so its OS lock is gone even though the file persists.
@@ -483,7 +477,8 @@
      (define merge (awaiting-test-merge-sha))
      ;; Implementation verified and parked: awaiting-delivery, never DONE.
      (define parked-by-run
-       (run-campaign! dir rec
+       (run-campaign! dir
+                      rec
                       #:runner (lambda (_) 'ok)
                       #:verifier (lambda (_) #t)
                       #:delivery-reader pending-readable))
@@ -500,23 +495,27 @@
      (check-equal? (load-outbox dir plan) '())
      (check-exn exn:fail?
                 (lambda ()
-                  (run-campaign! dir before
-                                 #:runner (lambda (_) (error 'test "must not rerun"))
-                                 #:delivery-reader
-                                 (lambda (base plan-id wave)
-                                   (define proof (test-delivered-proof base plan-id wave #:merge-sha merge))
-                                   (when proof
-                                     (error 'simulated-crash
-                                            "process died after authenticating the proof"))
-                                   proof))))
+                  (run-campaign!
+                   dir
+                   before
+                   #:runner (lambda (_) (error 'test "must not rerun"))
+                   #:delivery-reader
+                   (lambda (base plan-id wave)
+                     (define proof (test-delivered-proof base plan-id wave #:merge-sha merge))
+                     (when proof
+                       (error 'simulated-crash "process died after authenticating the proof"))
+                     proof))))
      (define after-crash (load-campaign-record dir plan))
      (check-eq? (campaign-wave-status (car (campaign-record-waves after-crash))) 'awaiting-delivery)
      (check-equal? (load-outbox dir plan) '() "the crash window commits no completion")
      ;; Retry: exactly one DONE and exactly one completion event, no rerun.
      (define runs 0)
      (define retry
-       (run-campaign! dir after-crash
-                      #:runner (lambda (_) (set! runs (add1 runs)) 'ok)
+       (run-campaign! dir
+                      after-crash
+                      #:runner (lambda (_)
+                                 (set! runs (add1 runs))
+                                 'ok)
                       #:verifier (lambda (_) #t)
                       #:delivery-reader (test-delivered-reader #:merge-sha merge)))
      (check-eq? (campaign-result-status retry) 'campaign-complete)
@@ -532,7 +531,8 @@
    (lambda (dir rec)
      (define plan (campaign-plan-id rec))
      (define merge (awaiting-test-merge-sha))
-     (run-campaign! dir rec
+     (run-campaign! dir
+                    rec
                     #:runner (lambda (_) 'ok)
                     #:verifier (lambda (_) #t)
                     #:delivery-reader pending-readable)
@@ -545,7 +545,12 @@
      (check-exn exn:fail?
                 (lambda ()
                   (run-delivery-finalization
-                   dir plan parked 0 merge '()
+                   dir
+                   plan
+                   parked
+                   0
+                   merge
+                   '()
                    #:on-delivered (lambda () (error 'simulated-crash "after DONE commit")))))
      (define committed (load-campaign-record dir plan))
      (check-eq? (campaign-wave-status (car (campaign-record-waves committed))) 'done)
@@ -553,8 +558,11 @@
      ;; Replay: no runner call and no duplicate completion event.
      (define runs 0)
      (define replay
-       (run-campaign! dir committed
-                      #:runner (lambda (_) (set! runs (add1 runs)) 'ok)
+       (run-campaign! dir
+                      committed
+                      #:runner (lambda (_)
+                                 (set! runs (add1 runs))
+                                 'ok)
                       #:verifier (lambda (_) #t)
                       #:delivery-reader (test-delivered-reader #:merge-sha merge)))
      (check-eq? (campaign-result-status replay) 'campaign-complete)

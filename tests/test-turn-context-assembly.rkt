@@ -147,14 +147,11 @@
                   content-part->text)
          (only-in "../runtime/context-assembly/auto-distillation.rkt"
                   current-auto-distillation-enabled?)
-         (only-in "../runtime/context-assembly/state-aware-builder.rkt"
-                  current-ws-evolution-enabled?)
+         (only-in "../runtime/context-assembly/state-aware-builder.rkt" current-ws-evolution-enabled?)
          (only-in "../runtime/context-assembly/rollback-actions.rkt"
                   current-rollback-state
                   make-default-rollback-state)
-         (only-in "../runtime/working-set.rkt"
-                  make-working-set
-                  working-set-add!)
+         (only-in "../runtime/working-set.rkt" make-working-set working-set-add!)
          (only-in "../runtime/context-assembly/task-conclusion.rkt"
                   task-conclusion
                   task-conclusion?
@@ -167,8 +164,7 @@
                   legacy-deterministic-fallback?
                   provenance-kind?
                   conclusion->hash)
-         (only-in "../runtime/session/session-store-goal-task.rkt"
-                  conclusion-hash->json-safe)
+         (only-in "../runtime/session/session-store-goal-task.rkt" conclusion-hash->json-safe)
          (only-in "../util/message/protocol-types.rkt" make-message make-text-part)
          (only-in "../runtime/session/session-types.rkt" agent-session-task-conclusions)
          (only-in "helpers/session-fixture.rkt" make-test-session)
@@ -210,10 +206,14 @@
     (define pinned-record
       (task-conclusion "auto-m1"
                        "Source message m1 retained as provenance; no distilled insight available."
-                       'provenance 'idle '("m1") 0
-                       '(auto-distilled deterministic-fallback) '()))
+                       'provenance
+                       'idle
+                       '("m1")
+                       0
+                       '(auto-distilled deterministic-fallback)
+                       '()))
     (define pinned (jsexpr->string (conclusion-hash->json-safe (conclusion->hash pinned-record))))
-    (define actual (jsexpr->string
-                    (conclusion-hash->json-safe
-                     (conclusion->hash (struct-copy task-conclusion c [timestamp 0])))))
+    (define actual
+      (jsexpr->string (conclusion-hash->json-safe
+                       (conclusion->hash (struct-copy task-conclusion c [timestamp 0])))))
     (check-equal? actual pinned)))

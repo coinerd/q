@@ -97,7 +97,10 @@
      (parameterize ([current-supplemental-journal-crash-cut (fault cut)])
        (check-exn #rx"injected-crash" (lambda () (step! f to additions))))
      (check-true (file-exists? (operation-path f ".intent.json")))
-     (define target-name (if (symbol? to) (symbol->string to) to))
+     (define target-name
+       (if (symbol? to)
+           (symbol->string to)
+           to))
      (define pending (load-supplemental-operation (fixture-grant f)))
      (define pending-view? (equal? (hash-ref pending 'state) (recovery-pending-state-name to)))
      (if pending-view?
@@ -109,8 +112,7 @@
            (for ([(key value) (in-hash (hash-ref old 'facts))])
              (check-equal? (hash-ref (hash-ref pending 'facts) key) value "old capture must survive"))
            ;; While pending, no normal transition is possible at all.
-           (check-exn #rx"pending recovery must reconcile"
-                      (lambda () (step! f probe))))
+           (check-exn #rx"pending recovery must reconcile" (lambda () (step! f probe))))
          (begin
            ;; A snapshot-written cut already installed the exact intended
            ;; record; the leftover intent still fences normal transitions.
@@ -119,21 +121,18 @@
            (check-true (hash-ref pending 'launch-consumed))
            (for ([(key value) (in-hash additions)])
              (check-equal? (hash-ref (hash-ref pending 'facts) key) value))
-           (check-exn #rx"unrecovered write-ahead intent"
-                      (lambda () (step! f probe)))))
+           (check-exn #rx"unrecovered write-ahead intent" (lambda () (step! f probe)))))
      ;; Wrong CAS expectations reconcile nothing.
      (check-exn #rx"stale operation revision"
                 (lambda ()
-                  (reconcile-supplemental-operation!
-                   (fixture-grant f)
-                   (add1 (hash-ref pending 'revision))
-                   (hash-ref pending 'state))))
+                  (reconcile-supplemental-operation! (fixture-grant f)
+                                                     (add1 (hash-ref pending 'revision))
+                                                     (hash-ref pending 'state))))
      ;; Exact authenticated same-operation continuation.
      (define done
-       (reconcile-supplemental-operation!
-        (fixture-grant f)
-        (hash-ref pending 'revision)
-        (hash-ref pending 'state)))
+       (reconcile-supplemental-operation! (fixture-grant f)
+                                          (hash-ref pending 'revision)
+                                          (hash-ref pending 'state)))
      (check-equal? (hash-ref done 'state) target-name)
      (check-equal? (hash-ref done 'revision) (add1 (hash-ref old 'revision)))
      (for ([(key value) (in-hash additions)])
@@ -143,10 +142,9 @@
      ;; Exactly once: nothing is left to reconcile, and no launch follows.
      (check-exn #rx"no pending recovery"
                 (lambda ()
-                  (reconcile-supplemental-operation!
-                   (fixture-grant f)
-                   (hash-ref pending 'revision)
-                   (hash-ref pending 'state))))
+                  (reconcile-supplemental-operation! (fixture-grant f)
+                                                     (hash-ref pending 'revision)
+                                                     (hash-ref pending 'state))))
      (assert-no-relaunch f done))))
 (define (check-interrupted-init cut)
   (with-preserved-fixture
@@ -185,7 +183,10 @@
     (test-case "supersession intent retains exact private approval linkage"
       (check-interrupted-transition 'probe-captured 'supersession-approved 'intent-written))
     (test-case "publication cut recovery re-installs the exact publication, never republishes"
-      (check-interrupted-reconcile 'supersession-approved 'published 'snapshot-written 'receipt-certified))
+      (check-interrupted-reconcile 'supersession-approved
+                                   'published
+                                   'snapshot-written
+                                   'receipt-certified))
     (test-case "receipt certification interruption continues with the exact receipt"
       (check-interrupted-reconcile 'published 'receipt-certified 'intent-written 'registered))
     (test-case "registration interruption continues exactly once without any new launch"
@@ -272,10 +273,9 @@
          (parameterize ([current-supplemental-journal-crash-cut (fault 'reconcile-snapshot-written)])
            (check-exn #rx"injected-crash"
                       (lambda ()
-                        (reconcile-supplemental-operation!
-                         (fixture-grant f)
-                         (hash-ref pending 'revision)
-                         (hash-ref pending 'state)))))
+                        (reconcile-supplemental-operation! (fixture-grant f)
+                                                           (hash-ref pending 'revision)
+                                                           (hash-ref pending 'state)))))
          (define installed (load-supplemental-operation (fixture-grant f)))
          (check-equal? (hash-ref installed 'state) "registered")
          (check-true (file-exists? (operation-path f ".intent.json")))
@@ -284,19 +284,17 @@
          ;; Resuming with the SAME pre-crash pending expectations completes
          ;; the identical operation exactly once.
          (define done
-           (reconcile-supplemental-operation!
-            (fixture-grant f)
-            (hash-ref pending 'revision)
-            (hash-ref pending 'state)))
+           (reconcile-supplemental-operation! (fixture-grant f)
+                                              (hash-ref pending 'revision)
+                                              (hash-ref pending 'state)))
          (check-equal? (hash-ref done 'state) "registered")
          (check-equal? (hash-ref done 'revision) (hash-ref installed 'revision))
          (check-false (file-exists? (operation-path f ".intent.json")))
          (check-exn #rx"no pending recovery"
                     (lambda ()
-                      (reconcile-supplemental-operation!
-                       (fixture-grant f)
-                       (hash-ref pending 'revision)
-                       (hash-ref pending 'state))))
+                      (reconcile-supplemental-operation! (fixture-grant f)
+                                                         (hash-ref pending 'revision)
+                                                         (hash-ref pending 'state))))
          (assert-no-relaunch f done))))
     (test-case "revocation cannot interleave with an in-flight journal admission"
       (with-preserved-fixture
@@ -308,24 +306,21 @@
          (define worker
            (thread
             (lambda ()
-              (parameterize ([current-supplemental-journal-crash-cut
-                              (lambda (at)
-                                (when (eq? at 'intent-written)
-                                  (channel-put at-cut #t)
-                                  (semaphore-wait go)))])
-                (channel-put
-                 outcome
-                 (with-handlers ([exn:fail? (lambda (e) (cons 'error e))])
-                   (step! f 'launched)))))))
+              (parameterize ([current-supplemental-journal-crash-cut (lambda (at)
+                                                                       (when (eq? at 'intent-written)
+                                                                         (channel-put at-cut #t)
+                                                                         (semaphore-wait go)))])
+                (channel-put outcome
+                             (with-handlers ([exn:fail? (lambda (e) (cons 'error e))])
+                               (step! f 'launched)))))))
          (check-true (sync/timeout 10 at-cut))
          ;; The admission critical section excludes revocation: while the
          ;; journal write is paused inside its lock, revocation must wait.
          (define done (make-channel))
-         (thread
-          (lambda ()
-            (with-handlers ([exn:fail? (lambda (e) (channel-put done e))])
-              (revoke-approval! (fixture-grant f))
-              (channel-put done 'revoked))))
+         (thread (lambda ()
+                   (with-handlers ([exn:fail? (lambda (e) (channel-put done e))])
+                     (revoke-approval! (fixture-grant f))
+                     (channel-put done 'revoked))))
          (check-false (sync/timeout 0.4 done)
                       "revocation must wait for the shared admission/revocation lock")
          (semaphore-post go)
@@ -340,12 +335,11 @@
          (check-exn exn:fail? (lambda () (load-supplemental-operation (fixture-grant f))))
          (check-exn #rx"authenticated"
                     (lambda ()
-                      (transition-supplemental-operation!
-                       (fixture-grant f)
-                       (hash-ref launched 'revision)
-                       'launched
-                       'candidate-sealed
-                       (hasheq 'candidate-ref "never")))))))
+                      (transition-supplemental-operation! (fixture-grant f)
+                                                          (hash-ref launched 'revision)
+                                                          'launched
+                                                          'candidate-sealed
+                                                          (hasheq 'candidate-ref "never")))))))
     (test-case "revocation before recovery leaves intent and historical captures untouched"
       (with-preserved-fixture
        (lambda (f)

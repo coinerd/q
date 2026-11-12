@@ -35,10 +35,14 @@
 (define-runtime-path core-src "../extensions/gsd/supplemental-evidence-store-core.rkt")
 ;; Partial-instantiation failure signatures that must never reappear.
 (define bad-signatures
-  (list #rx"cannot re-define a constant" #rx"not initialized or did not init" #rx"uninitialized"
+  (list #rx"cannot re-define a constant"
+        #rx"not initialized or did not init"
+        #rx"uninitialized"
         #rx"instantiate-linklet"))
 (define (instantiation-failure? message)
-  (and (string? message) (for/or ([rx (in-list bad-signatures)]) (regexp-match? rx message))))
+  (and (string? message)
+       (for/or ([rx (in-list bad-signatures)])
+         (regexp-match? rx message))))
 (define (check-no-instantiation-failures where results)
   (for ([result (in-vector results)])
     (when (and (eq? (car result) 'exn) (instantiation-failure? (cdr result)))
@@ -50,13 +54,16 @@
   (define barrier (make-semaphore))
   (define threads
     (for/list ([i (in-range n)])
-      (thread
-       (lambda ()
-         (semaphore-wait barrier)
-         (vector-set! results i (with-handlers ([exn:fail? (lambda (e) (cons 'exn (exn-message e)))])
-                                  (cons 'ok (proc i))))))))
-  (for ([_ (in-range n)]) (semaphore-post barrier))
-  (for ([t (in-list threads)]) (thread-wait t))
+      (thread (lambda ()
+                (semaphore-wait barrier)
+                (vector-set! results
+                             i
+                             (with-handlers ([exn:fail? (lambda (e) (cons 'exn (exn-message e)))])
+                               (cons 'ok (proc i))))))))
+  (for ([_ (in-range n)])
+    (semaphore-post barrier))
+  (for ([t (in-list threads)])
+    (thread-wait t))
   results)
 (module+ test
   (test-case "cold instantiation of the acyclic chain completes without re-entry"
@@ -99,13 +106,13 @@
           (call-with-values
            (lambda () (module-path-index-resolve mpi))
            (case-lambda
-             [(resolved) (and (resolved-module-path? resolved)
-                              (resolved-module-path-name resolved))]
+             [(resolved) (and (resolved-module-path? resolved) (resolved-module-path-name resolved))]
              [(path _base) (and (pair? path) (eq? (car path) 'file) (cadr path))]
              [_ #f])))
         (and (path? name) (path->string (simplify-path name)))))
     (define (imports? src suffix)
-      (for/or ([file (in-list (import-files src))] #:when file)
+      (for/or ([file (in-list (import-files src))]
+               #:when file)
         (string-suffix? file suffix)))
     (check-true (imports? journal-src "supplemental-disposition-claim.rkt")
                 "journal must statically require the claim module")
@@ -140,42 +147,41 @@
        (define root (build-path ws "private"))
        (make-directory root #o700)
        (define claim-file
-         (build-path root
-                     "supplemental-disposition-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json"))
+         (build-path
+          root
+          "supplemental-disposition-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json"))
        (atomic-write! claim-file (seal (hasheq 'schema "supplemental-disposition-claim/v1")))
        (define pointer (build-path ws "pointer.json"))
        (define results
-         (run-in-threads
-          3
-          (lambda (i)
-            (parameterize ([current-supplemental-authority-root root])
-              (supplemental-recovery-pointer-claimed? pointer)))))
+         (run-in-threads 3
+                         (lambda (i)
+                           (parameterize ([current-supplemental-authority-root root])
+                             (supplemental-recovery-pointer-claimed? pointer)))))
        (check-no-instantiation-failures "disposition route race" results)
        (for ([result (in-vector results)])
          (check-equal? (car result) 'exn "invalid claim must refuse, never fall back")
          (when (eq? (car result) 'exn)
-           (check-regexp-match #rx"supplemental-disposition-claim: invalid permanent disposition claim"
-                               (cdr result)))))
+           (check-regexp-match
+            #rx"supplemental-disposition-claim: invalid permanent disposition claim"
+            (cdr result)))))
      (lambda () (delete-directory/files ws))))
 
   (test-case "an empty private authority root scans to #f from three threads"
     (define ws (make-temporary-file "bug0090-cold-cache-~a" 'directory))
-    (dynamic-wind
-     (lambda () #f)
-     (lambda ()
-       (define root (build-path ws "private"))
-       (make-directory root #o700)
-       (define pointer (build-path ws "pointer.json"))
-       (define results
-         (run-in-threads
-          3
-          (lambda (i)
-            (parameterize ([current-supplemental-authority-root root])
-              (supplemental-recovery-pointer-claimed? pointer)))))
-       (check-no-instantiation-failures "empty root race" results)
-       (for ([result (in-vector results)])
-         (check-equal? result '(ok . #f) "empty root must scan as not claimed")))
-     (lambda () (delete-directory/files ws))))
+    (dynamic-wind (lambda () #f)
+                  (lambda ()
+                    (define root (build-path ws "private"))
+                    (make-directory root #o700)
+                    (define pointer (build-path ws "pointer.json"))
+                    (define results
+                      (run-in-threads 3
+                                      (lambda (i)
+                                        (parameterize ([current-supplemental-authority-root root])
+                                          (supplemental-recovery-pointer-claimed? pointer)))))
+                    (check-no-instantiation-failures "empty root race" results)
+                    (for ([result (in-vector results)])
+                      (check-equal? result '(ok . #f) "empty root must scan as not claimed")))
+                  (lambda () (delete-directory/files ws))))
 
   (test-case "negative control: primitives still refuse invalid claims and records"
     (define ws (make-temporary-file "bug0090-cold-cache-~a" 'directory))

@@ -55,8 +55,9 @@
         ;; record — no "Previously read" claim.
         (for ([c (in-list result)]
               [mid (in-list '("m1" "m2" "m3"))])
-          (check-equal? (task-conclusion-text c)
-                        (format "Source message ~a retained as provenance; no distilled insight available." mid))
+          (check-equal?
+           (task-conclusion-text c)
+           (format "Source message ~a retained as provenance; no distilled insight available." mid))
           (check-equal? (task-conclusion-category c) 'provenance))))
 
     ;; GAP-C: Content summaries forwarded

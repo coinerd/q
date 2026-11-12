@@ -162,7 +162,10 @@
   (check-true (string-contains? (exn-message e) "cols=5, rows=3"))
   (check-true (string-contains? (exn-message e) "aliasing"))
   ;; row violations name the row axis
-  (define e2 (with-handlers ([exn:fail:cell-buffer-bounds? values]) (cell-buffer-ref buf 0 3) #f))
+  (define e2
+    (with-handlers ([exn:fail:cell-buffer-bounds? values])
+      (cell-buffer-ref buf 0 3)
+      #f))
   (check-true (string-contains? (exn-message e2) "row must be in [0,3)")))
 
 (test-case "flattened-index collisions never alias: (5,0) is not (0,1)"
@@ -254,8 +257,10 @@
   (define ubuf (make-cell-buffer 8 24))
   (define layout (compute-layout 24 8))
   (define-values (c r _s _f)
-    (render-frame-vdom! ubuf (initial-ui-state)
-                        (input-insert-string (initial-input-state) "abcde") layout))
+    (render-frame-vdom! ubuf
+                        (initial-ui-state)
+                        (input-insert-string (initial-input-state) "abcde")
+                        layout))
   (check-equal? (list c r) (list 7 22))
   ;; prompt painted at the first composer text row
   (check-equal? (cell-char (cell-buffer-ref ubuf 0 22)) #\q)
@@ -285,8 +290,10 @@
   ;; cursor at END of "abcdefg": row 1 ("fg"), text col 2 — a plain visible
   ;; cell at buffer col 5 (prompt offset 3)
   (define-values (c2 r2 _s2 _f2)
-    (render-frame-vdom! ubuf (initial-ui-state)
-                        (input-insert-string (initial-input-state) "abcdefg") layout))
+    (render-frame-vdom! ubuf
+                        (initial-ui-state)
+                        (input-insert-string (initial-input-state) "abcdefg")
+                        layout))
   (check-equal? (list c2 r2) (list 5 23))
   (check-true (cell-buffer-in-bounds? ubuf c2 r2))
   (check-equal? (cell-char (cell-buffer-ref ubuf c2 r2)) #\space)
@@ -328,8 +335,10 @@
   (define ubuf (make-cell-buffer 5 24))
   (define layout (compute-layout 24 5))
   (define-values (c r _s _f)
-    (render-frame-vdom! ubuf (initial-ui-state)
-                        (input-insert-string (initial-input-state) "abcde") layout))
+    (render-frame-vdom! ubuf
+                        (initial-ui-state)
+                        (input-insert-string (initial-input-state) "abcde")
+                        layout))
   (check-equal? (list c r) (list 4 23))
   (check-equal? (cell-char (cell-buffer-ref ubuf 0 22)) #\q)
   (check-equal? (cell-char (cell-buffer-ref ubuf 3 23)) #\e)
@@ -339,8 +348,10 @@
   (define ubuf3 (make-cell-buffer 3 24))
   (define layout3 (compute-layout 24 3))
   (define-values (c3 r3 _s3 _f3)
-    (render-frame-vdom! ubuf3 (initial-ui-state)
-                        (input-insert-string (initial-input-state) "abc") layout3))
+    (render-frame-vdom! ubuf3
+                        (initial-ui-state)
+                        (input-insert-string (initial-input-state) "abc")
+                        layout3))
   (check-equal? (list c3 r3) (list 2 22))
   (check-equal? (cell-char (cell-buffer-ref ubuf3 0 22)) #\a "no prompt at width 3")
   (check-equal? (cell-char (cell-buffer-ref ubuf3 c3 r3)) #\c))
@@ -441,9 +452,8 @@
   (set-box! (tui-ctx-ubuf-box ctx) (make-cell-buffer 10 3))
   (for ([dims (in-list '((0 0) (0 24) (24 0) (-1 24) (24 -1)))])
     (define before-frame (diag-count 'renderer.frame-deferred))
-    (check-not-exn
-     (lambda () (render-frame-headless! ctx (car dims) (cadr dims)))
-     (format "deferred frame for ~ax~a must not raise" (car dims) (cadr dims)))
+    (check-not-exn (lambda () (render-frame-headless! ctx (car dims) (cadr dims)))
+                   (format "deferred frame for ~ax~a must not raise" (car dims) (cadr dims)))
     (check-true (> (diag-count 'renderer.frame-deferred) before-frame)
                 (format "deferral of ~ax~a is explicitly diagnosed" (car dims) (cadr dims)))
     (check-false (unbox last-cursor-buffer-gen-box) "no cursor cached from a deferred frame")))

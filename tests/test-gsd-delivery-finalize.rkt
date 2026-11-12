@@ -38,9 +38,7 @@
                   set-campaign-wave-delivery-branch!
                   set-campaign-wave-delivery-head-sha!
                   set-campaign-wave-status!)
-         (only-in "../extensions/gsd/campaign-repository.rkt"
-                  load-campaign-record
-                  persist-campaign!)
+         (only-in "../extensions/gsd/campaign-repository.rkt" load-campaign-record persist-campaign!)
          (only-in "../extensions/gsd/campaign-decision.rkt" campaign-decision)
          (only-in "../extensions/gsd/planning-paths.rkt" campaign-record-file))
 (define plan (make-string 64 #\a))
@@ -138,8 +136,7 @@
        (make-directory* (build-path root ".planning" "waves"))
        (call-with-output-file
         (build-path root ".planning" "PLAN.md")
-        (lambda (out)
-          (displayln "# Plan: Record loss\n\n- [Inbox] W0: Evidence → waves/W0-e.md"))
+        (lambda (out) (displayln "# Plan: Record loss\n\n- [Inbox] W0: Evidence → waves/W0-e.md"))
         #:exists 'truncate)
        (call-with-output-file
         (build-path root ".planning" "waves" "W0-e.md")
@@ -204,10 +201,7 @@
                         #:verifier-approve? #t
                         #:expected-attempt-id (campaign-attempt-id attempt)
                         #:expected-fence-token (campaign-attempt-fence-token attempt))
-    (values root
-            (campaign-plan-id rec)
-            (load-campaign-record root (campaign-plan-id rec))
-            attempt))
+    (values root (campaign-plan-id rec) (load-campaign-record root (campaign-plan-id rec)) attempt))
 
   (test-case "failed release gate: durable reason rides the stop, legacy text kept"
     (define-values (root plan-id rec attempt) (make-w4-parked-fixture))
@@ -223,12 +217,12 @@
     (check-equal? (campaign-result-message result) "release verification failed")
     (define d (campaign-result-diagnostics result))
     (check-equal? (hash-ref d 'code) 'delivery-finalization-failed)
-    (check-true (string-contains? (hash-ref d 'detail)
-                                  "release not verified: Release object missing")
+    (check-true (string-contains? (hash-ref d 'detail) "release not verified: Release object missing")
                 (format "detail: ~a" (hash-ref d 'detail)))
     (check-true (string-contains? (hash-ref d 'next-action) "fresh verified attempt"))
     (check-true (pair? (hash-ref d 'artifacts)))
-    (check-eq? (campaign-wave-status (car (campaign-record-waves (load-campaign-record root plan-id))))
+    (check-eq? (campaign-wave-status (car (campaign-record-waves (load-campaign-record root
+                                                                                       plan-id))))
                'failed)
     (delete-directory/files root #:must-exist? #f))
 
@@ -236,8 +230,7 @@
     (define-values (root plan-id rec attempt) (make-w4-parked-fixture))
     (set-campaign-cancellation! rec (make-campaign-cancellation "stop" 1))
     (persist-campaign! root rec)
-    (define result
-      (run-delivery-finalization root plan-id rec 0 (make-string 40 #\e) '()))
+    (define result (run-delivery-finalization root plan-id rec 0 (make-string 40 #\e) '()))
     (check-eq? (campaign-result-status result) 'wave-cancelled)
     (check-equal? (campaign-result-message result) "stale delivery completion ignored")
     (define d (campaign-result-diagnostics result))
@@ -248,11 +241,9 @@
 
   (test-case "paused finalization: durable journal/handoff facts and explicit next action"
     (define-values (root plan-id rec attempt) (make-w4-parked-fixture))
-    (define result
-      (run-delivery-finalization root plan-id rec 0 (make-string 40 #\f) '()))
+    (define result (run-delivery-finalization root plan-id rec 0 (make-string 40 #\f) '()))
     (check-eq? (campaign-result-status result) 'wave-blocked)
-    (check-equal? (campaign-result-message result)
-                  "delivery provenance changed during finalization")
+    (check-equal? (campaign-result-message result) "delivery provenance changed during finalization")
     (define d (campaign-result-diagnostics result))
     (check-equal? (hash-ref d 'code) 'delivery-finalization-pending)
     (check-true (string-contains? (hash-ref d 'detail) "finalization authorization refused")
@@ -264,7 +255,8 @@
     (check-true (string-contains? (hash-ref d 'next-action) "do not rerun implementation"))
     (check-true (string-contains? (hash-ref d 'next-action) "gsd-delivery.py"))
     (check-true (pair? (hash-ref d 'artifacts)) "the durable handoff record is referenced")
-    (check-eq? (campaign-wave-status (car (campaign-record-waves (load-campaign-record root plan-id))))
+    (check-eq? (campaign-wave-status (car (campaign-record-waves (load-campaign-record root
+                                                                                       plan-id))))
                'awaiting-delivery
                "a paused finalization never moves the wave off its resumable state")
     (delete-directory/files root #:must-exist? #f))
@@ -277,28 +269,27 @@
     (set-campaign-wave-delivery-branch! wave "campaign/test")
     (set-campaign-wave-delivery-head-sha! wave head)
     (persist-campaign! root rec)
-    (record-delivery-receipt!
-     root
-     plan-id
-     0
-     (hasheq 'repo
-             "/repo"
-             'branch
-             "campaign/test"
-             'head
-             head
-             'tree
-             (make-string 40 #\b)
-             'origin
-             "https://github.com/example/q.git"
-             'verified-at
-             0
-             'evidence
-             "Verify passed"
-             'attempt-id
-             (campaign-attempt-id attempt)
-             'attempt-fence
-             (campaign-attempt-fence-token attempt)))
+    (record-delivery-receipt! root
+                              plan-id
+                              0
+                              (hasheq 'repo
+                                      "/repo"
+                                      'branch
+                                      "campaign/test"
+                                      'head
+                                      head
+                                      'tree
+                                      (make-string 40 #\b)
+                                      'origin
+                                      "https://github.com/example/q.git"
+                                      'verified-at
+                                      0
+                                      'evidence
+                                      "Verify passed"
+                                      'attempt-id
+                                      (campaign-attempt-id attempt)
+                                      'attempt-fence
+                                      (campaign-attempt-fence-token attempt)))
     (persist-delivery-handoff! root plan-id wave "test precondition")
     (reconcile-delivered-handoff! root plan-id 0 merge-sha)
     (update-delivery-journal! root plan-id 0 (hasheq 'stage "delivered"))
@@ -314,8 +305,8 @@
                                  merge-sha
                                  '()
                                  #:on-delivered (lambda () later-result)))
-    (check-true (eq? result later-result)
-                "the later continuation result is passed through unwrapped")
-    (check-eq? (campaign-wave-status (car (campaign-record-waves (load-campaign-record root plan-id))))
+    (check-true (eq? result later-result) "the later continuation result is passed through unwrapped")
+    (check-eq? (campaign-wave-status (car (campaign-record-waves (load-campaign-record root
+                                                                                       plan-id))))
                'done)
     (delete-directory/files root #:must-exist? #f)))

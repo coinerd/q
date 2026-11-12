@@ -29,10 +29,7 @@
                   mas-envelope?
                   mas-envelope-payload
                   mas-envelope-risk-level)
-         (only-in "../tools/tool.rkt"
-                  make-error-result
-                  tool-result-content
-                  tool-result-is-error?)
+         (only-in "../tools/tool.rkt" make-error-result tool-result-content tool-result-is-error?)
          (only-in "../tools/builtins/find.rkt" tool-find)
          (only-in "../tools/builtins/read.rkt" tool-read)
          "helpers/fixtures.rkt")
@@ -51,7 +48,6 @@
     (hasheq 'status response-status 'role 'tool-gateway 'result "executed-remotely" 'trace-id #f)))
 
 ;; ── Tests ──
-
 
 ;; ── R97 (BUG-0097) worker-affinity helpers ──────────────────
 ;; A worker stub executes the REAL find/read handlers inside its own
@@ -72,17 +68,15 @@
         [("find") (tool-find args)]
         [("read")
          (define p (hash-ref args 'path #f))
-         (if (and (string? p)
-                  (absolute-path? p)
-                  (string-prefix? p (path->string ns-root)))
+         (if (and (string? p) (absolute-path? p) (string-prefix? p (path->string ns-root)))
              (tool-read args)
              (make-error-result
               (format "read: path not readable on worker ~a (different filesystem namespace): ~a"
-                      worker-name p)))]
+                      worker-name
+                      p)))]
 
         [else
-         (make-error-result
-          (format "tool ~a not available on worker ~a" tool-name worker-name))]))
+         (make-error-result (format "tool ~a not available on worker ~a" tool-name worker-name))]))
     (hasheq 'status 'ok 'worker worker-name 'result result)))
 
 (define (r97-result-strings r)
@@ -94,7 +88,6 @@
 
 (define (r97-result-text r)
   (string-join (r97-result-strings r) ""))
-
 
 (define suite
   (test-suite "Tool Gateway Remote Routing (W3 v0.99.12)"
@@ -240,12 +233,12 @@
          (define worker-a (make-r97-worker-stub 'A worker-a-root seen-args))
          (define role (make-tool-gateway-role))
          (define find-env
-           (make-mas-envelope 'supervisor
-                              'tool-gateway
-                              'shell-exec
-                              (hasheq 'tool-name "find"
-                                      'arguments (hasheq 'path (path->string worker-a-root)))
-                              #:risk-level 'high))
+           (make-mas-envelope
+            'supervisor
+            'tool-gateway
+            'shell-exec
+            (hasheq 'tool-name "find" 'arguments (hasheq 'path (path->string worker-a-root)))
+            #:risk-level 'high))
          (parameterize ([current-routing-policy 'risk-based]
                         [current-remote-tool-executor worker-a])
            (define find-res (agent-role-handle-envelope role find-env))
@@ -254,14 +247,14 @@
            (check-false (hash-ref find-res 'executed-locally?))
            (check-equal? (hash-ref find-res 'worker) 'A)
            (define find-result (hash-ref find-res 'result))
-           (check-false (tool-result-is-error? find-result)
-                        (r97-result-text find-result))
+           (check-false (tool-result-is-error? find-result) (r97-result-text find-result))
            (define found
              (findf (lambda (s) (string-suffix? s "docs/contracts/spec.txt"))
                     (r97-result-strings find-result)))
            ;; R97: worker find results are ABSOLUTE paths in the worker namespace
-           (check-not-false found (format "expected absolute result, got: ~a"
-                                          (r97-result-text find-result)))
+           (check-not-false found
+                            (format "expected absolute result, got: ~a"
+                                    (r97-result-text find-result)))
            (when found
              (check-true (absolute-path? found))
              (check-true (string-prefix? found (path->string worker-a-root)))
@@ -275,66 +268,66 @@
              (define read-res (agent-role-handle-envelope role read-env))
              (check-equal? (hash-ref read-res 'worker) 'A)
              (define read-result (hash-ref read-res 'result))
-             (check-false (tool-result-is-error? read-result)
-                          (r97-result-text read-result))
-             (check-true (string-contains? (r97-result-text read-result)
-                                           "worker-a-sentinel"))
+             (check-false (tool-result-is-error? read-result) (r97-result-text read-result))
+             (check-true (string-contains? (r97-result-text read-result) "worker-a-sentinel"))
              ;; the gateway delivered the read args VERBATIM — no remapping
              (check-equal? (hash-ref (unbox seen-args) 'path) found)))))
 
-    (test-case "R97: worker-A find path is not readable on worker B (no remapping)"
-      (with-temp-dir
-       (lambda (worker-a-root)
-         (with-temp-dir
-          (lambda (worker-b-root)
-            (make-directory* (build-path worker-a-root "docs" "contracts"))
-            (call-with-output-file (build-path worker-a-root "docs" "contracts" "spec.txt")
-                                   (lambda (out) (display "worker-a-sentinel" out))
-                                   #:exists 'replace)
-            ;; worker B has a DIFFERENT file at the same relative location
-            (make-directory* (build-path worker-b-root "docs" "contracts"))
-            (call-with-output-file (build-path worker-b-root "docs" "contracts" "spec.txt")
-                                   (lambda (out) (display "worker-b-decoy-sentinel" out))
-                                   #:exists 'replace)
-            (define seen-a (box #f))
-            (define seen-b (box #f))
-            (define worker-a (make-r97-worker-stub 'A worker-a-root seen-a))
-            (define worker-b (make-r97-worker-stub 'B worker-b-root seen-b))
-            (define role (make-tool-gateway-role))
-(parameterize ([current-routing-policy 'risk-based]
-               [current-remote-tool-executor worker-a])
-  (define find-res
-    (agent-role-handle-envelope
-     role
-     (make-mas-envelope 'supervisor 'tool-gateway 'shell-exec
-                        (hasheq 'tool-name "find"
-                                'arguments (hasheq 'path (path->string worker-a-root)))
-                        #:risk-level 'high)))
-  (define found
-    (findf (lambda (s) (string-suffix? s "docs/contracts/spec.txt"))
-           (r97-result-strings (hash-ref find-res 'result))))
-  (check-not-false found)
-  ;; now route the SAME absolute path to worker B
-  (define read-res
-    (parameterize ([current-routing-policy 'risk-based]
-                   [current-remote-tool-executor worker-b])
-      (agent-role-handle-envelope
-       role
-       (make-mas-envelope 'supervisor 'tool-gateway 'shell-exec
-                          (hasheq 'tool-name "read" 'arguments (hasheq 'path found))
-                          #:risk-level 'high))))
-  (check-equal? (hash-ref read-res 'worker) 'B)
-  (define read-result (hash-ref read-res 'result))
-  ;; B denies the foreign path instead of silently resolving a
-  ;; same-named file in its own namespace
-  (check-true (tool-result-is-error? read-result)
-              (format "worker B must deny foreign path, got: ~a"
-                      (r97-result-text read-result)))
-  (check-true (string-contains? (r97-result-text read-result) "worker B"))
-  (check-false (string-contains? (r97-result-text read-result)
-                                 "worker-b-decoy-sentinel"))
-  ;; B received the path verbatim: no remapping to B's namespace
-  (check-equal? (hash-ref (unbox seen-b) 'path) found)))))))
-
-)))
+      (test-case "R97: worker-A find path is not readable on worker B (no remapping)"
+        (with-temp-dir
+         (lambda (worker-a-root)
+           (with-temp-dir
+            (lambda (worker-b-root)
+              (make-directory* (build-path worker-a-root "docs" "contracts"))
+              (call-with-output-file (build-path worker-a-root "docs" "contracts" "spec.txt")
+                                     (lambda (out) (display "worker-a-sentinel" out))
+                                     #:exists 'replace)
+              ;; worker B has a DIFFERENT file at the same relative location
+              (make-directory* (build-path worker-b-root "docs" "contracts"))
+              (call-with-output-file (build-path worker-b-root "docs" "contracts" "spec.txt")
+                                     (lambda (out) (display "worker-b-decoy-sentinel" out))
+                                     #:exists 'replace)
+              (define seen-a (box #f))
+              (define seen-b (box #f))
+              (define worker-a (make-r97-worker-stub 'A worker-a-root seen-a))
+              (define worker-b (make-r97-worker-stub 'B worker-b-root seen-b))
+              (define role (make-tool-gateway-role))
+              (parameterize ([current-routing-policy 'risk-based]
+                             [current-remote-tool-executor worker-a])
+                (define find-res
+                  (agent-role-handle-envelope
+                   role
+                   (make-mas-envelope
+                    'supervisor
+                    'tool-gateway
+                    'shell-exec
+                    (hasheq 'tool-name "find" 'arguments (hasheq 'path (path->string worker-a-root)))
+                    #:risk-level 'high)))
+                (define found
+                  (findf (lambda (s) (string-suffix? s "docs/contracts/spec.txt"))
+                         (r97-result-strings (hash-ref find-res 'result))))
+                (check-not-false found)
+                ;; now route the SAME absolute path to worker B
+                (define read-res
+                  (parameterize ([current-routing-policy 'risk-based]
+                                 [current-remote-tool-executor worker-b])
+                    (agent-role-handle-envelope
+                     role
+                     (make-mas-envelope 'supervisor
+                                        'tool-gateway
+                                        'shell-exec
+                                        (hasheq 'tool-name "read" 'arguments (hasheq 'path found))
+                                        #:risk-level 'high))))
+                (check-equal? (hash-ref read-res 'worker) 'B)
+                (define read-result (hash-ref read-res 'result))
+                ;; B denies the foreign path instead of silently resolving a
+                ;; same-named file in its own namespace
+                (check-true (tool-result-is-error? read-result)
+                            (format "worker B must deny foreign path, got: ~a"
+                                    (r97-result-text read-result)))
+                (check-true (string-contains? (r97-result-text read-result) "worker B"))
+                (check-false (string-contains? (r97-result-text read-result)
+                                               "worker-b-decoy-sentinel"))
+                ;; B received the path verbatim: no remapping to B's namespace
+                (check-equal? (hash-ref (unbox seen-b) 'path) found))))))))))
 (run-tests suite)

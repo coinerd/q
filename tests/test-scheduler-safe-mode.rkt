@@ -480,40 +480,32 @@
      (parameterize ([current-safe-mode #t]
                     [project-root fixture])
        (define sr
-         (run-tool-batch
-          (list (tool-call "tc-find" "find" (hasheq 'path (path->string fixture))))
-          reg))
+         (run-tool-batch (list (tool-call "tc-find" "find" (hasheq 'path (path->string fixture))))
+                         reg))
        (define r (first (scheduler-result-results sr)))
-       (check-false (tool-result-is-error? r)
-                    (string-join (result-strings r) ""))
+       (check-false (tool-result-is-error? r) (string-join (result-strings r) ""))
        (define content (result-strings r))
        (define d (tool-result-details r))
        ;; the real file is emitted with an ABSOLUTE path
        (check-equal? (length content) 1)
-       (check-equal? (first content)
-                     (path->string (build-path fixture "inside.txt")))
+       (check-equal? (first content) (path->string (build-path fixture "inside.txt")))
        (check-true (absolute-path? (first content)))
        ;; the escaping symlink is NOT emitted and is recorded as denied
        (check-false (member (path->string (build-path fixture "escape-link")) content)
                     "escaping symlink result must be denied in safe mode")
        (check-true (hash-has-key? d 'denied) (format "details: ~a" d))
-       (check-not-false
-        (findf (lambda (rec)
-                 (and (equal? (hash-ref rec 'path #f)
-                              (path->string (build-path fixture "escape-link")))
-                      (string? (hash-ref rec 'reason #f))))
-               (hash-ref d 'denied))
-        (format "expected structured denial record, got: ~a" (hash-ref d 'denied #f)))
+       (check-not-false (findf (lambda (rec)
+                                 (and (equal? (hash-ref rec 'path #f)
+                                              (path->string (build-path fixture "escape-link")))
+                                      (string? (hash-ref rec 'reason #f))))
+                               (hash-ref d 'denied))
+                        (format "expected structured denial record, got: ~a" (hash-ref d 'denied #f)))
        ;; find -> read roundtrip with the emitted absolute path is allowed
        (define sr2
-         (run-tool-batch
-          (list (tool-call "tc-read" "read" (hasheq 'path (first content))))
-          reg))
+         (run-tool-batch (list (tool-call "tc-read" "read" (hasheq 'path (first content)))) reg))
        (define r2 (first (scheduler-result-results sr2)))
-       (check-false (tool-result-is-error? r2)
-                    (string-join (result-strings r2) ""))
-       (check-true (string-contains? (string-join (result-strings r2) "")
-                                     "inside-sentinel"))))))
+       (check-false (tool-result-is-error? r2) (string-join (result-strings r2) ""))
+       (check-true (string-contains? (string-join (result-strings r2) "") "inside-sentinel"))))))
 
 ;; Safe mode stays enforced for find itself: a search root OUTSIDE the
 ;; project root is still blocked by the scheduler preflight (unchanged).
@@ -522,10 +514,7 @@
                  [project-root test-project-root])
     (define reg (make-tool-registry))
     (register-tool! reg (make-real-find-tool))
-    (define sr
-      (run-tool-batch
-       (list (tool-call "tc-find" "find" (hasheq 'path "/etc")))
-       reg))
+    (define sr (run-tool-batch (list (tool-call "tc-find" "find" (hasheq 'path "/etc"))) reg))
     (define r (first (scheduler-result-results sr)))
     (check-true (tool-result-is-error? r))
     (check-true (string-contains? (string-join (result-strings r) "") "Access denied"))))

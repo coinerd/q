@@ -164,31 +164,27 @@
       ;; false-positive on sections the verifier will handle.
       (define (lint-verify-section body)
         (define dir
-          (make-planning-with-doc
-           (lambda ()
-             (displayln "# Wave 0")
-             (displayln "Status: Inbox")
-             (newline)
-             (displayln "## Files")
-             (displayln "- File: q/src/a.rkt")
-             (newline)
-             (displayln "## Verify")
-             (displayln body)
-             (newline)
-             (displayln "## Done")
-             (displayln "- delivered"))))
-        (dynamic-wind
-         void
-         (lambda ()
-           (map wave-doc-violation-section
-                (lint-wave-doc (read-wave-doc dir 0 "no-sections"))))
-         (lambda () (cleanup! dir))))
-      (check-equal?
-       (lint-verify-section
-        (string-append "The gates below must all pass.\n"
-                       "- `racket tests/a.rkt` green"))
-       '()
-       "prose-before-bullets Verify sections are lint-clean")
+          (make-planning-with-doc (lambda ()
+                                    (displayln "# Wave 0")
+                                    (displayln "Status: Inbox")
+                                    (newline)
+                                    (displayln "## Files")
+                                    (displayln "- File: q/src/a.rkt")
+                                    (newline)
+                                    (displayln "## Verify")
+                                    (displayln body)
+                                    (newline)
+                                    (displayln "## Done")
+                                    (displayln "- delivered"))))
+        (dynamic-wind void
+                      (lambda ()
+                        (map wave-doc-violation-section
+                             (lint-wave-doc (read-wave-doc dir 0 "no-sections"))))
+                      (lambda () (cleanup! dir))))
+      (check-equal? (lint-verify-section (string-append "The gates below must all pass.\n"
+                                                        "- `racket tests/a.rkt` green"))
+                    '()
+                    "prose-before-bullets Verify sections are lint-clean")
       (check-equal? (lint-verify-section "```sh\nracket tests/a.rkt\n")
                     '()
                     "unclosed fences are the verifier's refusal, not a lint violation")

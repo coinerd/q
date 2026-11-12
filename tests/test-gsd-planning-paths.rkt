@@ -115,8 +115,7 @@
 (test-case "declared lexical grammar stays lenient while canonical snapshot names stay distinct"
   (check-equal? (declared-wave-doc-reference "→ waves/custom/nested-legal.md")
                 "waves/custom/nested-legal.md")
-  (check-equal? (declared-wave-doc-reference "see waves/W0-fine.md for details")
-                "waves/W0-fine.md")
+  (check-equal? (declared-wave-doc-reference "see waves/W0-fine.md for details") "waves/W0-fine.md")
   (check-false (declared-wave-doc-reference "not-a-wave-path.md"))
   (check-false (declared-wave-doc-reference "waves/../escape.md")
                "traversal is not a lexical wave reference")
@@ -130,11 +129,9 @@
                               "waves/custom/nested-legal.md"))
   ;; Canonical snapshot names are unchanged.
   (check-true (wave-doc-rel-path? "waves/W0-fine.md"))
-  (check-equal? (regexp-match* canonical-snapshot-wave-doc-reference-rx
-                               "→ waves/W0-fine.md")
+  (check-equal? (regexp-match* canonical-snapshot-wave-doc-reference-rx "→ waves/W0-fine.md")
                 '("waves/W0-fine.md"))
-  (check-equal? (regexp-match* canonical-snapshot-wave-doc-reference-rx
-                               "→ waves/WAVE-2-fine_2.md")
+  (check-equal? (regexp-match* canonical-snapshot-wave-doc-reference-rx "→ waves/WAVE-2-fine_2.md")
                 '("waves/WAVE-2-fine_2.md")))
 
 (test-case "builders are pure: they create nothing on disk"

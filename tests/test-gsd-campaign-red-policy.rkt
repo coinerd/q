@@ -2,7 +2,10 @@
 ;; @covers extensions/gsd/campaign-state.rkt
 ;; @covers extensions/gsd/campaign-repository.rkt
 ;; @speed fast
-(require rackunit racket/file racket/list racket/runtime-path
+(require rackunit
+         racket/file
+         racket/list
+         racket/runtime-path
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt")
 (define-runtime-path state-module "../extensions/gsd/campaign-state.rkt")
@@ -38,25 +41,24 @@
      (check-equal? (list-ref before 2) (list-ref after 2))
      (check-equal? pid (campaign-manifest-hash (campaign-record-manifest rec)))
      (check-exn exn:fail:contract? (lambda () (set-policy! rec 'unknown)))
-     (check-false (policy (make-campaign-record pid (campaign-record-manifest rec) '() #f 0 #f 0 0))))))
+     (check-false
+      (policy (make-campaign-record pid (campaign-record-manifest rec) '() #f 0 #f 0 0))))))
 (test-case "historical absence loads legacy and unknown policies fail closed"
-  (with-project
-   (lambda (dir)
-     (define rec (load-or-migrate-campaign! dir))
-     (define path (record-path dir rec))
-     (define datum (call-with-input-file path read))
-     (rewrite! path (drop-right datum 1))
-     (check-false (policy (load-campaign-record dir (campaign-plan-id rec))))
-     (for ([bad (in-list '(unknown "owned-red-v1" #t 1))])
-       (rewrite! path (append (drop-right datum 1) (list bad)))
-       (check-exn exn:fail:campaign-corrupt?
-                  (lambda () (load-campaign-record dir (campaign-plan-id rec))))))))
+  (with-project (lambda (dir)
+                  (define rec (load-or-migrate-campaign! dir))
+                  (define path (record-path dir rec))
+                  (define datum (call-with-input-file path read))
+                  (rewrite! path (drop-right datum 1))
+                  (check-false (policy (load-campaign-record dir (campaign-plan-id rec))))
+                  (for ([bad (in-list '(unknown "owned-red-v1" #t 1))])
+                    (rewrite! path (append (drop-right datum 1) (list bad)))
+                    (check-exn exn:fail:campaign-corrupt?
+                               (lambda () (load-campaign-record dir (campaign-plan-id rec))))))))
 (test-case "existing frozen snapshot without record stays legacy, never stamped"
-  (with-project
-   (lambda (dir)
-     (define fresh (migrate-campaign! dir))
-     (define snapshot (campaign-record-plan-snapshot-digest fresh))
-     (define legacy (migrate-campaign! dir))
-     (check-false (policy legacy))
-     (check-equal? snapshot (campaign-record-plan-snapshot-digest legacy))
-     (check-equal? (campaign-plan-id fresh) (campaign-plan-id legacy)))))
+  (with-project (lambda (dir)
+                  (define fresh (migrate-campaign! dir))
+                  (define snapshot (campaign-record-plan-snapshot-digest fresh))
+                  (define legacy (migrate-campaign! dir))
+                  (check-false (policy legacy))
+                  (check-equal? snapshot (campaign-record-plan-snapshot-digest legacy))
+                  (check-equal? (campaign-plan-id fresh) (campaign-plan-id legacy)))))

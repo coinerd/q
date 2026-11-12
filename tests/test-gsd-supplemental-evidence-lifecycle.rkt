@@ -147,8 +147,7 @@
        (check-true (pair? new-files))
        (for ([p (in-list new-files)]
              #:when (not (equal? p "")))
-         (check-true (and (member p (fixture-task-paths fx)) #t)
-                     (format "unexpected path ~s" p)))
+         (check-true (and (member p (fixture-task-paths fx)) #t) (format "unexpected path ~s" p)))
        ;; The old receipt and its history are untouched; no fake readiness.
        (define journal (load-delivery-journal root plan 1))
        (check-equal? (hash-ref (hash-ref journal 'receipt) 'attempt-id) "old-attempt")

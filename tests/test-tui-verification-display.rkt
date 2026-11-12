@@ -553,28 +553,26 @@
     (test-case "R102: identified started stores progress with identity+generation"
       (define st0 (initial-ui-state))
       (define st1
-        (apply-event-to-state
-         st0
-         (make-test-event
-          'gsd.verification.started
-          (hasheq 'wave
-                  4
-                  'command
-                  "raco test"
-                  'timeout-sec
-                  60
-                  'log-path
-                  "/var/tmp/v.log"
-                  'start-ms
-                  1000.0
-                  'job-id
-                  'vj-9
-                  'registry-incarnation
-                  'vjreg-77
-                  'verify-identity-key
-                  "idkey-9"
-                  'session-attachment-generation
-                  3))))
+        (apply-event-to-state st0
+                              (make-test-event 'gsd.verification.started
+                                               (hasheq 'wave
+                                                       4
+                                                       'command
+                                                       "raco test"
+                                                       'timeout-sec
+                                                       60
+                                                       'log-path
+                                                       "/var/tmp/v.log"
+                                                       'start-ms
+                                                       1000.0
+                                                       'job-id
+                                                       'vj-9
+                                                       'registry-incarnation
+                                                       'vjreg-77
+                                                       'verify-identity-key
+                                                       "idkey-9"
+                                                       'session-attachment-generation
+                                                       3))))
       (define progress (ui-state-verification-progress st1))
       (check-true (hash? progress) "identified progress stored")
       (check-equal? (hash-ref progress 'identity-key #f) "vjreg-77|vj-9|idkey-9")
@@ -586,43 +584,39 @@
     (test-case "R102: a mismatched terminal cannot clear the newer foreground progress"
       (define st0 (initial-ui-state))
       (define st1
-        (apply-event-to-state
-         st0
-         (make-test-event
-          'gsd.verification.started
-          (hasheq 'wave
-                  4
-                  'timeout-sec
-                  60
-                  'start-ms
-                  1000.0
-                  'job-id
-                  'vj-9
-                  'registry-incarnation
-                  'vjreg-77
-                  'verify-identity-key
-                  "idkey-9"))))
+        (apply-event-to-state st0
+                              (make-test-event 'gsd.verification.started
+                                               (hasheq 'wave
+                                                       4
+                                                       'timeout-sec
+                                                       60
+                                                       'start-ms
+                                                       1000.0
+                                                       'job-id
+                                                       'vj-9
+                                                       'registry-incarnation
+                                                       'vjreg-77
+                                                       'verify-identity-key
+                                                       "idkey-9"))))
       (define st2
-        (apply-event-to-state
-         st1
-         (make-test-event
-          'gsd.verification.completed
-          (hasheq 'wave
-                  4
-                  'state
-                  'failed
-                  'exit-code
-                  3
-                  'verdict
-                  "reject"
-                  'elapsed-sec
-                  1.0
-                  'job-id
-                  'vj-10
-                  'registry-incarnation
-                  'vjreg-77
-                  'verify-identity-key
-                  "idkey-10"))))
+        (apply-event-to-state st1
+                              (make-test-event 'gsd.verification.completed
+                                               (hasheq 'wave
+                                                       4
+                                                       'state
+                                                       'failed
+                                                       'exit-code
+                                                       3
+                                                       'verdict
+                                                       "reject"
+                                                       'elapsed-sec
+                                                       1.0
+                                                       'job-id
+                                                       'vj-10
+                                                       'registry-incarnation
+                                                       'vjreg-77
+                                                       'verify-identity-key
+                                                       "idkey-10"))))
       (check-equal? (hash-ref (ui-state-verification-progress st2) 'identity-key #f)
                     "vjreg-77|vj-9|idkey-9"
                     "the newer identified progress survives the mismatched terminal")
@@ -633,41 +627,38 @@
     (test-case "R102: duplicate terminal delivery dedupes to exactly one transition"
       (define st0 (initial-ui-state))
       (define terminal
-        (make-test-event
-         'gsd.verification.completed
-         (hasheq 'wave
-                 4
-                 'state
-                 'failed
-                 'exit-code
-                 3
-                 'verdict
-                 "reject"
-                 'elapsed-sec
-                 1.0
-                 'job-id
-                 'vj-9
-                 'registry-incarnation
-                 'vjreg-77
-                 'verify-identity-key
-                 "idkey-9")))
+        (make-test-event 'gsd.verification.completed
+                         (hasheq 'wave
+                                 4
+                                 'state
+                                 'failed
+                                 'exit-code
+                                 3
+                                 'verdict
+                                 "reject"
+                                 'elapsed-sec
+                                 1.0
+                                 'job-id
+                                 'vj-9
+                                 'registry-incarnation
+                                 'vjreg-77
+                                 'verify-identity-key
+                                 "idkey-9")))
       (define st1
-        (apply-event-to-state
-         st0
-         (make-test-event
-          'gsd.verification.started
-          (hasheq 'wave
-                  4
-                  'timeout-sec
-                  60
-                  'start-ms
-                  1000.0
-                  'job-id
-                  'vj-9
-                  'registry-incarnation
-                  'vjreg-77
-                  'verify-identity-key
-                  "idkey-9"))))
+        (apply-event-to-state st0
+                              (make-test-event 'gsd.verification.started
+                                               (hasheq 'wave
+                                                       4
+                                                       'timeout-sec
+                                                       60
+                                                       'start-ms
+                                                       1000.0
+                                                       'job-id
+                                                       'vj-9
+                                                       'registry-incarnation
+                                                       'vjreg-77
+                                                       'verify-identity-key
+                                                       "idkey-9"))))
       (define st2 (apply-event-to-state st1 terminal))
       (define st3 (apply-event-to-state st2 terminal))
       (check-true (= 1 (length (ui-state-transcript st3)))
@@ -676,70 +667,64 @@
     (test-case "R102: a late start of an already-terminal job never resurrects the timer"
       (define st0 (initial-ui-state))
       (define started
-        (make-test-event
-         'gsd.verification.started
-         (hasheq 'wave
-                 4
-                 'timeout-sec
-                 60
-                 'start-ms
-                 1000.0
-                 'job-id
-                 'vj-9
-                 'registry-incarnation
-                 'vjreg-77
-                 'verify-identity-key
-                 "idkey-9")))
+        (make-test-event 'gsd.verification.started
+                         (hasheq 'wave
+                                 4
+                                 'timeout-sec
+                                 60
+                                 'start-ms
+                                 1000.0
+                                 'job-id
+                                 'vj-9
+                                 'registry-incarnation
+                                 'vjreg-77
+                                 'verify-identity-key
+                                 "idkey-9")))
       (define terminal
-        (make-test-event
-         'gsd.verification.completed
-         (hasheq 'wave
-                 4
-                 'state
-                 'failed
-                 'exit-code
-                 3
-                 'verdict
-                 "reject"
-                 'elapsed-sec
-                 1.0
-                 'job-id
-                 'vj-9
-                 'registry-incarnation
-                 'vjreg-77
-                 'verify-identity-key
-                 "idkey-9")))
+        (make-test-event 'gsd.verification.completed
+                         (hasheq 'wave
+                                 4
+                                 'state
+                                 'failed
+                                 'exit-code
+                                 3
+                                 'verdict
+                                 "reject"
+                                 'elapsed-sec
+                                 1.0
+                                 'job-id
+                                 'vj-9
+                                 'registry-incarnation
+                                 'vjreg-77
+                                 'verify-identity-key
+                                 "idkey-9")))
       (define st3 (apply-event-to-state (apply-event-to-state st0 started) terminal))
       (check-false (ui-state-verification-progress st3))
       (define st4 (apply-event-to-state st3 started))
-      (check-false (ui-state-verification-progress st4)
-                   "late start of a terminal job is refused"))
+      (check-false (ui-state-verification-progress st4) "late start of a terminal job is refused"))
 
     (test-case "R102: an identity-less legacy terminal never clears identified newer progress"
       (define st0 (initial-ui-state))
       (define st1
-        (apply-event-to-state
-         st0
-         (make-test-event
-          'gsd.verification.started
-          (hasheq 'wave
-                  4
-                  'timeout-sec
-                  60
-                  'start-ms
-                  1000.0
-                  'job-id
-                  'vj-9
-                  'registry-incarnation
-                  'vjreg-77
-                  'verify-identity-key
-                  "idkey-9"))))
+        (apply-event-to-state st0
+                              (make-test-event 'gsd.verification.started
+                                               (hasheq 'wave
+                                                       4
+                                                       'timeout-sec
+                                                       60
+                                                       'start-ms
+                                                       1000.0
+                                                       'job-id
+                                                       'vj-9
+                                                       'registry-incarnation
+                                                       'vjreg-77
+                                                       'verify-identity-key
+                                                       "idkey-9"))))
       (define st2
         (apply-event-to-state
          st1
-         (make-test-event
-          'gsd.verification.completed
-          (hasheq 'wave 4 'verdict "reject" 'reason "legacy" 'elapsed-sec 1.0))))
+         (make-test-event 'gsd.verification.completed
+                          (hasheq 'wave 4 'verdict "reject" 'reason "legacy" 'elapsed-sec 1.0))))
       (check-equal? (hash-ref (ui-state-verification-progress st2) 'identity-key #f)
                     "vjreg-77|vj-9|idkey-9"
                     "identified progress survives the legacy terminal")
@@ -753,122 +738,111 @@
       ;; foreground moved to generation 5 (session switched away)
       (define st5 (set-attachment-generation st0 5))
       (define stale-started
-        (apply-event-to-state
-         st5
-         (make-test-event
-          'gsd.verification.started
-          (hasheq 'wave
-                  4
-                  'timeout-sec
-                  60
-                  'start-ms
-                  1000.0
-                  'job-id
-                  'vj-1
-                  'registry-incarnation
-                  'vjreg-77
-                  'verify-identity-key
-                  "idkey-1"
-                  'session-attachment-generation
-                  1))))
-      (check-false (ui-state-verification-progress stale-started)
-                   "stale start cannot resurrect")
+        (apply-event-to-state st5
+                              (make-test-event 'gsd.verification.started
+                                               (hasheq 'wave
+                                                       4
+                                                       'timeout-sec
+                                                       60
+                                                       'start-ms
+                                                       1000.0
+                                                       'job-id
+                                                       'vj-1
+                                                       'registry-incarnation
+                                                       'vjreg-77
+                                                       'verify-identity-key
+                                                       "idkey-1"
+                                                       'session-attachment-generation
+                                                       1))))
+      (check-false (ui-state-verification-progress stale-started) "stale start cannot resurrect")
       (define stale-completed
-        (apply-event-to-state
-         stale-started
-         (make-test-event
-          'gsd.verification.completed
-          (hasheq 'wave
-                  4
-                  'state
-                  'failed
-                  'exit-code
-                  3
-                  'verdict
-                  "reject"
-                  'elapsed-sec
-                  1.0
-                  'job-id
-                  'vj-1
-                  'registry-incarnation
-                  'vjreg-77
-                  'verify-identity-key
-                  "idkey-1"
-                  'session-attachment-generation
-                  1))))
+        (apply-event-to-state stale-started
+                              (make-test-event 'gsd.verification.completed
+                                               (hasheq 'wave
+                                                       4
+                                                       'state
+                                                       'failed
+                                                       'exit-code
+                                                       3
+                                                       'verdict
+                                                       "reject"
+                                                       'elapsed-sec
+                                                       1.0
+                                                       'job-id
+                                                       'vj-1
+                                                       'registry-incarnation
+                                                       'vjreg-77
+                                                       'verify-identity-key
+                                                       "idkey-1"
+                                                       'session-attachment-generation
+                                                       1))))
       (check-true (null? (ui-state-transcript stale-completed))
                   "stale terminal from an old session is dropped entirely")
       ;; same-generation events still apply
       (define current-started
-        (apply-event-to-state
-         st5
-         (make-test-event
-          'gsd.verification.started
-          (hasheq 'wave
-                  4
-                  'timeout-sec
-                  60
-                  'start-ms
-                  1000.0
-                  'job-id
-                  'vj-5
-                  'registry-incarnation
-                  'vjreg-77
-                  'verify-identity-key
-                  "idkey-5"
-                  'session-attachment-generation
-                  5))))
+        (apply-event-to-state st5
+                              (make-test-event 'gsd.verification.started
+                                               (hasheq 'wave
+                                                       4
+                                                       'timeout-sec
+                                                       60
+                                                       'start-ms
+                                                       1000.0
+                                                       'job-id
+                                                       'vj-5
+                                                       'registry-incarnation
+                                                       'vjreg-77
+                                                       'verify-identity-key
+                                                       "idkey-5"
+                                                       'session-attachment-generation
+                                                       5))))
       (check-true (hash? (ui-state-verification-progress current-started))
                   "current-generation start applies"))
 
     (test-case "R102: same-generation completion of the matching identity clears"
       (define st0 (initial-ui-state))
       (define st1
-        (apply-event-to-state
-         st0
-         (make-test-event
-          'gsd.verification.started
-          (hasheq 'wave
-                  4
-                  'timeout-sec
-                  60
-                  'start-ms
-                  1000.0
-                  'job-id
-                  'vj-5
-                  'registry-incarnation
-                  'vjreg-77
-                  'verify-identity-key
-                  "idkey-5"
-                  'session-attachment-generation
-                  5))))
+        (apply-event-to-state st0
+                              (make-test-event 'gsd.verification.started
+                                               (hasheq 'wave
+                                                       4
+                                                       'timeout-sec
+                                                       60
+                                                       'start-ms
+                                                       1000.0
+                                                       'job-id
+                                                       'vj-5
+                                                       'registry-incarnation
+                                                       'vjreg-77
+                                                       'verify-identity-key
+                                                       "idkey-5"
+                                                       'session-attachment-generation
+                                                       5))))
       (define st2
-        (apply-event-to-state
-         st1
-         (make-test-event
-          'gsd.verification.completed
-          (hasheq 'wave
-                  4
-                  'state
-                  'completed
-                  'exit-code
-                  0
-                  'approved?
-                  #t
-                  'verdict
-                  "approve"
-                  'elapsed-sec
-                  2.0
-                  'log-path
-                  "/var/tmp/v.log"
-                  'job-id
-                  'vj-5
-                  'registry-incarnation
-                  'vjreg-77
-                  'verify-identity-key
-                  "idkey-5"
-                  'session-attachment-generation
-                  5))))
+        (apply-event-to-state st1
+                              (make-test-event 'gsd.verification.completed
+                                               (hasheq 'wave
+                                                       4
+                                                       'state
+                                                       'completed
+                                                       'exit-code
+                                                       0
+                                                       'approved?
+                                                       #t
+                                                       'verdict
+                                                       "approve"
+                                                       'elapsed-sec
+                                                       2.0
+                                                       'log-path
+                                                       "/var/tmp/v.log"
+                                                       'job-id
+                                                       'vj-5
+                                                       'registry-incarnation
+                                                       'vjreg-77
+                                                       'verify-identity-key
+                                                       "idkey-5"
+                                                       'session-attachment-generation
+                                                       5))))
       (check-false (ui-state-verification-progress st2))
       (check-false (ui-state-status-message st2))
       (check-true (= 1 (length (ui-state-transcript st2)))))
@@ -932,8 +906,7 @@
                        'verify-identity-key
                        "idkey-9")))
       (define st3 (apply-event-to-state st2 terminal))
-      (check-false (ui-state-verification-progress st3)
-                   "the identity-matched terminal still clears"))
+      (check-false (ui-state-verification-progress st3) "the identity-matched terminal still clears"))
 
     (test-case "W4: an identity-less legacy foreground is unaffected by session switches"
       ;; unchanged legacy behavior: unidentified progress was never session-keyed
@@ -950,7 +923,6 @@
       (define attach
         (event 1 'session.started 1001.0 "session-B" "turn" (hasheq 'session-id "session-B")))
       (define st2 (apply-event-to-state st1 attach))
-      (check-true (hash? (ui-state-verification-progress st2))
-                  "legacy behavior preserved"))))
+      (check-true (hash? (ui-state-verification-progress st2)) "legacy behavior preserved"))))
 
 (run-tests suite)

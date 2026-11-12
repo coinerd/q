@@ -1203,25 +1203,25 @@
                                   (list wt-detached-dir receipt-head-unit #f))))
           (check-false (artifact-root-selector dir plan 0 #:run-git (fake-git detached (hash)))))))
      (test-case "provenance checkout root: non-git bases keep the legacy unscoped root"
-       (call-with-campaign 1
-                           (lambda (dir rec)
-                             (define ready (done-record dir))
-                             (define plan (campaign-plan-id ready))
-                             (define no-git (lambda (_dir _args) (values 128 "")))
-                             ;; No .git marker in base-dir: legacy child q/ root.
-                             (check-equal? (artifact-root-selector dir plan 0 #:run-git no-git)
-                                           (build-path dir "q"))
-                             ;; R76 (BUG-0076): a git marker whose repository is
-                             ;; unusable now REFUSES with the typed diagnostic
-                             ;; (still fail-closed: the artifact-provenance gate
-                             ;; maps the refusal to a blocked stop), so
-                             ;; enumeration can never inspect a corrupt checkout.
-                             (make-directory (build-path dir "q"))
-                             (display-to-file "gitdir: missing" (build-path dir "q" ".git"))
-                             (check-exn exn:fail:git-root?
-                                        (lambda () (artifact-root-selector dir plan 0 #:run-git no-git)))
-                             (delete-file (build-path dir "q" ".git"))
-                             (make-directory (build-path dir ".git"))
-                             (check-exn exn:fail:git-root?
-                                        (lambda () (artifact-root-selector dir plan 0 #:run-git no-git)))))))
+       (call-with-campaign
+        1
+        (lambda (dir rec)
+          (define ready (done-record dir))
+          (define plan (campaign-plan-id ready))
+          (define no-git (lambda (_dir _args) (values 128 "")))
+          ;; No .git marker in base-dir: legacy child q/ root.
+          (check-equal? (artifact-root-selector dir plan 0 #:run-git no-git) (build-path dir "q"))
+          ;; R76 (BUG-0076): a git marker whose repository is
+          ;; unusable now REFUSES with the typed diagnostic
+          ;; (still fail-closed: the artifact-provenance gate
+          ;; maps the refusal to a blocked stop), so
+          ;; enumeration can never inspect a corrupt checkout.
+          (make-directory (build-path dir "q"))
+          (display-to-file "gitdir: missing" (build-path dir "q" ".git"))
+          (check-exn exn:fail:git-root?
+                     (lambda () (artifact-root-selector dir plan 0 #:run-git no-git)))
+          (delete-file (build-path dir "q" ".git"))
+          (make-directory (build-path dir ".git"))
+          (check-exn exn:fail:git-root?
+                     (lambda () (artifact-root-selector dir plan 0 #:run-git no-git)))))))
    (lambda () (delete-directory/files fixture-root #:must-exist? #f))))

@@ -48,7 +48,8 @@
          (only-in "../extensions/gsd/evidence-repair-ledger.rkt" load-evidence-repair)
          (only-in "../extensions/gsd/evidence-repair-format.rkt" canonical-evidence-digest)
          (only-in "../extensions/gsd/policy.rkt" current-gsd-wave-verification-repair-retries)
-         (only-in "../extensions/gsd/supplemental-evidence-operator.rkt" current-supplemental-operator-publisher))
+         (only-in "../extensions/gsd/supplemental-evidence-operator.rkt"
+                  current-supplemental-operator-publisher))
 
 ;; ------------------------------------------------------------------
 ;; Shared production-route drivers (same shapes the lifecycle suite uses).
@@ -73,7 +74,9 @@
 
 (define (auto-operator-approval! event payload)
   (when (equal? event "supplemental-evidence.approval-requested")
-    (thread (lambda () (approval-decide! (hash-ref payload 'request-id) (hash-ref payload 'proposal-sha256) #t)))))
+    (thread
+     (lambda ()
+       (approval-decide! (hash-ref payload 'request-id) (hash-ref payload 'proposal-sha256) #t)))))
 
 (define (with-auto-operator thunk)
   (parameterize ([current-supplemental-operator-publisher auto-operator-approval!])
@@ -106,7 +109,9 @@
       (error 'injected-crash "interrupted the ~a transition" wanted))))
 
 (define (operation-intent-path private grant)
-  (build-path private "supplemental-operations" (string-append (hash-ref grant 'sha256) ".intent.json")))
+  (build-path private
+              "supplemental-operations"
+              (string-append (hash-ref grant 'sha256) ".intent.json")))
 
 ;; The go fixture has an authenticated receipt but no remote-publication
 ;; history. Install its predecessor through the real publication path before
@@ -159,7 +164,8 @@
        ;; registration is durably admitted, then the protected operation's
        ;; own write-ahead intent is interrupted before its snapshot lands.
        (parameterize ([current-supplemental-journal-crash-cut (plain-intent-fault #t)])
-         (check-exn #rx"injected-crash" (lambda () (promote-supplemental-evidence! root plan 1 sapref (lambda () #t)))))
+         (check-exn #rx"injected-crash"
+                    (lambda () (promote-supplemental-evidence! root plan 1 sapref (lambda () #t)))))
        (define pending (load-supplemental-operation aref))
        (check-equal? (hash-ref pending 'state) "recover-pending-registration")
        (check-equal? (hash-ref (hash-ref pending 'facts) 'pending-recovery) "registered")
@@ -237,15 +243,16 @@
        ;; One real author attempt; the storage fault interrupts exactly the
        ;; green-captured write-ahead intent after G1 was captured and staged.
        (define result
-         (with-auto-operator (lambda ()
-                               (parameterize ([current-supplemental-journal-crash-cut
-                                               (intent-state-fault intent-path "green-captured" cut-fired)])
-                                 (author-run root
-                                             (load-campaign-record root plan)
-                                             (lambda (_)
-                                               (set-box! dispatches (add1 (unbox dispatches)))
-                                               (fixture-author-commit! (current-directory))
-                                               'ok))))))
+         (with-auto-operator
+          (lambda ()
+            (parameterize ([current-supplemental-journal-crash-cut
+                            (intent-state-fault intent-path "green-captured" cut-fired)])
+              (author-run root
+                          (load-campaign-record root plan)
+                          (lambda (_)
+                            (set-box! dispatches (add1 (unbox dispatches)))
+                            (fixture-author-commit! (current-directory))
+                            'ok))))))
        (check-true (unbox cut-fired) "the injected green-capture cut must have happened")
        (check-equal? (unbox dispatches) 1 "the cut must not spend a second dispatch")
        ;; The typed pending view left by the cut must NEVER park the run: the
@@ -256,8 +263,11 @@
                     (campaign-result-message result))
        (define after-run (load-supplemental-operation aref))
        (check-false (recovery-pending-state-name (hash-ref after-run 'state)))
-       (check-true (and (member (hash-ref after-run 'state) '("probe-captured" "supersession-approved")) #t)
-                   (format "unexpected post-cut state ~a: ~a" (hash-ref after-run 'state) (hash-ref after-run 'facts)))
+       (check-true
+        (and (member (hash-ref after-run 'state) '("probe-captured" "supersession-approved")) #t)
+        (format "unexpected post-cut state ~a: ~a"
+                (hash-ref after-run 'state)
+                (hash-ref after-run 'facts)))
 
        ;; The delivery-finalize checkpoint seam then carries the task through
        ;; S-authorized publication, certification, promotion and readiness.
@@ -269,19 +279,22 @@
        (with-auto-operator
         (lambda ()
           (parameterize ([current-gsd-approved-head-publisher (lambda args
-                                                                (set-box! pushes (add1 (unbox pushes)))
+                                                                (set-box! pushes
+                                                                          (add1 (unbox pushes)))
                                                                 (apply (stub-publisher) args))]
                          [current-supplemental-journal-crash-cut
                           (intent-state-fault intent-path "published" published-fired)])
-            (run-coordinator-checkpoint root
-                                        plan
-                                        (car (campaign-record-waves (load-campaign-record root plan)))
-                                        "supplemental recovery"
-                                        (lambda (_dir _id _wave) (cons 'blocked "delivery coordinator must not run"))
-                                        #:author-session-live? (lambda () #f)
-                                        #:on-advance (lambda () (set-box! advanced #t))
-                                        #:on-blocked (lambda (why) (set-box! blocked-reason (format "~a" why)))))))
-       (check-true (unbox advanced) (format "checkpoint must carry the recovered task: ~a" (unbox blocked-reason)))
+            (run-coordinator-checkpoint
+             root
+             plan
+             (car (campaign-record-waves (load-campaign-record root plan)))
+             "supplemental recovery"
+             (lambda (_dir _id _wave) (cons 'blocked "delivery coordinator must not run"))
+             #:author-session-live? (lambda () #f)
+             #:on-advance (lambda () (set-box! advanced #t))
+             #:on-blocked (lambda (why) (set-box! blocked-reason (format "~a" why)))))))
+       (check-true (unbox advanced)
+                   (format "checkpoint must carry the recovered task: ~a" (unbox blocked-reason)))
 
        (check-true (unbox published-fired))
        (check-equal? (hash-ref (load-supplemental-operation aref) 'state) "recover-pending-published")
@@ -299,7 +312,8 @@
          (check-equal? (campaign-result-status outcome) 'wave-blocked))
        (check-true (unbox certified-fired)
                    (format "certification cut not reached; entry: ~a" (unbox certification-outcome)))
-       (check-equal? (hash-ref (load-supplemental-operation aref) 'state) "recover-pending-receipt-certified")
+       (check-equal? (hash-ref (load-supplemental-operation aref) 'state)
+                     "recover-pending-receipt-certified")
        (check-equal? (unbox pushes) 1)
 
        ;; Completed WITHOUT a second dispatch or a second attempt.
@@ -314,7 +328,8 @@
        (check-equal? (hash-ref readiness 'code) "registered-probe-ready")
        (define journal (load-delivery-journal root plan 1))
        (check-equal? (hash-ref journal 'receipt) (hash-ref certified-journal 'receipt))
-       (check-equal? (hash-ref journal 'receipt-history) (hash-ref certified-journal 'receipt-history))
+       (check-equal? (hash-ref journal 'receipt-history)
+                     (hash-ref certified-journal 'receipt-history))
        (check-equal? (length (hash-ref journal 'receipt-history '())) 1)
        (define ledger (load-evidence-repair root plan 1 1))
        (check-equal? (length (hash-ref ledger 'registrations)) 1)
@@ -348,18 +363,22 @@
                                              (fixture-author-commit! (current-directory))
                                              'ok)))))
        (check-equal? (campaign-result-status result) 'wave-blocked)
-       (check-true (string-contains? (campaign-result-message result) "publication") (campaign-result-message result))
+       (check-true (string-contains? (campaign-result-message result) "publication")
+                   (campaign-result-message result))
        (define operation (load-supplemental-operation aref))
        (check-equal? (hash-ref operation 'state) "supersession-approved")
        (define sapref (hash-ref (hash-ref operation 'facts) 'supersession-approval-ref))
        (define r2
-         (hash-ref (supplemental-staged-evidence-record (load-supplemental-staged-evidence root plan 1)) 'receipt))
+         (hash-ref
+          (supplemental-staged-evidence-record (load-supplemental-staged-evidence root plan 1))
+          'receipt))
 
        ;; Late cut at the publication tail transition: the exact interrupted
        ;; write-ahead intent stays sealed on disk as a pending view.
        (define fired (box #f))
        (parameterize ([current-gsd-approved-head-publisher (stub-publisher)]
-                      [current-supplemental-journal-crash-cut (intent-state-fault intent-path "published" fired)])
+                      [current-supplemental-journal-crash-cut
+                       (intent-state-fault intent-path "published" fired)])
          (define-values (kind detail) (advance-supplemental-evidence! root plan 1))
          (check-equal? kind 'paused detail))
        (check-true (unbox fired) "the production publication tail must have been interrupted")

@@ -635,8 +635,7 @@
           ;; W4: the entry text names the DURABLE decision inputs (anchor
           ;; wave + canonical record status), not a PLAN-derived execution
           ;; claim.
-          (check-true (string-contains? (hash-ref payload 'text)
-                                        "Campaign W0 durable status"))))))))
+          (check-true (string-contains? (hash-ref payload 'text) "Campaign W0 durable status"))))))))
 
 ;; ============================================================
 ;; W1 (#1867): /go anti-exploration tests

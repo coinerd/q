@@ -60,13 +60,15 @@
 ;; Line helpers (anchors and section slicing without inline regex flags)
 ;; ============================================================
 
-(define (lines-of text) (string-split text "\n"))
+(define (lines-of text)
+  (string-split text "\n"))
 
 (define (count-exact-lines text target)
   (count (lambda (l) (string=? l target)) (lines-of text)))
 
 (define (line-offset text target)
-  (let loop ([lines (lines-of text)] [offset 0])
+  (let loop ([lines (lines-of text)]
+             [offset 0])
     (cond
       [(null? lines) #f]
       [(string=? (car lines) target) offset]
@@ -79,11 +81,11 @@
   (and start
        (let* ([after-heading (+ start (string-length heading))]
               [lines (lines-of (substring text after-heading))])
-         (let loop ([ls lines] [consumed 0])
+         (let loop ([ls lines]
+                    [consumed 0])
            (cond
              [(null? ls) (substring text start)]
-             [(string-prefix? (car ls) "## ")
-              (substring text start (+ after-heading consumed))]
+             [(string-prefix? (car ls) "## ") (substring text start (+ after-heading consumed))]
              [else (loop (cdr ls) (+ consumed (string-length (car ls)) 1))])))))
 
 ;; Drop one `## ` section (heading + body) from TEXT.
@@ -113,8 +115,10 @@
       [else (loop (add1 i))])))
 
 (define (documented-verify-examples text)
-  (define m (regexp-match #rx"<!-- verify-grammar-examples:start -->\n(.*?)<!-- verify-grammar-examples:end -->"
-                          text))
+  (define m
+    (regexp-match
+     #rx"<!-- verify-grammar-examples:start -->\n(.*?)<!-- verify-grammar-examples:end -->"
+     text))
   (unless m
     (error 'documented-verify-examples
            "verify grammar examples block missing from docs/gsd-guide.md"))
@@ -141,7 +145,9 @@
   (append (for/list ([rj (in-list (hash-ref extraction 'rejections '()))])
             (hash-ref rj 'reason))
           (let ([refusal (hash-ref extraction 'refusal #f)])
-            (if refusal (list refusal) '()))))
+            (if refusal
+                (list refusal)
+                '()))))
 
 (test-case "W5: the documented Verify grammar section exists and has both outcomes"
   (check-true (string-contains? guide-text "### Verify grammar (`## Verify`)"))
@@ -150,32 +156,34 @@
   (check-not-false (filter (lambda (e) (eq? (car e) 'reject)) examples)))
 
 (test-case "W5: every documented Verify ACCEPT example is accepted by the parser"
-  (for ([e (in-list examples)] #:when (eq? (car e) 'accept))
+  (for ([e (in-list examples)]
+        #:when (eq? (car e) 'accept))
     (define declaration (cadr e))
     (define extraction (verify-declaration-extraction declaration))
-    (check-equal? (reason-codes extraction) '()
-                  (format "documented ACCEPT refused: ~s" (caddr e)))
+    (check-equal? (reason-codes extraction) '() (format "documented ACCEPT refused: ~s" (caddr e)))
     (check-false (hash-ref extraction 'refusal)
                  (format "documented ACCEPT has a refusal: ~s" (caddr e)))
     (check-not-false (pair? (hash-ref extraction 'commands))
                      (format "documented ACCEPT shaped no executable command: ~s" (caddr e)))))
 
 (test-case "W5: every documented Verify REJECT example produces the documented reason"
-  (for ([e (in-list examples)] #:when (eq? (car e) 'reject))
+  (for ([e (in-list examples)]
+        #:when (eq? (car e) 'reject))
     (define documented-reason (cadr e))
     (define declaration (caddr e))
     (define extraction (verify-declaration-extraction declaration))
     (define codes (reason-codes extraction))
-    (check-not-false (member documented-reason codes)
-                     (format "documented REJECT ~a not produced for ~s (got ~a)"
-                             documented-reason (cadddr e) codes))
+    (check-not-false
+     (member documented-reason codes)
+     (format "documented REJECT ~a not produced for ~s (got ~a)" documented-reason (cadddr e) codes))
     ;; The documented reason must belong to the closed vocabulary, and a
     ;; rejection must never leave an executable command behind.
     (check-not-false (or (memq documented-reason verify-rejection-reasons)
                          (memq documented-reason verify-refusal-reasons))
                      (format "~a is outside the closed reason vocabulary" documented-reason))
     (when (memq documented-reason verify-rejection-reasons)
-      (check-equal? (hash-ref extraction 'commands) '()
+      (check-equal? (hash-ref extraction 'commands)
+                    '()
                     "a rejected declaration must not keep executable stages"))))
 
 (test-case "W5: an undocumented reason would fail the documentation contract"
@@ -190,18 +198,20 @@
 (define (emitted-wave-doc-template)
   (define p (planning-prompt "test"))
   (define m (regexp-match-positions #rx"### Wave Doc Format[^\n]*\n```\n" p))
-  (unless m (error 'emitted-wave-doc-template "wave-doc template fence missing"))
+  (unless m
+    (error 'emitted-wave-doc-template "wave-doc template fence missing"))
   (define start (cdr (car m)))
   (define close (regexp-match-positions #rx"\n```" (substring p start)))
-  (unless close (error 'emitted-wave-doc-template "closing fence missing"))
+  (unless close
+    (error 'emitted-wave-doc-template "closing fence missing"))
   (substring p start (+ start (caar close))))
 
 (test-case "W5: the prompt template is generated from the wave-docs contract"
   (define tpl (emitted-wave-doc-template))
-  (check-true (string-prefix? tpl (format "~a0\n~a~a\n"
-                                          WAVE-DOC-HEADING-PREFIX
-                                          WAVE-DOC-STATUS-PREFIX
-                                          WAVE-DOC-INITIAL-STATUS)))
+  (check-true
+   (string-prefix?
+    tpl
+    (format "~a0\n~a~a\n" WAVE-DOC-HEADING-PREFIX WAVE-DOC-STATUS-PREFIX WAVE-DOC-INITIAL-STATUS)))
   ;; Every required section of the shared table appears exactly once.
   (for ([name (in-list (wave-doc-required-section-names))])
     (check-equal? (count-exact-lines tpl (format "## ~a" name))
@@ -222,10 +232,8 @@
   (for ([entry (in-list WAVE-DOC-REQUIRED-SECTIONS)])
     (define name (first entry))
     (define expected (list-ref entry 2))
-    (define broken (parse-wave-doc-from-string
-                    (drop-h2-section tpl (format "## ~a" name))
-                    0
-                    "short-title"))
+    (define broken
+      (parse-wave-doc-from-string (drop-h2-section tpl (format "## ~a" name)) 0 "short-title"))
     (check-not-false (member expected (map wave-doc-violation-section (lint-wave-doc broken)))
                      (format "removing `## ~a` must report violation ~a" name expected))))
 
@@ -249,19 +257,19 @@
     (define text (file-text path))
     (check-true (and text (string-contains? text "gsd-guide.md#"))
                 (format "~a must link to the one lifecycle section" path))
-    (check-equal? (if text (count-exact-lines text "## Campaign lifecycle") 0)
+    (check-equal? (if text
+                      (count-exact-lines text "## Campaign lifecycle")
+                      0)
                   0
                   (format "~a must not duplicate the lifecycle section" path))))
 
 (test-case "W5: the recovery table forbids destructive recovery and force release"
   (define section (or lifecycle-section ""))
   (check-true (string-contains? section "### Recovery table"))
-  (for ([phrase (in-list '("Deleting campaign state is not a repair"
-                           "no force-release command"
-                           "never rewritten"
-                           "never marked DONE"))])
-    (check-true (string-contains? section phrase)
-                (format "recovery table must state: ~a" phrase))))
+  (for ([phrase (in-list '("Deleting campaign state is not a repair" "no force-release command"
+                                                                     "never rewritten"
+                                                                     "never marked DONE"))])
+    (check-true (string-contains? section phrase) (format "recovery table must state: ~a" phrase))))
 
 ;; ============================================================
 ;; 4. Module document keeps the responsibility/dependency rules
@@ -273,5 +281,4 @@
                            "Only `campaign-state.rkt` / `campaign-repository.rkt` may write durable"
                            "Compatibility wrappers delegate only"
                            "TODO(#v1.00.40)"))])
-    (check-true (string-contains? arch phrase)
-                (format "architecture doc must state: ~a" phrase))))
+    (check-true (string-contains? arch phrase) (format "architecture doc must state: ~a" phrase))))

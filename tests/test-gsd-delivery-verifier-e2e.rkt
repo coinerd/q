@@ -265,19 +265,22 @@
       (define events (box '()))
       (define (collect name wrapped)
         (set-box! events (append (unbox events) (list (cons name (hash-ref wrapped 'data))))))
-      (dynamic-wind
-       (lambda () (set-gsd-event-bus! collect))
-       (lambda ()
-         (define result
-           (parameterize ([current-gsd-verification-registry reg])
-             (run-delivery-verification base plan 0)))
-         (check-false (delivery-verification-approved? result)))
-       (lambda () (set-gsd-event-bus! void)))
+      (dynamic-wind (lambda () (set-gsd-event-bus! collect))
+                    (lambda ()
+                      (define result
+                        (parameterize ([current-gsd-verification-registry reg])
+                          (run-delivery-verification base plan 0)))
+                      (check-false (delivery-verification-approved? result)))
+                    (lambda () (set-gsd-event-bus! void)))
       (define all (unbox events))
       (define started
-        (for/first ([e (in-list all)] #:when (equal? (car e) 'gsd.verification.started)) (cdr e)))
+        (for/first ([e (in-list all)]
+                    #:when (equal? (car e) 'gsd.verification.started))
+          (cdr e)))
       (define completed
-        (for/first ([e (in-list all)] #:when (equal? (car e) 'gsd.verification.completed)) (cdr e)))
+        (for/first ([e (in-list all)]
+                    #:when (equal? (car e) 'gsd.verification.completed))
+          (cdr e)))
       (check-true (and started #t) "started event published")
       (check-true (and completed #t) "completed event published")
       (when (and started completed)
@@ -294,7 +297,7 @@
                     "terminal event carries the actual log identity"))
       (check-equal? (length (for/list ([e (in-list all)]
                                        #:when (equal? (car e) 'gsd.verification.completed))
-                                       e))
+                              e))
                     1
                     "exactly one terminal publication")
       (cleanup-tmp base))

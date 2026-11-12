@@ -120,19 +120,17 @@
            (check-exn #rx"interactive broker grant required"
                       (lambda () (verb (hasheq 'approved #t) #t)))))))
     (test-case "author/model phase cannot write proposals, authorize or revoke"
-      (with-root (lambda (root _)
-                   (parameterize ([current-gsd-author-phase (hasheq 'phase 'test-author)])
-                     (check-exn #rx"author phase"
-                                (lambda () (propose-retain! "task-proposal" sample)))
-                     (for ([verb (in-list owner-verbs)])
-                       (check-exn #rx"author phase" (lambda () (verb sample #t))))
-                     (check-false (validate-supplemental-approval sample)))
-                   ;; The lock handle may exist; no authority record may.
-                   (check-equal? (filter (lambda (entry)
-                                           (regexp-match? #px"^[0-9a-f]"
-                                                          (path->string entry)))
-                                         (directory-list root))
-                                 '()))))
+      (with-root
+       (lambda (root _)
+         (parameterize ([current-gsd-author-phase (hasheq 'phase 'test-author)])
+           (check-exn #rx"author phase" (lambda () (propose-retain! "task-proposal" sample)))
+           (for ([verb (in-list owner-verbs)])
+             (check-exn #rx"author phase" (lambda () (verb sample #t))))
+           (check-false (validate-supplemental-approval sample)))
+         ;; The lock handle may exist; no authority record may.
+         (check-equal? (filter (lambda (entry) (regexp-match? #px"^[0-9a-f]" (path->string entry)))
+                               (directory-list root))
+                       '()))))
     (test-case "stdin, reviewer/unbound phase, guards and policy grants are not authority"
       (with-root
        (lambda (root _)
@@ -323,93 +321,87 @@
                       (check-not-false (validate-supplemental-approval ref))
                       (check-false (approve-supplemental-proposal! proposal grant)))))))
     (test-case "re-approving the same proposal returns the existing approval; revoked never re-approves"
-      (with-root
-       (lambda (root _)
-         (with-channel
-          (lambda ()
-            (define proposal (propose-retain! "task-proposal" sample))
-            (define digest-files
-              (lambda ()
-                (filter (lambda (n) (regexp-match? #px"^[0-9a-f]{64}\\.json$" n))
-                        (map path->string (directory-list root)))))
-            (define ref (approve proposal))
-            (check-equal? (length (digest-files)) 2) ; proposal + one approval
-            ;; A second authentic owner decision is consumed but deduplicated:
-            ;; the EXISTING approval identity is returned, no fresh nonce.
-            (define ref2 (approve proposal))
-            (check-equal? ref2 ref)
-            (check-equal? (length (digest-files)) 2)
-            (check-not-false (validate-supplemental-approval ref proposal))
-            ;; Once any approval of the proposal is revoked the proposal is
-            ;; permanently dead: re-approval fails closed.
-            (define revocation
-              (propose-retain! "revocation-proposal" (hasheq 'reason "dedup") (list ref)))
-            (check-not-false (revoke! revocation (interactive-grant revocation)))
-            (check-exn #rx"revoked proposal can never be re-approved"
-                       (lambda () (approve proposal)))
-            ;; proposal + approval + revocation proposal + revocation record;
-            ;; the refused re-approval added no new approval identity.
-            (check-equal? (length (digest-files)) 4)
-            (check-false (validate-supplemental-approval ref proposal)))))))
+      (with-root (lambda (root _)
+                   (with-channel
+                    (lambda ()
+                      (define proposal (propose-retain! "task-proposal" sample))
+                      (define digest-files
+                        (lambda ()
+                          (filter (lambda (n) (regexp-match? #px"^[0-9a-f]{64}\\.json$" n))
+                                  (map path->string (directory-list root)))))
+                      (define ref (approve proposal))
+                      (check-equal? (length (digest-files)) 2) ; proposal + one approval
+                      ;; A second authentic owner decision is consumed but deduplicated:
+                      ;; the EXISTING approval identity is returned, no fresh nonce.
+                      (define ref2 (approve proposal))
+                      (check-equal? ref2 ref)
+                      (check-equal? (length (digest-files)) 2)
+                      (check-not-false (validate-supplemental-approval ref proposal))
+                      ;; Once any approval of the proposal is revoked the proposal is
+                      ;; permanently dead: re-approval fails closed.
+                      (define revocation
+                        (propose-retain! "revocation-proposal" (hasheq 'reason "dedup") (list ref)))
+                      (check-not-false (revoke! revocation (interactive-grant revocation)))
+                      (check-exn #rx"revoked proposal can never be re-approved"
+                                 (lambda () (approve proposal)))
+                      ;; proposal + approval + revocation proposal + revocation record;
+                      ;; the refused re-approval added no new approval identity.
+                      (check-equal? (length (digest-files)) 4)
+                      (check-false (validate-supplemental-approval ref proposal)))))))
     (test-case "concurrent same-proposal approvals yield exactly one admissible approval"
-      (with-root
-       (lambda (root _)
-         (with-channel
-          (lambda ()
-            (define proposal (propose-retain! "task-proposal" sample))
-            (define results (make-channel))
-            (define workers
-              (for/list ([i (in-range 6)])
-                (thread
-                 (lambda ()
-                   (with-handlers ([exn:fail? (lambda (e) (channel-put results e))])
-                     (channel-put
-                      results
-                      (approve-supplemental-proposal! proposal (interactive-grant proposal))))))))
-            (define refs
-              (for/list ([i (in-range 6)]) (sync/timeout 10 results)))
-            (for-each thread-wait workers)
-            (define ok (filter supplemental-reference? refs))
-            (check-false (null? ok))
-            (check-equal? (length (remove-duplicates ok)) 1)
-            (define approval-files
-              (filter (lambda (n) (regexp-match? #px"^[0-9a-f]{64}\\.json$" n))
-                      (map path->string (directory-list root))))
-            (check-equal? (length approval-files) 2) ; proposal + exactly one approval
-            (check-not-false (validate-supplemental-approval (car ok) proposal)))))))
+      (with-root (lambda (root _)
+                   (with-channel
+                    (lambda ()
+                      (define proposal (propose-retain! "task-proposal" sample))
+                      (define results (make-channel))
+                      (define workers
+                        (for/list ([i (in-range 6)])
+                          (thread (lambda ()
+                                    (with-handlers ([exn:fail? (lambda (e) (channel-put results e))])
+                                      (channel-put results
+                                                   (approve-supplemental-proposal!
+                                                    proposal
+                                                    (interactive-grant proposal))))))))
+                      (define refs
+                        (for/list ([i (in-range 6)])
+                          (sync/timeout 10 results)))
+                      (for-each thread-wait workers)
+                      (define ok (filter supplemental-reference? refs))
+                      (check-false (null? ok))
+                      (check-equal? (length (remove-duplicates ok)) 1)
+                      (define approval-files
+                        (filter (lambda (n) (regexp-match? #px"^[0-9a-f]{64}\\.json$" n))
+                                (map path->string (directory-list root))))
+                      (check-equal? (length approval-files) 2) ; proposal + exactly one approval
+                      (check-not-false (validate-supplemental-approval (car ok) proposal)))))))
     (test-case "the authority lock is reentrant per thread and excludes other threads"
       (with-root
        (lambda (_root _)
          (define inner-result #f)
-         (check-equal?
-          (call-with-supplemental-authority-lock
-           (lambda ()
-             (set! inner-result
-                   (call-with-supplemental-authority-lock (lambda () 'inner)))
-             'outer))
-          'outer)
+         (check-equal? (call-with-supplemental-authority-lock
+                        (lambda ()
+                          (set! inner-result
+                                (call-with-supplemental-authority-lock (lambda () 'inner)))
+                          'outer))
+                       'outer)
          (check-equal? inner-result 'inner)
          ;; Mutual exclusion between threads: B cannot enter while A holds.
          (define order (make-channel))
          (define release (make-semaphore))
          (define counter 0)
          (define a
-           (thread
-            (lambda ()
-              (call-with-supplemental-authority-lock
-               (lambda ()
-                 (channel-put order 'a-start)
-                 (sync/timeout 5 release)
-                 (set! counter (add1 counter))
-                 (channel-put order 'a-end))))))
+           (thread (lambda ()
+                     (call-with-supplemental-authority-lock (lambda ()
+                                                              (channel-put order 'a-start)
+                                                              (sync/timeout 5 release)
+                                                              (set! counter (add1 counter))
+                                                              (channel-put order 'a-end))))))
          (check-equal? (sync/timeout 5 order) 'a-start)
          (define b
-           (thread
-            (lambda ()
-              (call-with-supplemental-authority-lock
-               (lambda ()
-                 (set! counter (+ counter 10))
-                 (channel-put order 'b-end))))))
+           (thread (lambda ()
+                     (call-with-supplemental-authority-lock (lambda ()
+                                                              (set! counter (+ counter 10))
+                                                              (channel-put order 'b-end))))))
          (sleep 0.1) ; give a broken lock every chance to let B in
          (check-equal? counter 0 "thread B must wait while A holds the lock")
          (semaphore-post release)
@@ -419,27 +411,30 @@
          (thread-wait b)
          (check-equal? counter 11))))
     (test-case "admission revalidates live approvals under the lock and fails closed"
-      (with-root
-       (lambda (_root _)
-         (with-channel
-          (lambda ()
-            (define proposal (propose-retain! "task-proposal" sample))
-            (define ref (approve proposal))
-            (define effect #f)
-            (check-equal? (call-with-supplemental-admission (list ref) (lambda () (set! effect #t) 'ran))
-                          'ran)
-            (check-true effect)
-            (check-exn #rx"admission refs must be immutable"
-                       (lambda () (call-with-supplemental-admission (list (hasheq 'approved #t)) void)))
-            (check-exn #rx"admission requires a live unrevoked"
-                       (lambda () (call-with-supplemental-admission (list proposal) void)))
-            (define revocation
-              (propose-retain! "revocation-proposal" (hasheq) (list ref)))
-            (revoke! revocation (interactive-grant revocation))
-            (set! effect #f)
-            (check-exn #rx"admission requires a live unrevoked"
-                       (lambda () (call-with-supplemental-admission (list ref) void)))
-            (check-false effect "a failed admission must never run its thunk"))))))
+      (with-root (lambda (_root _)
+                   (with-channel
+                    (lambda ()
+                      (define proposal (propose-retain! "task-proposal" sample))
+                      (define ref (approve proposal))
+                      (define effect #f)
+                      (check-equal? (call-with-supplemental-admission (list ref)
+                                                                      (lambda ()
+                                                                        (set! effect #t)
+                                                                        'ran))
+                                    'ran)
+                      (check-true effect)
+                      (check-exn #rx"admission refs must be immutable"
+                                 (lambda ()
+                                   (call-with-supplemental-admission (list (hasheq 'approved #t))
+                                                                     void)))
+                      (check-exn #rx"admission requires a live unrevoked"
+                                 (lambda () (call-with-supplemental-admission (list proposal) void)))
+                      (define revocation (propose-retain! "revocation-proposal" (hasheq) (list ref)))
+                      (revoke! revocation (interactive-grant revocation))
+                      (set! effect #f)
+                      (check-exn #rx"admission requires a live unrevoked"
+                                 (lambda () (call-with-supplemental-admission (list ref) void)))
+                      (check-false effect "a failed admission must never run its thunk"))))))
     (test-case "foreign references, copied approvals and content tamper fail revalidation"
       (with-root (lambda (root _)
                    (with-channel
@@ -467,40 +462,39 @@
                       (replace-bytes! (path-for root proposal) #"{}")
                       (check-false (validate-supplemental-approval ref)))))))
     (test-case "revocation requires its own exact grant and replay never resurrects approval"
-      (with-root (lambda (root _)
-                   (with-channel
-                    (lambda ()
-                      (define proposal (propose-retain! "task-proposal" sample))
-                      (define ref (approve proposal))
-                      (define revocation
-                        (propose-retain! "revocation-proposal" (hasheq 'reason "test") (list ref)))
-                      (check-not-false (validate-supplemental-approval ref))
-                      (check-false (revoke! revocation (interactive-grant proposal)))
-                      (check-exn #rx"interactive broker"
-                                 (lambda ()
-                                   (revoke! revocation
-                                            (make-policy-approval-grant (hash-ref revocation
-                                                                                  'sha256)))))
-                      (define grant (interactive-grant revocation))
-                      (parameterize ([current-gsd-author-phase (hasheq 'phase 'test-author)])
-                        (check-exn #rx"author phase" (lambda () (revoke! revocation grant))))
-                      (define revoked (revoke! revocation grant))
-                      (check-equal? (hash-ref revoked 'kind) "revocation")
-                      (check-true (immutable? (load-supplemental-record revoked)))
-                      (check-false (validate-supplemental-approval ref))
-                      (check-false (revoke! revocation grant))
-                      (check-equal? proposal (propose-retain! "task-proposal" sample))
-                      (check-false (validate-supplemental-approval ref))
-                      (check-equal? revoked (revoke! revocation (interactive-grant revocation)))
-                      (check-false (validate-supplemental-approval ref))
-                      ;; A revoked proposal is permanently dead: re-approval
-                      ;; fails closed instead of minting a fresh nonce approval
-                      ;; that would admit a second operation.
-                      (check-exn #rx"revoked proposal can never be re-approved"
-                                 (lambda () (approve proposal)))
-                      (check-false (validate-supplemental-approval ref))
-                      (replace-bytes! (path-for root revoked) #"{}")
-                      (check-false (validate-supplemental-approval ref)))))))
+      (with-root
+       (lambda (root _)
+         (with-channel
+          (lambda ()
+            (define proposal (propose-retain! "task-proposal" sample))
+            (define ref (approve proposal))
+            (define revocation
+              (propose-retain! "revocation-proposal" (hasheq 'reason "test") (list ref)))
+            (check-not-false (validate-supplemental-approval ref))
+            (check-false (revoke! revocation (interactive-grant proposal)))
+            (check-exn #rx"interactive broker"
+                       (lambda ()
+                         (revoke! revocation
+                                  (make-policy-approval-grant (hash-ref revocation 'sha256)))))
+            (define grant (interactive-grant revocation))
+            (parameterize ([current-gsd-author-phase (hasheq 'phase 'test-author)])
+              (check-exn #rx"author phase" (lambda () (revoke! revocation grant))))
+            (define revoked (revoke! revocation grant))
+            (check-equal? (hash-ref revoked 'kind) "revocation")
+            (check-true (immutable? (load-supplemental-record revoked)))
+            (check-false (validate-supplemental-approval ref))
+            (check-false (revoke! revocation grant))
+            (check-equal? proposal (propose-retain! "task-proposal" sample))
+            (check-false (validate-supplemental-approval ref))
+            (check-equal? revoked (revoke! revocation (interactive-grant revocation)))
+            (check-false (validate-supplemental-approval ref))
+            ;; A revoked proposal is permanently dead: re-approval
+            ;; fails closed instead of minting a fresh nonce approval
+            ;; that would admit a second operation.
+            (check-exn #rx"revoked proposal can never be re-approved" (lambda () (approve proposal)))
+            (check-false (validate-supplemental-approval ref))
+            (replace-bytes! (path-for root revoked) #"{}")
+            (check-false (validate-supplemental-approval ref)))))))
     (test-case "public payloads and references cannot manufacture private owner records"
       (with-root
        (lambda (_root _)

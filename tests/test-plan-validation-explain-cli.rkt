@@ -302,8 +302,8 @@
      (define legacy-record-path
        (build-path dir ".planning" "campaigns" (string-append legacy-plan-id ".rktd")))
      (call-with-output-file legacy-record-path
-       (lambda (out) (write legacy-datum out))
-       #:exists 'replace)
+                            (lambda (out) (write legacy-datum out))
+                            #:exists 'replace)
      (delete-file record-path)
      (define-values (code out) (run-cli dir "--explain" "--campaign" legacy-plan-id))
      (check-equal? code 0 out)
@@ -355,8 +355,9 @@
      ;; so this is diagnostic only: the doctor must say so and offer no release.
      (define lock-path (build-path planning "campaigns" (string-append plan-id ".lock")))
      (call-with-output-file lock-path
-       (lambda (out) (write (hasheq 'owner "session-A" 'pid 4242 'acquired 1700000000) out))
-       #:exists 'truncate)
+                            (lambda (out)
+                              (write (hasheq 'owner "session-A" 'pid 4242 'acquired 1700000000) out))
+                            #:exists 'truncate)
      (define record-before (file->bytes record-path))
      (define lock-before (file->bytes lock-path))
      ;; In-process inspection: same function the CLI prints from, without
@@ -410,14 +411,13 @@
 
 (test-case "W4 doctor: the lease lock path is ONE shared helper"
   (define base (make-temporary-file "lease-path-~a" 'directory))
-  (dynamic-wind
-   void
-   (lambda ()
-     (define plan-id (make-string 64 #\c))
-     (check-equal? (lease-path base plan-id)
-                   (campaign-lock-file base plan-id)
-                   "the doctor and the lease can never name two lock files"))
-   (lambda () (drop-fixture base))))
+  (dynamic-wind void
+                (lambda ()
+                  (define plan-id (make-string 64 #\c))
+                  (check-equal? (lease-path base plan-id)
+                                (campaign-lock-file base plan-id)
+                                "the doctor and the lease can never name two lock files"))
+                (lambda () (drop-fixture base))))
 
 ;; --- W4 doctor: unknown user artifacts are reported, never removed ---
 
@@ -447,8 +447,8 @@
      ;; as one.
      (define lock-path (build-path planning "campaigns" (string-append plan-id ".lock")))
      (call-with-output-file lock-path
-       (lambda (out) (write (hasheq 'owner "session-A" 'pid 4242) out))
-       #:exists 'truncate)
+                            (lambda (out) (write (hasheq 'owner "session-A" 'pid 4242) out))
+                            #:exists 'truncate)
      (define lock-before (file->bytes lock-path))
      (define explanation (plan-artifact-explanation dir #:campaign-id plan-id))
      (define out (format-plan-artifact-explanation explanation))
@@ -495,32 +495,26 @@
      (make-directory* campaigns)
      (define owned (build-path campaigns "plan-snapshot.tmp-owned"))
      (make-directory* owned)
-     (call-with-output-file (build-path owned plan-snapshot-staging-marker-filename)
-       (lambda (out)
-         (write (hasheq 'schema-version 1
-                        'kind 'plan-snapshot-staging
-                        'pid 1
-                        'created-at 0)
-                out))
-       #:exists 'truncate)
+     (call-with-output-file
+      (build-path owned plan-snapshot-staging-marker-filename)
+      (lambda (out)
+        (write (hasheq 'schema-version 1 'kind 'plan-snapshot-staging 'pid 1 'created-at 0) out))
+      #:exists 'truncate)
      ;; The OTHER authentic marker q writes: /plan supersede rotation.
      (define waves-backup (build-path dir ".planning" "waves-pre-plan-backup"))
      (make-directory* waves-backup)
-     (call-with-output-file (build-path waves-backup ".q-gsd-plan-supersede-owner")
-       (lambda (out)
-         (write (hasheq 'schema-version 1
-                        'kind 'waves-pre-plan-backup
-                        'pid 1
-                        'created-at 0)
-                out))
-       #:exists 'truncate)
+     (call-with-output-file
+      (build-path waves-backup ".q-gsd-plan-supersede-owner")
+      (lambda (out)
+        (write (hasheq 'schema-version 1 'kind 'waves-pre-plan-backup 'pid 1 'created-at 0) out))
+      #:exists 'truncate)
      ;; A lookalike name with a non-authentic marker is still UNKNOWN: only the
      ;; exact kind/schema proves ownership.
      (define impostor (build-path campaigns "plan-snapshot.tmp-impostor"))
      (make-directory* impostor)
      (call-with-output-file (build-path impostor plan-snapshot-staging-marker-filename)
-       (lambda (out) (write (hasheq 'schema-version 1 'kind 'not-ours) out))
-       #:exists 'truncate)
+                            (lambda (out) (write (hasheq 'schema-version 1 'kind 'not-ours) out))
+                            #:exists 'truncate)
      (define explanation (plan-artifact-explanation dir))
      (define out (format-plan-artifact-explanation explanation))
      (define unknown (hash-ref explanation 'unknown-artifacts))
@@ -529,26 +523,22 @@
      (check-equal? (length known) 2 out)
      (for ([rel (in-list (list ".planning/waves-pre-plan-backup"
                                ".planning/campaigns/plan-snapshot.tmp-owned"))])
-       (define row (for/first ([row (in-list known)]
-                               #:when (equal? (hash-ref row 'path) rel))
-                    row))
+       (define row
+         (for/first ([row (in-list known)]
+                     #:when (equal? (hash-ref row 'path) rel))
+           row))
        (check-not-false row (format "missing owned artifact ~a in ~a" rel out))
        (check-eq? (hash-ref row 'ownership) 'owned))
      (check-true (for/or ([row (in-list unknown)])
-                   (equal? (hash-ref row 'path)
-                           ".planning/campaigns/plan-snapshot.tmp-impostor")))
+                   (equal? (hash-ref row 'path) ".planning/campaigns/plan-snapshot.tmp-impostor")))
      (check-false (for/or ([row (in-list unknown)])
-                    (equal? (hash-ref row 'path)
-                            ".planning/campaigns/plan-snapshot.tmp-owned")))
+                    (equal? (hash-ref row 'path) ".planning/campaigns/plan-snapshot.tmp-owned")))
      (check-false (for/or ([row (in-list unknown)])
-                    (equal? (hash-ref row 'path)
-                            ".planning/waves-pre-plan-backup")))
-     (check-true (string-contains? out
-                                  "known owned planning artifacts (2, excluded from unknown):"))
+                    (equal? (hash-ref row 'path) ".planning/waves-pre-plan-backup")))
+     (check-true (string-contains? out "known owned planning artifacts (2, excluded from unknown):"))
      (check-true (string-contains? out "[owned] .planning/waves-pre-plan-backup"))
      (check-true (string-contains? out "[owned] .planning/campaigns/plan-snapshot.tmp-owned"))
-     (check-true (string-contains? out
-                                  "[unowned] .planning/campaigns/plan-snapshot.tmp-impostor"))
+     (check-true (string-contains? out "[unowned] .planning/campaigns/plan-snapshot.tmp-impostor"))
      ;; READ-ONLY: both markers and both directories survive.
      (check-true (file-exists? (build-path owned plan-snapshot-staging-marker-filename)))
      (check-true (file-exists? (build-path waves-backup ".q-gsd-plan-supersede-owner")))
@@ -575,8 +565,7 @@
   ;; The next `##` heading ends the excluded span, so authored edits after it
   ;; are still compared.
   (define done-edited (string-replace base "Done means closed." "Done means open."))
-  (check-false (equal? (normalize-wave-doc-content base)
-                       (normalize-wave-doc-content done-edited)))
+  (check-false (equal? (normalize-wave-doc-content base) (normalize-wave-doc-content done-edited)))
   ;; So does a top-level `#` heading.
   (define top-base
     (string-append "# Wave 0\nStatus: Inbox\n\n## Last Failure\nreason\n\n"

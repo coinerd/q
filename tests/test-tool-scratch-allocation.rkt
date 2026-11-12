@@ -205,11 +205,11 @@
               (tool-bash (hasheq 'command (format "echo no >~a" (path->string target))) ctx*)))
            (parameterize ([current-bash-execution-config (make-bash-execution-config #:block? #t)])
              ;; The real allocation is accepted end to end.
-             (check-false
-              (tool-result-is-error?
-               (tool-bash (hasheq 'command
-                                  (format "echo ok >~a" (path->string (build-path root "ok.log"))))
-                          ctx)))
+             (check-false (tool-result-is-error?
+                           (tool-bash (hasheq 'command
+                                              (format "echo ok >~a"
+                                                      (path->string (build-path root "ok.log"))))
+                                      ctx)))
              (check-true (file-exists? (build-path root "ok.log")))
              ;; The container itself is not a session root.
              (check-true (refused? base (build-path base "base.log")))

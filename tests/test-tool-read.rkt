@@ -121,13 +121,16 @@
 ;; R96 (BUG-0096): honest bounded read
 ;; ============================================================
 
-(define (utf8-len s) (bytes-length (string->bytes/utf-8 s)))
+(define (utf8-len s)
+  (bytes-length (string->bytes/utf-8 s)))
 
 (test-case "tool-read: 2001-line file truncates with honest metadata"
   (define tmp (make-temporary-file "q-read-r96-~a.txt"))
   (call-with-output-file tmp
-    #:exists 'replace
-    (lambda (out) (for ([i (in-range 1 2002)]) (fprintf out "line ~a\n" i))))
+                         #:exists 'replace
+                         (lambda (out)
+                           (for ([i (in-range 1 2002)])
+                             (fprintf out "line ~a\n" i))))
   (define result (tool-read (hasheq 'path tmp)))
   (check-false (tool-result-is-error? result))
   (define d (tool-result-details result))
@@ -143,8 +146,7 @@
   (check-true (string-contains? (car (tool-result-content result)) notice))
   ;; byte-count oracle equality (single text-content string, UTF-8)
   (check-equal? (length (tool-result-content result)) 1)
-  (check-equal? (hash-ref d 'returned-byte)
-                (utf8-len (car (tool-result-content result))))
+  (check-equal? (hash-ref d 'returned-byte) (utf8-len (car (tool-result-content result))))
   (delete-file tmp))
 
 (test-case "tool-read: offset past EOF is an empty success"
@@ -163,8 +165,7 @@
 
 (test-case "tool-read: CRLF file has no phantom line and no stray CR"
   (define tmp (make-temporary-file "q-read-r96-~a.txt"))
-  (call-with-output-file tmp #:exists 'replace
-    (lambda (out) (write-bytes #"a\r\nb\r\n" out)))
+  (call-with-output-file tmp #:exists 'replace (lambda (out) (write-bytes #"a\r\nb\r\n" out)))
   (define result (tool-read (hasheq 'path tmp)))
   (check-false (tool-result-is-error? result))
   (check-equal? (hash-ref (tool-result-details result) 'total-lines) 2)
@@ -173,8 +174,7 @@
 
 (test-case "tool-read: lone CR is preserved"
   (define tmp (make-temporary-file "q-read-r96-~a.txt"))
-  (call-with-output-file tmp #:exists 'replace
-    (lambda (out) (write-bytes #"a\rb\n" out)))
+  (call-with-output-file tmp #:exists 'replace (lambda (out) (write-bytes #"a\rb\n" out)))
   (define result (tool-read (hasheq 'path tmp)))
   (check-false (tool-result-is-error? result))
   (check-equal? (hash-ref (tool-result-details result) 'total-lines) 1)
@@ -183,8 +183,9 @@
 
 (test-case "tool-read: oversized single line errors with line number and guidance"
   (define tmp (make-temporary-file "q-read-r96-~a.txt"))
-  (call-with-output-file tmp #:exists 'replace
-    (lambda (out) (write-string (make-string 60000 #\b) out)))
+  (call-with-output-file tmp
+                         #:exists 'replace
+                         (lambda (out) (write-string (make-string 60000 #\b) out)))
   (define result (tool-read (hasheq 'path tmp)))
   (check-pred tool-result-is-error? result)
   (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text) "line 1"))

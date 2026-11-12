@@ -361,25 +361,26 @@
     (test-case "R99a: hash->conclusion still rejects truly unknown categories"
       (check-exn exn:fail?
                  (lambda ()
-                   (hash->conclusion (hasheq 'id "x" 'text "t" 'category 'mystery
-                                             'fsm-state-origin 'idle)))))
+                   (hash->conclusion
+                    (hasheq 'id "x" 'text "t" 'category 'mystery 'fsm-state-origin 'idle)))))
 
     (test-case "R99a: task-memory->hash / hash->task-memory roundtrip keeps provenance"
       (define mem
-        (add-conclusion (add-conclusion (make-task-memory)
-                                        (task-conclusion "c1" "insight" 'fact 'idle '("m1") 1 '() '()))
-                        (r99a-provenance-record "p1")))
+        (add-conclusion
+         (add-conclusion (make-task-memory)
+                         (task-conclusion "c1" "insight" 'fact 'idle '("m1") 1 '() '()))
+         (r99a-provenance-record "p1")))
       (define restored (hash->task-memory (task-memory->hash mem)))
       (check-equal? (length (task-memory-conclusions restored)) 2)
       (check-true (for/or ([c (in-list (task-memory-conclusions restored))])
-                    (and (eq? (task-conclusion-category c) 'provenance)
-                         (provenance-kind? c)))))
+                    (and (eq? (task-conclusion-category c) 'provenance) (provenance-kind? c)))))
 
     (test-case "R99a: search/recall finds provenance by tag and state without dropping it"
       (define mem
-        (add-conclusion (add-conclusion (make-task-memory)
-                                        (task-conclusion "c1" "insight" 'decision 'planning '("m2") 1 '(arch) '()))
-                        (r99a-provenance-record "p1")))
+        (add-conclusion
+         (add-conclusion (make-task-memory)
+                         (task-conclusion "c1" "insight" 'decision 'planning '("m2") 1 '(arch) '()))
+         (r99a-provenance-record "p1")))
       ;; tag search (recall by origin tag)
       (define by-tag (conclusions-with-tags mem '(auto-distilled)))
       (check-equal? (map task-conclusion-id by-tag) '("p1"))
@@ -393,8 +394,11 @@
 
     (test-case "R99a: session store ACTIVE path roundtrips old five-category records unchanged"
       (define log-path (make-temporary-file "r99a-store-~a.log"))
-      (append-conclusion! log-path (task-conclusion "c1" "old fact" 'fact 'exploration '("m1") 1000 '() '()))
-      (append-conclusion! log-path (task-conclusion "c2" "old decision" 'decision 'planning '("m2") 2000 '(t) '()))
+      (append-conclusion! log-path
+                          (task-conclusion "c1" "old fact" 'fact 'exploration '("m1") 1000 '() '()))
+      (append-conclusion!
+       log-path
+       (task-conclusion "c2" "old decision" 'decision 'planning '("m2") 2000 '(t) '()))
       (define loaded (load-conclusions log-path))
       (check-equal? (map task-conclusion-id loaded) '("c1" "c2"))
       (check-equal? (map task-conclusion-category loaded) '(fact decision))
@@ -414,7 +418,8 @@
     (test-case "R99a: session store ARCHIVED path roundtrips provenance records"
       (define log-path (make-temporary-file "r99a-arch-~a.log"))
       (append-archive-marker! log-path (r99a-provenance-record "p1"))
-      (append-conclusion! log-path (task-conclusion "c1" "active insight" 'fact 'idle '("m1") 1000 '() '()))
+      (append-conclusion! log-path
+                          (task-conclusion "c1" "active insight" 'fact 'idle '("m1") 1000 '() '()))
       (append-archive-marker! log-path (r99a-provenance-record "p2"))
       ;; archived loader includes both task-conclusion and task-conclusion-archived entries
       (define archived (load-conclusions-archived log-path))
@@ -433,7 +438,9 @@
       ;; Characterization: unknown categories are NOT silently accepted — the
       ;; entry degrades to #f (documented rollback hazard for old readers).
       (define log-path (make-temporary-file "r99a-unknown-~a.log"))
-      (append-conclusion! log-path (task-conclusion "bad" "unknown category" 'mystery 'idle '("m1") 1000 '() '()))
+      (append-conclusion!
+       log-path
+       (task-conclusion "bad" "unknown category" 'mystery 'idle '("m1") 1000 '() '()))
       (define loaded (load-conclusions log-path))
       (check-equal? loaded '(#f))
       (delete-file log-path))))

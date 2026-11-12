@@ -124,22 +124,23 @@
   (set-campaign-wave-delivery-branch! wave "campaign/test")
   (set-campaign-wave-delivery-head-sha! wave HEAD)
   (persist-campaign! dir rec)
-  (record-delivery-receipt!
-   dir plan-id 0
-   (hasheq 'repo
-           "owner/repo"
-           'branch
-           "campaign/test"
-           'origin
-           "origin"
-           'evidence
-           "evidence"
-           'head
-           HEAD
-           'tree
-           (make-string 40 #\b)
-           'verified-at
-           0))
+  (record-delivery-receipt! dir
+                            plan-id
+                            0
+                            (hasheq 'repo
+                                    "owner/repo"
+                                    'branch
+                                    "campaign/test"
+                                    'origin
+                                    "origin"
+                                    'evidence
+                                    "evidence"
+                                    'head
+                                    HEAD
+                                    'tree
+                                    (make-string 40 #\b)
+                                    'verified-at
+                                    0))
   (persist-delivery-handoff! dir plan-id wave "test precondition")
   (reconcile-delivered-handoff! dir plan-id 0 MERGE)
   (update-delivery-journal! dir plan-id 0 (hasheq 'stage "delivered"))
@@ -147,47 +148,44 @@
 
 (define (write-tracker-opt-in! dir plan-id)
   (make-directory* (build-path dir ".q"))
-  (call-with-output-file
-   (build-path dir ".q" "config.json")
-   (lambda (out)
-     (write-json
-      (hasheq 'gsd
-              (hasheq 'tracker
-                      (hasheq 'live
-                              #t
-                              'plan-id
-                              plan-id
-                              'wave
-                              0
-                              'repository
-                              "owner/repo"
-                              'issue-number
-                              74
-                              'board-field
-                              "Status"
-                              'board-value
-                              "Done"
-                              'project-item-id
-                              "PVTI_item"
-                              'project-id
-                              "PVT_project"
-                              'field-id
-                              "PVTSSF_status"
-                              'option-id
-                              "done123")))
-      out)
-     (newline out))
-   #:exists 'replace))
+  (call-with-output-file (build-path dir ".q" "config.json")
+                         (lambda (out)
+                           (write-json (hasheq 'gsd
+                                               (hasheq 'tracker
+                                                       (hasheq 'live
+                                                               #t
+                                                               'plan-id
+                                                               plan-id
+                                                               'wave
+                                                               0
+                                                               'repository
+                                                               "owner/repo"
+                                                               'issue-number
+                                                               74
+                                                               'board-field
+                                                               "Status"
+                                                               'board-value
+                                                               "Done"
+                                                               'project-item-id
+                                                               "PVTI_item"
+                                                               'project-id
+                                                               "PVT_project"
+                                                               'field-id
+                                                               "PVTSSF_status"
+                                                               'option-id
+                                                               "done123")))
+                                       out)
+                           (newline out))
+                         #:exists 'replace))
 
 (define (item-readback-json option-id)
   (format
-   (string-append
-    "{\"data\":{\"node\":{\"id\":\"PVTI_item\","
-    "\"project\":{\"id\":\"PVT_project\"},"
-    "\"content\":{\"number\":74,\"repository\":{\"nameWithOwner\":\"owner/repo\"}},"
-    "\"fieldValueByName\":{\"field\":{\"id\":\"PVTSSF_status\","
-    "\"options\":[{\"id\":\"inbox\"},{\"id\":\"inprogress\"},{\"id\":\"done123\"}]},"
-    "\"optionId\":\"~a\"}}}}}")
+   (string-append "{\"data\":{\"node\":{\"id\":\"PVTI_item\","
+                  "\"project\":{\"id\":\"PVT_project\"},"
+                  "\"content\":{\"number\":74,\"repository\":{\"nameWithOwner\":\"owner/repo\"}},"
+                  "\"fieldValueByName\":{\"field\":{\"id\":\"PVTSSF_status\","
+                  "\"options\":[{\"id\":\"inbox\"},{\"id\":\"inprogress\"},{\"id\":\"done123\"}]},"
+                  "\"optionId\":\"~a\"}}}}}")
    option-id))
 
 ;; Records every gh argv in `log`; #:close-state simulates an issue whose
@@ -198,32 +196,28 @@
     (cond
       [(equal? (take argv 2) '("api" "graphql"))
        (values 0 (item-readback-json (if (= (length (unbox log)) 1) "inbox" "done123")) "")]
-      [(equal? (take argv 2) '("project" "item-edit"))
-       (values 0 "{\"id\":\"PVTI_item\"}" "")]
-      [else
-       (values 0 (format "{\"number\":74,\"state\":\"~a\"}" close-state) "")])))
+      [(equal? (take argv 2) '("project" "item-edit")) (values 0 "{\"id\":\"PVTI_item\"}" "")]
+      [else (values 0 (format "{\"number\":74,\"state\":\"~a\"}" close-state) "")])))
 
 ;; The shipped resolver with only the gh transport faked. Records the
 ;; live/repository arguments the production wiring hands the adapter maker.
 (define (composition-resolver dir plan-id log #:close-state [close-state "closed"])
   (define made-with (box #f))
-  (values
-   (lambda (_base _plan _wave)
-     (resolve-live-tracker-reconciler
-      dir
-      plan-id
-      0
-      #:adapter-maker
-      (lambda (#:live? live? #:repository repository)
-        (set-box! made-with (list live? repository))
-        (make-gh-cli-tracker-adapter #:live? live?
-                                     #:repository repository
-                                     #:runner (make-composition-runner log #:close-state close-state)))))
-   made-with))
+  (values (lambda (_base _plan _wave)
+            (resolve-live-tracker-reconciler
+             dir
+             plan-id
+             0
+             #:adapter-maker (lambda (#:live? live? #:repository repository)
+                               (set-box! made-with (list live? repository))
+                               (make-gh-cli-tracker-adapter
+                                #:live? live?
+                                #:repository repository
+                                #:runner (make-composition-runner log #:close-state close-state)))))
+          made-with))
 
 (define (composition-reader pid)
-  (lambda (_base _plan _wave)
-    (hasheq 'status "delivered" 'plan-id pid 'wave 0 'merge-sha MERGE)))
+  (lambda (_base _plan _wave) (hasheq 'status "delivered" 'plan-id pid 'wave 0 'merge-sha MERGE)))
 
 (test-case "production resume: after death between DONE and tracker writes the real resolver reaches gh with exact identity"
   (define dir (make-temporary-file "tracker-resume~a" 'directory))
@@ -237,13 +231,13 @@
      (define reader-called (box 0))
      (define-values (resolver made-with) (composition-resolver dir pid gh-log))
      (define results
-       (resume-tracker-reconciliation!
-        dir
-        done-rec
-        #:resolver resolver
-        #:delivery-reader (lambda (_b _p _w)
-                            (set-box! reader-called (add1 (unbox reader-called)))
-                            ((composition-reader pid) _b _p _w))))
+       (resume-tracker-reconciliation! dir
+                                       done-rec
+                                       #:resolver resolver
+                                       #:delivery-reader
+                                       (lambda (_b _p _w)
+                                         (set-box! reader-called (add1 (unbox reader-called)))
+                                         ((composition-reader pid) _b _p _w))))
      ;; The production wiring constructed the explicitly live adapter for the
      ;; exact bound repository, and the fresh readback was consulted once.
      (check-equal? (unbox made-with) (list #t "owner/repo"))
@@ -276,8 +270,10 @@
      (define gh-log (box '()))
      (define (resume!)
        (define-values (resolver _) (composition-resolver dir pid gh-log))
-       (resume-tracker-reconciliation!
-        dir done-rec #:resolver resolver #:delivery-reader (composition-reader pid)))
+       (resume-tracker-reconciliation! dir
+                                       done-rec
+                                       #:resolver resolver
+                                       #:delivery-reader (composition-reader pid)))
      (check-equal? (reconciliation-checkpoint-result-status (car (resume!))) 'reconciled)
      (define first-pass (unbox gh-log))
      ;; Each resume builds a fresh adapter and port — the restart shape. The
@@ -311,8 +307,10 @@
        (with-intercepted-logging
         (lambda (entry) (set-box! warnings (cons (vector-ref entry 1) (unbox warnings))))
         (lambda ()
-          (resume-tracker-reconciliation!
-           dir done-rec #:resolver resolver #:delivery-reader (composition-reader pid)))
+          (resume-tracker-reconciliation! dir
+                                          done-rec
+                                          #:resolver resolver
+                                          #:delivery-reader (composition-reader pid)))
         'warning))
      (check-equal? (reconciliation-checkpoint-result-status (car results)) 'blocked)
      ;; The attempted effect is visible: all four commands of the composed
@@ -320,15 +318,12 @@
      ;; state=closed.
      (check-equal? (length (unbox gh-log)) 4)
      ;; The refusal is visible to the operator.
-     (check-true
-      (and
-       (findf
-        (lambda (msg)
-          (and (string? msg)
-               (regexp-match? #rx"tracker resume blocked" msg)
-               (regexp-match? #rx"delivered wave remains DONE" msg)))
-        (unbox warnings))
-       #t))
+     (check-true (and (findf (lambda (msg)
+                               (and (string? msg)
+                                    (regexp-match? #rx"tracker resume blocked" msg)
+                                    (regexp-match? #rx"delivered wave remains DONE" msg)))
+                             (unbox warnings))
+                      #t))
      ;; Durable DONE stands and implementation is never re-entered: the
      ;; attempt and the terminal delivery journal are byte-identical.
      (check-equal? (campaign-wave-status (car (campaign-record-waves (load-campaign-record dir pid))))
