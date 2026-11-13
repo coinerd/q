@@ -4,6 +4,8 @@
 
 (module+ test
   (require rackunit)
+  (displayln "GMD-W7-TIMEOUT-STARTED")
+  (flush-output)
   (check-true (begin
                 (sleep 60)
                 #t)

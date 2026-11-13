@@ -148,6 +148,6 @@ resumed sessions receive it as part of their prompt.
 |----------|---------|
 | `scripts/run-tests.rkt` | Parallel test runner; gate entry point |
 | `sandbox/subprocess.rkt` | Timeout kill path (W1 fix: SIGTERM→SIGKILL, process-group) |
-| `scripts/run-tests/classify-filters.rkt` | Serialization of mutation-sensitive / subprocess-isolation files (W2 fix) |
+| `scripts/run-tests/classify.rkt` | Serialization of mutation-sensitive / subprocess-isolation files (W2 fix) |
 | `docs/gsd-process-governance.md` | Process rules for milestones/waves/releases |
 | `.planning/RESUME-PROMPT-*.md` | Per-session resume prompts incl. background-gate rule |

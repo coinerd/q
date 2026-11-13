@@ -37,7 +37,7 @@ and has a documented reason here:
   the `subprocess` spelling is a deprecated alias for `process`). It spawns
   `racket scripts/run-tests.rkt` as a child process, and that script's
   startup performs repo-wide stale-bytecode cleaning
-  (`scripts/run-tests/classify-filters.rkt`). Concurrent runs would
+  (`scripts/run-tests/classify.rkt`). Concurrent runs would
   delete compiled artifacts under each other's feet — a repository-tree
   shared surface that cannot be isolated from inside the test. The test
   itself operates on a copied fixture ledger in a temp dir and exits

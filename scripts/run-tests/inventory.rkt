@@ -326,8 +326,7 @@
 
 (require racket/port
          racket/file
-         (only-in "classify.rkt" collect-test-files)
-         (only-in "classify-filters.rkt" unit-fast-file?))
+         (only-in "classify.rkt" collect-test-files unit-fast-file?))
 
 ;; ============================================================
 ;; unit-fast eligibility audit (W3)
@@ -705,18 +704,18 @@
 
 ;; Gate name -> sorted list of selected test files (repository walk).
 (define (gate-membership)
-  (hasheq "fast"
-          (collect-test-files 'fast)
-          "platform"
-          (collect-test-files 'platform)
-          "security"
-          (collect-test-files 'security)
-          "workflows"
-          (collect-test-files 'workflows)
-          "unit-fast"
-          (collect-test-files 'unit-fast)
-          "slow/L4"
-          (collect-test-files 'slow)))
+  (hash "fast"
+        (collect-test-files 'fast)
+        "platform"
+        (collect-test-files 'platform)
+        "security"
+        (collect-test-files 'security)
+        "workflows"
+        (collect-test-files 'workflows)
+        "unit-fast"
+        (collect-test-files 'unit-fast)
+        "slow/L4"
+        (collect-test-files 'slow)))
 
 ;; v1.00.24 W0 candidate behavior table plus declared maintenance rows.
 ;; Original freeze membership is preserved; automatic review adds one current
@@ -1429,20 +1428,20 @@
 (define tier-known-gates (append v124-gate-names '("tui")))
 
 (define (tier-gate-membership)
-  (hasheq "fast"
-          (collect-test-files 'fast)
-          "platform"
-          (collect-test-files 'platform)
-          "security"
-          (collect-test-files 'security)
-          "workflows"
-          (collect-test-files 'workflows)
-          "unit-fast"
-          (collect-test-files 'unit-fast)
-          "slow/L4"
-          (collect-test-files 'slow)
-          "tui"
-          (collect-test-files 'tui)))
+  (hash "fast"
+        (collect-test-files 'fast)
+        "platform"
+        (collect-test-files 'platform)
+        "security"
+        (collect-test-files 'security)
+        "workflows"
+        (collect-test-files 'workflows)
+        "unit-fast"
+        (collect-test-files 'unit-fast)
+        "slow/L4"
+        (collect-test-files 'slow)
+        "tui"
+        (collect-test-files 'tui)))
 
 ;; Owner chain: a v1.00.24 behavior-row owner when the family belongs to
 ;; exactly one owner's rows, else the first --ownership-map area whose

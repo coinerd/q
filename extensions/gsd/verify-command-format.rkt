@@ -18,6 +18,7 @@
 (provide (all-from-out "verify-command-grammar.rkt")
          ;; Declaration-layout extraction (BUG-0075 / R75).
          verify-declaration-extraction
+         normalize-declared-verify
          ;; ADDITIVE operator diagnostics: the same facts, structured.
          verify-extraction-operator-reasons)
 
@@ -134,6 +135,9 @@
                          '()
                          'refusal
                          #f)])])]))))
+
+(define (normalize-declared-verify declaration)
+  (hash-ref (verify-declaration-extraction declaration) 'canonical ""))
 
 ;; ============================================================
 ;; ADDITIVE structured operator reasons

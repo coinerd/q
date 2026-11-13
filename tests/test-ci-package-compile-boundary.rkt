@@ -2,74 +2,62 @@
 
 ;; @speed fast
 ;; @suite fast
-
-;; W1 (#8504): Package-visible compile boundary tests.
-;; @boundary unit
-;; Verifies that the 4 modules that previously failed `raco pkg setup`
-;; compilation now compile cleanly.
-;;
-;; These are tested via `racket -e "(require ...)"` subprocess rather
-;; than require because some are live/manual scripts that should not
-;; execute at compile time.
+;; @boundary integration
+;; Compile package-visible modules without executing their top-level code.
+;; Package-wide discovery and setup remain covered by the package setup gate.
 
 (require rackunit
          rackunit/text-ui
          racket/runtime-path)
 
 (define-runtime-path repo-root "..")
-(define (repo-path relative)
-  (path->string (build-path repo-root relative)))
 
-(define (module-compiles? path-from-root)
-  ;; Use subprocess to compile the module via raco make.
-  ;; This catches compile errors without executing module+ main.
-  (define full-path (repo-path path-from-root))
-  (define-values (proc out in err)
-    (subprocess #f #f #f (find-executable-path "raco") "make" full-path))
-  (subprocess-wait proc)
-  (define code (subprocess-status proc))
-  (define err-output (port->string err))
+(define (module-compiles? path)
+  (define-values (proc out in err) (subprocess #f #f #f (find-executable-path "raco") "make" path))
   (close-output-port in)
+  ;; Drain both pipes while the compiler runs; waiting first can deadlock on
+  ;; a sufficiently large diagnostic or compiler output.
+  (define stdout #f)
+  (define stderr #f)
+  (define stdout-thread (thread (lambda () (set! stdout (port->string out)))))
+  (define stderr-thread (thread (lambda () (set! stderr (port->string err)))))
+  (subprocess-wait proc)
+  (thread-wait stdout-thread)
+  (thread-wait stderr-thread)
   (close-input-port out)
   (close-input-port err)
-  (values (zero? code) err-output))
+  (values (zero? (subprocess-status proc)) (format "~a~a" stdout stderr)))
 
 (define-test-suite
  package-compile-boundary-tests
- (test-case "F1: cli/generate-certificates.rkt compiles"
-   (define-values (ok? err) (module-compiles? "cli/generate-certificates.rkt"))
-   (check-true ok? err))
- (test-case "F2: scripts/sdk-gsd-integration-test.rkt compiles"
-   ;; NOTE: This script has top-level code (not in module+ main),
-   ;; so requiring it may execute live code. Test only compilation
-   ;; by checking raco make success via the compiled/ directory existence.
-   (define-values (ok? err) (module-compiles? "scripts/sdk-gsd-integration-test.rkt"))
-   ;; This script has top-level side effects, so requiring may fail at runtime
-   ;; even if compile succeeds. We verify compile via raco make instead.
-   ;; For now, skip this one - it's covered by the all-modules test below.
-   (check-true #t "compile verified by W2 package gate"))
- (test-case "F3: scripts/test-gsd-go-replanning.rkt compiles"
-   ;; Same pattern - manual test script with top-level code
-   (check-true #t "compile verified by W2 package gate"))
- (test-case "F4: scripts/test-gsd-sdk-live.rkt compiles"
-   ;; Same pattern - live script with top-level code
-   (check-true #t "compile verified by W2 package gate"))
- (test-case "Previously-failing modules compile via raco make"
-   ;; Use raco make as subprocess to verify compilation without execution
-   (for ([path '("cli/generate-certificates.rkt" "scripts/sdk-gsd-integration-test.rkt")])
-     (define full-path (repo-path path))
-     (define-values (proc out in err)
-       (subprocess #f #f #f (find-executable-path "raco") "make" full-path))
-     (subprocess-wait proc)
-     (define code (subprocess-status proc))
-     (define err-output (port->string err))
-     (close-output-port in)
-     (close-input-port out)
-     (close-input-port err)
-     (check-true (zero? code) (format "~a failed: ~a" path err-output)))))
+ (test-case "certificate generator compiles"
+   (define-values (ok? output)
+     (module-compiles? (build-path repo-root "cli" "generate-certificates.rkt")))
+   (check-true ok? output))
+ (test-case "SDK integration script compiles without running it"
+   (define-values (ok? output)
+     (module-compiles? (build-path repo-root "scripts" "sdk-gsd-integration-test.rkt")))
+   (check-true ok? output))
+ (test-case "invalid modules are rejected"
+   (define dir (make-temporary-file "package-compile-~a" 'directory))
+   (dynamic-wind void
+                 (lambda ()
+                   (define path (build-path dir "invalid.rkt"))
+                   (call-with-output-file
+                    path
+                    (lambda (out)
+                      (display "#lang racket/base\n(unbound-package-compile-control)\n" out)))
+                   (define-values (ok? output) (module-compiles? path))
+                   (check-false ok?)
+                   (check-regexp-match #rx"unbound-package-compile-control" output))
+                 (lambda () (delete-directory/files dir)))))
+
+(define (run-compile-tests!)
+  (unless (zero? (run-tests package-compile-boundary-tests))
+    (error 'package-compile-boundary "compilation checks failed")))
 
 (module+ test
-  (run-tests package-compile-boundary-tests))
+  (run-compile-tests!))
 
 (module+ main
-  (run-tests package-compile-boundary-tests))
+  (run-compile-tests!))

@@ -4,8 +4,8 @@ Frozen input tree for `q/tests/ci/metadata-discovery-test.rkt`
 (W0 of `docs/planning/PLAN-v1.00.11-TDD-CI-INTEGRITY-BASELINES.md`).
 
 Purpose: pin the file-discovery contract of
-`q/scripts/run-tests/classify-metadata.rkt` (base-dir resolution) and
-`q/scripts/run-tests/classify.rkt` (`collect-test-files`) so that both
+`q/scripts/run-tests/classify.rkt` (base-dir resolution) and
+`q/scripts/run-tests/classify.rkt`'s `collect-test-files` discovery so that both
 invocation modes — direct CLI from the repo root and a clean-copy temp root
 that mimics the CI checkout — discover the identical normalized relative
 path list.

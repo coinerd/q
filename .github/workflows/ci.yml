@@ -166,7 +166,7 @@ jobs:
         run: racket scripts/check-lint-alignment.rkt
 
       # Metadata lint (blocking): the repo-owned classifier
-      # scripts/run-tests/classify-metadata.rkt is the SINGLE discovery
+      # scripts/run-tests/classify.rkt is the SINGLE discovery
       # implementation for both local and CI. Both modes invoke the exact
       # same command from the checkout root, so the inventory is identical
       # by construction (invariants I4/I5). Enforcement flipped at v1.00.06
@@ -176,14 +176,14 @@ jobs:
       # discovery branch remains; the parity contract is pinned by
       # tests/ci/metadata-discovery-test.rkt + tests/metadata-discovery/fixture/.
       - name: metadata-inventory (artifact)
-        run: racket scripts/run-tests/classify-metadata.rkt --metadata-inventory-json > metadata-inventory.json
+        run: racket scripts/run-tests/classify.rkt --metadata-inventory-json > metadata-inventory.json
       - name: Upload metadata inventory
         uses: actions/upload-artifact@v7
         with:
           name: metadata-inventory-${{ github.sha }}
           path: metadata-inventory.json
       - name: metadata-lint (blocking)
-        run: racket scripts/run-tests/classify-metadata.rkt --lint-metadata
+        run: racket scripts/run-tests/classify.rkt --lint-metadata
 
   # ────────────────────────────────────────────────────────────
   # Gate 1b: Prepared environment producer (v1.00.16 W3 cutover)
@@ -1014,7 +1014,7 @@ jobs:
           START_EPOCH="$(( $(date -u +%s) - ( (ELAPSED_MS + 999) / 1000 ) ))"
           STARTED_AT="$(date -u -d "@${START_EPOCH}" '+%Y-%m-%dT%H:%M:%SZ')"
           INVENTORY_SHA="sha256:$(git ls-files tests | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
-          racket scripts/run-tests/classify-metadata.rkt --metadata-inventory-json > artifacts-run/metadata-inventory.json
+          racket scripts/run-tests/classify.rkt --metadata-inventory-json > artifacts-run/metadata-inventory.json
           METADATA_SHA="sha256:$(sha256sum artifacts-run/metadata-inventory.json | cut -d' ' -f1)"
           COVERS_SHA="sha256:$(git grep -h '@covers' -- tests | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
           SELECTED_SHA="sha256:$(jq -s '[.[].files[].path] | unique | .[]' $SHARD_JSONS | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
@@ -1127,7 +1127,7 @@ jobs:
             "digest_sources": {
               "note": "annotations for auditors; consume.rkt write ignores unknown claim-document keys",
               "inventory_digest": "sha256 over `git ls-files tests | sort`",
-              "metadata_manifest_digest": "sha256 over scripts/run-tests/classify-metadata.rkt --metadata-inventory-json",
+              "metadata_manifest_digest": "sha256 over scripts/run-tests/classify.rkt --metadata-inventory-json",
               "covers_manifest_digest": "sha256 over sorted `git grep -h '@covers' -- tests` lines",
               "selected_manifest_digest": "sha256 over the executed selection: sorted union of .files[].path across all shard test-results.json",
               "runner_revision_sha": "blob sha of scripts/run-tests.rkt at GITHUB_SHA",

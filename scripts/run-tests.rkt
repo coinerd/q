@@ -55,7 +55,6 @@
          platform-file?
          shard-files
          repo-surface-files
-         restore-repo-surfaces!
          print-summary
          save-failure-logs
          format-duration

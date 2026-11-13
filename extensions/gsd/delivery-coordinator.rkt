@@ -432,6 +432,12 @@
 
 (require (only-in "delivery-handoff.rkt" controller-environment redact-delivery-text)
          (only-in "../../scripts/gsd-binding-data.rkt" active-paths)
+         ;; Phase B slice S1: the READ-ONLY `preflight` action is native (no
+         ;; python3). Every other gsd-delivery.py action keeps the Python
+         ;; dispatch below. Phase B slice S2 additionally makes the `sync`
+         ;; stage native (see delivery-sync! below).
+         (only-in "../../scripts/gsd-delivery-preflight.rkt" delivery-preflight!)
+         (only-in "../../scripts/gsd-delivery-sync.rkt" delivery-sync!)
          racket/runtime-path
          json
          (only-in "../../sandbox/subprocess.rkt"
@@ -713,18 +719,49 @@
           (default-delivery-controller-interpret
            target-stage
            (string->jsexpr (subprocess-result-stdout result))))))
-  ;; Map the journal's linear delivery targets to gsd-delivery.py actions.
+  (define (run-native-preflight)
+    ;; Phase B slice S1: the read-only preflight stage is native Racket. It
+    ;; keeps the effect contract of the replaced Python dispatch: the same
+    ;; receipt-bound inputs, the same "ready" -> ok interpretation, and every
+    ;; typed refusal becomes a redacted blocked stop with the exact remedy.
+    (with-handlers
+        ([exn:fail? (lambda (e)
+                      (delivery-effect-result
+                       'blocked
+                       (hasheq 'stage target-stage 'reason (redact-delivery-text (exn-message e)))))])
+      (define repo (resolve-coordinator-repo base-dir))
+      (default-delivery-controller-interpret
+       target-stage
+       (delivery-preflight! repo
+                            plan
+                            wave
+                            (default-delivery-receipt-head base-dir plan wave)
+                            (default-delivery-receipt-branch base-dir plan wave)))))
+  (define (run-native-sync)
+    ;; Phase B slice S2: the `sync` stage is native Racket with the Python
+    ;; action's exact contract (clean tree, expected branch or main, non-forced
+    ;; refresh, fast-forward only, never switching branches) over the shared
+    ;; budget/credential/redaction seam. "synchronized" -> ok through the same
+    ;; interpreter; every typed refusal is a redacted blocked stop.
+    (with-handlers
+        ([exn:fail? (lambda (e)
+                      (delivery-effect-result
+                       'blocked
+                       (hasheq 'stage target-stage 'reason (redact-delivery-text (exn-message e)))))])
+      (define repo (resolve-coordinator-repo base-dir))
+      (default-delivery-controller-interpret
+       target-stage
+       (delivery-sync! (path->complete-path repo) (current-git-delivery-branch base-dir plan wave)))))
+  ;; Map the journal's linear delivery targets to their controller actions
+  ;; (native for delivery-preflight and delivery-sync, gsd-delivery.py for
+  ;; every other action).
   (case target-stage
-    [("delivery-preflight")
-     ;; Register F5: the read-only preflight action at the handoff seam —
-     ;; branch published, remote tip at the verified head (evidence-only
-     ;; drift allowed), required-check policy object present. It mutates
-     ;; nothing; a pending result is a typed stop with the remedy.
-     (run-controller "preflight"
-                     "--expected-head"
-                     (default-delivery-receipt-head base-dir plan wave)
-                     "--expected-branch"
-                     (default-delivery-receipt-branch base-dir plan wave))]
+    ;; Register F5: the read-only preflight action at the handoff seam —
+    ;; branch published, remote tip at the verified head (evidence-only
+    ;; drift allowed), required-check policy object present. It mutates
+    ;; nothing; a typed refusal is a blocked stop with the remedy. Native
+    ;; since Phase B slice S1 (this stage never spawns python3).
+    [("delivery-preflight") (run-native-preflight)]
     [("implementation-review")
      ;; Installed production runner: prepare -> fresh independent review ->
      ;; trusted strict validation/publication. Absent ports retain manual
@@ -941,11 +978,11 @@
      (run-controller "governance"
                      "--expected-branch"
                      (default-binding-branch plan wave #:base-dir base-dir))]
-    [("sync")
-     ;; The campaign working checkout synchronizes with the published bytes
-     ;; (fast-forward-only, never switching branches): either the wave
-     ;; branch itself or the shared main checkout the controller runs from.
-     (run-controller "sync" "--expected-branch" (current-git-delivery-branch base-dir plan wave))]
+    ;; The campaign working checkout synchronizes with the published bytes
+    ;; (fast-forward-only, never switching branches): either the wave branch
+    ;; itself or the shared main checkout the controller runs from. Native
+    ;; since Phase B slice S2 (this stage never spawns python3).
+    [("sync") (run-native-sync)]
     ;; Terminal stage: the authenticated delivered readback (controller
     ;; `status`) is the ONLY effect that completes the ladder — the same
     ;; receipt-bound proof the full-loop checkpoint finalizes DONE from.

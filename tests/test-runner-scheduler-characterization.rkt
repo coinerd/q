@@ -468,8 +468,8 @@
        (string-contains? (capture-stdout (lambda () (run-all-files (list timeout-file) 1 #f))) "T")
        "exit 2 -> 'T'")
       (check-true (string-contains? (capture-stdout (lambda () (run-all-files (list skip-file) 1 #f)))
-                                    "S")
-                  "SKIPPED_BY_PROFILE -> 'S'")
+                                    "F")
+                  "child exit 5 -> 'F'")
       (check-true (string-contains? (capture-stdout (lambda () (run-all-files (list fail-file) 1 #f)))
                                     "F")
                   "any other failure -> 'F'")
@@ -496,7 +496,7 @@
                1
                1)
          (list "plain-ok.rkt" "#lang racket/base\n(define x 1)\n" 'ZERO_PARSED 0 0 0 0)
-         (list "exit5.rkt" "#lang racket/base\n(module+ main (exit 5))\n" 'SKIPPED_BY_PROFILE 5 0 0 0)
+         (list "exit5.rkt" "#lang racket/base\n(module+ main (exit 5))\n" 'UNKNOWN_FAILURE 5 0 0 0)
          (list "break.rkt" "#lang racket/base\n(error \"user break\")\n" 'USER_BREAK 1 0 0 0)
          (list "env.rkt"
                "#lang racket/base\n(error \"missing environment variable W0_X\")\n"

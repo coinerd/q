@@ -8,7 +8,8 @@
 
 (require racket/string)
 
-(provide test-file-result
+(provide profile-skipped-result
+         test-file-result
          test-file-result?
          test-file-result-path
          test-file-result-exit-code
@@ -51,6 +52,8 @@
               grouped-fallback-reason)
   #:transparent)
 
+(struct profile-skipped-result test-file-result () #:transparent)
+
 ;; Backward-compatible constructor: pre-W7 positional call sites continue to
 ;; work; new telemetry is optional via keywords.
 (define (make-test-file-result path
@@ -75,6 +78,22 @@
                     grouped-fallback-reason))
 
 (define (parse-raco-output stdout-bytes)
+  (define-values (passed failed total) (parse-raco-output/raw stdout-bytes))
+  ;; Independent failure evidence supplies a lower bound when summaries pass.
+  (define output (bytes->string* stdout-bytes))
+  (define diagnostic?
+    (or (regexp-match? #px"(?m:^(?:FAILURE|ERROR)\r?\n(?:(?!-+$)[^\n]*\n)*(?:name|location|message):)"
+                       output)
+        (regexp-match? #rx"#<test-(failure|error)>" output)
+        (for/or ([m (in-list (regexp-match* #px"(?m:^([0-9]+) ([0-9]+) .+\\.(?:rkt|rktl|scrbl)$)"
+                                            output
+                                            #:match-select values))])
+          (positive? (string->number (cadr m))))))
+  (if (and (zero? failed) diagnostic?)
+      (values passed 1 (add1 total))
+      (values passed failed total)))
+
+(define (parse-raco-output/raw stdout-bytes)
   (define output (bytes->string* stdout-bytes))
   (define lines (string-split output "\n"))
   (define all-matches
@@ -150,7 +169,7 @@
   (define total (test-file-result-total r))
   (define output (result-output-string r))
   (cond
-    [(or (= exit-code 5) (regexp-match? #rx"skipped_by_profile" output)) 'SKIPPED_BY_PROFILE]
+    [(profile-skipped-result? r) 'SKIPPED_BY_PROFILE]
     [(and (= exit-code 0) (> total 0)) 'PASS]
     [(and (= exit-code 0) (= total 0)) 'ZERO_PARSED]
     [(= exit-code 2) 'TIMEOUT]

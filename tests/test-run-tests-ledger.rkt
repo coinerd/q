@@ -27,7 +27,7 @@
 ;; Retained exemption: @isolation process (canonical; the `subprocess`
 ;;   alias is deprecated) is kept because the CLI test
 ;;   spawns `racket scripts/run-tests.rkt`, whose startup performs repo-wide
-;;   stale-bytecode cleaning (see scripts/run-tests/classify-filters.rkt) —
+;;   stale-bytecode cleaning (see scripts/run-tests/classify.rkt) —
 ;;   a genuine shared repository-tree surface that cannot be isolated inside
 ;;   this test. Documented in tests/helpers/README.md.
 

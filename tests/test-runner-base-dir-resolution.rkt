@@ -45,7 +45,7 @@
          racket/file
          racket/path
          racket/string
-         (only-in "../scripts/run-tests/classify-metadata.rkt" resolve-base-dir q-root-candidate?))
+         (only-in "../scripts/run-tests/classify.rkt" resolve-base-dir q-root-candidate?))
 
 ;; Materialize a minimal q-root: tests/ directory + scripts/run-tests.rkt.
 (define (make-q-root! dir)

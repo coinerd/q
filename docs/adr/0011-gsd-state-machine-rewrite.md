@@ -71,7 +71,7 @@ Two consequences worth recording:
 
 Measured before/after values for this campaign (inventory entry counts, routing
 authorities, module sizes and the honest LOC accounting) are recorded once in
-[the architecture document](../gsd-architecture.md#simplification-campaign-v10031-measured-beforeafter);
+[the architecture document](../gsd-architecture.md#simplification-campaign-v10032-measured-beforeafter);
 this ADR does not restate them.
 
 ## Key Files

@@ -205,7 +205,7 @@
 
 ;; covers-of-file : path-string? string? -> (listof string?)
 ;; Reads @covers tokens from a test file's 50-line header (same header
-;; window as classify-metadata.rkt). Root-parameterized so fixture trees in
+;; window as classify.rkt). Root-parameterized so fixture trees in
 ;; tests work; the runner path uses the live repo root.
 (define (covers-of-file root rel)
   (define p (build-path root rel))
