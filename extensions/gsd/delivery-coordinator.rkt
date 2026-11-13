@@ -73,6 +73,9 @@
          default-delivery-coordinator
          default-delivery-controller-interpret
          parse-delivery-stop
+         run-native-resolve-pr
+         run-native-pr-ci
+         run-native-review
          default-active-delivery-evidence-path
          default-artifact-provenance-root
          resolve-coordinator-repo
@@ -433,11 +436,18 @@
 (require (only-in "delivery-handoff.rkt" controller-environment redact-delivery-text)
          (only-in "../../scripts/gsd-binding-data.rkt" active-paths)
          ;; Phase B slice S1: the READ-ONLY `preflight` action is native (no
-         ;; python3). Every other gsd-delivery.py action keeps the Python
-         ;; dispatch below. Phase B slice S2 additionally makes the `sync`
-         ;; stage native (see delivery-sync! below).
+         ;; python3); slice S2 adds the `sync` stage, and slice S5 the read-only
+         ;; ladder actions (resolve-pr / pr-ci / review). Only the MUTATING
+         ;; gsd-delivery.py actions keep the Python dispatch below.
          (only-in "../../scripts/gsd-delivery-preflight.rkt" delivery-preflight!)
          (only-in "../../scripts/gsd-delivery-sync.rkt" delivery-sync!)
+         ;; Phase B slice S5: the READ-ONLY ladder actions (resolve-pr, pr-ci,
+         ;; review) are native too. Only the mutating actions (open-pr, merge,
+         ;; prepare, binding-*, governance, status) keep the Python dispatch.
+         (only-in "../../scripts/gsd-delivery-pr.rkt"
+                  delivery-resolve-pr!
+                  delivery-pr-ci!
+                  delivery-review!)
          racket/runtime-path
          json
          (only-in "../../sandbox/subprocess.rkt"
@@ -674,6 +684,73 @@
                   'reason
                   (redact-delivery-text (format "~a" (hash-ref data 'reason "delivery pending"))))))))
 
+;; ============================================================
+;; Phase B slice S5: native read-only ladder actions
+;; ============================================================
+;;
+;; `resolve-pr`, `pr-ci` and `review` were the remaining READ-ONLY actions
+;; still served by gsd-delivery.py. They are now the native
+;; scripts/gsd-delivery-pr.rkt actions, dispatched with exactly the arguments
+;; the Python invocation carried: run-controller appended
+;; `--repo <resolved>/--plan/--wave`, so the native call receives plan/wave
+;; explicitly and the repository resolved the same way run-native-sync does
+;; (`path->complete-path` of the resolved coordinator repo). Everything else
+;; is IDENTICAL to the replaced dispatch:
+;;   * the action's JSON-shaped result goes through
+;;     default-delivery-controller-interpret, so "resolved"/"none"/"green"/
+;;     "reviewed"/"awaiting-review" keep mapping to the same typed effect the
+;;     Python stdout produced;
+;;   * a typed refusal is converted through the same with-handlers shape the
+;;     preflight/sync (and the Python exit-2 parser) use — a redacted blocked
+;;     stop carrying the actionable reason, which for a native refusal IS the
+;;     exact reason string gsd-delivery.py's
+;;     {"status":"delivery-pending","reason":…} payload carried;
+;;   * no stage ever spawns python3.
+;;
+;; These three are provided ONLY so the stage wiring is testable directly: the
+;; `implementation-review` stage reaches its dispatch only after the durable
+;; evidence-readiness gate, whose ready state needs a full owned-proof
+;; fixture. That end-to-end path stays covered by the existing production
+;; review fixtures; the wiring itself is covered here.
+(define (native-stage-blocked target-stage message)
+  (delivery-effect-result 'blocked
+                          (hasheq 'stage target-stage 'reason (redact-delivery-text message))))
+
+(define (native-ladder-repo base-dir)
+  (path->complete-path (resolve-coordinator-repo base-dir)))
+
+(define (run-native-resolve-pr base-dir plan wave target-stage branch expected-head)
+  (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
+    (default-delivery-controller-interpret target-stage
+                                           (delivery-resolve-pr! (native-ladder-repo base-dir)
+                                                                 plan
+                                                                 wave
+                                                                 branch
+                                                                 #:expected-head expected-head))))
+
+(define (run-native-pr-ci base-dir plan wave target-stage pr-number branch expected-head)
+  (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
+    (default-delivery-controller-interpret
+     target-stage
+     (delivery-pr-ci! (native-ladder-repo base-dir) pr-number branch #:expected-head expected-head))))
+
+(define (run-native-review base-dir plan wave target-stage expected-head expected-branch generation)
+  (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
+    (default-delivery-controller-interpret
+     target-stage
+     (delivery-review! (native-ladder-repo base-dir)
+                       plan
+                       wave
+                       expected-head
+                       expected-branch
+                       ;; Same campaign root / generation the Python
+                       ;; invocation passed via --campaign-root/--generation.
+                       ;; delivery-review! takes the root as a PATH (the Python
+                       ;; CLI argument was text), so pass it unchanged rather
+                       ;; than stringifying it.
+                       #:campaign-root base-dir
+                       #:generation generation))))
+
 (define (default-delivery-controller base-dir plan wave target-stage)
   ;; The controller shell runs in the checkout identified by the shared
   ;; layout-aware root resolution (R76) — exactly like delivery-readback.
@@ -752,9 +829,11 @@
       (default-delivery-controller-interpret
        target-stage
        (delivery-sync! (path->complete-path repo) (current-git-delivery-branch base-dir plan wave)))))
-  ;; Map the journal's linear delivery targets to their controller actions
-  ;; (native for delivery-preflight and delivery-sync, gsd-delivery.py for
-  ;; every other action).
+  ;; Map the journal's linear delivery targets to their controller actions.
+  ;; Native (python3-free) since Phase B slices S1/S2/S5: delivery-preflight,
+  ;; sync and the read-only ladder actions resolve-pr / pr-ci / review. Every
+  ;; MUTATING action (open-pr, merge, prepare, binding-*, governance, status)
+  ;; keeps the gsd-delivery.py dispatch.
   (case target-stage
     ;; Register F5: the read-only preflight action at the handoff seam —
     ;; branch published, remote tip at the verified head (evidence-only
@@ -793,15 +872,16 @@
                                          wave
                                          "implementation-review"
                                          #:generation (binding-generation base-dir plan wave)))
-             (run-controller "review"
-                             "--expected-head"
-                             (default-delivery-receipt-head base-dir plan wave)
-                             "--expected-branch"
-                             (default-delivery-receipt-branch base-dir plan wave)
-                             "--campaign-root"
-                             (path->string base-dir)
-                             "--generation"
-                             (number->string (binding-generation base-dir plan wave)))))]
+             ;; Native since Phase B slice S5: the Python `review` action's
+             ;; exact receipt-bound inputs (head, branch, campaign root and
+             ;; binding generation).
+             (run-native-review base-dir
+                                plan
+                                wave
+                                target-stage
+                                (default-delivery-receipt-head base-dir plan wave)
+                                (default-delivery-receipt-branch base-dir plan wave)
+                                (binding-generation base-dir plan wave))))]
     [("implementation-pr")
      ;; Resolve the durable branch identity first. A missing open PR is the
      ;; only blocked result that may proceed to deterministic creation; API,
@@ -809,8 +889,10 @@
      ;; as a create attempt.
      (define pr-branch (default-delivery-receipt-branch base-dir plan wave))
      (define pr-receipt-head (default-delivery-receipt-head base-dir plan wave))
+     ;; Native since Phase B slice S5 (the read-only resolve never spawns
+     ;; python3); a typed refusal keeps the Python reason text.
      (define resolved-pr
-       (run-controller "resolve-pr" "--expected-branch" pr-branch "--expected-head" pr-receipt-head))
+       (run-native-resolve-pr base-dir plan wave target-stage pr-branch pr-receipt-head))
      (define resolved-pr-data (delivery-effect-result-data resolved-pr))
      (define resolved-pr-status (and (hash? resolved-pr-data) (hash-ref resolved-pr-data 'status #f)))
      (define resolved-pr-number (and (hash? resolved-pr-data) (hash-ref resolved-pr-data 'pr #f)))
@@ -843,7 +925,7 @@
      (define ci-branch (default-delivery-receipt-branch base-dir plan wave))
      (define ci-receipt-head (default-delivery-receipt-head base-dir plan wave))
      (define resolved-ci-pr
-       (run-controller "resolve-pr" "--expected-branch" ci-branch "--expected-head" ci-receipt-head))
+       (run-native-resolve-pr base-dir plan wave target-stage ci-branch ci-receipt-head))
      (define resolved-ci-data (delivery-effect-result-data resolved-ci-pr))
      (define resolved-ci-status (and (hash? resolved-ci-data) (hash-ref resolved-ci-data 'status #f)))
      (define ci-pr-number (and (hash? resolved-ci-data) (hash-ref resolved-ci-data 'pr #f)))
@@ -853,13 +935,15 @@
              (equal? resolved-ci-status "resolved")
              (exact-nonnegative-integer? ci-pr-number)
              (full-sha-string? ci-pr-head))
-        (run-controller "pr-ci"
-                        "--pr"
-                        (number->string ci-pr-number)
-                        "--expected-branch"
-                        ci-branch
-                        "--expected-head"
-                        (default-delivery-receipt-head base-dir plan wave))]
+        ;; Native since Phase B slice S5: same --pr/--expected-branch/
+        ;; --expected-head the Python action received.
+        (run-native-pr-ci base-dir
+                          plan
+                          wave
+                          target-stage
+                          ci-pr-number
+                          ci-branch
+                          (default-delivery-receipt-head base-dir plan wave))]
        [(and (eq? (delivery-effect-result-kind resolved-ci-pr) 'ok)
              (equal? resolved-ci-status "resolved"))
         (delivery-effect-result
@@ -879,11 +963,8 @@
      (define receipt-head (default-delivery-receipt-head base-dir plan wave))
      (define evidence (default-active-delivery-evidence-path base-dir plan wave))
      (define resolve
-       (run-controller "resolve-pr"
-                       "--expected-branch"
-                       receipt-branch
-                       "--expected-head"
-                       receipt-head))
+       ;; Native since Phase B slice S5 (read-only resolve, no python3).
+       (run-native-resolve-pr base-dir plan wave target-stage receipt-branch receipt-head))
      (define resolve-data (delivery-effect-result-data resolve))
      ;; string->jsexpr hashes carry SYMBOL keys; a string key here never
      ;; matched and made the protected merge unreachable in production.
