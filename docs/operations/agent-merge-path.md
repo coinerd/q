@@ -123,3 +123,24 @@ an administrator bypass.
 `.github/workflows/project-automation.yml` synchronizes issue/PR state with the project
 board and does not replace branch protection. The `Closes #N` line remains required for
 issue linkage and board automation.
+
+### Board bootstrap is manual (Projects UI)
+
+Provisioning the "q Roadmap & Delivery" project is a one-time, web-UI-only operation and
+it has already been done. GraphQL exposes no mutation that creates a user-owned
+Project V2, so project creation was always manual; the board's fields (Status, Priority,
+Area, Effort, Risk, Start, Target, Iteration, OwnerNote), its views, its *Auto-add to
+project* workflows and its insights are configured in the project settings. This is also
+why `project-automation.yml` only updates items that are **already** on the board: a new
+issue reaches the board through the UI auto-add workflow, never through repo code.
+
+The former one-time bootstrap script `scripts/setup-github-project.py` was deleted for
+that reason. It was a one-shot field/view/backfill bootstrap, not a repeatable
+operation: nothing in the repo, CI, or docs invoked it, its bootstrap had already
+completed (the checked-in board state capture shows Status/Priority/Area/Effort/Risk
+populated on live items), and re-running it was unsafe rather than idempotent —
+`createProjectV2Field` fails on fields that exist while `updateProjectV2Field` would
+rewrite the whole Status single-select option set from a hardcoded list without ever
+reading current state, which risks detaching the values already set on board items.
+Board reads and card moves remain available through `gh-board`
+([github extension](../../extensions/github/README.md)).
