@@ -47,11 +47,16 @@
 ;; is what pins `awaiting-review`, `reviewed`, the weaker reviewed-sha clause
 ;; and its refusals.
 ;;
-;; Differential parity: scripts/gsd-delivery.py is IMPORTED by path and driven
-;; through the SAME gh fixtures against the SAME git subject; every case
-;; declares its OWN expected outcome ('ok or the exact reason), so a fixture
-;; drift can never let two identical transport failures masquerade as parity. A
-;; host without a python interpreter is a FAILED gate, never a skip.
+;; Differential parity: every case's Python outcome (success payload or refusal
+;; message) was captured from scripts/gsd-delivery.py at its final revision into
+;; tests/fixtures/gsd-delivery-goldens.json before the controller was deleted
+;; (Phase B), driven through the SAME gh fixtures against the SAME git subject;
+;; every case declares its OWN expected outcome ('ok or the exact reason), so a
+;; fixture drift can never let two identical transport failures masquerade as
+;; parity. Git object names and the temp subject path are tokenized in the
+;; recording and substituted back from the live fixtures, and the golden loader
+;; pins the case count, the label set and each case's input text, so a stale row
+;; can never answer a different case. No interpreter is needed on any host.
 
 (require rackunit
          json
@@ -66,9 +71,9 @@
          "../sandbox/subprocess.rkt"
          "../scripts/gsd-delivery-git.rkt"
          "../scripts/gsd-delivery-api.rkt"
-         "../scripts/gsd-delivery-pr.rkt")
+         "../scripts/gsd-delivery-pr.rkt"
+         "helpers/gsd-delivery-goldens.rkt")
 
-(define-runtime-path python-controller "../scripts/gsd-delivery.py")
 (define-runtime-path read-ladder-module "../scripts/gsd-delivery-pr.rkt")
 
 ;; The module under test spawns `racket` for the binding-data helper and the
@@ -700,60 +705,9 @@
     [else value]))
 
 ;; ============================================================
-;; Python parity driver
+;; The recorded oracle answers
 ;; ============================================================
-
-(define python-driver
-  #<<PY
-import importlib.util, json, sys
-spec = importlib.util.spec_from_file_location("gsd_delivery", sys.argv[1])
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-case = json.loads(sys.argv[2])
-fn = case["fn"]
-repo = case.get("repo")
-try:
-    if fn == "resolve_pr":
-        value = mod.resolve_pr(repo, case.get("plan"), case.get("wave"), case["branch"],
-                               case.get("expected_head"))
-    elif fn == "resolve_merged_pr":
-        value = mod.resolve_merged_pr(case["slug"], case["branch"], case.get("expected_head"))
-    elif fn == "resolve_prs_for_branch":
-        value = mod.resolve_prs_for_branch(case["slug"], case["branch"], case["state"])
-    elif fn == "branch_owner":
-        value = mod.branch_owner(case["slug"])
-    elif fn == "validate_pr_identity":
-        mod.validate_pr_identity(case["pr"], case["slug"])
-        value = None
-    elif fn == "policy_names":
-        value = mod.policy_names(repo, case["ref"])
-    elif fn == "require_receipt_tip":
-        mod.require_receipt_tip(repo, case.get("expected_head"), case["tip"],
-                                case.get("action", "delivery"))
-        value = None
-    elif fn == "pr_ci":
-        value = mod.pr_ci(repo, case["number"], case["branch"], case.get("expected_head"))
-    else:
-        raise SystemExit("unknown parity case: " + fn)
-    print(json.dumps({"ok": True, "value": value}))
-except mod.Pending as exc:
-    print(json.dumps({"ok": False, "reason": str(exc)}))
-PY
-  )
-
-(define (run-python-case root python spec)
-  (define result
-    (run-subprocess (path->string python)
-                    #:args
-                    (list "-c" python-driver (path->string python-controller) (jsexpr->string spec))
-                    #:directory root
-                    #:environment (current-environment-variables)
-                    #:timeout 120
-                    #:process-group? #t))
-  (unless (and (zero? (subprocess-result-exit-code result))
-               (not (subprocess-result-timed-out? result)))
-    (error 'python-parity "python parity driver failed: ~a" (subprocess-result-stderr result)))
-  (string->jsexpr (subprocess-result-stdout result)))
+(define parity-group "gsd-delivery-read-ladder")
 
 (module+ test
   ;; ============================================================
@@ -1614,14 +1568,13 @@ PY
         (lambda () (delete-directory/files campaign-root))))))
 
   ;; ============================================================
-  ;; differential parity with the imported Python controller
+  ;; differential parity with the recorded Python answers
   ;; ============================================================
 
-  (test-case "differential parity with the imported Python controller (>= 13 cases)"
-    (define python (or (find-executable-path "python3") (find-executable-path "python")))
-    (unless python
-      (fail
-       "python3/python is required for the differential read-ladder parity case; a missing interpreter is a FAILED gate, never a SKIP"))
+  (test-case "differential parity with the recorded Python answers (>= 13 cases)"
+    ;; Every case's Python outcome was recorded from scripts/gsd-delivery.py at
+    ;; its final revision (tests/fixtures/gsd-delivery-goldens.json); the golden
+    ;; group pins the case count, the label set and each case's input text.
     (define (case-slug n)
       (format "coinerd/ladder-~a"
               (if (< n 10)
@@ -1991,6 +1944,15 @@ PY
                 (hasheq 'fn "pr_ci" 'repo subject 'number 1 'branch branch)
                 "pull-request head does not match fetched ref"
                 (lambda () (delivery-pr-ci! subject 1 branch)))))
+       (define parity-tokens
+         (list (cons "head" head)
+               (cons "tip" tip)
+               (cons "receipt" receipt)
+               (cons "main" main)
+               (cons "drift" drift)
+               (cons "pre-policy" pre-policy)
+               (cons "bad-policy" bad-policy)
+               (cons "repo" subject)))
        (check-true (>= (length cases) 13) "the parity table must carry at least 13 cases")
        ;; Each case owns ONE slug: the gh fixtures above are keyed by it, and
        ;; `point-at!` makes both sides read exactly that slug from the subject's
@@ -2026,6 +1988,10 @@ PY
        (check-equal? (length case-slugs)
                      (length cases)
                      "every parity case must declare exactly one slug")
+       ;; ...and the recorded table must carry EXACTLY these labels.
+       (check-equal? (sort (map car cases) string<?)
+                     (golden-labels parity-group)
+                     "the golden table must match the parity table exactly")
        (define (check-declared-outcome! label side outcome expected)
          (cond
            [(eq? expected 'ok)
@@ -2042,11 +2008,11 @@ PY
          (define expected (caddr case))
          (define thunk (cadddr case))
          (point-at! world case-slug)
-         (define python-outcome (run-python-case subject python spec))
+         (define oracle-outcome (golden-outcome parity-group parity-tokens label spec))
          (define racket-outcome
            (with-handlers ([exn:fail:delivery-action? (lambda (error)
                                                         (hasheq 'ok #f 'reason (exn-message error)))])
              (hasheq 'ok #t 'value (json-value (thunk)))))
          (check-declared-outcome! label "racket" racket-outcome expected)
-         (check-declared-outcome! label "python" python-outcome expected)
-         (check-equal? (canonical racket-outcome) (canonical python-outcome) label))))))
+         (check-declared-outcome! label "recorded" oracle-outcome expected)
+         (check-equal? (canonical racket-outcome) (canonical oracle-outcome) label))))))

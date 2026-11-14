@@ -45,13 +45,18 @@
 ;; is not the expected branch, a non-ancestor receipt head, and a receipt head
 ;; followed by a NON-evidence commit.
 ;;
-;; Differential parity: scripts/gsd-delivery.py is IMPORTED by path and driven
-;; through the SAME gh fixtures against the SAME git subject; every case declares
-;; its OWN expected outcome ('ok or the exact reason string) and BOTH sides are
-;; asserted against it, so a fixture drift cannot let two identical transport
-;; failures masquerade as parity. A host without a python interpreter is a
-;; FAILED gate, never a skip. `gh_graphql` is deliberately excluded: the Python
-;; controller has no GraphQL call to compare against.
+;; Differential parity: every case's Python outcome (success payload or refusal
+;; message) was captured from scripts/gsd-delivery.py at its final revision into
+;; tests/fixtures/gsd-delivery-goldens.json before the controller was deleted
+;; (Phase B), driven through the SAME gh fixtures against the SAME git subject;
+;; every case declares its OWN expected outcome ('ok or the exact reason string)
+;; and BOTH sides are asserted against it, so a fixture drift cannot let two
+;; identical transport failures masquerade as parity. Git object names and the
+;; temp subject path are tokenized in the recording and substituted back from the
+;; live fixtures, and the golden loader pins the case count, the label set and
+;; each case's input text, so a stale row can never answer a different case. No
+;; interpreter is needed on any host. `gh_graphql` is deliberately excluded: the
+;; Python controller had no GraphQL call to compare against.
 
 (require rackunit
          json
@@ -66,9 +71,9 @@
          "../scripts/gsd-delivery-git.rkt"
          "../scripts/gsd-delivery-api.rkt"
          "../scripts/gsd-delivery-pr.rkt"
-         "../scripts/gsd-delivery-write.rkt")
+         "../scripts/gsd-delivery-write.rkt"
+         "helpers/gsd-delivery-goldens.rkt")
 
-(define-runtime-path python-controller "../scripts/gsd-delivery.py")
 (define-runtime-path write-module "../scripts/gsd-delivery-write.rkt")
 
 ;; Resolved at load time, BEFORE any fixture rewrites PATH, so the logging `git`
@@ -450,46 +455,9 @@
     [else value]))
 
 ;; ============================================================
-;; Python parity driver
+;; The recorded oracle answers
 ;; ============================================================
-
-(define python-driver
-  #<<PY
-import importlib.util, json, sys
-spec = importlib.util.spec_from_file_location("gsd_delivery", sys.argv[1])
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-case = json.loads(sys.argv[2])
-fn = case["fn"]
-try:
-    if fn == "open_pr":
-        value = mod.open_pr(case["repo"], case.get("plan"), case.get("wave"),
-                            case["branch"], case.get("expected_head"))
-    elif fn == "gh_post":
-        value = mod.gh_post(case["slug"], case["route"], case["fields"])
-    elif fn == "gh_put":
-        value = mod.gh_put(case["slug"], case["route"], case["fields"])
-    else:
-        raise SystemExit("unknown parity case: " + fn)
-    print(json.dumps({"ok": True, "value": value}))
-except mod.Pending as exc:
-    print(json.dumps({"ok": False, "reason": str(exc)}))
-PY
-  )
-
-(define (run-python-case root python spec)
-  (define result
-    (run-subprocess (path->string python)
-                    #:args
-                    (list "-c" python-driver (path->string python-controller) (jsexpr->string spec))
-                    #:directory root
-                    #:environment (current-environment-variables)
-                    #:timeout 120
-                    #:process-group? #t))
-  (unless (and (zero? (subprocess-result-exit-code result))
-               (not (subprocess-result-timed-out? result)))
-    (error 'python-parity "python parity driver failed: ~a" (subprocess-result-stderr result)))
-  (string->jsexpr (subprocess-result-stdout result)))
+(define parity-group "gsd-delivery-write")
 
 (define (parity-case slug* fixtures expected thunk spec [rejects '()])
   (hasheq 'slug slug* 'fixtures fixtures 'expected expected 'thunk thunk 'spec spec 'rejects rejects))
@@ -1088,12 +1056,24 @@ PY
                         'fields
                         (hasheq 'merge_method "squash")))))
 
-(test-case "differential parity with the imported Python controller (>= 8 cases)"
-  (define python (or (find-executable-path "python3") (find-executable-path "python")))
-  (unless python
-    (fail (string-append "python3/python is required for the differential write-seam parity case; "
-                         "a missing interpreter is a FAILED gate, never a SKIP")))
+(test-case "differential parity with the recorded Python answers (>= 8 cases)"
+  ;; Every case's Python outcome was recorded from scripts/gsd-delivery.py at its
+  ;; final revision (tests/fixtures/gsd-delivery-goldens.json); the golden group
+  ;; pins the case count, the label set and each case's input text.
+  ;; The live value of every dynamic fixture placeholder the recorded answers
+  ;; were captured with (git object names and the temp subject path):
+  ;; {{name}} is the full value, {{name-12}} its 12-hex prefix.
+  (define parity-tokens
+    (list (cons "repo" (path->string (hash-ref (shared-repo-world) 'subject)))
+          (cons "w1-tip" (hash-ref (shared-repo-world) 'w1-tip))
+          (cons "w2-tip" (hash-ref (shared-repo-world) 'w2-tip))
+          (cons "receipt" (hash-ref (shared-repo-world) 'receipt))
+          (cons "drift-tip" (hash-ref (shared-repo-world) 'drift-tip))))
   (check-true (>= (length parity-cases) 8) "the parity table must carry at least 8 cases")
+  ;; ...and the recorded table must carry EXACTLY these labels.
+  (check-equal? (sort (map (lambda (case) (hash-ref case 'slug)) parity-cases) string<?)
+                (golden-labels parity-group)
+                "the golden table must match the parity table exactly")
   (define (check-declared-outcome! label side outcome expected)
     (cond
       [(eq? expected 'ok)
@@ -1119,11 +1099,18 @@ PY
              (string-replace expected "PLACEHOLDER" (substring (hash-ref world 'receipt) 0 12))
              expected))
        (define spec (hash-set (hash-ref case 'spec) 'repo (path->string subject)))
-       (define python-outcome (run-python-case subject python spec))
+       (define case-fixtures
+         (let ([fixtures (hash-ref case 'fixtures)])
+           (if (procedure? fixtures) (fixtures world) fixtures)))
+       (define oracle-outcome
+         (golden-outcome parity-group
+                         parity-tokens
+                         label
+                         (hasheq 'spec spec 'fixtures case-fixtures)))
        (define racket-outcome
          (with-handlers ([exn:fail:delivery-action? (lambda (error)
                                                       (hasheq 'ok #f 'reason (exn-message error)))])
            (hasheq 'ok #t 'value (json-value ((hash-ref case 'thunk) world)))))
        (check-declared-outcome! label "racket" racket-outcome declared)
-       (check-declared-outcome! label "python" python-outcome declared)
-       (check-equal? (canonical racket-outcome) (canonical python-outcome) label)))))
+       (check-declared-outcome! label "recorded" oracle-outcome declared)
+       (check-equal? (canonical racket-outcome) (canonical oracle-outcome) label)))))

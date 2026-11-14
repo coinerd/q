@@ -30,10 +30,10 @@
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
          (only-in "../extensions/gsd/delivery-journal.rkt" record-delivery-receipt!)
-         "../extensions/gsd/delivery-coordinator.rkt")
+         "../extensions/gsd/delivery-coordinator.rkt"
+         "helpers/gsd-delivery-goldens.rkt")
 
 (define-runtime-path preflight-script "../scripts/gsd-delivery-preflight.rkt")
-(define-runtime-path python-controller "../scripts/gsd-delivery.py")
 (define racket-exe
   (let ([found (find-executable-path "racket")])
     (if found
@@ -471,80 +471,87 @@
                                     "Failed to execute: fatal: https://u:ghp_secret@github.com/x")
                                    "ghp_secret")))
 
-  (test-case "differential parity with the Python action (same JSON, same exit, same reason)"
-    (define python (find-executable-path "python3"))
-    (if (not python)
-        (eprintf
-         "WARNING: python3 is unavailable; the differential parity case against ~a was SKIPPED\n"
-         (path->string python-controller))
-        (with-world
-         (lambda (root _origin work subject)
-           (define plan (make-string 64 #\2))
-           (start-wave-branch! work)
-           (define head (push-wave-commit! work "tracked" "wave\n" "wave commit"))
-           ;; The Python action shells the trusted datum reader, so keep the
-           ;; Racket binary reachable for BOTH implementations.
-           (environment-variables-set! (current-environment-variables)
-                                       #"PATH"
-                                       (string->bytes/utf-8 (format "~a:/usr/bin:/bin"
-                                                                    racket-bin-dir)))
-           (define (run-python branch)
-             (run-subprocess (path->string python)
-                             #:args (list (path->string python-controller)
-                                          "preflight"
-                                          "--repo"
-                                          (path->string subject)
-                                          "--plan"
-                                          plan
-                                          "--wave"
-                                          "0"
-                                          "--expected-head"
-                                          head
-                                          "--expected-branch"
-                                          branch)
-                             #:directory root
-                             #:environment (current-environment-variables)
-                             #:timeout 180
-                             #:process-group? #t))
-           (define py-ready (run-python "campaign/w1"))
-           (define native-ready
-             (run-cli root
-                      "preflight"
-                      "--repo"
-                      (path->string subject)
-                      "--plan"
-                      plan
-                      "--wave"
-                      "0"
-                      "--expected-head"
-                      head
-                      "--expected-branch"
-                      "campaign/w1"))
-           (check-equal? (subprocess-result-exit-code py-ready) 0 (subprocess-result-stderr py-ready))
-           (check-equal? (subprocess-result-exit-code native-ready) 0)
-           (check-equal? (string->jsexpr (subprocess-result-stdout native-ready))
-                         (string->jsexpr (subprocess-result-stdout py-ready)))
-           (define py-refused (run-python "campaign/absent"))
-           (define native-refused
-             (run-cli root
-                      "preflight"
-                      "--repo"
-                      (path->string subject)
-                      "--plan"
-                      plan
-                      "--wave"
-                      "0"
-                      "--expected-head"
-                      head
-                      "--expected-branch"
-                      "campaign/absent"))
-           (check-equal? (subprocess-result-exit-code py-refused) 2)
-           (check-equal? (subprocess-result-exit-code native-refused) 2)
-           (define py-json (string->jsexpr (subprocess-result-stdout py-refused)))
-           (define native-json (string->jsexpr (subprocess-result-stdout native-refused)))
-           (check-equal? (hash-ref native-json 'status) (hash-ref py-json 'status))
-           (check-equal? (hash-ref native-json 'reason) (hash-ref py-json 'reason))
-           (check-false (string-contains? (subprocess-result-stderr native-refused) "fatal:"))))))
+  (test-case "differential parity with the recorded Python answers (same JSON, same exit, same reason)"
+    (with-world
+     (lambda (root _origin work subject)
+       (define plan (make-string 64 #\2))
+       (start-wave-branch! work)
+       (define head (push-wave-commit! work "tracked" "wave\n" "wave commit"))
+       ;; The recorded answers were captured from the Python action, which shells
+       ;; the trusted datum reader, so keep the Racket binary reachable for the
+       ;; native run too.
+       (environment-variables-set! (current-environment-variables)
+                                   #"PATH"
+                                   (string->bytes/utf-8 (format "~a:/usr/bin:/bin"
+                                                                racket-bin-dir)))
+       ;; The only dynamic value in the recorded answers is the wave head.
+       (define parity-tokens (list (cons "head" head)))
+       ;; The recorded oracle answer for one parity case: the exit code plus the
+       ;; parsed stdout payload, captured from `python3 scripts/gsd-delivery.py
+       ;; preflight` at its final revision
+       ;; (tests/fixtures/gsd-delivery-goldens.json). `fixture-state` names the
+       ;; repository state the case was recorded against, so two rows can never
+       ;; share a case text.
+       (define (oracle-spec fixture-state branch)
+         (hasheq 'action
+                 "preflight"
+                 'plan
+                 plan
+                 'wave
+                 0
+                 'expected_head
+                 head
+                 'expected_branch
+                 branch
+                 'fixture_state
+                 fixture-state))
+       (define (oracle fixture-state label branch)
+         (golden-outcome "gsd-delivery-preflight"
+                         parity-tokens
+                         label
+                         (oracle-spec fixture-state branch)))
+       (define recorded-ready (oracle "wave branch published at the expected head"
+                                      "preflight-ready"
+                                      "campaign/w1"))
+       (define native-ready
+         (run-cli root
+                  "preflight"
+                  "--repo"
+                  (path->string subject)
+                  "--plan"
+                  plan
+                  "--wave"
+                  "0"
+                  "--expected-head"
+                  head
+                  "--expected-branch"
+                  "campaign/w1"))
+       (check-equal? (hash-ref recorded-ready 'exit) 0)
+       (check-equal? (subprocess-result-exit-code native-ready) 0)
+       (check-equal? (string->jsexpr (subprocess-result-stdout native-ready))
+                     (hash-ref recorded-ready 'value))
+       (define native-refused
+         (run-cli root
+                  "preflight"
+                  "--repo"
+                  (path->string subject)
+                  "--plan"
+                  plan
+                  "--wave"
+                  "0"
+                  "--expected-head"
+                  head
+                  "--expected-branch"
+                  "campaign/absent"))
+       (define recorded-refused
+         (oracle "wave branch absent on origin" "preflight-absent-branch" "campaign/absent"))
+       (check-equal? (hash-ref recorded-refused 'exit) 2)
+       (check-equal? (subprocess-result-exit-code native-refused) 2)
+       (define native-json (string->jsexpr (subprocess-result-stdout native-refused)))
+       (check-equal? (hash-ref native-json 'status)
+                     (hash-ref (hash-ref recorded-refused 'value) 'status))
+       (check-equal? (hash-ref native-json 'reason) (hash-ref recorded-refused 'reason))
+       (check-false (string-contains? (subprocess-result-stderr native-refused) "fatal:")))))
 
   (test-case "production delivery-preflight stage is native: python3 is never spawned"
     (with-world

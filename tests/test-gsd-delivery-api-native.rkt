@@ -42,14 +42,16 @@
 ;; otherwise fully trusted), a non-40-hex FETCH_HEAD, and total_count 0 served
 ;; in one page (no second request).
 ;;
-;; Differential parity: when python3/python resolves, scripts/gsd-delivery.py is
-;; IMPORTED by path and driven through the SAME gh shim fixtures, and every
-;; refusal message / success payload must match exactly. Each case ALSO declares
-;; its own expected outcome ('ok or the exact reason string) and both sides are
-;; asserted against it, so a fixture/route drift cannot let two identical
-;; transport failures masquerade as parity. A host without an interpreter is a
-;; FAILED gate (never a skip) — the same discipline as
-;; tests/test-gsd-delivery-sync-native.rkt.
+;; Differential parity: every case's Python outcome (success payload or refusal
+;; message) was captured from scripts/gsd-delivery.py at its final revision into
+;; tests/fixtures/gsd-delivery-goldens.json before the controller was deleted
+;; (Phase B), driven through the SAME gh shim fixtures, and the Racket answer
+;; must match the recorded one exactly. Each case ALSO declares its own expected
+;; outcome ('ok or the exact reason string) and both sides are asserted against
+;; it, so a fixture/route drift cannot let two identical transport failures
+;; masquerade as parity. The golden loader pins the case count, the label set
+;; and each case's input text, so a stale row can never answer a different case;
+;; no interpreter is needed on any host.
 
 (require rackunit
          json
@@ -61,9 +63,8 @@
          racket/string
          "../sandbox/subprocess.rkt"
          "../scripts/gsd-delivery-git.rkt"
-         "../scripts/gsd-delivery-api.rkt")
-
-(define-runtime-path python-controller "../scripts/gsd-delivery.py")
+         "../scripts/gsd-delivery-api.rkt"
+         "helpers/gsd-delivery-goldens.rkt")
 
 ;; ============================================================
 ;; Fixture helpers
@@ -221,54 +222,6 @@
                     (clear-api-cache!)
                     (proc repo)))
                 (lambda () (delete-directory/files root))))
-
-;; The Python parity driver: import the controller BY PATH (the module is
-;; importable; `main()` only runs under __main__) and drive the SAME five read
-;; functions with the SAME shim fixtures. It prints
-;; {"ok":true,"value":...} or {"ok":false,"reason":...} so outcomes compare
-;; exactly — never by scraping stderr.
-(define python-driver
-  #<<PY
-import importlib.util, json, sys
-spec = importlib.util.spec_from_file_location("gsd_delivery", sys.argv[1])
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-case = json.loads(sys.argv[2])
-fn = case["fn"]
-try:
-    if fn == "api":
-        value = mod.api(case["slug"], case["route"])
-    elif fn == "checks":
-        value = mod.checks(case["slug"], case["sha"])
-    elif fn == "trusted_check":
-        value = mod.trusted_check(case["slug"], case["sha"], case["name"], case["event"],
-                                  case.get("branch"))
-    elif fn == "protection":
-        value = mod.protection(case["slug"], case["names"])
-    elif fn == "validate_merge":
-        value = mod.validate_merge(case["pr"], case["commit"], case["slug"], case["merge"],
-                                   case["head"])
-    else:
-        raise SystemExit("unknown parity case: " + fn)
-    print(json.dumps({"ok": True, "value": value}))
-except mod.Pending as exc:
-    print(json.dumps({"ok": False, "reason": str(exc)}))
-PY
-  )
-
-(define (run-python-case root python spec)
-  (define result
-    (run-subprocess (path->string python)
-                    #:args
-                    (list "-c" python-driver (path->string python-controller) (jsexpr->string spec))
-                    #:directory root
-                    #:environment (current-environment-variables)
-                    #:timeout 60
-                    #:process-group? #t))
-  (unless (and (zero? (subprocess-result-exit-code result))
-               (not (subprocess-result-timed-out? result)))
-    (error 'python-parity "python parity driver failed: ~a" (subprocess-result-stderr result)))
-  (string->jsexpr (subprocess-result-stdout result)))
 
 ;; Order-insensitive jsexpr shape: hashes become sorted key/value lists, so a
 ;; Python dict and a Racket hash compare by CONTENT (never by key order or hash
@@ -1025,16 +978,17 @@ PY
                            (check-equal? (length (file->lines (getenv "GIT_SHIM_LOG"))) 2))))
 
   ;; ============================================================
-  ;; differential parity with the imported Python controller
+  ;; differential parity with the recorded Python controller answers
   ;; ============================================================
 
-  (test-case "differential parity with the imported Python controller (same gh fixtures)"
-    ;; Parity IS the contract, so a host without an interpreter is a FAILED
-    ;; gate (fail closed), never a silent SKIP.
-    (define python (or (find-executable-path "python3") (find-executable-path "python")))
-    (unless python
-      (fail
-       "python3/python is required for the differential read-layer parity case; a missing interpreter is a FAILED gate, never a SKIP"))
+  (test-case "differential parity with the recorded Python answers (same gh fixtures)"
+    ;; Every case's Python outcome was recorded from scripts/gsd-delivery.py at
+    ;; its final revision (tests/fixtures/gsd-delivery-goldens.json). The golden
+    ;; group pins the case count, the label set and each case's input text.
+    (define parity-group "gsd-delivery-api")
+    ;; No dynamic fixture values here: every slug and SHA in this table is
+    ;; literal, so the recorded case texts carry no tokens.
+    (define parity-tokens '())
     ;; One slug per case keeps every route (and every fixture file) distinct.
     (define (case-slug n)
       (format "coinerd/api-parity-~a" n))
@@ -1047,9 +1001,10 @@ PY
     (define case-sha-7 (make-string 40 #\7))
     (define case-sha-8 (make-string 40 #\8))
     (define case-sha-9 (make-string 40 #\9))
-    ;; Every entry: (label python-spec fixtures expected racket-thunk). Both
-    ;; sides use the same functions, the same fixtures and the same arguments,
-    ;; and BOTH outcomes must additionally match `expected` — either 'ok or the
+    ;; Every entry: (label oracle-spec fixtures expected racket-thunk). The
+    ;; recorded answer was produced by the same functions with the same
+    ;; fixtures and the same arguments, and BOTH outcomes must additionally
+    ;; match `expected` — either 'ok or the
     ;; EXACT reason string. Comparing the two sides only against EACH OTHER
     ;; would let a gh-shim fixture/route drift produce two identical
     ;; "delivery command failed (gh, exit 66)" results and call that parity.
@@ -1208,6 +1163,11 @@ PY
     ;; The table size is FIXED: a case (or its fixtures) silently disappearing
     ;; must fail loudly instead of quietly shrinking parity coverage.
     (check-equal? (length cases) 13 "the parity table must carry exactly 13 cases")
+    ;; ...and so is the recorded table: an added, removed, renamed or reordered
+    ;; label can never be read from a stale row.
+    (check-equal? (sort (map car cases) string<?)
+                  (golden-labels parity-group)
+                  "the golden table must match the parity table exactly")
     ;; A declared outcome is asserted against EACH side separately, so the two
     ;; sides can no longer agree on one transport failure and call it parity.
     (define (check-declared-outcome! label side outcome expected)
@@ -1225,12 +1185,16 @@ PY
                 fixtures))
      (lambda (root)
        (for ([case (in-list cases)])
-         (match-define (list label spec _fixtures expected thunk) case)
-         (define python-outcome (run-python-case root python spec))
+         (match-define (list label spec fixtures expected thunk) case)
+         (define oracle-outcome
+           (golden-outcome parity-group
+                           parity-tokens
+                           label
+                           (hasheq 'spec spec 'fixtures fixtures)))
          (define racket-outcome
            (with-handlers ([exn:fail:delivery-action? (lambda (error)
                                                         (hasheq 'ok #f 'reason (exn-message error)))])
              (hasheq 'ok #t 'value (thunk))))
          (check-declared-outcome! label "racket" racket-outcome expected)
-         (check-declared-outcome! label "python" python-outcome expected)
-         (check-equal? (canonical racket-outcome) (canonical python-outcome) label))))))
+         (check-declared-outcome! label "recorded" oracle-outcome expected)
+         (check-equal? (canonical racket-outcome) (canonical oracle-outcome) label))))))

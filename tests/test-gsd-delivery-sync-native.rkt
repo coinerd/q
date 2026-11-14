@@ -38,10 +38,10 @@
          "../scripts/gsd-delivery-git.rkt"
          "../extensions/gsd/campaign-state.rkt"
          "../extensions/gsd/campaign-repository.rkt"
-         "../extensions/gsd/delivery-coordinator.rkt")
+         "../extensions/gsd/delivery-coordinator.rkt"
+         "helpers/gsd-delivery-goldens.rkt")
 
 (define-runtime-path native-module "../scripts/gsd-delivery-sync.rkt")
-(define-runtime-path python-controller "../scripts/gsd-delivery.py")
 (define racket-exe
   (let ([found (find-executable-path "racket")])
     (if found
@@ -371,75 +371,69 @@
     (check-false (string-contains? cleanup "detached HEAD"))
     (check-false (string-contains? no-group "detached HEAD")))
 
-  ;; Differential parity against the Python action on identical clones: the
-  ;; native port must produce the SAME JSON and exit code, and the SAME typed
-  ;; reason for every refusal shape.
-  (test-case "differential parity with the Python action (payload, exit, reason)"
-    ;; Parity IS the contract, so a host without an interpreter is a FAILED
-    ;; gate (fail closed), never a silent SKIP.
-    (define python (or (find-executable-path "python3") (find-executable-path "python")))
-    (unless python
-      (fail
-       "python3/python is required for the differential sync parity case; a missing interpreter is a FAILED gate, never a SKIP"))
+  ;; Differential parity against the recorded Python answers on identical
+  ;; clones: the native port must produce the SAME JSON and exit code, and the
+  ;; SAME typed reason for every refusal shape.
+  (test-case "differential parity with the recorded Python answers (payload, exit, reason)"
     (with-world
      (lambda (root origin work subject)
        ;; A second, identical clone so a mutating case never repairs the
-       ;; fixture for the other implementation.
+       ;; fixture for the recorded answer.
        (define twin (build-path root "twin"))
        (git root "clone" "-b" "main" (path->string origin) (path->string twin))
-       (define (run-python repo)
-         (run-subprocess (path->string python)
-                         #:args (list (path->string python-controller)
-                                      "sync"
-                                      "--repo"
-                                      (path->string repo)
-                                      "--expected-branch"
-                                      "campaign/w1")
-                         #:directory root
-                         #:environment (current-environment-variables)
-                         #:timeout 60
-                         #:process-group? #t))
        (define (run-native repo)
          (run-sync-cli root "sync" "--repo" (path->string repo) "--expected-branch" "campaign/w1"))
-       (define (both)
-         (list (run-python subject) (run-native twin)))
-       (define (compare-reasons!)
-         (define-values (py native) (apply values (both)))
-         (check-equal? (subprocess-result-exit-code native) (subprocess-result-exit-code py))
+       ;; The recorded oracle answer for one parity case: the exit code plus the
+       ;; parsed stdout payload, captured from `python3 scripts/gsd-delivery.py
+       ;; sync` at its final revision (tests/fixtures/gsd-delivery-goldens.json).
+       ;; `fixture-state` names the clone state the case was recorded against,
+       ;; so two rows can never share a case text.
+       (define (oracle-spec fixture-state)
+         (hasheq 'action "sync" 'expected_branch "campaign/w1" 'fixture_state fixture-state))
+       (define (oracle fixture-state label tokens)
+         (golden-outcome "gsd-delivery-sync" tokens label (oracle-spec fixture-state)))
+       (define (compare-reasons! fixture-state label tokens)
+         (define recorded (oracle fixture-state label tokens))
+         (define native (run-native twin))
+         (check-equal? (subprocess-result-exit-code native) (hash-ref recorded 'exit))
          (check-equal? (subprocess-result-exit-code native) 2)
          (check-equal? (hash-ref (string->jsexpr (subprocess-result-stdout native)) 'reason)
-                       (hash-ref (string->jsexpr (subprocess-result-stdout py)) 'reason)))
+                       (hash-ref recorded 'reason)))
        (define (on-both thunk)
          (thunk subject)
          (thunk twin))
        ;; success: identical payload and HEAD
        (define target (advance work))
-       (define-values (py-ok native-ok) (apply values (both)))
-       (check-equal? (subprocess-result-exit-code py-ok) 0)
+       ;; The only dynamic value in the sync answers is the fast-forwarded head.
+       (define sync-tokens (list (cons "head" target)))
+       (define recorded-ok
+         (oracle "branch=main, clean, behind origin" "sync-success" sync-tokens))
+       (define native-ok (run-native twin))
+       (check-equal? (hash-ref recorded-ok 'exit) 0)
        (check-equal? (subprocess-result-exit-code native-ok) 0)
-       (check-equal? (string->jsexpr (subprocess-result-stdout native-ok))
-                     (string->jsexpr (subprocess-result-stdout py-ok)))
+       (check-equal? (string->jsexpr (string-trim (subprocess-result-stdout native-ok)))
+                     (hash-ref recorded-ok 'value))
        (check-equal? (hash-ref (string->jsexpr (subprocess-result-stdout native-ok)) 'head) target)
        (check-equal? (git twin "rev-parse" "HEAD") target)
        ;; unrelated branch
        (on-both (lambda (repo) (git repo "checkout" "-b" "unrelated")))
        (advance work)
-       (compare-reasons!)
+       (compare-reasons! "branch=unrelated, clean" "sync-unrelated-branch" sync-tokens)
        (on-both (lambda (repo) (git repo "checkout" "main")))
        ;; dirty checkout
        (on-both (lambda (repo) (put (build-path repo "tracked") "dirty\n")))
-       (compare-reasons!)
+       (compare-reasons! "branch=main, dirty tracked file" "sync-dirty-checkout" sync-tokens)
        (on-both (lambda (repo) (git repo "checkout" "--" "tracked")))
        ;; detached HEAD
        (on-both (lambda (repo) (git repo "checkout" "--detach")))
-       (compare-reasons!)
+       (compare-reasons! "detached HEAD" "sync-detached-head" sync-tokens)
        (on-both (lambda (repo) (git repo "checkout" "main")))
        ;; diverged checkout (merge --ff-only refuses)
        (on-both (lambda (repo)
                   (put (build-path repo "local") "local\n")
                   (git repo "add" "local")
                   (git repo "commit" "-m" "local")))
-       (compare-reasons!))))
+       (compare-reasons! "branch=main, divergent local commit" "sync-diverged-checkout" sync-tokens))))
 
   ;; ============================================================
   ;; Production dispatch: the coordinator `sync` stage is native

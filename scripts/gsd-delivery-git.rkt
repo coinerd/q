@@ -166,8 +166,11 @@
     [(regexp-match? remote-ref-missing-rx text)
      (define match
        (or (regexp-match refspec-rx text)
-           (for/first ([arg (in-list args)]
-                       #:when (string? arg))
+           ;; `for/or`, not `for/first`: for/first returns the FIRST body value
+           ;; and stops, so a non-matching argument (#f) would end the search and
+           ;; the refspec carried only by the arguments would never be found.
+           (for/or ([arg (in-list args)]
+                    #:when (string? arg))
              (regexp-match refspec-rx arg))))
      (if match
          (format

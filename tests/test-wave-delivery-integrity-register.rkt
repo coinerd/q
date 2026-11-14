@@ -36,6 +36,14 @@
 ;; This wave changes no production behaviour: no guard is registered here and no
 ;; green claim is made about any guard.
 ;;
+;; Phase B note (register F8): scripts/gsd-delivery.py is gone. F8's guard now
+;; consults scripts/gsd-delivery-git.rkt's classify-failure — the module that
+;; owns the typed failure classifiers — and requires its answer to equal the
+;; reason recorded from the Python original at its final revision
+;; (tests/fixtures/gsd-delivery-goldens.json). The replacement is named here
+;; because this file still declares no @covers (see above); adding one would
+;; misreport a mixed-fidelity register as a unit suite for that module.
+;;
 ;; W1 (register F1) registers the first guard — see the section below the harness
 ;; — so the "no guard" claim is now the frozen W0 statement it was written as,
 ;; while the tests assert the current per-wave registry state.
@@ -52,6 +60,8 @@
          json
          (file "../util/json/checksum.rkt")
          (file "../scripts/ci/invocation-contract.rkt")
+         (file "../scripts/gsd-delivery-git.rkt")
+         (file "../tests/helpers/gsd-delivery-goldens.rkt")
          (file "../tests/helpers/w2-mini-git-repo.rkt")
          (only-in "helpers/honest-delivery-fixture.rkt" seed-awaiting-delivery!)
          (file "../scripts/gsd-evidence-bind.rkt")
@@ -465,33 +475,44 @@
   (delete-directory/files root #:must-exist? #f)
   refused?)
 
+(define (w3-f8-classify-case)
+  ;; The exact classify_failure input the register row is recorded against.
+  (hasheq 'args
+          (list "git" "fetch" "origin" "refs/heads/campaign/x")
+          'cmd
+          "git"
+          'exit
+          128
+          'stderr
+          "fatal: couldn't find remote ref refs/heads/campaign/x"))
+
+(define (w3-f8-recorded-reason)
+  ;; The recorded Python answer for this row (Phase B: the oracle is gone;
+  ;; scripts/gsd-delivery.py's classify_failure is now
+  ;; scripts/gsd-delivery-git.rkt's classify-failure).
+  (hash-ref (golden-outcome "gsd-delivery-failure-classification"
+                            '()
+                            "register-f8-missing-remote-ref"
+                            (w3-f8-classify-case))
+            'value))
+
 (define (w3-f8-defect-refused?)
   ;; The defect: every subprocess failure surfaces as the bare
   ;; "delivery command failed (<cmd>, exit 128)". Refused when the
   ;; classified shapes come back typed with class and remedy while the
-  ;; unclassified shape honestly keeps the generic form.
-  (define quoted (format "~s" "fatal: couldn't find remote ref refs/heads/campaign/x"))
-  (define program
-    (string-append
-     "import importlib.util as u\n"
-     "spec = u.spec_from_file_location('g', r'"
-     (path->string (build-path q-root "scripts" "gsd-delivery.py"))
-     "')\n"
-     "m = u.module_from_spec(spec)\nspec.loader.exec_module(m)\n"
-     "print(m.classify_failure(['git', 'fetch', 'origin', 'refs/heads/campaign/x'], 'git', 128, "
-     quoted
-     "))\n"))
-  (define tmp (make-temporary-file "w3reg-f8-~a.py"))
-  (dynamic-wind (lambda () (display-to-file program tmp #:exists 'truncate))
-                (lambda ()
-                  (define out
-                    (string-trim (with-output-to-string
-                                  (lambda ()
-                                    (void (system (format "python3 ~a" (path->string tmp))))))))
-                  (and (string-prefix? out "remote-ref-missing:")
-                       (string-contains? out "refs/heads/campaign/x")
-                       (string-contains? out "push the verified head first")))
-                (lambda () (delete-file tmp))))
+  ;; unclassified shape honestly keeps the generic form. The classifier under
+  ;; test is scripts/gsd-delivery-git.rkt's classify-failure; the recorded
+  ;; Python answer is the parity reference it must still match.
+  (define out (w3-f8-recorded-reason))
+  (define native
+    (classify-failure "git"
+                      128
+                      "fatal: couldn't find remote ref refs/heads/campaign/x"
+                      (list "git" "fetch" "origin" "refs/heads/campaign/x")))
+  (and (string-prefix? out "remote-ref-missing:")
+       (string-contains? out "refs/heads/campaign/x")
+       (string-contains? out "push the verified head first")
+       (equal? native out)))
 
 (define (w3-f9-defect-refused?)
   ;; The defect: a wave can be marked done with delivery-pending and NO
