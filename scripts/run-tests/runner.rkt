@@ -2205,7 +2205,6 @@
     (define rec (with-input-from-file path read-json))
     (check-local-p90-record rec)))
 
-
 ;; Overhead-diagnostics CLI (body moved verbatim from overhead.rkt's
 ;; `module+ main`; `argv` is the command-line vector supplied by the
 ;; direct-invocation guard in this module).
@@ -2301,7 +2300,6 @@
                  (simplify-path (path->complete-path source))))))
 (when invoked-directly?
   (define argv (current-command-line-arguments))
-  (if (and (> (vector-length argv) 0)
-           (member (vector-ref argv 0) '("--check" "--collect-local")))
+  (if (and (> (vector-length argv) 0) (member (vector-ref argv 0) '("--check" "--collect-local")))
       (overhead-cli argv)
       (main (vector->list argv))))
