@@ -5,33 +5,39 @@
 ;; @covers scripts/gsd-delivery-pr.rkt
 ;; @covers scripts/gsd-delivery-write.rkt
 ;; @covers scripts/gsd-delivery-status.rkt
+;; @covers scripts/gsd-delivery-merge.rkt
+;; @covers scripts/gsd-delivery-binding.rkt
 ;; @timeout 300
 ;;
-;; Phase B slices S5/S6 — native delivery action wiring.
+;; Phase B slices S5/S6/S9 — native delivery action wiring.
 ;;
 ;; The coordinator stages that used to shell `gsd-delivery.py resolve-pr /
 ;; pr-ci / review` now dispatch to the native scripts/gsd-delivery-pr.rkt
 ;; functions (delivery-resolve-pr!, delivery-pr-ci!, delivery-review!) with the
 ;; exact arguments the Python invocation carried, and slice S6 moved `open-pr`
 ;; (scripts/gsd-delivery-write.rkt) plus the `status` / `governance` readbacks
-;; (scripts/gsd-delivery-status.rkt) to native code too. This file pins that
-;; wiring:
+;; (scripts/gsd-delivery-status.rkt) to native code too. Slice S9 closed the
+;; ladder: the protected `merge` and `prepare` (scripts/gsd-delivery-merge.rkt)
+;; and every `binding-*` action (scripts/gsd-delivery-binding.rkt) are native, so
+;; NO dispatchable stage spawns python3; gsd-delivery.py survives only as the
+;; fallback for an unknown/legacy action name. This file pins that wiring:
 ;;
-;;   (a) the native stages never spawn python3,
+;;   (a) no delivery stage spawns python3,
 ;;   (b) a native refusal surfaces the SAME reason string the Python exit-2
 ;;       {"status":"delivery-pending","reason":…} payload produced (each case
 ;;       compares against a RECORDED expectation constant),
-;;   (c) `status` is dispatched WITH the campaign root: a two-tier fixture
-;;       (campaign root + nested q checkout) distinguishes the delivered
-;;       readback from a root-less call, which refuses as ambiguous,
-;;   (d) every stage that still dispatches through the controller is asserted
-;;       to reach python3 (merge / prepare / binding-*).
+;;   (c) `status` is dispatched WITH the campaign root (two-tier control case),
+;;       and `merge`/`prepare` receive the RECEIPT-resolved identity — the
+;;       merged/head-mismatch controls prove which value the native action was
+;;       handed,
+;;   (d) the Python fallback is still exercised, but ONLY for an unknown /
+;;       legacy action name.
 ;;
 ;; Fixture: a real local git origin plus a per-case subject clone (so
 ;; `refresh`, `origin/main`, `merge-base` and the PR-head fetch are REAL
 ;; commands), a fake `gh` installed FIRST on PATH (S3/S4 pattern), and a
 ;; python3 spy that fails closed and records any invocation. The spy marker is
-;; the assertion: a native stage never creates it, a Python stage always does.
+;; the assertion: a native stage never creates it, the legacy fallback does.
 
 (require rackunit
          json
@@ -66,6 +72,27 @@
 (define (recorded-governance-unresolvable-reason plan)
   (format "governance cannot self-resolve exactly one merged binding PR for branch binding/~a-w0"
           (substring plan 0 12)))
+
+;; Slice S9 recordings: the EXACT reason strings scripts/gsd-delivery.py's exit-2
+;; payload carried for these fixtures; the native ports are byte-identical.
+(define recorded-merge-head-mismatch-reason
+  "implementation PR head does not match the verified expected head")
+(define recorded-merge-stale-base-reason
+  "implementation PR is not based on fresh origin/main; reanchor and re-verify")
+(define recorded-binding-not-directory-reason "binding staging output is not a regular directory")
+(define recorded-binding-not-ready-to-publish-reason "binding staging is not ready to publish")
+
+(define (recorded-prepare-unresolvable-reason)
+  (format "prepare cannot self-resolve exactly one merged implementation PR for branch ~a" branch))
+(define (recorded-multiple-merged-reason)
+  (format "multiple merged pull requests already target branch ~a" branch))
+
+;; The interpreter's typed stop for a `none` resolve (the binding CI/merge
+;; dispatch passes the resolve result straight through).
+(define (recorded-binding-none-reason stage plan)
+  (format "~a: no open pull request for branch ~a; open it for genuine independent review"
+          stage
+          (expected-binding-branch plan)))
 
 ;; The deterministic (generation 0) binding branch the coordinator must hand to
 ;; `governance` as --expected-branch.
@@ -210,11 +237,17 @@
     (write-json value out)
     (get-output-string out)))
 
+(define (open-route-for br)
+  (format "repos/~a/pulls?state=open&head=example:~a" slug br))
+
+(define (all-route-for br)
+  (format "repos/~a/pulls?state=all&head=example:~a" slug br))
+
 (define (open-route)
-  (format "repos/~a/pulls?state=open&head=example:~a" slug branch))
+  (open-route-for branch))
 
 (define (all-route)
-  (format "repos/~a/pulls?state=all&head=example:~a" slug branch))
+  (all-route-for branch))
 
 (define (pr-route [number 1])
   (format "repos/~a/pulls/~a" slug number))
@@ -297,7 +330,18 @@
      (make-directory* fixtures)
      (install-gh-shim! bin fixtures routes)
      (install-python3-spy! bin marker)
-     (define env (fixture-env root (format "~a:/usr/bin:/bin" (path->string bin))))
+     ;; The native actions load the coordinator journal and the campaign
+     ;; snapshot through `racket scripts/gsd-binding-data.rkt`, so the
+     ;; interpreter's own directory stays on PATH; only python3 is shimmed (the
+     ;; spy directory comes FIRST).
+     (define racket-dir (path-only (find-executable-path "racket")))
+     (define env
+       (fixture-env root
+                    (format "~a:/usr/bin:/bin~a"
+                            (path->string bin)
+                            (if racket-dir
+                                (format ":~a" (path->string racket-dir))
+                                ""))))
      (env-set! env "GH_SHIM_LOG" (path->string (build-path root "gh.log")))
      (env-set! env "GH_SHIM_FIXTURES" (path->string fixtures))
      (parameterize ([current-environment-variables env])
@@ -656,32 +700,239 @@
        (check-exn (lambda (e) (equal? (exn-message e) recorded-ambiguous-root-reason))
                   (lambda () (delivery-status! (hash-ref ctx 'subject) plan 0)))))))
 
-;; (d) every stage still on run-controller keeps reaching python3.
+;; (a) EVERY dispatchable stage is native. Each stage is asserted python3-free
+;; by its own case below (implementation-review / -pr / -ci / -merged,
+;; binding-prepared / -review / -pr / -ci / -merged, governance, delivered)
+;; except the two that have no dedicated case in this file — `delivery-preflight`
+;; and `sync`, swept here. tests/test-gsd-delivery-preflight.rkt and
+;; tests/test-gsd-delivery-sync-native.rkt pin their production wiring.
 (module+ test
-  (test-case "implementation-merged still dispatches the protected merge through the controller"
+  (test-case "delivery-preflight and sync dispatch natively (no python3)"
+    (with-ladder-case (list (list "*" "none.json" "[]"))
+                      (lambda (ctx)
+                        (for ([stage (in-list '("delivery-preflight" "sync"))])
+                          (when (file-exists? (hash-ref ctx 'marker))
+                            (delete-file (hash-ref ctx 'marker)))
+                          (stage-effect ctx stage)
+                          (check-false (spawned-python3? ctx)
+                                       (format "~a must be native (no python3)" stage)))))))
+
+;; (a)+(b)+(c) implementation-merged: the native protected merge.
+(module+ test
+  (test-case "implementation-merged runs the native merge with the receipt-resolved head"
+    ;; The PR collection the resolve reads carries the receipt head; the PR that
+    ;; the merge itself reads names a DIFFERENT head. The refusal proves the
+    ;; merge received the RECEIPT-resolved head (--expected-head) instead of
+    ;; accepting whatever its own read returned.
     (with-ladder-case
      (list (list (open-route) "open.json" (json-text (list (pr-hash))))
+           (list (pr-route 1) "pr1.json" (json-text (pr-hash #:head (make-string 40 #\c))))
            (list (all-route) "all.json" "[]"))
      (lambda (ctx)
-       (stage-effect ctx "implementation-merged")
-       (check-true (spawned-python3? ctx)
-                   "the protected merge is mutating and stays on gsd-delivery.py")))))
+       (define result (stage-effect ctx "implementation-merged"))
+       (check-eq? (delivery-effect-result-kind result) 'blocked)
+       (check-equal? (hash-ref (delivery-effect-result-data result) 'reason)
+                     recorded-merge-head-mismatch-reason)
+       (check-false (spawned-python3? ctx) "the protected merge is native since slice S9")
+       (check-true (for/or ([line (in-list (gh-calls ctx))])
+                     (string-contains? line (pr-route 1)))
+                   "merge must read the resolved PR number")))))
 
 (module+ test
-  (test-case "binding-prepared still dispatches prepare through the controller"
-    (with-ladder-case '()
+  (test-case "merge's expected-head is the resolved identity (control)"
+    ;; The same fixture with AGREEING heads: the exact-head contract passes, so
+    ;; the refusal moves on to the fresh-origin/main base proof. Together with
+    ;; the mismatch case this pins that --expected-head is the resolved head.
+    (with-ladder-case (list (list (open-route) "open.json" (json-text (list (pr-hash))))
+                            (list (pr-route 1) "pr1.json" (json-text (pr-hash)))
+                            (list (all-route) "all.json" "[]"))
                       (lambda (ctx)
-                        (stage-effect ctx "binding-prepared")
-                        (check-true (spawned-python3? ctx)
-                                    "prepare is mutating and stays on gsd-delivery.py")))))
+                        (define result (stage-effect ctx "implementation-merged"))
+                        (check-eq? (delivery-effect-result-kind result) 'blocked)
+                        (check-equal? (hash-ref (delivery-effect-result-data result) 'reason)
+                                      recorded-merge-stale-base-reason)
+                        (check-false (spawned-python3? ctx)
+                                     "the protected merge is native since slice S9")))))
+
+;; (a)+(b) binding-prepared: the native prepare.
+(module+ test
+  (test-case "binding-prepared runs the native prepare with the receipt branch (no python3)"
+    ;; No merged implementation PR exists: the action's own self-resolution
+    ;; refuses with the exact Python text, which echoes the branch it was
+    ;; HANDED (the durable receipt branch).
+    (with-ladder-case (list (list (all-route) "all.json" "[]"))
+                      (lambda (ctx)
+                        (define result (stage-effect ctx "binding-prepared"))
+                        (check-eq? (delivery-effect-result-kind result) 'blocked)
+                        (check-equal? (hash-ref (delivery-effect-result-data result) 'reason)
+                                      (recorded-prepare-unresolvable-reason))
+                        (check-false (spawned-python3? ctx) "prepare is native since slice S9")))))
 
 (module+ test
-  (test-case "binding-* stages still dispatch through the controller"
+  (test-case "prepare's expected-head narrows the merged-PR self-resolution (control)"
+    ;; TWO merged PRs for the durable branch. Only --expected-head = the receipt
+    ;; head narrows them to exactly one; without it the action refuses with the
+    ;; multiple-merged reason, and with a different head with the unresolvable
+    ;; one. Reaching a DEEPER proof therefore pins the head argument.
+    (with-ladder-case (list (list (all-route)
+                                  "all.json"
+                                  (json-text (list (hash-set (pr-hash #:state "closed" #:merged? #t)
+                                                             'merge_commit_sha
+                                                             (make-string 40 #\d))
+                                                   (hash-set (pr-hash #:number 2
+                                                                      #:state "closed"
+                                                                      #:merged? #t
+                                                                      #:head (make-string 40 #\e))
+                                                             'merge_commit_sha
+                                                             (make-string 40 #\f)))))
+                            (list "*" "none.json" "[]"))
+                      (lambda (ctx)
+                        (define result (stage-effect ctx "binding-prepared"))
+                        (check-eq? (delivery-effect-result-kind result) 'blocked)
+                        (define reason (hash-ref (delivery-effect-result-data result) 'reason))
+                        (check-false (equal? reason (recorded-multiple-merged-reason))
+                                     "the receipt head must narrow the two merged PRs to one")
+                        (check-false (equal? reason (recorded-prepare-unresolvable-reason))
+                                     "the receipt head must self-resolve exactly one merged PR")
+                        (check-false (spawned-python3? ctx) "prepare is native since slice S9")))))
+
+;; (a)+(b) binding-review: the native staged-trio validation.
+(module+ test
+  (test-case "binding-review runs the native staged-trio validation (no python3)"
+    ;; A REGULAR FILE at the deterministic staging path: the native action's
+    ;; structural refusal, with the exact Python reason text.
     (with-ladder-case
      '()
      (lambda (ctx)
-       (for ([stage (in-list '("binding-pr" "binding-ci" "binding-merged" "binding-review"))])
+       (define plan (hash-ref ctx 'plan))
+       (put (build-path (hash-ref ctx 'subject) ".planning" "campaigns" plan "binding-w0")
+            "not a directory\n")
+       (define result (stage-effect ctx "binding-review"))
+       (check-eq? (delivery-effect-result-kind result) 'blocked)
+       (check-equal? (hash-ref (delivery-effect-result-data result) 'reason)
+                     recorded-binding-not-directory-reason)
+       (check-false (spawned-python3? ctx) "binding-review is native since slice S9")))))
+
+;; (a)+(b) binding-pr: the native publication.
+(module+ test
+  (test-case "binding-pr publishes only a reviewed staging trio (native, no python3)"
+    (with-ladder-case '()
+                      (lambda (ctx)
+                        (define result (stage-effect ctx "binding-pr"))
+                        ;; No staging directory at all: binding-review reports
+                        ;; awaiting-review, so publication refuses with the
+                        ;; Python text and nothing is pushed.
+                        (check-eq? (delivery-effect-result-kind result) 'blocked)
+                        (check-equal? (hash-ref (delivery-effect-result-data result) 'reason)
+                                      recorded-binding-not-ready-to-publish-reason)
+                        (check-false (spawned-python3? ctx) "binding-pr is native since slice S9")))))
+
+;; (a)+(b)+(c) binding-merged: the native dispatch's idempotent resume.
+(module+ test
+  (test-case "binding-merged resumes natively on an already-merged binding PR"
+    ;; A merged binding publication PR at the deterministic branch tip: the
+    ;; native resolve returns the idempotent `already-merged` identity, so the
+    ;; dispatch passes it through VERBATIM instead of merging again — the whole
+    ;; path is native and the branch it resolved is the one the dispatch built.
+    (with-ladder-case
+     '()
+     (lambda (ctx)
+       (define root (hash-ref ctx 'root))
+       (define subject (hash-ref ctx 'subject))
+       (define plan (hash-ref ctx 'plan))
+       (define binding-br (expected-binding-branch plan))
+       (define env (fixture-env root "/usr/bin:/bin"))
+       ;; A real binding publication branch at the origin plus
+       ;; its PR ref, so the fetched branch tip and
+       ;; refs/pull/2/head agree with the merged PR head.
+       (git! env subject "checkout" "-q" "-b" binding-br "main")
+       (put (build-path subject "binding-draft") "draft\n")
+       (git! env subject "add" "binding-draft")
+       (git! env subject "commit" "-qm" "binding draft")
+       (define tip (git! env subject "rev-parse" "HEAD"))
+       (git! env subject "push" "-q" "origin" (format "~a:refs/heads/~a" tip binding-br))
+       (git! env subject "push" "-q" "origin" (format "~a:refs/pull/2/head" tip))
+       (git! env subject "checkout" "-q" branch)
+       (define merged-pr
+         (hash-set (pr-hash #:number 2 #:state "closed" #:merged? #t #:head tip #:head-ref binding-br)
+                   'merge_commit_sha
+                   (make-string 40 #\f)))
+       ;; Routes are installed HERE because the deterministic
+       ;; binding branch embeds the campaign plan hash.
+       (install-gh-shim!
+        (build-path root "bin")
+        (build-path root "fixtures")
+        (list (list (all-route-for binding-br) "ball.json" (json-text (list merged-pr)))
+              (list (pr-route 2) "pr2.json" (json-text merged-pr))
+              (list "*" "none.json" "[]")))
+       (define result (stage-effect ctx "binding-merged"))
+       (check-eq? (delivery-effect-result-kind result) 'ok)
+       (check-equal? (hash-ref (delivery-effect-result-data result) 'status #f) "already-merged")
+       (check-equal? (hash-ref (delivery-effect-result-data result) 'pr #f) 2)
+       (check-equal? (hash-ref (delivery-effect-result-data result) 'head #f) tip)
+       (check-false (spawned-python3? ctx) "the binding dispatch is native since slice S9")
+       (check-true (for/or ([line (in-list (gh-calls ctx))])
+                     (string-contains? line (all-route-for binding-br)))
+                   (string-append "the resolve must query the deterministic " "binding branch"))))))
+
+(module+ test
+  (test-case "binding-ci and binding-merged dispatch natively through the binding resolve"
+    ;; No binding PR exists: the dispatch resolves the deterministic binding
+    ;; branch (the argument it hands the resolve), gets the typed `none` result
+    ;; and stops with the interpreter's reason — never python3.
+    (with-ladder-case
+     (list (list "*" "none.json" "[]"))
+     (lambda (ctx)
+       (define plan (hash-ref ctx 'plan))
+       (for ([stage (in-list '("binding-ci" "binding-merged"))])
          (when (file-exists? (hash-ref ctx 'marker))
            (delete-file (hash-ref ctx 'marker)))
-         (stage-effect ctx stage)
-         (check-true (spawned-python3? ctx) (format "~a stays on gsd-delivery.py" stage)))))))
+         (define result (stage-effect ctx stage))
+         (check-eq? (delivery-effect-result-kind result) 'blocked)
+         (check-equal? (hash-ref (delivery-effect-result-data result) 'reason)
+                       (recorded-binding-none-reason stage plan))
+         (check-false (spawned-python3? ctx) (format "~a is native since slice S9" stage))
+         (check-true (for/or ([line (in-list (gh-calls ctx))])
+                       (string-contains? line (expected-binding-branch plan)))
+                     (format "~a must resolve the deterministic binding branch" stage)))))))
+
+;; (d) the Python dispatch survives ONLY for an unknown / legacy action name.
+(module+ test
+  (test-case "the Python fallback is reachable only for an unknown/legacy action name"
+    (with-ladder-case
+     (list (list "*" "none.json" "[]"))
+     (lambda (ctx)
+       (define subject (hash-ref ctx 'subject))
+       (define plan (hash-ref ctx 'plan))
+       ;; A KNOWN binding action through the same dispatch seam: native.
+       (define known
+         (run-native-binding-action subject
+                                    plan
+                                    0
+                                    "binding-ci"
+                                    "binding-resolve-pr"
+                                    "--expected-branch"
+                                    branch))
+       (check-eq? (delivery-effect-result-kind known) 'blocked)
+       (check-equal?
+        (hash-ref (delivery-effect-result-data known) 'reason)
+        (format
+         "binding-ci: no open pull request for branch ~a; open it for genuine independent review"
+         branch))
+       (check-false (spawned-python3? ctx) "a known binding action must never reach python3")
+       ;; Python's legacy `binding-publish` alias is not served by any native
+       ;; surface: the authenticated gsd-delivery.py controller still owns it.
+       (define legacy
+         (run-native-binding-action subject
+                                    plan
+                                    0
+                                    "binding-ci"
+                                    "binding-publish"
+                                    "--output"
+                                    (default-binding-staging-path subject plan 0)
+                                    "--campaign-root"
+                                    (path->string subject)))
+       (check-eq? (delivery-effect-result-kind legacy) 'blocked)
+       (check-true (spawned-python3? ctx)
+                   (string-append "an unknown/legacy action name must still reach the "
+                                  "authenticated controller"))))))

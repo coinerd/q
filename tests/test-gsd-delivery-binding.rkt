@@ -1163,11 +1163,15 @@
                                                                   "1"))))
                   "binding-merge requires --pr, --expected-branch, --expected-head and --evidence")
     (check-equal? (delivery-refusal (lambda ()
+                                      (delivery-binding-action! '("binding-resolve-pr" "--repo" "/tmp/x"))))
+                  "binding-resolve-pr requires --expected-branch")
+    (check-equal? (delivery-refusal (lambda ()
                                       (delivery-binding-action! '("binding-publish"
                                                                   "--repo"
                                                                   "/tmp/x"))))
                   (string-append "unsupported action binding-publish; this module implements "
-                                 "binding-review, binding-pr, binding-ci and binding-merge only")))
+                                 "binding-review, binding-pr, binding-resolve-pr, binding-ci and "
+                                 "binding-merge only")))
 
   (test-case "binding-pr builds Python's exact publication title and body"
     (check-equal? (binding-publish-title plan-id wave "binding/x")

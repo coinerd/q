@@ -7,12 +7,13 @@
 ;;   binding-pr       -> binding_publish   (Python: `binding_pr = binding_publish`)
 ;;   binding-ci       -> binding_ci
 ;;   binding-merged   -> binding_merge     (= merge, unchanged protected gate)
+;;   binding-resolve-pr -> binding_resolve_pr (the CI/merge dispatch's resolve)
 ;;
-;; Scope law: this module implements exactly those four actions. It is NOT wired
-;; into extensions/gsd/delivery-coordinator.rkt (the coordinator still shells to
-;; the Python controller), it does not edit scripts/gsd-delivery.py, and every
-;; module it reuses (S3 api, S4 read ladder, S5 write seam, S6 status, S7 merge)
-;; is READ-ONLY here. The ONE mutation this slice performs is Python's
+;; Scope law: this module implements exactly those five actions. The coordinator
+;; (extensions/gsd/delivery-coordinator.rkt) dispatches every binding stage here
+;; (Phase B slice S9), so no binding stage spawns python3; this module does not
+;; edit scripts/gsd-delivery.py, and every module it reuses (S3 api, S4 read
+;; ladder, S5 write seam, S6 status, S7 merge) is READ-ONLY here. The ONE mutation this slice performs is Python's
 ;; `gh_post(slug, "pulls", {title,body,head,base})` through the S5 write seam,
 ;; plus the non-force push of the deterministic binding branch — exactly the two
 ;; writes binding_publish performs.
@@ -146,6 +147,7 @@
          delivery-binding-pr!
          delivery-binding-ci!
          delivery-binding-merged!
+         delivery-binding-resolve-pr!
          ;; deterministic helpers (exported so a test can pin the exact contract)
          binding-staging-path
          require-binding-output
@@ -283,8 +285,10 @@
   (define proofs (build-path parent "owned-proofs"))
   (cond
     [(and (directory-exists? proofs) (not (link-exists? proofs)))
-     (for/fold ([files (hash)]) ([payload (in-list (sort (for/list ([p (in-directory proofs)]) p)
-                                                        path<?))])
+     (for/fold ([files (hash)])
+               ([payload (in-list (sort (for/list ([p (in-directory proofs)])
+                                          p)
+                                        path<?))])
        (cond
          [(and (file-exists? payload) (not (link-exists? payload)))
           (define relative (find-relative-path parent payload))
@@ -292,10 +296,7 @@
             (refuse! (string-append "unsafe staged owned-proof bundle path: "
                                     (path->string payload))))
           (hash-set files
-                    (path->string (build-path "docs"
-                                              "reports"
-                                              "gsd-wave-validation"
-                                              relative))
+                    (path->string (build-path "docs" "reports" "gsd-wave-validation" relative))
                     payload)]
          [else files]))]
     [else (hash)]))
@@ -363,37 +364,29 @@
    (lambda ()
      (for ([kind (in-list '("evidence" "reviews" "validation"))])
        (define source (hash-ref paths kind))
-       (define target
-         (build-path gate-root "docs/reports" (string-append "gsd-wave-" kind) artifact))
+       (define target (build-path gate-root "docs/reports" (string-append "gsd-wave-" kind) artifact))
        (make-directory* (path-only target))
        (call-with-output-file target
-                              #:exists
-                              'truncate
+                              #:exists 'truncate
                               (lambda (out) (write-bytes (file->bytes source) out))))
-     (define proofs-src
-       (build-path staging "docs/reports/gsd-wave-validation/owned-proofs"))
+     (define proofs-src (build-path staging "docs/reports/gsd-wave-validation/owned-proofs"))
      (when (and (directory-exists? proofs-src) (not (link-exists? proofs-src)))
-       (for ([payload (in-list (for/list ([p (in-directory proofs-src)]) p))])
+       (for ([payload (in-list (for/list ([p (in-directory proofs-src)])
+                                 p))])
          (when (and (file-exists? payload) (not (link-exists? payload)))
            (define relative (find-relative-path proofs-src payload))
            (define target
-             (build-path gate-root
-                         "docs/reports/gsd-wave-validation/owned-proofs"
-                         relative))
+             (build-path gate-root "docs/reports/gsd-wave-validation/owned-proofs" relative))
            (make-directory* (path-only target))
            (call-with-output-file target
-                                  #:exists
-                                  'truncate
+                                  #:exists 'truncate
                                   (lambda (out) (write-bytes (file->bytes payload) out))))))
      (define policy (blob-or-none git main policy-relative-path))
      (unless policy
        (refuse! "binding gate policy is unavailable"))
      (define policy-path (build-path gate-root policy-relative-path))
      (make-directory* (path-only policy-path))
-     (call-with-output-file policy-path
-                            #:exists
-                            'truncate
-                            (lambda (out) (write-string policy out)))
+     (call-with-output-file policy-path #:exists 'truncate (lambda (out) (write-string policy out)))
      (define out
        (run "racket"
             (list (path->string wave-gate-script)
@@ -426,13 +419,7 @@
 ;; that a durable draft exists and, for a finalized draft, that it passes the
 ;; unchanged strict gate; the `reviewed` status therefore always means "a
 ;; genuine reviewer finalized this staged trio".
-(define (read-staged-trio repo
-                          plan
-                          wave
-                          output
-                          campaign-root
-                          expected-branch
-                          #:context [context #f])
+(define (read-staged-trio repo plan wave output campaign-root expected-branch #:context [context #f])
   (define ctx (or context (make-delivery-pr-context repo)))
   (define git (delivery-pr-context-git ctx))
   (define run (delivery-pr-context-run ctx))
@@ -553,8 +540,7 @@
           (refuse! "staged binding validation placeholders do not match the pending draft contract"))
         (for ([field (in-list '("red-first" "focused-tests" "format-compile" "lint" "fast"))])
           (unless (hash? (hash-ref validation (string->symbol field) #f))
-            (refuse! (string-append "staged binding validation gate evidence is malformed: "
-                                    field))))
+            (refuse! (string-append "staged binding validation gate evidence is malformed: " field))))
         (hasheq 'status
                 "pending-review"
                 'output
@@ -619,7 +605,10 @@
                                   #:expected-branch [expected-branch #f]
                                   #:context [context #f])
   (binding-path plan wave)
-  (define root (if campaign-root campaign-root (as-path repo)))
+  (define root
+    (if campaign-root
+        campaign-root
+        (as-path repo)))
   (read-staged-trio repo plan wave output root expected-branch #:context context))
 
 ;; ============================================================
@@ -648,22 +637,16 @@
   (define run (delivery-pr-context-run ctx))
   (define paths (staged-artifact-paths (as-path output) plan wave generation))
   (for ([kind (in-list '("evidence" "reviews" "validation"))])
-    (define relative
-      (path->string
-       (find-relative-path
-        (as-path output)
-        (hash-ref paths kind))))
+    (define relative (path->string (find-relative-path (as-path output) (hash-ref paths kind))))
     (define blob (blob-or-none git tip relative))
     (unless blob
       (refuse! (string-append "existing binding branch is missing " relative)))
-    (unless (equal? (read-datum-bytes run blob)
-                    (read-binding-datum run (hash-ref paths kind)))
+    (unless (equal? (read-datum-bytes run blob) (read-binding-datum run (hash-ref paths kind)))
       (refuse! "existing binding branch does not match the staged trio")))
   (for ([(relative source) (in-hash (staged-bundle-files output))])
     (define blob (blob-or-none git tip relative))
     (unless blob
-      (refuse! (string-append "existing binding branch is missing the audit bundle: "
-                              relative)))
+      (refuse! (string-append "existing binding branch is missing the audit bundle: " relative)))
     (unless (equal? (string->bytes/utf-8 blob) (file->bytes source))
       (refuse! (string-append "existing binding branch audit bundle differs from staging: "
                               relative))))
@@ -687,12 +670,13 @@
        (unless (and (file-exists? source) (not (link-exists? source)))
          (refuse! "staged binding trio is not a regular file"))
        (define target
-         (build-path worktree "docs/reports" (string-append "gsd-wave-" kind)
+         (build-path worktree
+                     "docs/reports"
+                     (string-append "gsd-wave-" kind)
                      (path->string (file-name-from-path source))))
        (make-directory* (path-only target))
        (call-with-output-file target
-                              #:exists
-                              'truncate
+                              #:exists 'truncate
                               (lambda (out) (write-bytes (file->bytes source) out))))
      (for ([(relative source) (in-hash (staged-bundle-files output))])
        (define target (build-path worktree relative))
@@ -700,19 +684,14 @@
          (refuse! (string-append "staged audit bundle path is unsafe: " relative)))
        (make-directory* (path-only target))
        (call-with-output-file target
-                              #:exists
-                              'truncate
+                              #:exists 'truncate
                               (lambda (out) (write-bytes (file->bytes source) out))))
      (worktree-git (list "add" "-A"))
-     (worktree-git (list "commit"
-                         "--no-gpg-sign"
-                         "-m"
-                         (format "W~a binding draft: ~a-w~a" wave plan wave)))
+     (worktree-git
+      (list "commit" "--no-gpg-sign" "-m" (format "W~a binding draft: ~a-w~a" wave plan wave)))
      (define commit (string-trim (worktree-git (list "rev-parse" "HEAD"))))
      (define parents (commit-parents worktree-git "HEAD"))
-     (unless (and (= 2 (length parents))
-                  (equal? (car parents) commit)
-                  (equal? (cadr parents) main))
+     (unless (and (= 2 (length parents)) (equal? (car parents) commit) (equal? (cadr parents) main))
        (refuse! "binding publication commit is not based on fresh origin/main"))
      commit)
    (lambda ()
@@ -789,8 +768,7 @@
      ;; Resolve-before-create: an OPEN PR wins, then a merged PR, and only then
      ;; the ONE creation POST.
      (define existing (resolve-existing-pr api slug branch))
-     (define merged
-       (and (not existing) (resolve-merged-pr api slug branch #f)))
+     (define merged (and (not existing) (resolve-merged-pr api slug branch #f)))
      (cond
        [merged
         (hasheq 'status
@@ -807,29 +785,26 @@
               (let ([resolved (hash-ref existing 'number #f)])
                 (unless (and (exact-integer? resolved) (> resolved 0))
                   (refuse! "resolved binding pull request has no usable number"))
-                (values resolved
-                        "exists"
-                        (api slug (format "pulls/~a" resolved) #:refresh? #t)))
-              (let ([created (gh-post ctx
-                                      slug
-                                      "pulls"
-                                      (list (cons "title" (binding-publish-title plan wave branch))
-                                            (cons "body"
-                                                  (binding-publish-body plan wave commit branch binding))
-                                            (cons "head" branch)
-                                            (cons "base" "main")))])
+                (values resolved "exists" (api slug (format "pulls/~a" resolved) #:refresh? #t)))
+              (let ([created
+                     (gh-post ctx
+                              slug
+                              "pulls"
+                              (list (cons "title" (binding-publish-title plan wave branch))
+                                    (cons "body"
+                                          (binding-publish-body plan wave commit branch binding))
+                                    (cons "head" branch)
+                                    (cons "base" "main")))])
                 (define created-number (hash-ref created 'number #f))
                 (unless (and (exact-integer? created-number) (> created-number 0))
-                  (refuse!
-                   "GitHub pull-request creation response has no usable number"))
+                  (refuse! "GitHub pull-request creation response has no usable number"))
                 (values created-number
                         "opened"
                         (api slug (format "pulls/~a" created-number) #:refresh? #t)))))
         (unless (and (hash? pr) (equal? (hash-ref pr 'state #f) "open"))
           (refuse! "binding pull request is not open"))
         (validate-pr-identity pr slug)
-        (unless (and (equal? (dig pr 'head 'ref) branch)
-                     (equal? (dig pr 'head 'sha) commit))
+        (unless (and (equal? (dig pr 'head 'ref) branch) (equal? (dig pr 'head 'sha) commit))
           (refuse! "binding pull request does not match the verified publication branch/head"))
         (hasheq 'status status 'pr number 'branch branch 'head commit)])]))
 
@@ -838,11 +813,7 @@
 ;; ============================================================
 
 ;; Check a binding PR at its exact head without implementation ancestry rules.
-(define (delivery-binding-ci! repo
-                              number
-                              expected-branch
-                              expected-head
-                              #:context [context #f])
+(define (delivery-binding-ci! repo number expected-branch expected-head #:context [context #f])
   (unless (and (exact-integer? number) (> number 0))
     (refuse! "binding-ci requires --pr"))
   (unless (nonblank-string? expected-branch)
@@ -896,14 +867,110 @@
                                   expected-branch
                                   source
                                   #:context [context #f])
-  (delivery-merge! repo
-                   plan
-                   wave
-                   number
-                   expected-head
-                   expected-branch
-                   source
-                   #:context context))
+  (delivery-merge! repo plan wave number expected-head expected-branch source #:context context))
+
+;; ============================================================
+;; binding-resolve-pr
+;; ============================================================
+
+;; Resolve a binding PR by its deterministic branch WITHOUT the implementation
+;; receipt's ancestry rule (binding publication branches are fresh-main
+;; publication commits). Python's `binding_resolve_pr`, in its exact order: an
+;; OPEN PR first (fetched branch-tip equality, refreshed re-read, same-repo
+;; identity), then a MERGED PR for idempotent resume (`already-merged`), else the
+;; typed `none` result. Merged resolution runs BEFORE the branch fetch so a
+;; deleted head branch (common post-merge hygiene) cannot block resume, while a
+;; still-existing, DIVERGENT recreated branch fails closed.
+(define (delivery-binding-resolve-pr! repo plan wave expected-branch #:context [context #f])
+  (unless (nonblank-string? expected-branch)
+    (refuse! "binding PR resolution requires --expected-branch"))
+  (define ctx (or context (make-delivery-pr-context repo)))
+  (define git (delivery-pr-context-git ctx))
+  (define api (delivery-pr-context-api ctx))
+  (define session (delivery-pr-context-session ctx))
+  (define slug (repository git))
+  (define existing (resolve-existing-pr api slug expected-branch))
+  (refresh git)
+  (define refspec (string-append "refs/heads/" expected-branch))
+  (define remote-ref (string-append "refs/remotes/origin/" expected-branch))
+  (define (fetch-branch-tip!)
+    (git (list "fetch" "--no-tags" "origin" (format "+~a:~a" refspec remote-ref)))
+    (string-trim (git (list "rev-parse" remote-ref))))
+  (cond
+    [(hash? existing)
+     (define tip (fetch-branch-tip!))
+     (unless (full-sha? tip)
+       (refuse! "malformed fetched binding branch tip"))
+     (define number (hash-ref existing 'number #f))
+     (unless (and (exact-integer? number) (> number 0))
+       (refuse! "resolved binding pull request has no usable number"))
+     (define pr (api slug (format "pulls/~a" number) #:refresh? #t))
+     (unless (and (hash? pr) (equal? (hash-ref pr 'state #f) "open"))
+       (refuse! "resolved binding pull request is not open"))
+     (validate-pr-identity pr slug)
+     (define head (dig pr 'head 'sha))
+     (unless (and (full-sha? head) (equal? head tip))
+       (refuse! "binding pull request head does not match the fetched branch tip"))
+     (unless (equal? (dig pr 'head 'ref) expected-branch)
+       (refuse! "binding pull request branch does not match expected branch"))
+     (hasheq 'status
+             "resolved"
+             'pr
+             number
+             'branch
+             expected-branch
+             'head
+             head
+             'plan-id
+             (json-null plan)
+             'wave
+             (json-null wave))]
+    [else
+     (define merged (resolve-merged-pr api slug expected-branch #f))
+     (cond
+       [(not (hash? merged)) (hasheq 'status "none" 'branch expected-branch)]
+       [else
+        (define number (hash-ref merged 'number #f))
+        (unless (and (exact-integer? number) (> number 0))
+          (refuse! "resolved merged binding pull request has no usable number"))
+        (define pr (api slug (format "pulls/~a" number) #:refresh? #t))
+        (unless (pr-is-merged? pr)
+          (refuse! "resolved binding pull request is not merged"))
+        (validate-pr-identity pr slug)
+        (define head (dig pr 'head 'sha))
+        (unless (full-sha? head)
+          (refuse! "resolved merged binding pull request has no full head SHA"))
+        (unless (equal? (dig pr 'head 'ref) expected-branch)
+          (refuse! "resolved merged binding pull request branch does not match expected branch"))
+        (define fetched ((delivery-api-session-fetch-head session) number))
+        (unless (equal? fetched head)
+          (refuse! "merged binding pull request head does not match fetched ref"))
+        ;; A deleted branch must not block resume (the fetch failure is
+        ;; tolerated exactly like Python's `except Pending`); the tip equality
+        ;; stays enforced outside that tolerance.
+        (define branch-tip
+          (with-handlers ([exn:fail:delivery-action?
+                           (lambda (error)
+                             (if (infrastructure-refusal? (exn-message error))
+                                 (raise error)
+                                 #f))])
+            (fetch-branch-tip!)))
+        (when (and branch-tip (not (equal? head branch-tip)))
+          (refuse! "resolved merged binding pull request head does not match fetched branch tip"))
+        (hasheq 'status
+                "already-merged"
+                'pr
+                number
+                'branch
+                expected-branch
+                'head
+                head
+                'merge-sha
+                (json-null (hash-ref pr 'merge_commit_sha #f))
+                'plan-id
+                (json-null plan)
+                'wave
+                (json-null wave))])]))
 
 ;; ============================================================
 ;; CLI surface (same JSON shapes as the Python actions)
@@ -948,6 +1015,10 @@
      (unless (and output campaign-root)
        (refuse! "binding-pr requires --output and --campaign-root"))
      (delivery-binding-pr! repo plan wave output #:campaign-root campaign-root)]
+    [(equal? action "binding-resolve-pr")
+     (unless expected-branch
+       (refuse! "binding-resolve-pr requires --expected-branch"))
+     (delivery-binding-resolve-pr! repo plan wave expected-branch)]
     [(equal? action "binding-ci")
      (unless (and number expected-branch expected-head)
        (refuse! "binding-ci requires --pr, --expected-branch and --expected-head"))
@@ -958,9 +1029,9 @@
      (delivery-binding-merged! repo plan wave number expected-head expected-branch evidence)]
     [else
      (refuse!
-      (format
-       "unsupported action ~a; this module implements binding-review, binding-pr, binding-ci and binding-merge only"
-       (or action "")))]))
+      (format (string-append "unsupported action ~a; this module implements binding-review, "
+                             "binding-pr, binding-resolve-pr, binding-ci and binding-merge only")
+              (or action "")))]))
 
 ;; Success -> JSON on stdout, exit 0. Refusal -> delivery-pending JSON, exit 2
 ;; (the exact shape delivery-coordinator.rkt's typed-stop parser expects).

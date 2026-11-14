@@ -79,6 +79,11 @@
          run-native-open-pr
          run-native-status
          run-native-governance
+         run-native-merge
+         run-native-prepare
+         run-native-binding-review
+         run-native-binding-pr
+         run-native-binding-action
          default-active-delivery-evidence-path
          default-artifact-provenance-root
          resolve-coordinator-repo
@@ -440,8 +445,7 @@
          (only-in "../../scripts/gsd-binding-data.rkt" active-paths)
          ;; Phase B slice S1: the READ-ONLY `preflight` action is native (no
          ;; python3); slice S2 adds the `sync` stage, and slice S5 the read-only
-         ;; ladder actions (resolve-pr / pr-ci / review). Only the MUTATING
-         ;; gsd-delivery.py actions keep the Python dispatch below.
+         ;; ladder actions (resolve-pr / pr-ci / review).
          (only-in "../../scripts/gsd-delivery-preflight.rkt" delivery-preflight!)
          (only-in "../../scripts/gsd-delivery-sync.rkt" delivery-sync!)
          ;; Phase B slice S5: the READ-ONLY ladder actions (resolve-pr, pr-ci,
@@ -451,11 +455,23 @@
                   delivery-pr-ci!
                   delivery-review!)
          ;; Phase B slice S6: the `open-pr` mutation (write seam) plus the
-         ;; read-only `status`/`governance` readback actions are native. Only
-         ;; `merge`, `prepare` and the `binding-*` actions keep the Python
-         ;; dispatch below.
+         ;; read-only `status`/`governance` readback actions are native.
          (only-in "../../scripts/gsd-delivery-write.rkt" delivery-open-pr!)
          (only-in "../../scripts/gsd-delivery-status.rkt" delivery-status! delivery-governance!)
+         ;; Phase B slice S9: the LAST MUTATING actions are native too — the
+         ;; protected `merge` and `prepare` (scripts/gsd-delivery-merge.rkt) and
+         ;; the whole `binding-*` ladder (scripts/gsd-delivery-binding.rkt). No
+         ;; delivery stage spawns python3 any more; the Python shell survives
+         ;; ONLY as the fallback for an unknown/legacy action name
+         ;; (run-legacy-python-controller).
+         (only-in "../../scripts/gsd-delivery-merge.rkt" delivery-merge! delivery-prepare!)
+         (only-in "../../scripts/gsd-delivery-binding.rkt"
+                  delivery-binding-review!
+                  delivery-binding-pr!
+                  delivery-binding-ci!
+                  delivery-binding-merged!
+                  delivery-binding-resolve-pr!
+                  delivery-binding-action!)
          racket/runtime-path
          json
          (only-in "../../sandbox/subprocess.rkt"
@@ -699,7 +715,7 @@
 ;; `resolve-pr`, `pr-ci` and `review` were the remaining READ-ONLY actions
 ;; still served by gsd-delivery.py. They are now the native
 ;; scripts/gsd-delivery-pr.rkt actions, dispatched with exactly the arguments
-;; the Python invocation carried: run-controller appended
+;; the Python invocation carried: the Python dispatch appended
 ;; `--repo <resolved>/--plan/--wave`, so the native call receives plan/wave
 ;; explicitly and the repository resolved the same way run-native-sync does
 ;; (`path->complete-path` of the resolved coordinator repo). Everything else
@@ -721,7 +737,32 @@
 ;; same `--plan/--wave` identity, same campaign root / expected branch the
 ;; Python invocation carried, the same interpreter (so "opened"/"governed"/
 ;; "delivered" keep their typed effect), and the same redacted blocked stop on
-;; refusal. `merge`, `prepare` and every `binding-*` action keep run-controller.
+;; refusal.
+;;
+;; Phase B slice S9 closes the ladder: the protected `merge`, the binding
+;; `prepare` and every `binding-*` action are native (scripts/
+;; gsd-delivery-merge.rkt and scripts/gsd-delivery-binding.rkt). EVERY action a
+;; delivery stage can dispatch is therefore native, and the Python shell is
+;; retained ONLY as the documented fallback for an unknown/legacy action name
+;; (run-legacy-python-controller). The native-vs-Python table is:
+;;
+;;   action               native implementation                  python3?
+;;   preflight            delivery-preflight!                    no
+;;   sync                 delivery-sync!                          no
+;;   resolve-pr           delivery-resolve-pr!                    no
+;;   pr-ci                delivery-pr-ci!                         no
+;;   review               delivery-review!                        no
+;;   open-pr              delivery-open-pr!                       no
+;;   status               delivery-status!                        no
+;;   governance           delivery-governance!                    no
+;;   merge                delivery-merge!                         no
+;;   prepare              delivery-prepare!                       no
+;;   binding-review       delivery-binding-review!                no
+;;   binding-pr           delivery-binding-pr!                    no
+;;   binding-resolve-pr   delivery-binding-resolve-pr!            no
+;;   binding-ci           delivery-binding-ci!                    no
+;;   binding-merge        delivery-binding-merged!                no
+;;   (any other name)     gsd-delivery.py (legacy fallback)       yes
 ;;
 ;; These helpers are provided ONLY so the stage wiring is testable directly: the
 ;; `implementation-review` stage reaches its dispatch only after the durable
@@ -733,8 +774,9 @@
                           (hasheq 'stage target-stage 'reason (redact-delivery-text message))))
 
 ;; The ONE repository value every native action receives: the shared
-;; layout-aware coordinator root (R76), exactly the root run-controller passes
-;; to gsd-delivery.py as `--repo` (`path->complete-path` of the same value).
+;; layout-aware coordinator root (R76), exactly the root the Python dispatch
+;; passes to gsd-delivery.py as `--repo` (`path->complete-path` of the same
+;; value).
 (define (native-delivery-repo base-dir)
   (path->complete-path (resolve-coordinator-repo base-dir)))
 
@@ -802,51 +844,191 @@
      target-stage
      (delivery-governance! (native-delivery-repo base-dir) plan wave expected-branch))))
 
+;; ============================================================
+;; Phase B slice S9: merge / prepare / binding-* native actions
+;; ============================================================
+;;
+;; Each helper receives EXACTLY the values the replaced Python dispatch call
+;; built, in the same order, so the native action sees the same identity the
+;; Python action saw (`run-legacy-python-controller` appends
+;; `--repo/--plan/--wave`; the helpers pass the resolved repository and
+;; plan/wave explicitly):
+;;
+;;   merge      --pr / --expected-head / --expected-branch / --evidence
+;;   prepare    --evidence / --output / --campaign-root / --expected-branch /
+;;              --expected-head (no --pr: prepare self-resolves the merged PR)
+;;   binding-review  --output / --campaign-root / --expected-branch
+;;   binding-pr      --output / --campaign-root
+;;
+;; The JSON-shaped result goes through the SAME interpreter as every other
+;; action, and a typed refusal becomes the same redacted blocked stop, so the
+;; journal text/status is unchanged in both directions.
+
+;; merge: the protected squash gate for the resolved implementation PR head.
+(define (run-native-merge base-dir
+                          plan
+                          wave
+                          target-stage
+                          pr-number
+                          expected-head
+                          expected-branch
+                          evidence)
+  (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
+    (default-delivery-controller-interpret target-stage
+                                           (delivery-merge! (native-delivery-repo base-dir)
+                                                            plan
+                                                            wave
+                                                            pr-number
+                                                            expected-head
+                                                            expected-branch
+                                                            evidence))))
+
+;; prepare: `--campaign-root` travels UNCHANGED (the Python invocation passed
+;; `--campaign-root <base-dir>` and the native action takes it as a path), and
+;; `#f` for the number keeps the action's own merged-PR self-resolution.
+(define (run-native-prepare base-dir
+                            plan
+                            wave
+                            target-stage
+                            evidence
+                            output
+                            expected-branch
+                            expected-head)
+  (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
+    (default-delivery-controller-interpret target-stage
+                                           (delivery-prepare! (native-delivery-repo base-dir)
+                                                              plan
+                                                              wave
+                                                              #f
+                                                              evidence
+                                                              base-dir
+                                                              output
+                                                              #:expected-branch expected-branch
+                                                              #:expected-head expected-head))))
+
+;; binding-review: validate the durable staged trio (never manufacture an
+;; approval) at the deterministic staging directory.
+(define (run-native-binding-review base-dir plan wave target-stage output expected-branch)
+  (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
+    (default-delivery-controller-interpret target-stage
+                                           (delivery-binding-review! (native-delivery-repo base-dir)
+                                                                     plan
+                                                                     wave
+                                                                     output
+                                                                     #:campaign-root base-dir
+                                                                     #:expected-branch
+                                                                     expected-branch))))
+
+;; binding-pr: publish the validated staging trio on the deterministic
+;; fresh-main binding branch (resolve-before-create inside the action).
+(define (run-native-binding-pr base-dir plan wave target-stage output)
+  (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
+    (default-delivery-controller-interpret target-stage
+                                           (delivery-binding-pr! (native-delivery-repo base-dir)
+                                                                 plan
+                                                                 wave
+                                                                 output
+                                                                 #:campaign-root base-dir))))
+
+;; The native action surfaces of the binding CI/merge dispatch seam. The
+;; dispatch (binding-dispatch-stage-action) builds the per-action flags exactly
+;; as it did for the Python CLI, so it is served by the native CLI surface that
+;; carries the SAME flag contract and the SAME per-action requirement text.
+(define binding-dispatch-action-surface
+  (hash "binding-resolve-pr"
+        delivery-binding-action!
+        "binding-ci"
+        delivery-binding-action!
+        "binding-merge"
+        delivery-binding-action!))
+
+;; The `run` seam binding-dispatch-stage-action needs: LAW
+;;   (action-name flag ...) -> delivery-effect-result
+;; It appends `--repo/--plan/--wave` in the SAME position the Python dispatch
+;; did, so the per-action flags the dispatch built are untouched, and interprets
+;; the native JSON result through the same interpreter. A name outside the
+;; surface table is UNKNOWN/legacy and falls back to the authenticated Python
+;; controller (run-legacy-python-controller) — no delivery stage spells one.
+(define (run-native-binding-action base-dir plan wave target-stage action-name . flags)
+  (define action
+    (if (symbol? action-name)
+        (symbol->string action-name)
+        action-name))
+  (define surface (and (string? action) (hash-ref binding-dispatch-action-surface action #f)))
+  (cond
+    [surface
+     (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
+       (default-delivery-controller-interpret
+        target-stage
+        (surface (append (list action)
+                         flags
+                         (list "--repo"
+                               (path->string (native-delivery-repo base-dir))
+                               "--plan"
+                               plan
+                               "--wave"
+                               (number->string wave))))))]
+    [else (apply run-legacy-python-controller base-dir plan wave target-stage (cons action flags))]))
+
+;; The seam closure the binding dispatch stages are handed.
+(define (native-binding-stage-run base-dir plan wave target-stage)
+  (lambda (action . flags)
+    (apply run-native-binding-action base-dir plan wave target-stage action flags)))
+
+;; ============================================================
+;; The legacy Python dispatch (unknown / legacy action names ONLY)
+;; ============================================================
+;;
+;; Phase B slice S9 made EVERY action a delivery stage can dispatch native, so
+;; no stage reaches this procedure any more: it is reachable ONLY through
+;; run-native-binding-action's unknown/legacy branch, and is kept as the
+;; authenticated authority gsd-delivery.py still owns for an action name nobody
+;; has ported (e.g. Python's legacy `binding-publish` alias).
+;;
+;; The controller shell runs in the checkout identified by the shared
+;; layout-aware root resolution (R76) — exactly like delivery-readback.
+;; Tokens are added for THIS process only; the reason is redacted on every
+;; failure path. A git-root refusal (decoy outer repository, broken
+;; marker, ambiguous child q) is a typed blocked stop with the redacted
+;; root+reason — the controller never runs against an unauthenticated root.
+(define (run-legacy-python-controller base-dir plan wave target-stage . args)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (delivery-effect-result
+                      'blocked
+                      (hasheq 'stage target-stage 'reason (redact-delivery-text (exn-message e)))))])
+    (define repo (resolve-coordinator-repo base-dir))
+    (define result
+      (run-subprocess "python3"
+                      #:args (append (list (path->string default-delivery-controller-script))
+                                     args
+                                     (list "--repo"
+                                           (path->string (path->complete-path repo))
+                                           "--plan"
+                                           plan
+                                           "--wave"
+                                           (number->string wave)))
+                      #:directory base-dir
+                      #:environment (controller-environment)
+                      #:timeout 240
+                      #:process-group? #t))
+    (if (or (subprocess-result-timed-out? result)
+            (subprocess-result-truncated? result)
+            (not (zero? (subprocess-result-exit-code result))))
+        ;; gsd-delivery.py reports typed stops as exit 2 with the reason on
+        ;; STDOUT ({"status":"delivery-pending","reason":…}); stderr stays
+        ;; empty. Surface the preserved, redacted reason instead of
+        ;; discarding it with the blank stderr.
+        (or (parse-delivery-stop (subprocess-result-stdout result) target-stage)
+            (delivery-effect-result 'blocked
+                                    (hasheq 'stage
+                                            target-stage
+                                            'reason
+                                            (redact-delivery-text (subprocess-result-stderr
+                                                                   result)))))
+        (default-delivery-controller-interpret target-stage
+                                               (string->jsexpr (subprocess-result-stdout result))))))
 (define (default-delivery-controller base-dir plan wave target-stage)
-  ;; The controller shell runs in the checkout identified by the shared
-  ;; layout-aware root resolution (R76) — exactly like delivery-readback.
-  ;; Tokens are added for THIS process only; the reason is redacted on every
-  ;; failure path. A git-root refusal (decoy outer repository, broken
-  ;; marker, ambiguous child q) is a typed blocked stop with the redacted
-  ;; root+reason — the controller never runs against an unauthenticated root.
-  (define (run-controller . args)
-    (with-handlers
-        ([exn:fail? (lambda (e)
-                      (delivery-effect-result
-                       'blocked
-                       (hasheq 'stage target-stage 'reason (redact-delivery-text (exn-message e)))))])
-      (define repo (resolve-coordinator-repo base-dir))
-      (define result
-        (run-subprocess "python3"
-                        #:args (append (list (path->string default-delivery-controller-script))
-                                       args
-                                       (list "--repo"
-                                             (path->string (path->complete-path repo))
-                                             "--plan"
-                                             plan
-                                             "--wave"
-                                             (number->string wave)))
-                        #:directory base-dir
-                        #:environment (controller-environment)
-                        #:timeout 240
-                        #:process-group? #t))
-      (if (or (subprocess-result-timed-out? result)
-              (subprocess-result-truncated? result)
-              (not (zero? (subprocess-result-exit-code result))))
-          ;; gsd-delivery.py reports typed stops as exit 2 with the reason on
-          ;; STDOUT ({"status":"delivery-pending","reason":…}); stderr stays
-          ;; empty. Surface the preserved, redacted reason instead of
-          ;; discarding it with the blank stderr.
-          (or (parse-delivery-stop (subprocess-result-stdout result) target-stage)
-              (delivery-effect-result 'blocked
-                                      (hasheq 'stage
-                                              target-stage
-                                              'reason
-                                              (redact-delivery-text (subprocess-result-stderr
-                                                                     result)))))
-          (default-delivery-controller-interpret
-           target-stage
-           (string->jsexpr (subprocess-result-stdout result))))))
   (define (run-native-preflight)
     ;; Phase B slice S1: the read-only preflight stage is native Racket. It
     ;; keeps the effect contract of the replaced Python dispatch: the same
@@ -881,11 +1063,12 @@
        target-stage
        (delivery-sync! (path->complete-path repo) (current-git-delivery-branch base-dir plan wave)))))
   ;; Map the journal's linear delivery targets to their controller actions.
-  ;; Native (python3-free) since Phase B slices S1/S2/S5/S6: delivery-preflight,
-  ;; sync, the read-only ladder actions resolve-pr / pr-ci / review, the
-  ;; `open-pr` mutation, and the status/governance readbacks. Only the mutating
-  ;; `merge` / `prepare` / `binding-*` actions keep the gsd-delivery.py
-  ;; dispatch.
+  ;; EVERY stage below is native (python3-free) since Phase B slice S9:
+  ;; delivery-preflight, sync, the read-only ladder actions resolve-pr / pr-ci /
+  ;; review, the `open-pr` mutation, the status/governance readbacks, the
+  ;; protected `merge`, `prepare`, and every `binding-*` action. No delivery
+  ;; stage reaches gsd-delivery.py any more; the Python shell survives only as
+  ;; the unknown/legacy fallback (run-legacy-python-controller).
   (case target-stage
     ;; Register F5: the read-only preflight action at the handoff seam —
     ;; branch published, remote tip at the verified head (evidence-only
@@ -1038,15 +1221,17 @@
                  'reason
                  (format "controller resolved no usable PR identity for branch ~a" receipt-branch)))]
        [else
-        (run-controller "merge"
-                        "--pr"
-                        (number->string pr-number)
-                        "--expected-head"
-                        pr-head
-                        "--expected-branch"
-                        receipt-branch
-                        "--evidence"
-                        evidence)])]
+        ;; Native since Phase B slice S9: the SAME `merge`/`--pr`/
+        ;; `--expected-head`/`--expected-branch`/`--evidence` the Python
+        ;; invocation carried (the protected squash PUT is the ONE mutation).
+        (run-native-merge base-dir
+                          plan
+                          wave
+                          target-stage
+                          pr-number
+                          pr-head
+                          receipt-branch
+                          evidence)])]
     [("binding-prepared")
      ;; Prepare the durable, hash-named binding staging output from the
      ;; implementation receipt. The Python action self-resolves the merged
@@ -1054,17 +1239,17 @@
      ;; receipt head disambiguates branches carrying multiple merged PRs
      ;; (lawful across repair generations).
      (define receipt-branch (default-delivery-receipt-branch base-dir plan wave))
-     (run-controller "prepare"
-                     "--evidence"
-                     (default-active-delivery-evidence-path base-dir plan wave)
-                     "--output"
-                     (default-binding-staging-path base-dir plan wave)
-                     "--campaign-root"
-                     (path->string base-dir)
-                     "--expected-branch"
-                     receipt-branch
-                     "--expected-head"
-                     (default-delivery-receipt-head base-dir plan wave))]
+     ;; Native since Phase B slice S9: the SAME `--evidence`/`--output`/
+     ;; `--campaign-root`/`--expected-branch`/`--expected-head` the Python
+     ;; invocation carried (no `--pr`: prepare self-resolves the merged PR).
+     (run-native-prepare base-dir
+                         plan
+                         wave
+                         target-stage
+                         (default-active-delivery-evidence-path base-dir plan wave)
+                         (default-binding-staging-path base-dir plan wave)
+                         receipt-branch
+                         (default-delivery-receipt-head base-dir plan wave))]
     [("binding-review")
      ;; Post-merge staged binding review: validation only, plus (slice B)
      ;; automatic finalization of a still-pending staged trio through the
@@ -1077,26 +1262,30 @@
                                      #:generation (binding-generation base-dir plan wave)
                                      #:staging-root
                                      (default-binding-staging-path base-dir plan wave)))
-         (run-controller "binding-review"
-                         "--output"
-                         (default-binding-staging-path base-dir plan wave)
-                         "--campaign-root"
-                         (path->string base-dir)
-                         "--expected-branch"
-                         (default-delivery-receipt-branch base-dir plan wave)))]
+         ;; Native since Phase B slice S9: the SAME `--output`/
+         ;; `--campaign-root`/`--expected-branch` the Python invocation carried.
+         (run-native-binding-review base-dir
+                                    plan
+                                    wave
+                                    target-stage
+                                    (default-binding-staging-path base-dir plan wave)
+                                    (default-delivery-receipt-branch base-dir plan wave)))]
     [("binding-pr")
      ;; Publish the validated staging trio on the deterministic fresh-main
      ;; binding branch, resolving an existing PR before creating a new one.
-     (run-controller "binding-pr"
-                     "--output"
-                     (default-binding-staging-path base-dir plan wave)
-                     "--campaign-root"
-                     (path->string base-dir))]
+     ;; Native since Phase B slice S9 (same `--output`/`--campaign-root`).
+     (run-native-binding-pr base-dir
+                            plan
+                            wave
+                            target-stage
+                            (default-binding-staging-path base-dir plan wave))]
     [("binding-ci")
      ;; Resolve the exact binding PR by branch, then check its exact fetched
      ;; head. Binding commits are fresh-main publication commits, so the
      ;; implementation receipt ancestry check is intentionally not applied.
-     (binding-dispatch-stage-action run-controller
+     ;; Native since Phase B slice S9: the dispatch keeps building the SAME
+     ;; per-action flags; its `run` seam now serves them from the native action.
+     (binding-dispatch-stage-action (native-binding-stage-run base-dir plan wave target-stage)
                                     target-stage
                                     plan
                                     wave
@@ -1105,7 +1294,7 @@
     [("binding-merged")
      ;; Reuse the protected merge workflow verbatim, with the binding path as
      ;; its evidence source and the exact resolved binding PR head as input.
-     (binding-dispatch-stage-action run-controller
+     (binding-dispatch-stage-action (native-binding-stage-run base-dir plan wave target-stage)
                                     target-stage
                                     plan
                                     wave
@@ -1133,8 +1322,8 @@
     ;; S6 (the same `--campaign-root <base-dir>` the Python invocation passed).
     [("delivered") (run-native-status base-dir plan wave target-stage)]
     [else
-     ;; Stages the controller shell cannot yet act on deterministically are
-     ;; typed stops with an actionable reason — never fabricated progress.
+     ;; Stages with no controller action at all are typed stops with an
+     ;; actionable reason — never fabricated progress.
      (delivery-effect-result 'blocked
                              (hasheq 'stage
                                      target-stage
@@ -1301,7 +1490,9 @@
 
 ;; Binding CI/merge dispatch: resolve the deterministic binding PR by branch,
 ;; then act on the typed status. `run` is the controller seam (injectable for
-;; tests; the production caller passes run-controller). Statuses are JSON
+;; tests; the production caller passes native-binding-stage-run, which serves
+;; the binding actions from native Racket and reaches python3 ONLY for an
+;; unknown/legacy action name). Statuses are JSON
 ;; strings — string->jsexpr never produces symbols, so comparing against a
 ;; quoted symbol list never matches and would silently skip the CI/merge
 ;; action (fabricated progress). "already-merged" returns the resolve result
@@ -1309,9 +1500,10 @@
 ;; or head fails closed as a typed blocked stop.
 (define (binding-dispatch-stage-action run target-stage plan wave action-name #:base-dir base-dir)
   (define binding-branch (default-binding-branch plan wave #:base-dir base-dir))
-  ;; The run-controller seam appends --repo/--plan/--wave itself; per-action
-  ;; flags must never duplicate them (argparse refuses unknown flags like
-  ;; --plan-id and would turn every dispatch into a usage-error stop).
+  ;; The run seam (native-binding-stage-run) appends --repo/--plan/--wave
+  ;; itself; per-action flags must never duplicate them (argparse refuses
+  ;; unknown flags like --plan-id and would turn every dispatch into a usage
+  ;; error stop).
   (define binding-resolved (run "binding-resolve-pr" "--expected-branch" binding-branch))
   (define binding-resolved-data (delivery-effect-result-data binding-resolved))
   (define binding-resolved-status
