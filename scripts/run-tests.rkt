@@ -34,7 +34,6 @@
          "run-tests/inventory.rkt"
          "run-tests/overhead.rkt"
          "run-tests/shard-plan.rkt"
-         "run-tests/scheduler-order.rkt"
          "run-tests/impact.rkt"
          "run-tests/runner.rkt"
          "testing/full-plan.rkt")

@@ -75,8 +75,7 @@
                   print-shard-plan-report
                   print-starvation-tail-report
                   load-duration-snapshot
-                  shard-plan-mode)
-         (only-in "scheduler-order.rkt"
+                  shard-plan-mode
                   default-ordering
                   current-max-age-seconds
                   prepare-ordering

@@ -48,7 +48,7 @@
          racket/runtime-path
          racket/system
          (prefix-in p: racket/port)
-         (only-in "../scripts/run-tests/scheduler-order.rkt"
+         (only-in "../scripts/run-tests/shard-plan.rkt"
                   default-ordering
                   default-max-age-seconds
                   known-orderings

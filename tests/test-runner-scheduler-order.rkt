@@ -29,7 +29,7 @@
          racket/list
          openssl
          (only-in file/sha1 bytes->hex-string)
-         (only-in "../scripts/run-tests/scheduler-order.rkt"
+         (only-in "../scripts/run-tests/shard-plan.rkt"
                   ordering-record
                   ordering-record-mode
                   ordering-record-requested
