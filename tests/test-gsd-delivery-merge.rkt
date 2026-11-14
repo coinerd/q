@@ -432,10 +432,22 @@
   (and at (< (add1 at) (length argv)) (list-ref argv (add1 at))))
 
 ;; Every gh MUTATION (any invocation carrying an explicit method).
+;; State-changing invocations of either program: a gh mutation (`-X PUT|POST|…`)
+;; or a git command that writes objects/refs/worktree. `prepare` must produce
+;; none of either, and `merge` exactly one gh PUT (a git push would be a second
+;; mutation and must never happen).
+(define (git-write? argv)
+  (and (pair? argv)
+       (member (car argv)
+               '("push" "commit" "merge" "rebase" "reset" "checkout" "switch" "fetch" "add" "tag"))))
+
 (define (mutations records)
-  (for/list ([argv (in-list (invocations records "gh"))]
-             #:when (argv-method argv))
-    argv))
+  (append (for/list ([argv (in-list (invocations records "gh"))]
+                     #:when (argv-method argv))
+            argv)
+          (for/list ([argv (in-list (invocations records "git"))]
+                     #:when (git-write? argv))
+            argv)))
 
 (define (route slug* path)
   (format "repos/~a/~a" slug* path))
@@ -478,6 +490,17 @@
   (define gh (build-path bin "gh"))
   (put gh gh-shim-script)
   (file-or-directory-permissions gh #o700)
+  ;; A logging git forwarder: the combined log then proves the ORDER of the git
+  ;; proofs (fetch refs/pull/N/head, rev-parse origin/main, policy blob read,
+  ;; review digest diff) around the merge PUT, and that `prepare` performs no
+  ;; git mutation (the forwarder records every invocation).
+  (define git-shim (build-path bin "git"))
+  (put git-shim
+       (string-append "#!/bin/sh\n"
+                      (argv-log-snippet "git")
+                      "\n"
+                      (format "exec ~s \"$@\"\n" real-git)))
+  (file-or-directory-permissions git-shim #o700)
   (define env (fixture-env root (format "~a:~a:/usr/bin:/bin" bin racket-directory)))
   (environment-set! env "MERGE_SHIM_FIXTURES" (path->string fixtures-dir))
   (environment-set! env "MERGE_SHIM_HITS" (path->string hits-dir))
@@ -926,6 +949,10 @@
 (define (prepare-job label variant fixtures thunk expected [assertions no-assertions])
   (job label variant fixtures (case-thunk thunk) expected assertions))
 
+;; Self-resolution evidence captured inside the job thunk (the staging directory
+;; is removed by the harness, so the staged draft is read while it exists).
+(define self-resolved-prs (box '()))
+
 (define jobs
   (list
    ;; ----------------------------------------------------------
@@ -986,7 +1013,29 @@
                                    (route slug "actions/runs/1001")
                                    (route slug "branches/main/protection")))])
         (check-true (< (position-of records (lambda (record) (gh-read? route* record)) route*) put-at)
-                    (format "~a must precede the PUT" route*)))))
+                    (format "~a must precede the PUT" route*)))
+      ;; The git-side proofs (fetched PR ref, origin/main, policy blob, review
+      ;; digest) all precede the PUT as well, and the merge performs no git write.
+      (define git-records
+        (for/list ([record (in-list records)]
+                   #:when (equal? (car record) "git"))
+          (cdr record)))
+      (check-true (pair? git-records) "the git proofs are logged")
+      (check-not-false (for/or ([argv (in-list git-records)])
+                         (member "refs/pull/1/head" argv))
+                       "the port fetches the exact PR ref")
+      (check-not-false (for/or ([argv (in-list git-records)])
+                         (and (member "rev-parse" argv)
+                              (member "refs/remotes/origin/main" argv)))
+                       "the port resolves origin/main")
+      (define git-writes (filter git-write? (filter (lambda (argv) (not (member "fetch" argv))) git-records)))
+      (check-equal? git-writes '() "the merge performs no git mutation of its own")
+      (define last-git-at
+        (for/last ([record (in-list records)]
+                   [index (in-naturals)]
+                   #:when (equal? (car record) "git"))
+          index))
+      (check-true (< last-git-at put-at) "every git proof precedes the merge PUT")))
    (merge-job "merge already merged"
               'merge
               (lambda (world) (merge-fixtures-merged (hash-ref world 'head) (hash-ref world 'base)))
@@ -1300,6 +1349,51 @@
                                        'implementation-sha
                                        (hash-ref world 'merge))
                                "idempotent staging resume")))
+   ;; Self-resolution: no --pr, the durable branch resolves exactly one merged
+   ;; PR. Python rebinds `number` from that PR before fetch_head; without the
+   ;; rebinding this path refuses "invalid implementation PR number".
+   (prepare-job "prepare self-resolves the merged PR"
+                'prepare
+                (lambda (world)
+                  (fixtures-with (prepare-fixtures world)
+                                 (route slug (format "pulls?state=all&head=coinerd:~a" wave-branch))
+                                 (json-text (list (pr-json #:number 1
+                                                           #:state "closed"
+                                                           #:merged #t
+                                                           #:merge-sha (hash-ref world 'merge)
+                                                           #:head-sha (hash-ref world 'head)
+                                                           #:base-sha (hash-ref world 'base))))))
+                (prepare-campaign
+                   (lambda (world campaign root log)
+                     (define payload (delivery-prepare! (hash-ref world 'subject)
+                                                        plan-id
+                                                        wave
+                                                        #f
+                                                        evidence-relative
+                                                        (path->string campaign)
+                                                        (path->string (build-path root "staging"))
+                                                        #:expected-branch wave-branch
+                                                        #:expected-head (hash-ref world 'head)))
+                     ;; The self-resolved number is what the staged bundle binds.
+                     (define staged-files
+                       (find-files
+                        (lambda (path) (regexp-match? #rx"[.]rktd$" (path->string path)))
+                        (hash-ref payload 'output)))
+                     (set-box!
+                      self-resolved-prs
+                      (for/list ([path (in-list staged-files)])
+                        (define datum (call-with-input-file path read))
+                        (and (hash? datum) (hash-ref datum 'delivery-pr #f))))
+                     payload))
+                'value
+                (lambda (facts label)
+                  (value-of facts
+                            label
+                            (lambda (payload label)
+                              (check-equal? (hash-ref payload 'status) "pending-review" label)
+                              (define prs (filter values (unbox self-resolved-prs)))
+                              (check-false (null? prs) label)
+                              (check-equal? prs (make-list (length prs) 1) label)))))
    (prepare-job "prepare without pr and branch"
                 'prepare
                 prepare-fixtures

@@ -246,10 +246,17 @@
     (check-true
      (string-contains? ci-yml "SHARD_EXPECT=\"${{ vars.FAST_SHARD_COUNT")
      "the expected shard count must come from the matrix variable, not the downloaded artifacts")
-    (check-true
-     (string-contains? ci-yml "head_sha: .run_summary.run_sha")
-     "every recorded shard must carry its shard-side run SHA (not stamped by the aggregate)")
-    (check-true (string-contains? ci-yml "lacks its shard-side run-SHA attestation")
+    ;; Phase D: the shard-side run-SHA binding moved from the inline jq
+    ;; projection into scripts/ci/verify-shard-results.rkt. The workflow must
+    ;; call it, and the binding/refusal logic must live in the verifier (the
+    ;; aggregate still never stamps a SHA onto the shard evidence).
+    (define shard-verifier
+      (file->string (build-path repo-root "scripts" "ci" "verify-shard-results.rkt")))
+    (check-true (string-contains? ci-yml "scripts/ci/verify-shard-results.rkt")
+                "test-aggregate must invoke the shard-results verifier")
+    (check-true (string-contains? shard-verifier "run_summary.run_sha")
+                "every recorded shard must carry its shard-side run SHA (verified, not stamped)")
+    (check-true (string-contains? shard-verifier "lacks its shard-side run-SHA attestation")
                 "the aggregate must refuse a bundle over an unattested shard")
     (define producer-start
       (car (car (regexp-match-positions #rx"Produce fast-suite proof bundle" ci-yml))))

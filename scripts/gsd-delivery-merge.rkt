@@ -734,9 +734,10 @@
   (refresh git)
   (define main (origin-main git))
   ;; The PR identity: given, or self-resolved from exactly one merged PR for the
-  ;; durable branch. `number` stays #f when the resolved PR carries no number,
-  ;; exactly like Python's `number = pr.get('number')` (the closed-state check
-  ;; below then still applies and fetch_head refuses the unusable number).
+  ;; durable branch. The resolved number REBINDS the argument, exactly like
+  ;; Python's `number = pr.get('number')`; every later use (fetch_head, the
+  ;; closed-state check, draft request, staged-identity comparison, payloads)
+  ;; reads the rebound value, so self-resolution is reachable and consistent.
   (define pr
     (cond
       [(not number)
@@ -758,8 +759,13 @@
   (unless number
     (unless (equal? (hash-ref pr 'state #f) "closed")
       (refuse! "self-resolved implementation PR is not closed")))
+  ;; Python rebinds `number` from the (self-)resolved PR before fetch_head.
+  (define resolved-number (or number (hash-ref pr 'number #f)))
+  (ensure! (and (exact-integer? resolved-number) (positive? resolved-number))
+           "resolved pull request has no usable number")
+  (set! number resolved-number)
   (validate-merge pr (api slug (format "commits/~a" merge)) slug merge head)
-  (define fetched ((delivery-api-session-fetch-head session) (or number #f)))
+  (define fetched ((delivery-api-session-fetch-head session) number))
   (unless (equal? fetched head)
     (refuse! "fetched implementation head does not match PR head SHA"))
   (unless (equal? (tree-of git merge) (tree-of git fetched))
