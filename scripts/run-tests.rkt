@@ -4,8 +4,8 @@
 ;; the full public surface from run-tests/ sub-modules: classify.rkt (metadata,
 ;; classifiers, discovery), parse.rkt (output parsing, result struct),
 ;; reporting.rkt (summaries, failure logs), ledger.rkt, cli.rkt, profiles.rkt,
-;; gate-evidence.rkt, inventory.rkt, overhead.rkt, and runner.rkt (execution
-;; orchestration).
+;; gate-evidence.rkt, inventory.rkt, and runner.rkt (execution orchestration,
+;; including the overhead diagnostics/telemetry formerly in overhead.rkt).
 ;;
 ;; Phase D step 1: this file is also the command-line entry point, as a thin
 ;; COMPATIBILITY ADAPTER over the shared `./qt full` CI engine. Its argv is
@@ -32,7 +32,6 @@
          "run-tests/profiles.rkt"
          "run-tests/gate-evidence.rkt"
          "run-tests/inventory.rkt"
-         "run-tests/overhead.rkt"
          "run-tests/shard-plan.rkt"
          "run-tests/impact.rkt"
          "run-tests/runner.rkt"
