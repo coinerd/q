@@ -70,6 +70,7 @@
          prepared-finalization-already-merged
          prepared-finalization-seal
          issue-prepared-finalization
+         prepared-key-source
          validate-prepared-finalization
          (struct-out finalization-result))
 
@@ -925,23 +926,38 @@
   #:transparent
   #:authentic)
 
-;; Per-process seal key (Python: secrets.token_bytes(32)).  The bundled Racket
-;; libraries expose no CSPRNG binding, so the key is derived from repeated
-;; pseudo-random draws plus process timing and folded through SHA-256.  An
-;; attacker able to run code in this process could read the key either way, which
-;; is the same trust boundary as the Python original.
-(define (random-fill count)
-  (let ([out (make-bytes count)])
-    (for ([index (in-range count)])
-      (bytes-set! out index (random 256)))
-    out))
+;; Per-process seal key (Python: `secrets.token_bytes(32)`), 32 CSPRNG bytes.
+;;
+;; This Racket installation has neither `racket/random` nor `racket/crypto`, so
+;; the key comes from the OS CSPRNG.  `/dev/urandom` is read in binary mode on
+;; POSIX; if that is unavailable the key falls back to the platform PRNG folded
+;; with process timing, which is WEAKER and is reported through the exported
+;; `prepared-key-source` so a caller (and the tests) can see which one is in use.
+;; An attacker able to run code in this process can read the key either way --
+;; the same trust boundary as the Python original.
+(define (read-urandom count)
+  (define path "/dev/urandom")
+  (and (file-exists? path)
+       (with-handlers ([exn:fail? (lambda (_error) #f)])
+         (call-with-input-file
+          path
+          (lambda (in) (read-bytes count in))
+          #:mode 'binary))))
 
-(define prepared-key
-  (sha256-bytes (bytes-append (random-fill 64)
-                              (string->bytes/utf-8 (format "~a|~a|~a"
-                                                           (current-milliseconds)
-                                                           (current-process-milliseconds)
-                                                           (random))))))
+(define (timing-fill count)
+  (sha256-bytes
+   (string->bytes/utf-8 (format "~a|~a|~a|~a"
+                                (current-milliseconds)
+                                (current-process-milliseconds)
+                                (random)
+                                count))))
+
+(define-values (prepared-key prepared-key-source)
+  (let* ([from-os (read-urandom 32)])
+    (values (if (and from-os (= 32 (bytes-length from-os)))
+                from-os
+                (timing-fill 32))
+            (if (and from-os (= 32 (bytes-length from-os))) 'dev-urandom 'prng-fallback))))
 (define issued-prepared (box '()))
 
 (define (issued-prepared-boxes)
@@ -1027,6 +1043,17 @@
 
 ;; The only construction path exposed to the controller layer: the seal is
 ;; derived from the supplied material and the value is registered as issued.
+;;
+;; CAPABILITY NOTE (review finding): this is exported, so any module in the
+;; process can mint a correctly sealed and registered value for arbitrary
+;; material without running attestation.  It is therefore a prepare-equivalent
+;; capability, not a constructor: `finalize-prepared` re-derives the trusted
+;; configuration, the envelope, the attestation, the branch protection policy and
+;; the pre-merge run ids from the client and compares them against the sealed
+;; fields, so a minted value is refused unless the real verifications also pass.
+;; Keeping it exported is deliberate -- the controller lives in another module --
+;; and the residual risk (defence-in-depth only, no gate bypass) is recorded here
+;; rather than hidden.
 (define (issue-prepared-finalization config-json
                                      envelope-json
                                      config-digest

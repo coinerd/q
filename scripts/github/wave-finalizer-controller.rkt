@@ -35,13 +35,11 @@
 ;; delivery session api closure (`delivery-api-session-api-call`) with
 ;; `#:refresh? #t` -- the SAME session and the same budget window, so the
 ;; one-budget law (one adapter = one session = one budget) still holds and no
-;; second session is ever created.  Check-run lists are the one documented
-;; exception: the adapter's `checks` closure memoizes per (slug, sha) and offers
-;; no refresh path, so a changed check run cannot be detected here.  That cannot weaken a gate: the pre-merge freshness comparison
-;; rests on the refreshed workflow-run ids, the refreshed policy and the
-;; refreshed pull request, and merge CI is keyed by the merge SHA (a different
-;; cache entry); `not_before=merged_at` on refreshed workflow runs is what proves
-;; the post-merge CI actually ran after the merge.
+;; second session is ever created.  Check-run lists are refreshed the same way:
+;; the adapter pages `commits/<sha>/check-runs` through that session with
+;; `#:refresh? #t` (it does NOT use the memoizing `checks` closure when a fresh
+;; read is requested), so a check that was revoked, re-run or re-concluded
+;; between prepare and finalize is observed here rather than trusted.
 ;;
 ;; Parity notes (always fail-closed):
 ;;  * refusal kinds are the Python class names in `exn:fail:finalizer-kind`, and
@@ -74,6 +72,8 @@
          finalize
          python-json-text
          finalizer-main
+         launcher-arguments
+         attestation-verifier
          missing-launcher-message)
 
 ;; ================================================================ errors
@@ -209,9 +209,10 @@
      ;; `#:refresh? #t` per page); a `#:refresh? #f` request cannot un-refresh it.
      (wave-finalizer-adapter-list-workflow-runs adapter sha))
    #:list-check-runs (lambda (repo sha #:refresh? [refresh? #f])
-                       ;; Documented exception: the adapter's checks closure memoizes per (slug, sha)
-                       ;; and exposes no refresh path.
-                       (wave-finalizer-adapter-list-check-runs adapter sha))
+                       ;; Fresh like every other post-prepare read: the adapter pages the
+                       ;; check-run route itself with `#:refresh? #t` (same session/budget),
+                       ;; so a revoked or re-run check between prepare and finalize is seen.
+                       (wave-finalizer-adapter-list-check-runs adapter sha #:refresh? refresh?))
    #:merge-pr
    (lambda (repo number #:sha sha #:merge-method merge-method)
      (wave-finalizer-adapter-merge-pr adapter number #:sha sha #:merge-method merge-method))
@@ -840,3 +841,62 @@
                              (if (eq? key 'trusted-config) "--trusted-config" "--envelope"))
                            ", ")))]
     [else (run-finalizer client flags exit-procedure)]))
+
+;; ---------------------------------------------------------------- runnable CLI
+;; A runnable replacement for `python3 scripts/github/wave-finalizer.py` must
+;; exist, because the artifact being replaced is executable.  The injection
+;; Python received as `client=` comes from the digest-verifying launcher, so this
+;; CLI takes the same two inputs from the environment and refuses (exit 2, the
+;; exact launcher message) when they are absent:
+;;
+;;   Q_WAVE_FINALIZER_REPO           owner/name of the repository to authenticate
+;;   Q_WAVE_FINALIZER_ATTESTATION_CMD
+;;       command reading {"repository":..., "reference":...} as JSON on stdin and
+;;       printing the attestation response JSON on stdout; it MUST exit non-zero
+;;       when the evidence does not verify.  Its output is the only attestation
+;;       input this CLI accepts -- there is no fallback.
+;;
+;; No GraphQL field query/mutation is supplied here: a configuration that
+;; requires board synchronization refuses rather than guessing a query, exactly
+;; like a missing adapter.
+(define (launcher-arguments)
+  ;; Returns (values repo attestation-command) or (values #f #f): the launcher
+  ;; contract is all-or-nothing, never a partial injection.
+  (define repo (getenv "Q_WAVE_FINALIZER_REPO"))
+  (define attestation (getenv "Q_WAVE_FINALIZER_ATTESTATION_CMD"))
+  (if (and (nonblank-string? repo) (nonblank-string? attestation))
+      (values repo attestation)
+      (values #f #f)))
+
+(define (attestation-verifier command)
+  (lambda (repository reference)
+    (define payload (python-json-text (hash 'repository repository 'reference reference)))
+    (define-values (proc out in err)
+      (subprocess #f #f #f "/bin/sh" "-c" (string-append command " 2>/dev/null")))
+    (display payload in)
+    (close-output-port in)
+    (define out-text (port->string out))
+    (define err-text (port->string err))
+    (subprocess-wait proc)
+    (unless (zero? (subprocess-status proc))
+      (attestation-error (string-append "attestation verifier failed: " err-text)))
+    (with-handlers ([exn:fail?
+                     (lambda (_error)
+                       (attestation-error "attestation verifier produced malformed JSON"))])
+      (read-json (open-input-string out-text)))))
+
+(define (nonblank-string? value)
+  (and (string? value) (not (string=? (string-trim value) ""))))
+
+(module+ main
+  (define argv (vector->list (current-command-line-arguments)))
+  (define-values (repo attestation) (launcher-arguments))
+  (if (not repo)
+      (begin
+        (eprintf "~a\n"
+                 (string-append "wave-finalizer: error: "
+                                missing-launcher-message))
+        (exit 2))
+      (let* ([adapter (make-wave-finalizer-adapter repo #:verify-evidence (attestation-verifier attestation))]
+             [client (wave-finalizer-adapter->finalizer-client adapter)])
+        (finalizer-main argv #:client client))))

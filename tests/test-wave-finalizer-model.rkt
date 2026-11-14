@@ -279,6 +279,12 @@
 ;; ---------------------------------------------------------------- canonical JSON
 
 (module+ test
+  (test-case "the seal key comes from the OS CSPRNG, not the platform PRNG"
+    ;; The key must never be the weak timing fallback on a POSIX host: a
+    ;; predictable seal key would let another process forge a prepared snapshot.
+    ;; The source is exported; the key bytes themselves are not.
+    (check-equal? prepared-key-source 'dev-urandom))
+
   (test-case "canonical json sorts keys and uses python separators"
     (check-equal? (finalizer-canonical-json (hash "b" 1 "a" (list 1 'null #t "x")))
                   "{\"a\":[1,null,true,\"x\"],\"b\":1}")

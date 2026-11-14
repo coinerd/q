@@ -166,7 +166,10 @@
 ;; verification.
 (define full-obligations
   (list
-   "Python governance-controller suite (scripts/github/test_wave_finalizer.py, run by the required `lint` CI job)"
+   (string-append "governance-controller suite parity: the Racket finalizer port"
+                  " (tests/test-wave-finalizer-{model,adapter,controller}.rkt) runs here, but the"
+                  " Python oracle it diffs against (scripts/github/test_wave_finalizer.py) is run by"
+                  " the required `lint` CI job, not by this command")
    "macOS/platform lane (platform-specific behavior of this Linux host)"
    "GitHub branch protection and required status checks"
    "release provenance and exact-candidate verification (run `racket scripts/release-preflight.rkt`)"))

@@ -1004,6 +1004,7 @@
 ;; ================================================================ differential parity
 
 (define-runtime-path github-dir "../scripts/github")
+(define-runtime-path finalizer-path "../scripts/github/wave-finalizer-controller.rkt")
 (define python3 (find-executable-path "python3"))
 
 (define python-parity-code
@@ -1177,6 +1178,74 @@
 (define (mutation-strings fake)
   (for/list ([name (in-list (mutation-names fake))])
     (symbol->string name)))
+
+;; ------------------------------------------------------------ runnable CLI
+;; The deleted artifact is executable, so the replacement must be too.  These
+;; cases pin the launcher contract: without an injected, digest-verifying
+;; adapter the CLI refuses with exit 2 and Python's exact message; with one it
+;; reaches the normal argument validation; and a failing verifier is a typed
+;; refusal (exit 1, `wave-finalizer: ` prefix), never a silent success.
+(define (run-cli-process . args)
+  (define-values (proc out in err)
+    (apply subprocess
+           #f
+           #f
+           #f
+           (find-executable-path "env")
+           "-u"
+           "Q_WAVE_FINALIZER_REPO"
+           "-u"
+           "Q_WAVE_FINALIZER_ATTESTATION_CMD"
+           args))
+  (close-output-port in)
+  (define out-text (port->string out))
+  (define err-text (port->string err))
+  (subprocess-wait proc)
+  (values (subprocess-status proc) out-text err-text))
+
+(module+ test
+  (test-case "cli refuses without the launcher injection (exit 2, exact message)"
+    (define-values (code out err)
+      (run-cli-process (find-executable-path "racket") finalizer-path "--trusted-config" "/tmp/none" "--envelope" "/tmp/none"))
+    (check-equal? code 2)
+    (check-equal? out "")
+    (check-true (string-contains? err missing-launcher-message)))
+
+  (test-case "cli validates arguments once an adapter is injected"
+    (define-values (code out err)
+      (run-cli-process "Q_WAVE_FINALIZER_REPO=coinerd/q"
+               "Q_WAVE_FINALIZER_ATTESTATION_CMD=true"
+               (find-executable-path "racket")
+               finalizer-path))
+    (check-equal? code 2)
+    (check-equal? out "")
+    (check-true (string-contains? err "the following arguments are required: --trusted-config, --envelope")))
+
+  (test-case "a bad input is a typed refusal with the python prefix, never a success"
+    (define config-file (make-temporary-file "wf-cli-config-~a.json"))
+    (define envelope-file (make-temporary-file "wf-cli-envelope-~a.json"))
+    (call-with-output-file config-file (lambda (out) (display "{}" out)) #:exists 'truncate)
+    (call-with-output-file envelope-file (lambda (out) (display "{}" out)) #:exists 'truncate)
+    (dynamic-wind
+     void
+     (lambda ()
+       (define-values (code out err)
+         (run-cli-process "Q_WAVE_FINALIZER_REPO=coinerd/q"
+                  "Q_WAVE_FINALIZER_ATTESTATION_CMD=false"
+                  (find-executable-path "racket")
+                  finalizer-path
+                  "--trusted-config"
+                  (path->string config-file)
+                  "--envelope"
+                  (path->string envelope-file)))
+       ;; An empty trusted configuration cannot be authenticated: the CLI must
+       ;; exit 1 with Python's stderr prefix and print nothing on stdout.
+       (check-equal? code 1)
+       (check-equal? out "")
+       (check-true (string-prefix? err "wave-finalizer: ")))
+     (lambda ()
+       (delete-file config-file)
+       (delete-file envelope-file)))))
 
 (module+ test
   (test-case "differential parity table matches the python controller"

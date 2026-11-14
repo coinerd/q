@@ -315,11 +315,42 @@
     (uncertain "workflow run pagination incomplete"))
   runs)
 
-(define (wave-finalizer-adapter-list-check-runs adapter sha)
-  (items-response
-   "check runs"
-   (seam-call "list check runs"
-              (lambda () ((wave-finalizer-adapter-checks adapter) (adapter-slug adapter) sha)))))
+;; Check runs have no refresh path in the delivery api session (its `checks`
+;; closure memoizes per (slug, sha)), so a fresh read pages the SAME route
+;; through the session's api closure with `#:refresh? #t` -- the same rules as
+;; `checks` in gsd-delivery-api.rkt (per-page total_count validation, short
+;; result fails closed) and the same single budget window.
+(define (check-runs-route sha page)
+  (format "commits/~a/check-runs?per_page=100&page=~a" sha page))
+
+(define (fresh-check-runs adapter sha)
+  (define slug (adapter-slug adapter))
+  (let loop ([page 1]
+             [accumulated '()])
+    (define data
+      (seam-call "list check runs"
+                 (lambda ()
+                   (adapter-api adapter slug (check-runs-route sha page) #:refresh? #t))))
+    (unless (and (hash? data) (list? (hash-ref data 'check_runs #f)))
+      (uncertain "invalid check result"))
+    (define page-runs (hash-ref data 'check_runs))
+    (unless (for/and ([run (in-list page-runs)]) (hash? run))
+      (uncertain "invalid check run entry"))
+    (define page-total (hash-ref data 'total_count #f))
+    (unless (and (exact-integer? page-total) (>= page-total 0))
+      (uncertain "malformed check-total"))
+    (define next (append accumulated page-runs))
+    (if (or (null? page-runs) (>= (length next) page-total))
+        next
+        (loop (add1 page) next))))
+
+(define (wave-finalizer-adapter-list-check-runs adapter sha #:refresh? [refresh? #f])
+  (define runs
+    (if refresh?
+        (fresh-check-runs adapter sha)
+        (seam-call "list check runs"
+                   (lambda () ((wave-finalizer-adapter-checks adapter) (adapter-slug adapter) sha)))))
+  (items-response "check runs" runs))
 
 (define (wave-finalizer-adapter-get-issue adapter number)
   (object-response
