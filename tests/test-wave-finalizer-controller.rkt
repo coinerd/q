@@ -7,7 +7,8 @@
 ;;
 ;; Port job J3: the wave-finalizer controller (scripts/github/wave-finalizer-controller.rkt).
 ;;
-;; The 17 security/recovery invariants of `scripts/github/test_wave_finalizer.py`
+;; The 17 security/recovery invariants of the Python controller suite
+;; (`scripts/github/test_wave_finalizer.py`, deleted with the original)
 ;; are ported one for one against an in-file fake adapter (a `finalizer-client`
 ;; procedure bundle, the port's replacement for Python's injected `GitHubClient`),
 ;; plus the port-plan invariants that have no Python test: the mutation ORDER
@@ -18,10 +19,13 @@
 ;; the argparse-parity launcher message, Python's default `json.dumps` rendering).
 ;;
 ;; The last section is a differential parity table: the same eleven scenarios are
-;; driven through the Python module (imported by path through the committed
-;; `test_wave_finalizer` fixtures) and through this port, and the refusal kind +
-;; message (or the success payload and mutation order) must match exactly.  A
-;; missing python3 fails these tests instead of skipping them.
+;; compared against GOLDENS captured once from the Python module (the committed
+;; `test_wave_finalizer` fixtures driving `scripts/github/wave-finalizer.py` at its
+;; final revision 0d9789c6b7120c7f9528fc784094e2f8eaf27447; both Python files are
+;; deleted now), and the refusal kind + message (or the success payload and
+;; mutation order) must match exactly.  The goldens live in
+;; tests/fixtures/wave-finalizer-goldens.json (`controller` group) and are read
+;; through tests/helpers/wave-finalizer-goldens.rkt, so no python3 is needed.
 ;;
 ;; Freshness note: the fake records the `#:refresh?` flag of every read, which is
 ;; how "every controller read is fresh" is asserted.  In production the frozen
@@ -38,6 +42,7 @@
          racket/string
          file/sha1
          openssl
+         "helpers/wave-finalizer-goldens.rkt"
          "../scripts/github/wave-finalizer.rkt"
          "../scripts/github/wave-finalizer-adapter.rkt"
          "../scripts/github/wave-finalizer-controller.rkt"
@@ -1003,78 +1008,24 @@
 
 ;; ================================================================ differential parity
 
-(define-runtime-path github-dir "../scripts/github")
 (define-runtime-path finalizer-path "../scripts/github/wave-finalizer-controller.rkt")
-(define python3 (find-executable-path "python3"))
 
-(define python-parity-code
-  (string-append
-   "import json,sys,test_wave_finalizer as t\n"
-   "wf=t.wf\n"
-   "def outcome(name):\n"
-   " c=t.FakeGitHub(); cfg=t.trusted_config(); env=t.envelope()\n"
-   " def muts():\n"
-   "  n=[x[0] for x in c.calls]\n"
-   "  return [x for x in n if x in ('merge','close_issue','update_board')]\n"
-   " try:\n"
-   "  if name=='prepare-ok':\n"
-   "   p=wf.prepare_finalization(c,cfg,env)\n"
-   "   return {'ok':p.head_sha,'mutations':muts()}\n"
-   "  if name=='finalize-ok':\n"
-   "   c=t.ready_client(); p=wf.prepare_finalization(c,cfg,env)\n"
-   "   r=wf.finalize_prepared(c,p)\n"
-   "   return {'ok':r.merge_sha,'mutations':muts()}\n"
-   "  if name=='attestation-unverified':\n"
-   "   c.attestation_overrides={'verified':False}\n"
-   "   wf.prepare_finalization(c,cfg,env)\n"
-   "  if name=='already-merged-prepare':\n"
-   "   c.prs=[t.pull(merged=True,state='closed',merge_sha=t.MERGE_SHA,merged_at=t.MERGED_AT)]\n"
-   "   wf.prepare_finalization(c,cfg,env)\n"
-   "  if name=='policy-unpinned':\n"
-   "   c.protection=t.protection(app_id=None)\n"
-   "   wf.prepare_finalization(c,cfg,env)\n"
-   "  if name=='workflow-ref':\n"
-   "   c.workflow_runs[t.HEAD][0]['head_branch']='other'\n"
-   "   wf.prepare_finalization(c,cfg,env)\n"
-   "  if name=='merge-ci-predates':\n"
-   "   c=t.ready_client()\n"
-   "   c.workflow_runs[t.MERGE_SHA]=[t.workflow_run(merge=True,created_at='2025-01-02T11:59:59Z')]\n"
-   "   p=wf.prepare_finalization(c,cfg,env)\n"
-   "   wf.finalize_prepared(c,p)\n"
-   "  if name=='merge-not-confirmed':\n"
-   "   c=t.ready_client(); p=wf.prepare_finalization(c,cfg,env)\n"
-   "   c.merge_response={'merged':False,'sha':t.MERGE_SHA}\n"
-   "   c.prs=[t.pull()]\n"
-   "   wf.finalize_prepared(c,p)\n"
-   "  if name=='merge-sha-mismatch':\n"
-   "   c=t.ready_client(); p=wf.prepare_finalization(c,cfg,env)\n"
-   "   c.merge_response={'merged':True,'sha':'5'*40}\n"
-   "   wf.finalize_prepared(c,p)\n"
-   "  if name=='close-unconfirmed':\n"
-   "   c=t.ready_client(); p=wf.prepare_finalization(c,cfg,env)\n"
-   "   c.close_without_apply={40}\n"
-   "   wf.finalize_prepared(c,p)\n"
-   "  if name=='board-unconfirmed':\n"
-   "   c=t.ready_client(); p=wf.prepare_finalization(c,cfg,env)\n"
-   "   c.board_without_apply=True\n"
-   "   wf.finalize_prepared(c,p)\n"
-   " except wf.FinalizerError as e:\n"
-   "  return {'error':type(e).__name__,'message':str(e)}\n"
-   " return {'unexpected':'scenario did not refuse'}\n"
-   "print(json.dumps([outcome(n) for n in json.load(sys.stdin)]))\n"))
-
-(define (python-outcomes names)
-  (unless python3
-    (error 'test-wave-finalizer-controller "python3 is required for wave-finalizer parity tests"))
-  (parameterize ([current-directory github-dir])
-    (define-values (proc out in err) (subprocess #f #f #f python3 "-c" python-parity-code))
-    (write-json (apply list names) in)
-    (close-output-port in)
-    (define out-text (port->string out))
-    (define err-text (port->string err))
-    (subprocess-wait proc)
-    (check-equal? (subprocess-status proc) 0 (string-append err-text out-text))
-    (read-json (open-input-string out-text))))
+;; The eleven scenarios below are the ones the Python controller's fake-adapter
+;; fixtures drove.  Their observed outcomes are the `controller` golden group:
+;; both successes (head/merge sha plus the mutation order) and the ten typed
+;; refusals, captured from the Python original before it was deleted.
+(define scenario-names
+  (list "prepare-ok"
+        "finalize-ok"
+        "attestation-unverified"
+        "already-merged-prepare"
+        "policy-unpinned"
+        "workflow-ref"
+        "merge-ci-predates"
+        "merge-not-confirmed"
+        "merge-sha-mismatch"
+        "close-unconfirmed"
+        "board-unconfirmed"))
 
 ;; `read-json` yields eq?-keyed hash tables while the port's values are equal?-keyed
 ;; hashes, and `equal?` never equates the two.  Compare a key-sorted alist form.
@@ -1248,20 +1199,9 @@
        (delete-file envelope-file)))))
 
 (module+ test
-  (test-case "differential parity table matches the python controller"
-    (define names
-      (list "prepare-ok"
-            "finalize-ok"
-            "attestation-unverified"
-            "already-merged-prepare"
-            "policy-unpinned"
-            "workflow-ref"
-            "merge-ci-predates"
-            "merge-not-confirmed"
-            "merge-sha-mismatch"
-            "close-unconfirmed"
-            "board-unconfirmed"))
-    (define theirs (python-outcomes names))
+  (test-case "differential parity table matches the captured python goldens"
+    (define names scenario-names)
+    (define theirs (golden-outcomes 'controller names))
     (for ([name (in-list names)]
           [expected (in-list theirs)])
       (test-case (format "parity ~a" name)

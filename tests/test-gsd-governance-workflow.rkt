@@ -29,6 +29,7 @@
   rec)
 
 (define-runtime-path ci-workflow "../.github/workflows/ci.yml")
+(define-runtime-path controller-suite "../tests/test-wave-finalizer-controller.rkt")
 (define-runtime-path governance-doc "../docs/gsd-process-governance.md")
 (define-runtime-path required-check-policy "../scripts/required-pr-checks.policy")
 (define-runtime-path historical-w6-validation "../docs/reports/gsd-wave-validation/v0.99.51-w6.rktd")
@@ -387,11 +388,17 @@
   (check-true (string-contains? workflow "docs/reports/gsd-wave-evidence"))
   (check-false (string-contains? workflow "sort | tail -1")))
 
-(test-case "CI lint runs the protected-governance controller tests"
+(test-case "CI lint carries no inert Python controller discovery step"
   (define workflow (file->string ci-workflow))
-  (check-true (string-contains? workflow "Protected governance controller tests"))
-  (check-true (string-contains? workflow
-                                "python3 -m unittest discover -s scripts/github -p 'test_*.py'")))
+  ;; The Python controller suite (`test_wave_finalizer.py`) was deleted together
+  ;; with the port it guarded; its eleven scenarios are pinned in Racket by
+  ;; tests/test-wave-finalizer-controller.rkt, which the `test` job discovers.
+  ;; A discovery step in the PR-critical `lint` job would now match zero tests,
+  ;; so the workflow must not carry one.
+  (check-false (regexp-match? #rx"(?m:^ +run:.*unittest)" workflow))
+  (check-false (string-contains? workflow "test_wave_finalizer.py"))
+  ;; the coverage moved, it was not dropped
+  (check-true (file-exists? controller-suite)))
 
 (test-case "governance documentation preserves protected W0 trust boundaries"
   (define governance (string-normalize-spaces (file->string governance-doc)))

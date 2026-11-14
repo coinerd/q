@@ -1,30 +1,19 @@
 #lang racket
 ;; @suite testing
 ;; @speed fast
+;; Protection-policy parsing goldens for the wave-finalizer port: each case below
+;; was executed once against the Python original
+;; (`scripts/github/wave-finalizer.py` at revision
+;; 0d9789c6b7120c7f9528fc784094e2f8eaf27447, via
+;; `scripts/github/test_wave_finalizer.py`; both deleted now) and its observed
+;; outcome is the `policy` group of tests/fixtures/wave-finalizer-goldens.json,
+;; read through tests/helpers/wave-finalizer-goldens.rkt.  No python3 needed.
 (require rackunit
          racket/runtime-path
          json
+         "helpers/wave-finalizer-goldens.rkt"
          "../scripts/github/wave-finalizer.rkt")
 
-(define-runtime-path github-dir "../scripts/github")
-(define python-code
-  (string-append "import json,sys,test_wave_finalizer as t\n"
-                 "try:\n"
-                 " p=t.wf._parse_policy(json.load(sys.stdin))\n"
-                 " print(json.dumps({'contexts':p.required_contexts,'app_ids':p.app_ids}))\n"
-                 "except t.wf.FinalizerError as e:\n"
-                 " print(json.dumps({'error':type(e).__name__}))\n"))
-(define (python-policy value)
-  (parameterize ([current-directory github-dir])
-    (define-values (proc out in err)
-      (subprocess #f #f #f (find-executable-path "python3") "-c" python-code))
-    (write-json value in)
-    (close-output-port in)
-    (define result (read-json out))
-    (define errors (port->string err))
-    (subprocess-wait proc)
-    (check-equal? (subprocess-status proc) 0 errors)
-    result))
 (define (native-policy value)
   (with-handlers ([exn:fail:finalizer? (lambda (e) (hasheq 'error (exn:fail:finalizer-kind e)))])
     (define policy (parse-protection-policy value))
@@ -110,7 +99,9 @@
                                     (map car (protection-policy-app-ids policy))))])
       (check-true (immutable? context))
       (check-exn exn:fail:contract? (lambda () (string-set! context 0 #\X)))))
+  (define theirs (golden-outcomes 'policy cases))
   (for ([value (in-list cases)]
-        [index (in-naturals)])
+        [index (in-naturals)]
+        [expected (in-list theirs)])
     (test-case (format "protection differential ~a" index)
-      (check-equal? (native-policy value) (python-policy value)))))
+      (check-equal? (native-policy value) expected))))

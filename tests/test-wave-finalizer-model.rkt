@@ -5,11 +5,15 @@
 ;; @covers scripts/github/wave-finalizer.rkt
 ;;
 ;; Model-layer parity tests for the wave-finalizer port.  Canonical JSON, digests,
-;; refusal messages and ISO-8601 parsing are pinned differentially against the
-;; Python original (`scripts/github/wave-finalizer.py`, imported through
-;; `test_wave_finalizer.wf`): python3 is required and a missing interpreter fails
-;; these tests instead of skipping them.  Each differential test sends all of its
-;; cases in one python process to keep the suite fast.
+;; refusal messages and ISO-8601 parsing are pinned differentially against
+;; checked-in GOLDENS, not against a live oracle: the goldens were captured once
+;; from the Python original (`scripts/github/wave-finalizer.py` at its final
+;; revision 0d9789c6b7120c7f9528fc784094e2f8eaf27447, driven through
+;; `scripts/github/test_wave_finalizer.py`; both files are deleted now) and live in
+;; tests/fixtures/wave-finalizer-goldens.json, read through
+;; tests/helpers/wave-finalizer-goldens.rkt.  Each golden group records the
+;; observed outcome of exactly the cases asserted below, index-aligned, so this
+;; suite needs no python3 and fails loudly if a case is edited without a recapture.
 ;;
 ;; Forged `prepared-finalization` values are built through the module's
 ;; `for-testing` submodule (`forge-prepared-finalization`), the only place the
@@ -23,105 +27,10 @@
          racket/list
          racket/runtime-path
          racket/string
+         "helpers/wave-finalizer-goldens.rkt"
          "../scripts/github/wave-finalizer.rkt")
 
-(define-runtime-path github-dir "../scripts/github")
 (define-runtime-path finalizer-path "../scripts/github/wave-finalizer.rkt")
-(define python3 (find-executable-path "python3"))
-
-;; ---------------------------------------------------------------- python bridge
-
-(define (to-jsexpr value)
-  ;; write-json only accepts symbol-keyed objects; the fixtures use both spellings.
-  (cond
-    [(hash? value)
-     (for/fold ([acc (hash)]) ([(key item) (in-hash value)])
-       (hash-set acc
-                 (if (string? key)
-                     (string->symbol key)
-                     key)
-                 (to-jsexpr item)))]
-    [(list? value) (map to-jsexpr value)]
-    [(vector? value) (list->vector (map to-jsexpr (vector->list value)))]
-    [else value]))
-
-(define (python-run code payload)
-  (unless python3
-    (error 'test-wave-finalizer-model "python3 is required for wave-finalizer parity tests"))
-  (parameterize ([current-directory github-dir])
-    (define-values (proc out in err) (subprocess #f #f #f python3 "-c" code))
-    (write-json (to-jsexpr payload) in)
-    (close-output-port in)
-    (define out-text (port->string out))
-    (define err-text (port->string err))
-    (subprocess-wait proc)
-    (check-equal? (subprocess-status proc) 0 (string-append err-text out-text))
-    (read-json (open-input-string out-text))))
-
-(define py-prelude "import json,sys,test_wave_finalizer as t\nwf=t.wf\n")
-
-;; Each snippet reads a JSON array on stdin and prints a JSON array of results.
-(define py-canonical-many
-  (string-append py-prelude
-                 "out=[]\n"
-                 "for v in json.load(sys.stdin):\n"
-                 " try:\n"
-                 "  out.append({'value':wf._canonical_json(v,'lbl',wf.EnvelopeError)})\n"
-                 " except wf.FinalizerError as exc:\n"
-                 "  out.append({'error':type(exc).__name__,'message':str(exc)})\n"
-                 "print(json.dumps(out))\n"))
-
-(define py-config-many
-  (string-append
-   py-prelude
-   "out=[]\n"
-   "for v in json.load(sys.stdin):\n"
-   " try:\n"
-   "  c=wf.load_trusted_configuration(v)\n"
-   "  out.append({'canonical':c.canonical_json,'digest':c.digest,'board':c.board.value()})\n"
-   " except wf.FinalizerError as exc:\n"
-   "  out.append({'error':type(exc).__name__,'message':str(exc)})\n"
-   "print(json.dumps(out))\n"))
-
-(define py-envelope-many
-  (string-append py-prelude
-                 "out=[]\n"
-                 "for v in json.load(sys.stdin):\n"
-                 " try:\n"
-                 "  e=wf.verify_external_envelope(v)\n"
-                 "  out.append({'digest':e.digest,'projection_digest':e.projection_digest,"
-                 "'canonical':e.canonical_json,'evidence':e.evidence_reference()})\n"
-                 " except wf.FinalizerError as exc:\n"
-                 "  out.append({'error':type(exc).__name__,'message':str(exc)})\n"
-                 "print(json.dumps(out))\n"))
-
-(define py-envelope-digest-many
-  (string-append
-   py-prelude
-   "print(json.dumps([wf.compute_envelope_digest(v) for v in json.load(sys.stdin)]))\n"))
-
-(define py-time-many
-  (string-append py-prelude
-                 "out=[]\n"
-                 "for v in json.load(sys.stdin):\n"
-                 " try:\n"
-                 "  d=wf._time(v,'created_at')\n"
-                 "  out.append({'micros':(d.toordinal()-719163)*86400000000"
-                 "+d.hour*3600000000+d.minute*60000000+d.second*1000000+d.microsecond})\n"
-                 " except wf.FinalizerError as exc:\n"
-                 "  out.append({'error':type(exc).__name__,'message':str(exc)})\n"
-                 "print(json.dumps(out))\n"))
-
-(define py-exact-keys-many
-  (string-append py-prelude
-                 "out=[]\n"
-                 "for p in json.load(sys.stdin):\n"
-                 " try:\n"
-                 "  wf._exact_keys(p['value'],set(p['required']),set(),p['label'],wf.EnvelopeError)\n"
-                 "  out.append({'ok':True})\n"
-                 " except wf.FinalizerError as exc:\n"
-                 "  out.append({'error':type(exc).__name__,'message':str(exc)})\n"
-                 "print(json.dumps(out))\n"))
 
 ;; ---------------------------------------------------------------- helpers
 
@@ -213,8 +122,8 @@
 
 ;; An envelope is self-consistent only when its canonical digest covers exactly
 ;; the other keys; the digest is computed with the module under test (the digest
-;; itself is pinned against Python by the "envelope digest matches python" case)
-;; so the envelope fixtures stay readable literals.
+;; itself is pinned against the captured golden by the "envelope digest matches
+;; python" case), so the envelope fixtures stay readable literals.
 (define (sample-envelope #:head-sha [head-sha sample-sha] #:pull-number [pull-number 42])
   (define body
     (hash 'schema_version
@@ -298,7 +207,7 @@
             (list "tab\there" "quote\"q" "back\\slash" "\u007f" "\u2028")
             (list "x\u00e9\n" "\u0000\u001f" "\u007f")))
     (for ([document (in-list documents)]
-          [theirs (in-list (python-run py-canonical-many documents))])
+          [theirs (in-list (golden-outcomes 'canonical-documents documents))])
       (check-equal? (finalizer-canonical-json document)
                     (hash-ref theirs 'value)
                     (format "~s" document))))
@@ -329,7 +238,7 @@
       (for/list ([value (in-list values)])
         (hash "v" value)))
     (for ([document (in-list documents)]
-          [theirs (in-list (python-run py-canonical-many documents))])
+          [theirs (in-list (golden-outcomes 'canonical-floats documents))])
       (check-equal? (finalizer-canonical-json document)
                     (hash-ref theirs 'value)
                     (format "~s" document))))
@@ -347,18 +256,8 @@
      (lambda () (finalizer-canonical-json (hash "a" -inf.0) "envelope" "EnvelopeError"))
      "EnvelopeError"
      "envelope is not canonical JSON: Out of range float values are not JSON compliant: -inf")
-    ;; python raises ValueError through the same prefix and the same suffix text
-    (define python-message
-      (hash-ref (python-run (string-append
-                             py-prelude
-                             "v=json.load(sys.stdin)\n"
-                             "try:\n"
-                             " print(json.dumps({'value':wf._canonical_json({'a':float('nan')},"
-                             "'envelope',wf.EnvelopeError)}))\n"
-                             "except wf.FinalizerError as exc:\n"
-                             " print(json.dumps({'error':type(exc).__name__,'message':str(exc)}))\n")
-                            (hash 'nan #t))
-                'message))
+    ;; the golden records the message Python produced for the same input
+    (define python-message (hash-ref (car (golden-outcomes 'canonical-nan (list #t))) 'message))
     (check-equal?
      python-message
      "envelope is not canonical JSON: Out of range float values are not JSON compliant: nan"))
@@ -405,9 +304,9 @@
             (hash "issuer" "q-attestor")
             (hash "schema_version" 1 "projection" 1)))
     (define theirs
-      (python-run py-exact-keys-many
-                  (for/list ([value (in-list payloads)])
-                    (hash 'value value 'required required 'label "envelope"))))
+      (golden-outcomes 'exact-keys
+                       (for/list ([value (in-list payloads)])
+                         (hash 'value value 'required required 'label "envelope"))))
     (for ([value (in-list payloads)]
           [expected (in-list theirs)])
       (check-parity (refusal (lambda () (verify-external-envelope value)))
@@ -495,7 +394,7 @@
 (module+ test
   (test-case "trusted configuration canonical json and digest match python"
     (define config (trusted-sample))
-    (define python-side (car (python-run py-config-many (list (sample-config)))))
+    (define python-side (car (golden-outcomes 'config-sample (list (sample-config)))))
     (check-equal? (trusted-configuration-canonical-json config) expected-config-canonical)
     (check-equal? (trusted-configuration-digest config) expected-config-digest)
     (check-equal? (trusted-configuration-canonical-json config) (hash-ref python-side 'canonical))
@@ -571,7 +470,7 @@
     (check-equal? (board-sync-value-json board) "{\"count\":2,\"ratio\":0.5,\"status\":\"Done\"}")
     (check-equal? (board-sync-value board) (hash "count" 2 "ratio" 0.5 "status" "Done"))
     (check-equal? (board-sync-project-id board) "PVT_1")
-    (check-equal? (hash-ref (car (python-run py-config-many (list (sample-config)))) 'board)
+    (check-equal? (hash-ref (car (golden-outcomes 'config-sample (list (sample-config)))) 'board)
                   (read-json (open-input-string (board-sync-value-json board)))))
 
   (test-case "trusted configuration refusals match python"
@@ -619,7 +518,7 @@
             (workflow '(app) (hash 'slug "github-actions" 'id #t))
             (variant '(merge_workflows 0 ref) "develop")
             (variant '(merge_workflows 0 event) "pull_request")))
-    (define theirs (python-run py-config-many variants))
+    (define theirs (golden-outcomes 'config-variants variants))
     (for ([broken (in-list variants)]
           [expected (in-list theirs)])
       (check-parity (refusal (lambda () (load-trusted-configuration broken)))
@@ -634,7 +533,7 @@
       (list (hash-remove (sample-envelope) 'canonical_digest)
             (hash-remove (sample-envelope #:pull-number 7) 'canonical_digest)
             (hash 'schema_version 1 'issuer "other")))
-    (define theirs (python-run py-envelope-digest-many bodies))
+    (define theirs (golden-outcomes 'envelope-digest bodies))
     (for ([body (in-list bodies)]
           [expected (in-list theirs)])
       (check-equal? (compute-envelope-digest body) expected))
@@ -643,7 +542,7 @@
 
   (test-case "verified envelope matches python"
     (define envelope (verified-sample))
-    (define python-side (car (python-run py-envelope-many (list (sample-envelope)))))
+    (define python-side (car (golden-outcomes 'envelope-verified (list (sample-envelope)))))
     (check-equal? (verified-envelope-digest envelope) (hash-ref python-side 'digest))
     (check-equal? (verified-envelope-projection-digest envelope)
                   (hash-ref python-side 'projection_digest))
@@ -710,7 +609,7 @@
             (hash-set envelope 'evidence (hash 'kind "artifact" 'id 0))
             (hash-set envelope 'canonical_digest (hash 'algorithm "sha256"))
             (hash-set envelope 'canonical_digest (hash 'algorithm "sha256" 'value "XYZ"))))
-    (define theirs (python-run py-envelope-many variants))
+    (define theirs (golden-outcomes 'envelope-variants variants))
     (for ([broken (in-list variants)]
           [expected (in-list theirs)])
       (check-parity (refusal (lambda () (verify-external-envelope broken)))
@@ -734,7 +633,7 @@
             "0001-01-01T00:00:00Z"
             "2024-02-29T12:00:00Z"
             "2024-12-31T23:59:59Z"))
-    (define theirs (python-run py-time-many values))
+    (define theirs (golden-outcomes 'time-valid values))
     (for ([value (in-list values)]
           [expected (in-list theirs)])
       (check-equal? (parse-timestamp value "created_at") (hash-ref expected 'micros) value)))
@@ -751,7 +650,7 @@
             "2024-01-01T00:00:60Z"
             "2024-01-01T00:00:00+24:00"
             "2024-01-01T00:00:00z"))
-    (define theirs (python-run py-time-many values))
+    (define theirs (golden-outcomes 'time-invalid values))
     (for ([value (in-list values)]
           [expected (in-list theirs)])
       (check-parity (refusal (lambda () (parse-timestamp value "created_at"))) expected value))
@@ -775,7 +674,7 @@
             "2024-01-01T00:00:00+02:30:15"
             "2024-01-01T00:00:00+02"
             "2024-01-01T000000Z"))
-    (define theirs (python-run py-time-many values))
+    (define theirs (golden-outcomes 'time-narrowed values))
     (for ([value (in-list values)]
           [expected (in-list theirs)])
       (check-refusal (lambda () (parse-timestamp value "created_at"))

@@ -101,20 +101,21 @@ concurrency:
 jobs:
   # ────────────────────────────────────────────────────────────
   # Gate 1: Lint — lightweight, required, fast PR feedback
-  # v1.00.26 W1 (§7): the PR-critical path keeps only the governance
-  # controller tests and workflow YAML validation. The Racket lint
-  # suite (lint-all, version-expectations, lint-alignment, metadata
-  # inventory/lint) moved to the parallel `lint-quality` job so
-  # downstream jobs (fast-env → test …) no longer wait for Racket lint
-  # steps. `lint` and `lint-quality` are both required.
+  # v1.00.26 W1 (§7): the PR-critical path keeps only workflow YAML
+  # validation. The Racket lint suite (lint-all, version-expectations,
+  # lint-alignment, metadata inventory/lint) moved to the parallel
+  # `lint-quality` job so downstream jobs (fast-env → test …) no longer
+  # wait for Racket lint steps. The former Python controller gate
+  # (`python3 -m unittest discover -s scripts/github`) is gone with the
+  # last Python test under scripts/github: the protected-wave finalizer
+  # controller scenarios are Racket now (tests/test-wave-finalizer-*.rkt)
+  # and run in the `test` job, so `lint` carries no inert discovery step.
+  # `lint` and `lint-quality` are both required.
   # ────────────────────────────────────────────────────────────
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
-      - name: Protected governance controller tests
-        run: python3 -m unittest discover -s scripts/github -p 'test_*.py'
 
       - name: Workflow YAML validation
         run: |

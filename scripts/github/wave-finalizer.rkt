@@ -8,9 +8,11 @@
 ;; it owns the sealed `prepared-finalization` snapshot plus its revalidation.
 ;; An authenticated adapter and the finalizing controller are separate modules.
 ;;
-;; Ported from `scripts/github/wave-finalizer.py`.  Refusal kinds and messages are
+;; Ported from `scripts/github/wave-finalizer.py` (since deleted: this module is
+;; now the only finalizer implementation).  Refusal kinds and messages are
 ;; kept byte-identical unless a note below says otherwise; the notes are repeated
-;; in `tests/test-wave-finalizer-model.rkt` next to the assertions.
+;; in `tests/test-wave-finalizer-model.rkt` next to the assertions, and the
+;; Python behaviour they pin lives in `tests/fixtures/wave-finalizer-goldens.json`.
 ;;
 ;; Parity notes (deliberately narrowed, always fail-closed):
 ;;  * `parse-timestamp` accepts the GitHub extended ISO-8601 form only
