@@ -124,23 +124,42 @@ an administrator bypass.
 board and does not replace branch protection. The `Closes #N` line remains required for
 issue linkage and board automation.
 
-### Board bootstrap is manual (Projects UI)
+### Board bootstrap is manual (Projects UI) plus one idempotent verifier
 
-Provisioning the "q Roadmap & Delivery" project is a one-time, web-UI-only operation and
-it has already been done. GraphQL exposes no mutation that creates a user-owned
-Project V2, so project creation was always manual; the board's fields (Status, Priority,
-Area, Effort, Risk, Start, Target, Iteration, OwnerNote), its views, its *Auto-add to
-project* workflows and its insights are configured in the project settings. This is also
-why `project-automation.yml` only updates items that are **already** on the board: a new
-issue reaches the board through the UI auto-add workflow, never through repo code.
+Creating the "q Roadmap & Delivery" project itself is a one-time, web-UI-only
+operation and it has already been done: GraphQL exposes no mutation that creates a
+user-owned Project V2. Its *Auto-add to project* workflows and its insights are also
+project settings. This is why `project-automation.yml` only updates items that are
+**already** on the board — a new issue reaches the board through the UI auto-add
+workflow, never through repo code.
 
-The former one-time bootstrap script `scripts/setup-github-project.py` was deleted for
-that reason. It was a one-shot field/view/backfill bootstrap, not a repeatable
-operation: nothing in the repo, CI, or docs invoked it, its bootstrap had already
-completed (the checked-in board state capture shows Status/Priority/Area/Effort/Risk
-populated on live items), and re-running it was unsafe rather than idempotent —
-`createProjectV2Field` fails on fields that exist while `updateProjectV2Field` would
-rewrite the whole Status single-select option set from a hardcoded list without ever
-reading current state, which risks detaching the values already set on board items.
-Board reads and card moves remain available through `gh-board`
-([github extension](../../extensions/github/README.md)).
+Everything else the board needs after that is handled by
+[`scripts/github/project-setup.rkt`](../../scripts/github/project-setup.rkt), the Racket
+replacement for the deleted one-shot `scripts/setup-github-project.py`:
+
+```
+racket scripts/github/project-setup.rkt --owner coinerd --project-number 1 \
+    --expected-slug coinerd/q [--dry-run]
+```
+
+It runs under ONE delivery session (one budget window, `controller-environment`
+credential isolation, no raw child output in any refusal) and is safe to re-run:
+
+- **repository identity** — origin must identify `--expected-slug` before any API call
+  (typed `repository-identity-mismatch`);
+- **project read** — a missing project refuses (`project-not-found`) instead of
+  inventing one;
+- **field creation** — Priority / Area / Effort / Risk (single-select, documented option
+  tables) and OwnerNote (text) are created only when absent; an existing field of the
+  wrong type refuses (`field-data-type-mismatch`) and one missing a documented option
+  refuses (`field-options-missing`). Status is **verified, never rewritten**: the Python
+  script replaced the whole Status option set on every run, which rewrites option IDs
+  and can detach the values stored on items;
+- **board item sync** — every open issue that is not already a project item is added
+  (`addProjectV2ItemById`, one POST each, never retried); pull-request entries from the
+  issues endpoint are skipped.
+
+Saved views are reported, never created: `createProjectV2View` is not part of the public
+GraphQL schema. `--dry-run` prints the exact plan (fields to create, issues to add)
+without mutating anything. Board reads and card moves remain available through
+`gh-board` ([github extension](../../extensions/github/README.md)).

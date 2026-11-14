@@ -39,9 +39,10 @@ Create, read, and manage tracker issues (one wave = one issue).
 | `list-items` | `project?`, `column?` | read "q Roadmap & Delivery" items |
 | `move-card` | `issue-number`, `column` | manual card moves (the `project-automation.yml` sync usually covers this) |
 
-Board provisioning (project, fields, views, auto-add workflows, insights) is a manual
-one-time Projects-UI operation, not a repo script — see
-[docs/operations/agent-merge-path.md](../../docs/operations/agent-merge-path.md#board-bootstrap-is-manual-projects-ui).
+Board provisioning (project, views, auto-add workflows, insights) is a manual one-time
+Projects-UI operation; field creation and board item sync are handled by
+[`scripts/github/project-setup.rkt`](../../scripts/github/project-setup.rkt) — see
+[docs/operations/agent-merge-path.md](../../docs/operations/agent-merge-path.md#board-bootstrap-is-manual-projects-ui-plus-one-idempotent-verifier).
 
 ### `gh-wave-start` — begin a wave
 **Parameters:** `issue_number`
