@@ -134,6 +134,7 @@
          (struct-out qt-ci-outcome)
          qt-strict-test-runner?
          qt-shard-plan-modes
+         qt-effective-mode
          qt-suite-relative
          qt-suite-files
          qt-shard-partition
@@ -145,6 +146,12 @@
          qt-ci-pass-pattern
          qt-ci-suite-label
          qt-ci-marker
+         ;; Phase D step 1: ONE execution path, two CLI contracts (qt + the
+         ;; scripts/run-tests.rkt compatibility adapter).
+         (struct-out qt-ci-exec-options)
+         qt-ci-default-options
+         qt-ci-compat-options
+         qt-ci-presentation
          run-qt-ci-plan)
 
 ;; One-line honest label reused by every full output summary.
@@ -1042,12 +1049,11 @@
    ci-binding-cache
    (list module name)
    (lambda ()
-     (with-handlers ([exn:fail?
-                      (lambda (e)
-                        (error 'full-plan
-                               "CI surface unavailable: cannot load ~a (~a); fail closed"
-                               label
-                               (exn-message e)))])
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (error 'full-plan
+                                         "CI surface unavailable: cannot load ~a (~a); fail closed"
+                                         label
+                                         (exn-message e)))])
        (dynamic-require module name)))))
 
 ;; STRICT_TEST_RUNNER=1 is the CI setting that turns the runner's strict
@@ -1069,9 +1075,22 @@
 ;; Raw values from the CLI. Selection is resolved from `suite`/`files` (both #f
 ;; means the complete available suite, exactly like plain `./qt full`).
 (struct qt-ci-spec
-        (suite files shard-index shard-total timeout profile ledger-path json-out
-                record-gate? repeat mode scheduler ordering shard-plan durations argv)
-        #:transparent)
+        (suite files
+               shard-index
+               shard-total
+               timeout
+               profile
+               ledger-path
+               json-out
+               record-gate?
+               repeat
+               mode
+               scheduler
+               ordering
+               shard-plan
+               durations
+               argv)
+  #:transparent)
 
 (define (qt-known-suites)
   (ci-load rt-cli "scripts/run-tests/cli.rkt" 'known-suites))
@@ -1082,7 +1101,20 @@
 (define (qt-symbol-choices module label name)
   (map symbol->string (qt-known-list module label name)))
 
-(define (validate-qt-ci-spec! spec)
+;; `contract` names the CLI whose raw values these are, so ONE resolution
+;; implementation serves both front-ends:
+;;   - 'qt     — the `./qt full` CI surface: fail closed on combinations a mode
+;;               cannot honour, and on a `--ledger` path that does not exist
+;;               (a typo is not evidence that no known failures exist);
+;;   - 'compat — the long-standing `scripts/run-tests.rkt` CLI (the Phase D
+;;               compatibility adapter). That CLI has always ACCEPTED these
+;;               combinations with defined behavior (a missing ledger file is
+;;               an empty ledger, `--file` may be sharded and may record gate
+;;               evidence, plan-only modes ignore execution flags), so leaving
+;;               them accepted is what keeps it byte-identical while sharing
+;;               this module's selection.
+(define (validate-qt-ci-spec! spec #:contract [contract 'qt])
+  (define qt-contract? (eq? contract 'qt))
   (define suite (qt-ci-spec-suite spec))
   (define files (qt-ci-spec-files spec))
   (define index (qt-ci-spec-shard-index spec))
@@ -1102,7 +1134,8 @@
       (error 'full-plan
              "unsupported --suite: ~a (valid: ~a)"
              suite
-             (string-join (qt-symbol-choices rt-cli "scripts/run-tests/cli.rkt" 'known-suites) ", "))))
+             (string-join (qt-symbol-choices rt-cli "scripts/run-tests/cli.rkt" 'known-suites)
+                          ", "))))
   (unless (and (exact-integer? total) (positive? total))
     (error 'full-plan "--shard-total must be a positive integer, got ~s" total))
   (unless (and (exact-integer? index) (>= index 0) (< index total))
@@ -1116,7 +1149,9 @@
     (error 'full-plan
            "unsupported --profile: ~a (valid: ~a)"
            profile
-           (string-join (qt-symbol-choices rt-profiles "scripts/run-tests/profiles.rkt" 'known-profiles) ", ")))
+           (string-join
+            (qt-symbol-choices rt-profiles "scripts/run-tests/profiles.rkt" 'known-profiles)
+            ", ")))
   (unless (memq mode (qt-known-list rt-cli "scripts/run-tests/cli.rkt" 'known-modes))
     (error 'full-plan
            "unsupported --mode: ~a (valid: ~a)"
@@ -1135,7 +1170,7 @@
              ordering
              (string-join (qt-symbol-choices rt-cli "scripts/run-tests/cli.rkt" 'known-orderings)
                           ", "))))
-  (when ledger-path
+  (when (and ledger-path qt-contract?)
     (unless (file-exists? (path->complete-path (string->path ledger-path)))
       (error 'full-plan "--ledger file does not exist: ~a" ledger-path)))
   (when shard-plan
@@ -1148,45 +1183,71 @@
       (unless json-out
         (error 'full-plan
                "--shard-plan measure requires --json-out PATH (duration snapshot destination)"))
-      (when (pair? files)
-        (error 'full-plan
-               "--shard-plan measure cannot be combined with --file (explicit reproduction is not a measurement pass)")))
-    (when (and (equal? shard-plan "report") json-out)
-      (error 'full-plan
-             "--json-out is not written by --shard-plan report (the plan is printed; drop --json-out or use report output)")))
+      (when (and (pair? files) qt-contract?)
+        (error
+         'full-plan
+         "--shard-plan measure cannot be combined with --file (explicit reproduction is not a measurement pass)")))
+    (when (and (equal? shard-plan "report") json-out qt-contract?)
+      (error
+       'full-plan
+       "--json-out is not written by --shard-plan report (the plan is printed; drop --json-out or use report output)")))
   (when (and (pair? files) suite)
-    (error 'full-plan
-           "cannot combine --suite with --file: --file is explicit reproduction, --suite is a suite selection"))
-  (when (and (pair? files) (> total 1))
-    (error 'full-plan
-           "--file (explicit reproduction) cannot be sharded (--shard-total ~a); reproduction is never a coverage claim"
-           total))
-  (when (and (pair? files) record-gate?)
-    (error 'full-plan
-           "--file (explicit reproduction) cannot --record-gate-evidence (gate evidence claims a suite PASS)"))
+    (error
+     'full-plan
+     "cannot combine --suite with --file: --file is explicit reproduction, --suite is a suite selection"))
+  (when (and (pair? files) (> total 1) qt-contract?)
+    (error
+     'full-plan
+     "--file (explicit reproduction) cannot be sharded (--shard-total ~a); reproduction is never a coverage claim"
+     total))
+  (when (and (pair? files) record-gate? qt-contract?)
+    (error
+     'full-plan
+     "--file (explicit reproduction) cannot --record-gate-evidence (gate evidence claims a suite PASS)"))
   ;; Plan-only modes never execute the flags below, so accepting them would be
   ;; a silent ignore. Name every offender and fail closed.
-  (define conflicts (qt-shard-plan-conflicts spec))
+  (define conflicts
+    (if qt-contract?
+        (qt-shard-plan-conflicts spec)
+        '()))
   (unless (null? conflicts)
-    (error 'full-plan
-           "cannot combine --shard-plan ~a with ~a: they would be ignored (fail closed, never silently ignored)"
-           shard-plan
-           (string-join conflicts ", ")))
+    (error
+     'full-plan
+     "cannot combine --shard-plan ~a with ~a: they would be ignored (fail closed, never silently ignored)"
+     shard-plan
+     (string-join conflicts ", ")))
   (void))
 
 (define (qt-shard-plan-conflicts spec)
   (define shard-plan (qt-ci-spec-shard-plan spec))
   (define common
-    (append (if (> (qt-ci-spec-repeat spec) 1) (list "--repeat") '())
-            (if (qt-ci-spec-record-gate? spec) (list "--record-gate-evidence") '())
-            (if (qt-ci-spec-ledger-path spec) (list "--ledger") '())
-            (if (not (eq? (qt-ci-spec-mode spec) 'auto)) (list "--mode") '())
-            (if (not (eq? (qt-ci-spec-scheduler spec) 'batch)) (list "--scheduler") '())
-            (if (qt-ci-spec-ordering spec) (list "--ordering") '())
-            (if (positive? (qt-ci-spec-shard-index spec)) (list "--shard-index") '())))
+    (append (if (> (qt-ci-spec-repeat spec) 1)
+                (list "--repeat")
+                '())
+            (if (qt-ci-spec-record-gate? spec)
+                (list "--record-gate-evidence")
+                '())
+            (if (qt-ci-spec-ledger-path spec)
+                (list "--ledger")
+                '())
+            (if (not (eq? (qt-ci-spec-mode spec) 'auto))
+                (list "--mode")
+                '())
+            (if (not (eq? (qt-ci-spec-scheduler spec) 'batch))
+                (list "--scheduler")
+                '())
+            (if (qt-ci-spec-ordering spec)
+                (list "--ordering")
+                '())
+            (if (positive? (qt-ci-spec-shard-index spec))
+                (list "--shard-index")
+                '())))
   (cond
     [(equal? shard-plan "report")
-     (append common (if (qt-ci-spec-timeout spec) (list "--timeout") '()))]
+     (append common
+             (if (qt-ci-spec-timeout spec)
+                 (list "--timeout")
+                 '()))]
     [(equal? shard-plan "measure") common]
     [else '()]))
 
@@ -1211,7 +1272,10 @@
 ;; One `--file` argument as a root-relative identity string. Fail closed when
 ;; the file is missing, not a `.rkt` file, or outside the selection root.
 (define (qt-reproduction-file f base)
-  (define raw (if (path? f) (path->string f) f))
+  (define raw
+    (if (path? f)
+        (path->string f)
+        f))
   (define abs (simplify-path (path->complete-path (string->path raw) base) #f))
   (unless (file-exists? abs)
     (error 'full-plan "--file is not an existing test file: ~a" raw))
@@ -1219,15 +1283,14 @@
     (error 'full-plan "--file must name a .rkt test file: ~a" raw))
   (define rel (find-relative-path base abs))
   (when (absolute-path? rel)
-    (error 'full-plan
-           "--file must live under the selection root ~a: ~a"
-           (path->string base)
-           raw))
+    (error 'full-plan "--file must live under the selection root ~a: ~a" (path->string base) raw))
   (path->string rel))
 
 (define (qt-reproduction-files files root)
   (define base (selection-root root))
-  (define rels (for/list ([f (in-list files)]) (qt-reproduction-file f base)))
+  (define rels
+    (for/list ([f (in-list files)])
+      (qt-reproduction-file f base)))
   (define dup (check-duplicates rels))
   (when dup
     (error 'full-plan "--file listed more than once: ~a" dup))
@@ -1250,11 +1313,10 @@
 ;; `mode`: 'full-suite | 'explicit-suite | 'explicit-reproduction. `rels` is
 ;; the UNsharded selection in the runner's own path form (root-relative strings
 ;; from classify.rkt), so duration snapshots and gate evidence keep matching.
-(struct qt-ci-plan (root mode suite rels shard-index shard-total shard-plan spec)
-  #:transparent)
+(struct qt-ci-plan (root mode suite rels shard-index shard-total shard-plan spec) #:transparent)
 
-(define (resolve-qt-ci-plan root spec)
-  (validate-qt-ci-spec! spec)
+(define (resolve-qt-ci-plan root spec #:contract [contract 'qt])
+  (validate-qt-ci-spec! spec #:contract contract)
   (define base (selection-root root))
   (define suite (qt-ci-spec-suite spec))
   (define raw-files (qt-ci-spec-files spec))
@@ -1265,10 +1327,20 @@
       [else 'full-suite]))
   (define rels
     (case mode
-      [(explicit-reproduction) (qt-reproduction-files raw-files root)]
+      ;; The compat CLI has always passed positional/normalized reproduction
+      ;; paths straight to the runner (absolute paths stay absolute, no
+      ;; existence/.rkt validation, no de-duplication), so its results keep the
+      ;; exact `path` identity they had before this adapter existed.
+      [(explicit-reproduction)
+       (if (eq? contract 'compat)
+           (map normalize-test-path raw-files)
+           (qt-reproduction-files raw-files root))]
       [(explicit-suite) (qt-suite-relative suite root)]
       [else (lane-relative 'full root)]))
-  (when (null? rels)
+  ;; qt fails closed on an empty selection. The compat CLI keeps its own
+  ;; long-standing `No test files matched the selected suite.` (exit 1), so it
+  ;; never reaches the execution layer with an empty selection either.
+  (when (and (eq? contract 'qt) (null? rels))
     (error 'full-plan
            "CI selection is empty under ~a (zero files is a failure, not a pass)"
            (path->string base)))
@@ -1291,15 +1363,15 @@
   (define build (ci-load rt-shard-plan "scripts/run-tests/shard-plan.rkt" 'build-shard-plan/safe))
   (define skips (ci-load rt-profiles "scripts/run-tests/profiles.rkt" 'profile-skips-test?))
   (define-values (dur dur-status) (load-dur durations))
-  (printf ";; qt: shard-plan durations=~a status=~a known=~a~n"
-          (or durations "<none>")
-          dur-status
-          (hash-count dur))
+  (when (qt-ci-presentation)
+    (printf ";; qt: shard-plan durations=~a status=~a known=~a~n"
+            (or durations "<none>")
+            dur-status
+            (hash-count dur)))
   (build (qt-ci-plan-rels plan)
          total
          #:durations dur
-         #:profile-skips?
-         (lambda (f) (skips profile (hash-ref (get-file-metadata f) 'requires '())))
+         #:profile-skips? (lambda (f) (skips profile (hash-ref (get-file-metadata f) 'requires '())))
          #:duration-source durations))
 
 ;; The exact files this plan would execute. `active` consumes the duration-aware
@@ -1342,9 +1414,9 @@
   (define total (qt-ci-plan-shard-total plan))
   (define index (qt-ci-plan-shard-index plan))
   (cond
-    [(> total 1)
-     (format "shard ~a of ~a; partial coverage (never a full-suite claim)" index total)]
-    [(eq? (qt-ci-plan-mode plan) 'explicit-reproduction) (format "explicit --file selection (~a files)" (length (qt-ci-plan-rels plan)))]
+    [(> total 1) (format "shard ~a of ~a; partial coverage (never a full-suite claim)" index total)]
+    [(eq? (qt-ci-plan-mode plan) 'explicit-reproduction)
+     (format "explicit --file selection (~a files)" (length (qt-ci-plan-rels plan)))]
     [(eq? (qt-ci-plan-mode plan) 'explicit-suite) "explicit --suite selection"]
     [else "complete available Racket suite"]))
 
@@ -1365,7 +1437,9 @@
           'full_coverage
           (and (eq? mode 'full-suite) (= total 1))
           'suite
-          (if (qt-ci-plan-suite plan) (symbol->string (qt-ci-plan-suite plan)) "")
+          (if (qt-ci-plan-suite plan)
+              (symbol->string (qt-ci-plan-suite plan))
+              "")
           'shard_index
           index
           'shard_total
@@ -1385,12 +1459,10 @@
 
 (define (qt-ci-read-json path)
   (define read-json (ci-load 'json "json" 'read-json))
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     (error 'full-plan
-                            "--json-out document at ~a is unreadable (~a)"
-                            path
-                            (exn-message e)))])
+  (with-handlers
+      ([exn:fail?
+        (lambda (e)
+          (error 'full-plan "--json-out document at ~a is unreadable (~a)" path (exn-message e)))])
     (call-with-input-file path read-json)))
 
 ;; Merge the qt selection marker into the runner-written document and write it
@@ -1403,14 +1475,21 @@
   (unless (hash? doc)
     (error 'full-plan "--json-out document at ~a is not a run-summary object" path))
   (define extra (hash-ref doc 'extra #f))
-  (define extra* (if (hash? extra) (hash-copy extra) (make-hasheq)))
+  (define extra*
+    (if (hash? extra)
+        (hash-copy extra)
+        (make-hasheq)))
   (hash-set! extra* 'qt (qt-ci-marker plan run-files))
   (define doc* (hash-set doc 'extra extra*))
-  (call-with-output-file path #:exists 'truncate/replace
-    (lambda (port) (write-json doc* port) (newline port))))
+  (call-with-output-file path
+                         #:exists 'truncate/replace
+                         (lambda (port)
+                           (write-json doc* port)
+                           (newline port))))
 
 (define (validate-qt-json-out! path)
-  (define validate (ci-load rt-reporting "scripts/run-tests/reporting.rkt" 'validate-run-summary-json))
+  (define validate
+    (ci-load rt-reporting "scripts/run-tests/reporting.rkt" 'validate-run-summary-json))
   (define doc (qt-ci-read-json path))
   (define problems (validate doc))
   (unless (null? problems)
@@ -1462,32 +1541,27 @@
   (define measured
     (for/list ([f (in-list files)])
       (define r (run-one f #:timeout (and timeout (* timeout 1000)) #:mode 'subprocess))
-      (printf ";; qt: measured ~a ~as (~a)~n"
-              f
-              (/ (qt-result-elapsed-ms r) 1000.0)
-              (status r))
-      (hasheq 'path
-              f
-              'duration_seconds
-              (/ (qt-result-elapsed-ms r) 1000.0)
-              'status
-              (status r))))
-  (call-with-output-file json-out #:exists 'truncate/replace
-    (lambda (out)
-      (write-json
-       (hasheq 'schema
-               "ci-durations/1"
-               'suite
-               (qt-ci-suite-label plan)
-               'generated_at
-               (parameterize ([date-display-format 'iso-8601])
-                 (date->string (current-date) #t))
-               'measured_by
-               "--shard-plan measure (sequential subprocess per-file wall clock, includes per-file runner overhead)"
-               'files
-               measured)
-       out)
-      (newline out)))
+      (printf ";; qt: measured ~a ~as (~a)~n" f (/ (qt-result-elapsed-ms r) 1000.0) (status r))
+      (hasheq 'path f 'duration_seconds (/ (qt-result-elapsed-ms r) 1000.0) 'status (status r))))
+  (call-with-output-file
+   json-out
+   #:exists 'truncate/replace
+   (lambda (out)
+     (write-json
+      (hasheq
+       'schema
+       "ci-durations/1"
+       'suite
+       (qt-ci-suite-label plan)
+       'generated_at
+       (parameterize ([date-display-format 'iso-8601])
+         (date->string (current-date) #t))
+       'measured_by
+       "--shard-plan measure (sequential subprocess per-file wall clock, includes per-file runner overhead)"
+       'files
+       measured)
+      out)
+     (newline out)))
   (printf ";; qt: duration snapshot written to ~a~n" json-out)
   (define load-dur (ci-load rt-shard-plan "scripts/run-tests/shard-plan.rkt" 'load-duration-snapshot))
   (define-values (mdur mstatus) (load-dur json-out))
@@ -1499,7 +1573,9 @@
   (define profile (qt-ci-spec-profile spec))
   (define mplan
     (build files
-           (if (> (qt-ci-plan-shard-total plan) 1) (qt-ci-plan-shard-total plan) 3)
+           (if (> (qt-ci-plan-shard-total plan) 1)
+               (qt-ci-plan-shard-total plan)
+               3)
            #:durations mdur
            #:profile-skips?
            (lambda (f) (skips profile (hash-ref (get-file-metadata f) 'requires '())))
@@ -1516,17 +1592,19 @@
 
 (struct qt-ci-outcome (ran? exit-code results) #:transparent)
 
-(define (qt-record-gate-evidence! plan run-files results jobs)
+(define (qt-record-gate-evidence! plan run-files results jobs suite-label)
   (define spec (qt-ci-plan-spec plan))
   (define index (qt-ci-plan-shard-index plan))
   (define total (qt-ci-plan-shard-total plan))
-  (define refusal (ci-load rt-gate-evidence "scripts/run-tests/gate-evidence.rkt" 'gate-evidence-refusal))
+  (define refusal
+    (ci-load rt-gate-evidence "scripts/run-tests/gate-evidence.rkt" 'gate-evidence-refusal))
   (define reason (refusal index total))
   (when reason
     (error 'full-plan "cannot record gate evidence: ~a" reason))
-  (define record (ci-load rt-gate-evidence "scripts/run-tests/gate-evidence.rkt" 'record-gate-evidence!))
+  (define record
+    (ci-load rt-gate-evidence "scripts/run-tests/gate-evidence.rkt" 'record-gate-evidence!))
   (define inv-hash (ci-load rt-inventory "scripts/run-tests/inventory.rkt" 'compute-inventory-hash))
-  (record (qt-ci-suite-label plan)
+  (record suite-label
           #:results results
           #:args (qt-ci-spec-argv spec)
           #:jobs jobs
@@ -1537,17 +1615,54 @@
           #:shard-index index
           #:shard-total total))
 
-(define (run-qt-ci-tests plan jobs)
+;; ============================================================
+;; Shared execution options — ONE execution path, two CLI contracts
+;; ============================================================
+;; The engine below is the single implementation of execution, repeat handling,
+;; JSON evidence and gate-evidence recording. It has exactly two callers:
+;;   - `./qt full` (`qt-ci-default-options`) — the qt contract: the qt
+;;     presentation (`;; qt:` chatty lines plus the schema-additive `extra.qt`
+;;     JSON marker) and qt's fail-closed refusals (zero executed tests, and a
+;;     profile that skips every selected file);
+;;   - `scripts/run-tests.rkt` (`qt-ci-compat-options`) — the long-standing
+;;     runner CLI, whose presentation, strict zero-parsed-test default and
+;;     zero-test behavior predate the CI surface and must stay identical: the
+;;     document is written by reporting.rkt alone (no `extra.qt`), the strict
+;;     flag comes from the caller, and a zero-test run is reported by the
+;;     runner itself instead of being refused here.
+;; `suite-label` (a string) overrides the label derived from the plan, because
+;; the compat CLI keeps its own suite naming ("all" for an explicit file list,
+;; "impact" for a change-impact run).
+(struct qt-ci-exec-options
+        (suite-label strict? refuse-zero-tests? refuse-all-skipped? phases on-run-start)
+  #:transparent)
+
+;; Presentation switch for the SHARED helpers (`qt-ci-build-shard-plan`,
+;; `qt-ci-run-files`) and for the engine's JSON marker: `#t` is the qt contract
+;; (`;; qt:` chatty lines plus the schema-additive `extra.qt` marker). The compat
+;; adapter binds it to `#f` for its whole run, so its stdout stays the
+;; runner's own and the document stays exactly what reporting.rkt wrote.
+(define qt-ci-presentation (make-parameter #t))
+
+(define (qt-ci-default-options)
+  (qt-ci-exec-options #f (qt-strict-test-runner?) #t #t (hasheq) void))
+
+(define (qt-ci-compat-options suite-label strict? phases on-run-start)
+  (qt-ci-exec-options suite-label strict? #f #f phases on-run-start))
+
+(define (run-qt-ci-tests plan jobs #:options [options (qt-ci-default-options)])
   (define spec (qt-ci-plan-spec plan))
   (define total (qt-ci-plan-shard-total plan))
   (define files (qt-ci-run-files plan))
   (when (null? files)
-    (error 'full-plan
-           "the selected CI run covers zero files; a shard that executes nothing is a failure, not a pass"))
+    (error
+     'full-plan
+     "the selected CI run covers zero files; a shard that executes nothing is a failure, not a pass"))
   ;; Refuse an impossible gate-evidence recording BEFORE running, exactly like
   ;; the runner's own main (a shard must never emit/overwrite a full PASS).
   (when (qt-ci-spec-record-gate? spec)
-    (define refusal (ci-load rt-gate-evidence "scripts/run-tests/gate-evidence.rkt" 'gate-evidence-refusal))
+    (define refusal
+      (ci-load rt-gate-evidence "scripts/run-tests/gate-evidence.rkt" 'gate-evidence-refusal))
     (define reason (refusal (qt-ci-plan-shard-index plan) total))
     (when reason
       (error 'full-plan "cannot record gate evidence: ~a" reason)))
@@ -1559,15 +1674,15 @@
   (define skip? (ci-load rt-profiles "scripts/run-tests/profiles.rkt" 'profile-skips-test?))
   (define skipped
     (filter (lambda (f) (skip? profile (hash-ref (get-file-metadata f) 'requires '()))) files))
-  (when (= (length skipped) (length files))
+  (when (and (qt-ci-exec-options-refuse-all-skipped? options) (= (length skipped) (length files)))
     (error 'full-plan
            (string-append "zero tests executed: all ~a selected file(s) are skipped by --profile ~a"
                           "~a; a pass with zero tests is never reported")
            (length files)
            profile
-           (if (qt-strict-test-runner?) " [STRICT_TEST_RUNNER=1]" "")))
+           (if (qt-ci-exec-options-strict? options) " [STRICT_TEST_RUNNER=1]" "")))
   (define requested (qt-ci-spec-mode spec))
-  (define suite-label (qt-ci-suite-label plan))
+  (define suite-label (or (qt-ci-exec-options-suite-label options) (qt-ci-suite-label plan)))
   (define mode (qt-effective-mode requested suite-label))
   (define ledger-path (qt-ci-spec-ledger-path spec))
   (define ledger
@@ -1580,16 +1695,21 @@
   (define requested-param
     (ci-load rt-runner "scripts/run-tests/runner.rkt" 'current-requested-execution-mode))
   (define run-suite-once (ci-load rt-runner "scripts/run-tests/runner.rkt" 'run-suite-once))
-  (when (and (equal? (qt-ci-plan-shard-plan plan) "active") (= total 1))
+  (when (and (qt-ci-presentation) (equal? (qt-ci-plan-shard-plan plan) "active") (= total 1))
     (printf ";; qt: --shard-plan active ignored — --shard-total=1 (unsharded)~n"))
   ;; STRICT_TEST_RUNNER=1 enables the runner's strict zero-parsed-test check
-  ;; (the CI setting). qt also refuses a run that executed zero tests at all.
-  (define strict? (qt-strict-test-runner?))
+  ;; (the CI setting, and the qt contract's default). qt additionally refuses a
+  ;; run that executed zero tests at all; the compat CLI leaves that to the
+  ;; runner's own strict handling.
+  (define strict? (qt-ci-exec-options-strict? options))
   (define last-results (box '()))
   (define exit-code (box 0))
   (parameterize ([requested-param (symbol->string requested)])
     (for ([run-num (in-range 1 (add1 repeat))]
           #:break (not (zero? (unbox exit-code))))
+      ;; Presentation hook: the compat CLI prints its `── Run n/N ──` header
+      ;; between repeats; qt prints nothing here.
+      ((qt-ci-exec-options-on-run-start options) run-num repeat)
       (define-values (code results)
         (run-suite-once files
                         jobs
@@ -1603,38 +1723,46 @@
                         ledger
                         (qt-ci-spec-profile spec)
                         #:shard shard
+                        #:phases (qt-ci-exec-options-phases options)
                         #:scheduler (qt-ci-spec-scheduler spec)
                         #:ordering (qt-ci-spec-ordering spec)
                         #:duration-source (qt-ci-spec-durations spec)))
       (set-box! last-results results)
       (set-box! exit-code code)))
   (define results (unbox last-results))
-  ;; Evidence first (the runner already wrote the document): add the qt
-  ;; selection marker and validate the exact runner schema, then decide.
+  ;; Evidence first (the runner already wrote the document): under the qt
+  ;; presentation add the selection marker, then validate the exact runner
+  ;; schema. The compat CLI's document stays exactly what reporting.rkt wrote.
   (when json-out
-    (merge-qt-ci-marker! json-out plan files)
+    (when (qt-ci-presentation)
+      (merge-qt-ci-marker! json-out plan files))
     (validate-qt-json-out! json-out))
   (define total-tests (for/sum ([r (in-list results)]) (qt-result-total r)))
-  (when (zero? total-tests)
+  (when (and (qt-ci-exec-options-refuse-zero-tests? options) (zero? total-tests))
     (error 'full-plan
-           (string-append "zero tests executed (~a selected files); a pass with zero tests is never reported"
-                          "~a")
+           (string-append
+            "zero tests executed (~a selected files); a pass with zero tests is never reported"
+            "~a")
            (length files)
-           (if strict?
-               " [STRICT_TEST_RUNNER=1]"
-               "")))
+           (if strict? " [STRICT_TEST_RUNNER=1]" "")))
   (when (and (zero? (unbox exit-code)) (qt-ci-spec-record-gate? spec))
-    (qt-record-gate-evidence! plan files results jobs))
+    ;; The recorded label is the label the run REPORTED (a compat run keeps its
+    ;; own suite naming), never a plan-derived substitute.
+    (qt-record-gate-evidence! plan files results jobs suite-label))
   (qt-ci-outcome #t (unbox exit-code) results))
 
 ;; A single entry point: `report`/`measure` never run tests (ran? = #f); every
 ;; other mode executes through the runner's `run-suite-once`.
-(define (run-qt-ci-plan plan jobs)
+(define (run-qt-ci-plan plan jobs #:options [options (qt-ci-default-options)])
   (define shard-plan (qt-ci-plan-shard-plan plan))
   (cond
-    [(equal? shard-plan "report") (run-qt-ci-shard-report! plan) (qt-ci-outcome #f 0 '())]
-    [(equal? shard-plan "measure") (run-qt-ci-measure! plan) (qt-ci-outcome #f 0 '())]
-    [else (run-qt-ci-tests plan jobs)]))
+    [(equal? shard-plan "report")
+     (run-qt-ci-shard-report! plan)
+     (qt-ci-outcome #f 0 '())]
+    [(equal? shard-plan "measure")
+     (run-qt-ci-measure! plan)
+     (qt-ci-outcome #f 0 '())]
+    [else (run-qt-ci-tests plan jobs #:options options)]))
 
 ;; ============================================================
 ;; Explain (nothing executed) and the honest pass line
@@ -1651,35 +1779,33 @@
   (define total (qt-ci-plan-shard-total plan))
   (define index (qt-ci-plan-shard-index plan))
   (define shard-plan (qt-ci-plan-shard-plan plan))
-  (define planned?
-    (or (equal? shard-plan "report") (equal? shard-plan "measure")))
+  (define planned? (or (equal? shard-plan "report") (equal? shard-plan "measure")))
   (define files
     (if planned?
         (sort (qt-ci-plan-rels plan) string<?)
         (qt-ci-run-files plan)))
   (append
-   (list (format "full: ~a under ~a" (qt-ci-selection-noun plan) (path->string (qt-ci-plan-root plan)))
-         (format "label: ~a" (qt-ci-label plan))
-         (format "selection: ~a files (selection only; nothing executed, nothing cleaned)"
-                 (length files))
-         (format "coverage: ~a" (qt-ci-coverage-line plan))
-         (string-append "reproduction spelling: ./qt full --file FILE... runs an EXPLICIT REPRODUCTION "
-                        "only (never a PR pass, never full coverage)"))
+   (list
+    (format "full: ~a under ~a" (qt-ci-selection-noun plan) (path->string (qt-ci-plan-root plan)))
+    (format "label: ~a" (qt-ci-label plan))
+    (format "selection: ~a files (selection only; nothing executed, nothing cleaned)" (length files))
+    (format "coverage: ~a" (qt-ci-coverage-line plan))
+    (string-append "reproduction spelling: ./qt full --file FILE... runs an EXPLICIT REPRODUCTION "
+                   "only (never a PR pass, never full coverage)"))
    (if suite
-       (list (format "suite: ~a (classify.rkt's existing suite predicate; not the complete suite)" suite))
+       (list (format "suite: ~a (classify.rkt's existing suite predicate; not the complete suite)"
+                     suite))
        '())
    (if (> total 1)
-       (list (format "shard: ~a of ~a (~a semantics)"
-                     index
-                     total
-                     (if (equal? shard-plan "active")
-                         "duration-aware plan"
-                         "round-robin --shard-files")))
+       (list (format
+              "shard: ~a of ~a (~a semantics)"
+              index
+              total
+              (if (equal? shard-plan "active") "duration-aware plan" "round-robin --shard-files")))
        '())
    (if shard-plan
-       (list (format "shard-plan: ~a (durations ~a)"
-                     shard-plan
-                     (or (qt-ci-spec-durations spec) "<none>")))
+       (list
+        (format "shard-plan: ~a (durations ~a)" shard-plan (or (qt-ci-spec-durations spec) "<none>")))
        '())
    (if (eq? mode 'explicit-reproduction)
        (list (format "reproduction files: ~a (explicit --file selection)"
@@ -1698,8 +1824,7 @@
    (for/list ([item (in-list full-not-provided)])
      (format "  - ~a" item))))
 
-(define qt-ci-pass-pattern
-  #rx"^full passed: [0-9]+ files, [0-9]+ tests \\([^)]+\\)$")
+(define qt-ci-pass-pattern #rx"^full passed: [0-9]+ files, [0-9]+ tests \\([^)]+\\)$")
 
 (define (qt-ci-pass-line plan results)
   (define tests (for/sum ([r (in-list results)]) (qt-result-total r)))

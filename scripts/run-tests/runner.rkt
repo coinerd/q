@@ -1688,10 +1688,20 @@
                            #:shard-total shard-total))
   (exit 0))
 
+;; Direct-invocation guard (Phase D step 1).
+;; `scripts/run-tests.rkt` is now a compatibility adapter that owns the
+;; command-line entry point and delegates selection/execution/reporting to the
+;; shared CI engine in `scripts/testing/full-plan.rkt`. runner.rkt therefore
+;; autoruns only when IT is the module that was actually run (`racket
+;; scripts/run-tests/runner.rkt`), never when the facade loads it for its
+;; re-exports. Matching is on paths, not on a file name, so a copy of
+;; runner.rkt still autoruns and a copy of the facade still runs the adapter.
 (define invoked-directly?
-  (let ([run-file (find-system-path 'run-file)])
+  (let ([run-file (find-system-path 'run-file)]
+        [source (variable-reference->module-source (#%variable-reference))])
     (and (path? run-file)
-         (let ([base (file-name-from-path run-file)])
-           (and base (equal? (path->string base) "run-tests.rkt"))))))
+         (path? source)
+         (equal? (simplify-path (path->complete-path run-file))
+                 (simplify-path (path->complete-path source))))))
 (when invoked-directly?
   (main (vector->list (current-command-line-arguments))))
