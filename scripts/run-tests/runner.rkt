@@ -87,7 +87,7 @@
                   ordering-record->jsexpr)
          (only-in "gate-evidence.rkt" record-gate-evidence! gate-evidence-refusal)
          (only-in "inventory.rkt" print-inventory compute-inventory-hash)
-         (only-in "impact.rkt"
+         (only-in "../testing/changed-selection.rkt"
                   run-impact-selection!
                   print-impact-explain
                   selection->jsexpr

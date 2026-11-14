@@ -31,10 +31,11 @@
 ;;   - `--changed [BASE]` on `full`/`default` — the working-tree diff against
 ;;                 BASE (origin/main, then HEAD) mapped onto the lane through
 ;;                 the repository's `@covers` manifest and the existing impact
-;;                 machinery (`scripts/run-tests/impact.rkt`, required lazily so
-;;                 `full` gains no `json` dependency). An uncomputable or empty
-;;                 diff fails closed; a test file with no `@covers` attribution
-;;                 is INCLUDED (fail open) and reported as unattributable.
+;;                 machinery (`scripts/testing/changed-selection.rkt`, required
+;;                 lazily so `full` gains no `json` dependency). An uncomputable
+;;                 or empty diff fails closed; a test file with no `@covers`
+;;                 attribution is INCLUDED (fail open) and reported as
+;;                 unattributable.
 ;;
 ;; Fail-closed contract (never a false green):
 ;;   - zero selection is an error, not an empty pass;
@@ -167,9 +168,11 @@
 (define full-obligations
   (list
    (string-append "governance-controller suite parity: the Racket finalizer port"
-                  " (tests/test-wave-finalizer-{model,adapter,controller}.rkt) runs here, but the"
-                  " Python oracle it diffs against (scripts/github/test_wave_finalizer.py) is run by"
-                  " the required `lint` CI job, not by this command")
+                  " (tests/test-wave-finalizer-{model,adapter,controller,native}.rkt) runs here,"
+                  " pinned to goldens captured from the original Python governance-controller suite"
+                  " (scripts/github/wave-finalizer.py + test_wave_finalizer.py, since deleted);"
+                  " no live oracle is left to diff against, so this command is the authoritative"
+                  " parity run")
    "macOS/platform lane (platform-specific behavior of this Linux host)"
    "GitHub branch protection and required status checks"
    "release provenance and exact-candidate verification (run `racket scripts/release-preflight.rkt`)"))
@@ -414,9 +417,9 @@
 
 ;; The repository's existing impact machinery, loaded ON DEMAND: `full`,
 ;; `default` and `release` must not inherit the `json` dependency that
-;; `scripts/run-tests/impact.rkt` carries (classify.rkt deliberately avoids it
-;; for minimal installations). A load failure is a selection failure.
-(define-runtime-path impact-module "../run-tests/impact.rkt")
+;; `scripts/testing/changed-selection.rkt` carries (classify.rkt deliberately
+;; avoids it for minimal installations). A load failure is a selection failure.
+(define-runtime-path impact-module "changed-selection.rkt")
 
 (define (impact-procedure name)
   (with-handlers ([exn:fail?

@@ -5,8 +5,9 @@
 ;; @boundary unit
 
 ;; Tests for change-impact selection and deterministic prioritization
-;; (scripts/run-tests/impact.rkt) — TDD plan W4 (selection core, escape
-;; hatches, @covers manifest) and W6 (prioritization, failure history).
+;; (scripts/testing/changed-selection.rkt, formerly run-tests/impact.rkt) —
+;; TDD plan W4 (selection core, escape hatches, @covers manifest) and W6
+;; (prioritization, failure history).
 ;;
 ;; All cases run against a synthetic fixture repo tree in a temp directory:
 ;; the selection core is pure and root-parameterized, so no real repository
@@ -18,7 +19,7 @@
          racket/path
          racket/string
          json
-         (file "../scripts/run-tests/impact.rkt"))
+         (file "../scripts/testing/changed-selection.rkt"))
 
 ;; ------------------------------------------------------------------
 ;; Fixture repo tree

@@ -81,7 +81,7 @@ feedback lane. Neither is PR/CI verification.
 - **Fail closed on an uncomputable or empty diff**: missing git, no resolvable
   BASE, or zero changed files is an error, never an empty pass.
 - Changed files are mapped through `tests/.coverage-manifest.json` (`@covers`)
-  and the impact machinery in `scripts/run-tests/impact.rkt`.
+  and the impact machinery in `scripts/testing/changed-selection.rkt`.
 - **Unattributable test files are INCLUDED (fail open)** and reported as such;
   a changed file that maps to no test escalates to the whole lane.
 - `release` does not accept `--changed`: a release covers the complete suite.
@@ -208,8 +208,8 @@ Selection is conservative by design:
 
 ## Local impact selection (opt-in)
 
-Change-impact selection (implemented in `scripts/run-tests/impact.rkt`, driven
-through the `scripts/run-tests.rkt` CLI) is an **opt-in local developer
+Change-impact selection (implemented in `scripts/testing/changed-selection.rkt`,
+driven through the `scripts/run-tests.rkt` CLI) is an **opt-in local developer
 workflow**. It is never invoked by CI (rationale below) and never replaces the
 normal suites.
 

@@ -33,7 +33,7 @@
          "run-tests/gate-evidence.rkt"
          "run-tests/inventory.rkt"
          "run-tests/shard-plan.rkt"
-         "run-tests/impact.rkt"
+         "testing/changed-selection.rkt"
          "run-tests/runner.rkt"
          "testing/full-plan.rkt")
 

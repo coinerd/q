@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; impact.rkt — change-impact test selection and deterministic prioritization.
+;; changed-selection.rkt — change-impact test selection and deterministic prioritization.
 ;;
 ;; W4 (conservative change-impact selection) + W6 (deterministic prioritization)
 ;; of the TDD/test-suite improvement plan (.planning/TDD-TEST-STRATEGY-PLAN.md).
@@ -79,7 +79,7 @@
 ;; ============================================================
 
 ;; Repo root for runner-level orchestration (three levels up from this file:
-;; scripts/run-tests/impact.rkt → repo root).
+;; scripts/testing/changed-selection.rkt → repo root).
 (define repo-root (simplify-path (build-path (syntax-source #'here) 'up 'up 'up)))
 
 (define (root-relative root p)
