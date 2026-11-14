@@ -3,21 +3,29 @@
 ;; @suite extensions
 ;; @covers extensions/gsd/delivery-coordinator.rkt
 ;; @covers scripts/gsd-delivery-pr.rkt
+;; @covers scripts/gsd-delivery-write.rkt
+;; @covers scripts/gsd-delivery-status.rkt
 ;; @timeout 300
 ;;
-;; Phase B slice S5 — native read-only delivery ladder wiring.
+;; Phase B slices S5/S6 — native delivery action wiring.
 ;;
 ;; The coordinator stages that used to shell `gsd-delivery.py resolve-pr /
 ;; pr-ci / review` now dispatch to the native scripts/gsd-delivery-pr.rkt
 ;; functions (delivery-resolve-pr!, delivery-pr-ci!, delivery-review!) with the
-;; exact arguments the Python invocation carried. This file pins that wiring:
+;; exact arguments the Python invocation carried, and slice S6 moved `open-pr`
+;; (scripts/gsd-delivery-write.rkt) plus the `status` / `governance` readbacks
+;; (scripts/gsd-delivery-status.rkt) to native code too. This file pins that
+;; wiring:
 ;;
-;;   (a) the three read-only stages never spawn python3,
+;;   (a) the native stages never spawn python3,
 ;;   (b) a native refusal surfaces the SAME reason string the Python exit-2
 ;;       {"status":"delivery-pending","reason":…} payload produced (each case
 ;;       compares against a RECORDED expectation constant),
-;;   (c) every other stage still dispatches through the controller
-;;       (open-pr / merge / governance are asserted to reach python3).
+;;   (c) `status` is dispatched WITH the campaign root: a two-tier fixture
+;;       (campaign root + nested q checkout) distinguishes the delivered
+;;       readback from a root-less call, which refuses as ambiguous,
+;;   (d) every stage that still dispatches through the controller is asserted
+;;       to reach python3 (merge / prepare / binding-*).
 ;;
 ;; Fixture: a real local git origin plus a per-case subject clone (so
 ;; `refresh`, `origin/main`, `merge-base` and the PR-head fetch are REAL
@@ -35,6 +43,7 @@
          "../extensions/gsd/campaign-repository.rkt"
          (only-in "../extensions/gsd/delivery-journal.rkt" record-delivery-receipt!)
          "../extensions/gsd/delivery-coordinator.rkt"
+         (only-in "../scripts/gsd-delivery-status.rkt" delivery-status!)
          "../sandbox/subprocess.rkt")
 
 (define slug "example/q")
@@ -46,6 +55,22 @@
 (define recorded-multiple-prs-reason "multiple pull requests already target branch campaign/test")
 (define recorded-branch-mismatch-reason "pull request branch does not match expected branch")
 (define recorded-symlinked-root-reason "symlinked campaign root refused")
+;; S6 recordings (same provenance, verified against the Python action's own
+;; text): the delivered `status` readback, the governance binding refusal, and
+;; the refusal a `status` call produces when the campaign root is NOT passed.
+(define recorded-binding-absent-reason
+  "W0 verified; delivery pending: protected campaign binding is absent")
+(define recorded-ambiguous-root-reason "ambiguous campaign roots; explicit --campaign-root required")
+
+;; Recorded governance refusal for a wave with no merged binding PR.
+(define (recorded-governance-unresolvable-reason plan)
+  (format "governance cannot self-resolve exactly one merged binding PR for branch binding/~a-w0"
+          (substring plan 0 12)))
+
+;; The deterministic (generation 0) binding branch the coordinator must hand to
+;; `governance` as --expected-branch.
+(define (expected-binding-branch plan)
+  (format "binding/~a-w0" (substring plan 0 12)))
 ;; ============================================================
 ;; Fixture helpers
 ;; ============================================================
@@ -89,8 +114,12 @@
 
 ;; The fake `gh`: logs the argument vector, recovers the route argument and
 ;; prints the fixture. `case` patterns are DOUBLE-QUOTED so `?`/`&` stay
-;; literal.
+;; literal. A route entry whose pattern is `*` becomes the fallback fixture,
+;; for routes that cannot be spelled out up front (one embedding the campaign
+;; plan hash).
 (define (install-gh-shim! bin fixtures routes)
+  (define fallback (findf (lambda (entry) (equal? (car entry) "*")) routes))
+  (define explicit (filter (lambda (entry) (not (equal? (car entry) "*"))) routes))
   (define shim (build-path bin "gh"))
   (define lines
     (append (list "#!/bin/sh"
@@ -102,9 +131,12 @@
                   "  esac"
                   "done"
                   "case \"$route\" in")
-            (for/list ([entry (in-list routes)])
+            (for/list ([entry (in-list explicit)])
               (format "  ~s) /bin/cat \"$GH_SHIM_FIXTURES/~a\" ;;" (car entry) (cadr entry)))
-            (list "  *) printf 'no fixture for route %s\\n' \"$route\" >&2; exit 66 ;;" "esac")))
+            (list (if fallback
+                      (format "  *) /bin/cat \"$GH_SHIM_FIXTURES/~a\" ;;" (cadr fallback))
+                      "  *) printf 'no fixture for route %s\\n' \"$route\" >&2; exit 66 ;;")
+                  "esac")))
   (put shim (string-append (string-join lines "\n") "\n"))
   (file-or-directory-permissions shim #o700)
   (for ([entry (in-list routes)])
@@ -186,6 +218,10 @@
 
 (define (pr-route [number 1])
   (format "repos/~a/pulls/~a" slug number))
+
+;; The PR-collection route `gh api -X POST repos/<slug>/pulls` targets.
+(define (create-route)
+  (format "repos/~a/pulls" slug))
 
 ;; ============================================================
 ;; Campaign fixture: the durable receipt the coordinator reads
@@ -290,6 +326,59 @@
 
 (define (spawned-python3? ctx)
   (file-exists? (hash-ref ctx 'marker)))
+
+;; ============================================================
+;; Two-tier fixture for the delivered `status` readback
+;; ============================================================
+
+;; Campaign root <root>/ holds the journal; <root>/q/ is the nested repository
+;; (the recognised two-tier workspace layout), so the coordinator resolves the
+;; repo to <root>/q while the campaign root stays <root>. The nested checkout
+;; carries its own EMPTY .planning/ so a status call WITHOUT the explicit
+;; campaign root refuses as ambiguous — the control assertion that proves the
+;; delivered stage really hands the campaign root to the native action.
+;;
+;; CTX keys: root, subject (<root>/q), plan, head, marker, python3-racket path.
+(define (with-two-tier-case proc)
+  (define root (make-temporary-file "status-wiring-~a" 'directory))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define world (shared-origin))
+     (define build-env (fixture-env root "/usr/bin:/bin"))
+     (define subject (build-path root "q"))
+     (git! build-env root "clone" "-q" (path->string (hash-ref world 'origin)) (path->string subject))
+     (git! build-env subject "config" "user.name" "Test")
+     (git! build-env subject "config" "user.email" "test@example.invalid")
+     (git! build-env subject "config" "remote.origin.url" "https://github.com/example/q.git")
+     (git! build-env
+           subject
+           "config"
+           (format "url.~a.insteadOf" (path->string (hash-ref world 'origin)))
+           "https://github.com/example/q.git")
+     (define plan (make-campaign! root (hash-ref world 'head)))
+     ;; An independent .planning in the nested checkout: that is what makes a
+     ;; root-less `status` ambiguous (never guessed).
+     (make-directory* (build-path subject ".planning"))
+     (define bin (build-path root "bin"))
+     (define marker (build-path root "python-invoked"))
+     (make-directory* bin)
+     (install-python3-spy! bin marker)
+     ;; The native status action loads the journal through `racket
+     ;; scripts/gsd-binding-data.rkt`, so the interpreter's own directory stays
+     ;; on PATH; only python3 is shimmed.
+     (define racket-dir (path-only (find-executable-path "racket")))
+     (define env
+       (fixture-env root
+                    (format "~a:/usr/bin:/bin~a"
+                            (path->string bin)
+                            (if racket-dir
+                                (format ":~a" (path->string racket-dir))
+                                ""))))
+     (parameterize ([current-environment-variables env])
+       (proc
+        (hasheq 'root root 'subject subject 'plan plan 'head (hash-ref world 'head) 'marker marker))))
+   (lambda () (delete-directory/files root #:must-exist? #f))))
 
 ;; ============================================================
 ;; Fixtures for the green pr-ci verdict (the full trusted-check chain)
@@ -485,16 +574,89 @@
                         (check-false (spawned-python3? ctx)
                                      "an unready review stage must not reach python3")))))
 
-;; (c) every mutating action still dispatches through the controller.
+;; (a)+(b) implementation-pr: native open-pr (the mutating create step).
 (module+ test
-  (test-case "implementation-pr's missing-PR path still dispatches open-pr through the controller"
+  (test-case "implementation-pr opens the PR natively (python3 is never spawned)"
     (with-ladder-case
-     (list (list (open-route) "open.json" "[]") (list (all-route) "all.json" "[]"))
+     (list (list (open-route) "open.json" "[]")
+           (list (all-route) "all.json" "[]")
+           (list (create-route) "create.json" (json-text (pr-hash)))
+           (list (pr-route 1) "pr1.json" (json-text (pr-hash))))
      (lambda (ctx)
-       (stage-effect ctx "implementation-pr")
-       (check-true (spawned-python3? ctx)
-                   "opening a pull request is mutating and stays on gsd-delivery.py")))))
+       (define result (stage-effect ctx "implementation-pr"))
+       (check-eq? (delivery-effect-result-kind result) 'ok)
+       (check-equal? (hash-ref (delivery-effect-result-data result) 'status #f) "opened")
+       (check-false (spawned-python3? ctx) "open-pr is native since slice S6: no python3")
+       ;; The mutation really POSTed the collection route the Python action used,
+       ;; so this is not a resolve-only no-op path.
+       (check-true (for/or ([line (in-list (gh-calls ctx))])
+                     (and (string-contains? line "-X POST") (string-contains? line (create-route))))
+                   "open-pr must POST repos/<slug>/pulls")))))
 
+(module+ test
+  (test-case "open-pr native refusal preserves the Python reason string"
+    ;; Two open PRs for one branch: the same fail-closed ambiguity the Python
+    ;; action refused (gsd-delivery.py's resolve_existing_pr), same reason text.
+    (with-ladder-case (list (list (open-route)
+                                  "open.json"
+                                  (json-text (list (pr-hash #:number 1) (pr-hash #:number 2))))
+                            (list (all-route) "all.json" "[]"))
+                      (lambda (ctx)
+                        (define result
+                          (run-native-open-pr (hash-ref ctx 'subject)
+                                              (hash-ref ctx 'plan)
+                                              0
+                                              "implementation-pr"
+                                              branch
+                                              (hash-ref ctx 'head)))
+                        (check-eq? (delivery-effect-result-kind result) 'blocked)
+                        (check-equal? (hash-ref (delivery-effect-result-data result) 'reason)
+                                      recorded-multiple-prs-reason)
+                        (check-false (spawned-python3? ctx)
+                                     "a refused native open-pr must not fall back to python3")))))
+
+;; (a)+(b) governance: the native protected-publication readback.
+(module+ test
+  (test-case "governance runs natively with the deterministic binding branch (no python3)"
+    ;; No merged binding PR exists: the native action refuses with the exact
+    ;; Python reason, and the API route it queried carries the binding branch the
+    ;; coordinator handed it (--expected-branch travelled).
+    (with-ladder-case (list (list "*" "all.json" "[]"))
+                      (lambda (ctx)
+                        (define plan (hash-ref ctx 'plan))
+                        (define result (stage-effect ctx "governance"))
+                        (check-eq? (delivery-effect-result-kind result) 'blocked)
+                        (check-equal? (hash-ref (delivery-effect-result-data result) 'reason)
+                                      (recorded-governance-unresolvable-reason plan))
+                        (check-false (spawned-python3? ctx)
+                                     "governance is native since slice S6: no python3")
+                        (check-true (for/or ([line (in-list (gh-calls ctx))])
+                                      (string-contains? line (expected-binding-branch plan)))
+                                    "governance must query the deterministic binding branch")))))
+
+;; (a)+(b)+(c) delivered: native status, dispatched WITH the campaign root.
+(module+ test
+  (test-case "delivered runs status natively WITH the campaign root (no python3)"
+    (with-two-tier-case
+     (lambda (ctx)
+       (define root (hash-ref ctx 'root))
+       (define plan (hash-ref ctx 'plan))
+       ;; The journal the native readback must observe lives at the CAMPAIGN ROOT
+       ;; (not in the nested checkout).
+       (check-true (file-exists?
+                    (build-path root ".planning" "campaigns" plan "coordinator-w0.json")))
+       (define result (default-delivery-controller root plan 0 "delivered"))
+       (check-eq? (delivery-effect-result-kind result) 'blocked)
+       (check-equal? (hash-ref (delivery-effect-result-data result) 'reason)
+                     recorded-binding-absent-reason)
+       (check-false (spawned-python3? ctx) "status is native since slice S6: no python3")
+       ;; CONTROL: without the explicit campaign root the same repository refuses
+       ;; as ambiguous, so the reason above can only come from the root argument
+       ;; the delivered stage passes.
+       (check-exn (lambda (e) (equal? (exn-message e) recorded-ambiguous-root-reason))
+                  (lambda () (delivery-status! (hash-ref ctx 'subject) plan 0)))))))
+
+;; (d) every stage still on run-controller keeps reaching python3.
 (module+ test
   (test-case "implementation-merged still dispatches the protected merge through the controller"
     (with-ladder-case
@@ -506,10 +668,20 @@
                    "the protected merge is mutating and stays on gsd-delivery.py")))))
 
 (module+ test
-  (test-case "governance still dispatches through the controller"
+  (test-case "binding-prepared still dispatches prepare through the controller"
+    (with-ladder-case '()
+                      (lambda (ctx)
+                        (stage-effect ctx "binding-prepared")
+                        (check-true (spawned-python3? ctx)
+                                    "prepare is mutating and stays on gsd-delivery.py")))))
+
+(module+ test
+  (test-case "binding-* stages still dispatch through the controller"
     (with-ladder-case
      '()
      (lambda (ctx)
-       (stage-effect ctx "governance")
-       (check-true (spawned-python3? ctx)
-                   "governance is not a read-only ladder action and stays on gsd-delivery.py")))))
+       (for ([stage (in-list '("binding-pr" "binding-ci" "binding-merged" "binding-review"))])
+         (when (file-exists? (hash-ref ctx 'marker))
+           (delete-file (hash-ref ctx 'marker)))
+         (stage-effect ctx stage)
+         (check-true (spawned-python3? ctx) (format "~a stays on gsd-delivery.py" stage)))))))

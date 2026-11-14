@@ -76,6 +76,9 @@
          run-native-resolve-pr
          run-native-pr-ci
          run-native-review
+         run-native-open-pr
+         run-native-status
+         run-native-governance
          default-active-delivery-evidence-path
          default-artifact-provenance-root
          resolve-coordinator-repo
@@ -442,12 +445,17 @@
          (only-in "../../scripts/gsd-delivery-preflight.rkt" delivery-preflight!)
          (only-in "../../scripts/gsd-delivery-sync.rkt" delivery-sync!)
          ;; Phase B slice S5: the READ-ONLY ladder actions (resolve-pr, pr-ci,
-         ;; review) are native too. Only the mutating actions (open-pr, merge,
-         ;; prepare, binding-*, governance, status) keep the Python dispatch.
+         ;; review) are native too.
          (only-in "../../scripts/gsd-delivery-pr.rkt"
                   delivery-resolve-pr!
                   delivery-pr-ci!
                   delivery-review!)
+         ;; Phase B slice S6: the `open-pr` mutation (write seam) plus the
+         ;; read-only `status`/`governance` readback actions are native. Only
+         ;; `merge`, `prepare` and the `binding-*` actions keep the Python
+         ;; dispatch below.
+         (only-in "../../scripts/gsd-delivery-write.rkt" delivery-open-pr!)
+         (only-in "../../scripts/gsd-delivery-status.rkt" delivery-status! delivery-governance!)
          racket/runtime-path
          json
          (only-in "../../sandbox/subprocess.rkt"
@@ -685,7 +693,7 @@
                   (redact-delivery-text (format "~a" (hash-ref data 'reason "delivery pending"))))))))
 
 ;; ============================================================
-;; Phase B slice S5: native read-only ladder actions
+;; Phase B slices S5/S6: native delivery actions
 ;; ============================================================
 ;;
 ;; `resolve-pr`, `pr-ci` and `review` were the remaining READ-ONLY actions
@@ -707,7 +715,15 @@
 ;;     {"status":"delivery-pending","reason":…} payload carried;
 ;;   * no stage ever spawns python3.
 ;;
-;; These three are provided ONLY so the stage wiring is testable directly: the
+;; Phase B slice S6 repeats the same discipline for the `open-pr` mutation
+;; (scripts/gsd-delivery-write.rkt) and the read-only `status`/`governance`
+;; readback actions (scripts/gsd-delivery-status.rkt): same repository value,
+;; same `--plan/--wave` identity, same campaign root / expected branch the
+;; Python invocation carried, the same interpreter (so "opened"/"governed"/
+;; "delivered" keep their typed effect), and the same redacted blocked stop on
+;; refusal. `merge`, `prepare` and every `binding-*` action keep run-controller.
+;;
+;; These helpers are provided ONLY so the stage wiring is testable directly: the
 ;; `implementation-review` stage reaches its dispatch only after the durable
 ;; evidence-readiness gate, whose ready state needs a full owned-proof
 ;; fixture. That end-to-end path stays covered by the existing production
@@ -716,13 +732,16 @@
   (delivery-effect-result 'blocked
                           (hasheq 'stage target-stage 'reason (redact-delivery-text message))))
 
-(define (native-ladder-repo base-dir)
+;; The ONE repository value every native action receives: the shared
+;; layout-aware coordinator root (R76), exactly the root run-controller passes
+;; to gsd-delivery.py as `--repo` (`path->complete-path` of the same value).
+(define (native-delivery-repo base-dir)
   (path->complete-path (resolve-coordinator-repo base-dir)))
 
 (define (run-native-resolve-pr base-dir plan wave target-stage branch expected-head)
   (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
     (default-delivery-controller-interpret target-stage
-                                           (delivery-resolve-pr! (native-ladder-repo base-dir)
+                                           (delivery-resolve-pr! (native-delivery-repo base-dir)
                                                                  plan
                                                                  wave
                                                                  branch
@@ -730,15 +749,17 @@
 
 (define (run-native-pr-ci base-dir plan wave target-stage pr-number branch expected-head)
   (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
-    (default-delivery-controller-interpret
-     target-stage
-     (delivery-pr-ci! (native-ladder-repo base-dir) pr-number branch #:expected-head expected-head))))
+    (default-delivery-controller-interpret target-stage
+                                           (delivery-pr-ci! (native-delivery-repo base-dir)
+                                                            pr-number
+                                                            branch
+                                                            #:expected-head expected-head))))
 
 (define (run-native-review base-dir plan wave target-stage expected-head expected-branch generation)
   (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
     (default-delivery-controller-interpret
      target-stage
-     (delivery-review! (native-ladder-repo base-dir)
+     (delivery-review! (native-delivery-repo base-dir)
                        plan
                        wave
                        expected-head
@@ -750,6 +771,36 @@
                        ;; than stringifying it.
                        #:campaign-root base-dir
                        #:generation generation))))
+
+;; open-pr: the SAME `--expected-branch`/`--expected-head` the Python action
+;; received. The mutation keeps its EXACT order (resolve-before-create, forced
+;; single-branch refresh, receipt-tip pin, then create) inside the native
+;; action, and its "opened" payload goes through the same interpreter.
+(define (run-native-open-pr base-dir plan wave target-stage expected-branch expected-head)
+  (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
+    (default-delivery-controller-interpret target-stage
+                                           (delivery-open-pr! (native-delivery-repo base-dir)
+                                                              plan
+                                                              wave
+                                                              expected-branch
+                                                              #:expected-head expected-head))))
+
+;; status: the delivered readback. The campaign root travels UNCHANGED (the
+;; Python invocation passed `--campaign-root <base-dir>`); the native action
+;; takes it as a path, so it is handed the same value rather than stringified.
+(define (run-native-status base-dir plan wave target-stage)
+  (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
+    (default-delivery-controller-interpret
+     target-stage
+     (delivery-status! (native-delivery-repo base-dir) plan wave #:campaign-root base-dir))))
+
+;; governance: the read-only protected-publication check, with the same
+;; deterministic binding branch (generation-aware) the Python action received.
+(define (run-native-governance base-dir plan wave target-stage expected-branch)
+  (with-handlers ([exn:fail? (lambda (e) (native-stage-blocked target-stage (exn-message e)))])
+    (default-delivery-controller-interpret
+     target-stage
+     (delivery-governance! (native-delivery-repo base-dir) plan wave expected-branch))))
 
 (define (default-delivery-controller base-dir plan wave target-stage)
   ;; The controller shell runs in the checkout identified by the shared
@@ -830,10 +881,11 @@
        target-stage
        (delivery-sync! (path->complete-path repo) (current-git-delivery-branch base-dir plan wave)))))
   ;; Map the journal's linear delivery targets to their controller actions.
-  ;; Native (python3-free) since Phase B slices S1/S2/S5: delivery-preflight,
-  ;; sync and the read-only ladder actions resolve-pr / pr-ci / review. Every
-  ;; MUTATING action (open-pr, merge, prepare, binding-*, governance, status)
-  ;; keeps the gsd-delivery.py dispatch.
+  ;; Native (python3-free) since Phase B slices S1/S2/S5/S6: delivery-preflight,
+  ;; sync, the read-only ladder actions resolve-pr / pr-ci / review, the
+  ;; `open-pr` mutation, and the status/governance readbacks. Only the mutating
+  ;; `merge` / `prepare` / `binding-*` actions keep the gsd-delivery.py
+  ;; dispatch.
   (case target-stage
     ;; Register F5: the read-only preflight action at the handoff seam —
     ;; branch published, remote tip at the verified head (evidence-only
@@ -913,11 +965,15 @@
                  (format "controller resolved no usable PR identity for branch ~a" pr-branch)))]
        [(and (eq? (delivery-effect-result-kind resolved-pr) 'blocked)
              (equal? resolved-pr-status "none"))
-        (run-controller "open-pr"
-                        "--expected-branch"
-                        pr-branch
-                        "--expected-head"
-                        (default-delivery-receipt-head base-dir plan wave))]
+        ;; Native since Phase B slice S6: the same --expected-branch /
+        ;; --expected-head the Python action received. Creating a pull request
+        ;; is the ONE mutating step of this stage; it never spawns python3.
+        (run-native-open-pr base-dir
+                            plan
+                            wave
+                            target-stage
+                            pr-branch
+                            (default-delivery-receipt-head base-dir plan wave))]
        [else resolved-pr])]
     [("implementation-ci")
      ;; CI is evaluated only after an exact open PR has been resolved from the
@@ -1056,9 +1112,13 @@
                                     "binding-merge"
                                     #:base-dir base-dir)]
     [("governance")
-     (run-controller "governance"
-                     "--expected-branch"
-                     (default-binding-branch plan wave #:base-dir base-dir))]
+     ;; Native since Phase B slice S6: the same generation-aware deterministic
+     ;; binding branch the Python invocation passed via --expected-branch.
+     (run-native-governance base-dir
+                            plan
+                            wave
+                            target-stage
+                            (default-binding-branch plan wave #:base-dir base-dir))]
     ;; The campaign working checkout synchronizes with the published bytes
     ;; (fast-forward-only, never switching branches): either the wave branch
     ;; itself or the shared main checkout the controller runs from. Native
@@ -1069,8 +1129,9 @@
     ;; receipt-bound proof the full-loop checkpoint finalizes DONE from.
     ;; default-delivery-controller-interpret already maps its "delivered"
     ;; status to an ok effect; this wiring makes the terminal stage
-    ;; reachable instead of an unimplemented stop.
-    [("delivered") (run-controller "status" "--campaign-root" (path->string base-dir))]
+    ;; reachable instead of an unimplemented stop. Native since Phase B slice
+    ;; S6 (the same `--campaign-root <base-dir>` the Python invocation passed).
+    [("delivered") (run-native-status base-dir plan wave target-stage)]
     [else
      ;; Stages the controller shell cannot yet act on deterministically are
      ;; typed stops with an actionable reason — never fabricated progress.
