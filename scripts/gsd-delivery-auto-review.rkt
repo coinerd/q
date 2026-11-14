@@ -98,7 +98,19 @@
          audit-binding
          owned-audit-mode
          auto-review-stages
-         implementation-review-staging)
+         implementation-review-staging
+         ;; The owned-proof authority seam and the committed-rejection recovery.
+         ;; Exported for the bounded native regression suites
+         ;; (tests/test-gsd-evidence-rejection-binding.rkt and
+         ;; tests/test-gsd-supplemental-evidence-audit.rkt), which inject a fake
+         ;; git/run seam to pin every guard without an owned gate execution.
+         owned-authority
+         bind-owned-request
+         reauthenticate-owned-request
+         recover-rejected-artifact
+         ;; The typed reviewer-infrastructure stop (Python `_ReviewInfra`), so a
+         ;; regression can assert it instead of a broad `exn:fail?`.
+         exn:fail:review-infra?)
 
 (define-runtime-path this-source "gsd-delivery-auto-review.rkt")
 (define scripts-dir (path-only this-source))
