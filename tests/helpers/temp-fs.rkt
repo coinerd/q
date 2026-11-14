@@ -12,7 +12,7 @@
 
 (require racket/file
          rackunit
-         "../../scripts/run-tests/work-counters.rkt")
+         "work-counters.rkt")
 
 (provide with-temp-file
          with-temp-dir)
