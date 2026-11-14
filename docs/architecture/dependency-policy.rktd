@@ -445,7 +445,7 @@
        (risk
         . "Fast-lane file inventory with ownership matrix reconciliation and tier semantics; grew with the v1.00.28 workload census and grouped-lane governance; score ~21192")
        (owner . "tools"))
-      ("scripts/run-tests/cohort-report.rkt"
+      ("scripts/ci/cohort-report.rkt"
        (risk
         . "Test cohort measurement report builder (census/final-cohort aggregation, per-row verdict binding); grew with the v1.00.28 measurement campaign; score ~20888")
        (owner . "tools"))
