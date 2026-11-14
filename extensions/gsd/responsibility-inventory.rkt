@@ -515,23 +515,28 @@
    ;; ledger is additionally written atomically via
    ;; call-with-atomic-output-file / make-parent-directory* (fs-write /
    ;; fs-rename / mkdir, invisible to the marker scanner).
+   ;; Phase B slice S10: readback is NATIVE (delivery-status!) instead of a
+   ;; `python3 scripts/gsd-delivery.py status` shell, and the native port is
+   ;; resolved with `dynamic-require` at first use because the shared bounded-git
+   ;; seam requires controller-environment from THIS module (a static require
+   ;; would close a module cycle). The credential boundary (controller-environment
+   ;; / sanitize-env) is still owned here; only the status subprocess is gone.
    (make-entry "delivery-handoff.rkt"
                'campaign-state
-               '(fs-read path-ops parameterize subprocess)
+               '(fs-read subprocess parameterize path-ops dynamic-require)
                '()
-               '("json" "racket/file"
-                        "racket/format"
-                        "racket/path"
-                        "racket/runtime-path"
-                        "racket/string"
-                        "campaign-state"
-                        "campaign-repository"
-                        "campaign-decision"
-                        "git-root-layout"
-                        "delivery-journal"
-                        "delivery-receipt"
-                        "planning-paths"
-                        "sandbox/subprocess"))
+               '("racket/file" "racket/format"
+                               "racket/path"
+                               "racket/runtime-path"
+                               "racket/string"
+                               "campaign-state"
+                               "campaign-repository"
+                               "campaign-decision"
+                               "git-root-layout"
+                               "delivery-journal"
+                               "delivery-receipt"
+                               "planning-paths"
+                               "sandbox/subprocess"))
    ;; JSON journal writes atomically; fs-write/fs-rename/mkdir are not visible
    ;; to the legacy effect marker scanner, as with delivery-handoff above.
    ;; W3 register F5: the remote-pending marker's clear deletes the sibling

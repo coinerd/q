@@ -253,7 +253,12 @@
     (check-true (string-contains? (hash-ref d 'detail) "delivery handoff: delivery-pending")
                 (format "detail: ~a" (hash-ref d 'detail)))
     (check-true (string-contains? (hash-ref d 'next-action) "do not rerun implementation"))
-    (check-true (string-contains? (hash-ref d 'next-action) "gsd-delivery.py"))
+    ;; S10: the operator hint names the NATIVE entry point, never the retired
+    ;; `python3 scripts/gsd-delivery.py` shell.
+    (check-true (string-contains? (hash-ref d 'next-action) "scripts/gsd-delivery-status.rkt")
+                (format "next-action: ~a" (hash-ref d 'next-action)))
+    (check-false (string-contains? (hash-ref d 'next-action) "gsd-delivery.py")
+                 (format "next-action: ~a" (hash-ref d 'next-action)))
     (check-true (pair? (hash-ref d 'artifacts)) "the durable handoff record is referenced")
     (check-eq? (campaign-wave-status (car (campaign-record-waves (load-campaign-record root
                                                                                        plan-id))))

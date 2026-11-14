@@ -45,13 +45,8 @@
          racket/string
          (only-in "delivery-handoff.rkt" controller-environment redact-delivery-text)
          (only-in "delivery-journal.rkt" load-delivery-journal)
-         (only-in "../../sandbox/subprocess.rkt"
-                  run-subprocess
-                  subprocess-result-stdout
-                  subprocess-result-stderr
-                  subprocess-result-exit-code
-                  subprocess-result-timed-out?
-                  subprocess-result-truncated?))
+         (only-in "../../scripts/gsd-delivery-auto-review.rkt"
+                  auto-review-seam-run!))
 
 (provide current-gsd-auto-review-runner
          review-runner-installed?
@@ -181,14 +176,22 @@
   (path->string
    (build-path base-dir ".planning" "campaigns" plan (format "review-w~a-g~a" wave generation))))
 
-(define-runtime-path review-python-script "../../scripts/gsd-delivery.py")
-
 ;; Production trusted-controller seam: (args (listof string?)) -> jsexpr.
-;; Shells scripts/gsd-delivery.py through the SAME credential boundary as
-;; the delivery controller; a nonzero exit, timeout or truncation raises
-;; with a redacted typed reason (the caller maps failures to review-infra).
-;; The reviewer runner is NEVER invoked through this seam — credentials and
-;; reviewer sessions stay on opposite sides of the boundary.
+;; S12 moved the `auto-review` action (prepare + finalize) to the NATIVE
+;; controller (scripts/gsd-delivery-auto-review.rkt), so no Python process is
+;; spawned here any more. The seam keeps the SAME contract the dispatcher has
+;; always relied on:
+;;
+;;   * a typed controller refusal comes back as its {"status":"delivery-pending",
+;;     "reason":...} payload (a BLOCKED stop with the preserved reason);
+;;   * an infrastructure fault (budget, timeout, exec boundary) is RE-RAISED with
+;;     its typed cause, so `run-phase` maps it to review-infra — never a
+;;     controller refusal, never a rejection;
+;;   * the reviewer runner is still NEVER invoked through this seam: credentials
+;;     and reviewer sessions stay on opposite sides of the boundary.
+;;
+;; The name is kept because it is the exported port contract the coordinator and
+;; the dispatch tests inject/override.
 (define (default-review-python base-dir plan wave)
   (define repo
     (if (or (directory-exists? (build-path base-dir ".git"))
@@ -196,52 +199,14 @@
         base-dir
         (build-path base-dir "q")))
   (lambda (args)
-    (define result
-      (run-subprocess "python3"
-                      #:args (append (list (path->string review-python-script))
-                                     args
-                                     (list "--repo"
-                                           (path->string (path->complete-path repo))
-                                           "--plan"
-                                           plan
-                                           "--wave"
-                                           (number->string wave)))
-                      #:directory base-dir
-                      #:environment (controller-environment)
-                      #:timeout 240
-                      #:process-group? #t))
-    (cond
-      [(or (subprocess-result-timed-out? result) (subprocess-result-truncated? result))
-       (raise-argument-error
-        'review-dispatch
-        (redact-delivery-text "review controller timed out or produced truncated output")
-        #f)]
-      [(zero? (subprocess-result-exit-code result))
-       (with-handlers ([exn:fail?
-                        (lambda (_e)
-                          (raise-argument-error
-                           'review-dispatch
-                           (redact-delivery-text "review controller returned malformed JSON output")
-                           #f))])
-         (string->jsexpr (subprocess-result-stdout result)))]
-      [else
-       ;; A typed controller refusal (exit 2 with a delivery-pending JSON
-       ;; payload) is a BLOCKED stop with the preserved reason — never an
-       ;; infrastructure failure, never a rejection. Anything else raises
-       ;; with a redacted typed reason (mapped to review-infra upstream).
-       (define refused
-         (with-handlers ([exn:fail? (lambda (_) #f)])
-           (define data (string->jsexpr (subprocess-result-stdout result)))
-           (and (hash? data) (equal? (hash-ref data 'status #f) "delivery-pending") data)))
-       (cond
-         [refused refused]
-         [else
-          (raise-argument-error
-           'review-dispatch
-           (redact-delivery-text (string-trim (format "review controller failed: ~a ~a"
-                                                      (subprocess-result-stderr result)
-                                                      (subprocess-result-stdout result))))
-           #f)])])))
+    (auto-review-seam-run!
+     (append args
+             (list "--repo"
+                   (path->string (path->complete-path repo))
+                   "--plan"
+                   plan
+                   "--wave"
+                   (number->string wave))))))
 
 ;; ---------------------------------------------------------------------------
 ;; The dispatcher

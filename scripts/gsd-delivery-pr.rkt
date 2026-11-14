@@ -156,7 +156,12 @@
          blob-or-none
          binding-path
          artifact-path
-         excluded-prefixes)
+         excluded-prefixes
+         ;; S12 (auto-review) reuses these exact seams instead of duplicating
+         ;; digest computation and datum materialization.
+         content-digest
+         materialize
+         read-binding-datum)
 
 ;; ============================================================
 ;; Constants (mirror scripts/gsd-delivery.py)
