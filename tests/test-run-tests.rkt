@@ -853,8 +853,13 @@
         out)))))
 
 (define (r92-make-counter-fixture kind)
-  (define fixture (make-temporary-file "r92-counter-~a.rkt"))
-  (define counter (make-temporary-file "r92-counter-count-~a" #f (path-only fixture)))
+  ;; Each fixture lives in its OWN private directory. A shared temp directory can
+  ;; contain an unrelated sibling (e.g. a stale `info.rkt`), which makes
+  ;; `raco test <file>` fail for reasons unrelated to the fixture; a private
+  ;; directory keeps the R92 contract environment-independent.
+  (define dir (make-temporary-directory))
+  (define fixture (build-path dir "r92-counter.rkt"))
+  (define counter (build-path dir "counter"))
   ;; Pre-create the external counter file so fixtures can append to it.
   (call-with-output-file counter #:exists 'truncate void)
   (r92-write-counter-fixture fixture counter kind)
@@ -874,8 +879,10 @@
     (apply system*/exit-code args)))
 
 (define (r92-cleanup! fixture counter)
-  (delete-file fixture)
-  (delete-file counter))
+  ;; Both live in one private directory; remove it wholesale.
+  (define dir (path-only fixture))
+  (when (directory-exists? dir)
+    (delete-directory/files dir)))
 
 (test-case "BUG-0092: forced grouped-in-process actually runs grouped, exactly once"
   (define run (runner-ref 'run-single-file))
