@@ -939,7 +939,7 @@
   ;; unscoped root.
   (require racket/system
            racket/port
-           (only-in (file "../scripts/run-tests/sha256.rkt") sha256 bytes->hex-string))
+           (only-in (file "../util/sha256.rkt") sha256 bytes->hex-string))
 
   (define (receipt-for branch head)
     (hash-set (hash-set (receipt-head) 'branch branch) 'head head))

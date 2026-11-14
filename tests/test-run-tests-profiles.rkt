@@ -152,7 +152,7 @@
       #f))
 
 (define sha256-hex*
-  (dynamic-require (build-path project-root "scripts" "run-tests" "sha256.rkt")
+  (dynamic-require (build-path project-root "util" "sha256.rkt")
                    'sha256-hex
                    (lambda () (error 'w2-overlap "sha256.rkt no longer exports sha256-hex"))))
 

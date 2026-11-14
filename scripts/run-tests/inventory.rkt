@@ -677,7 +677,7 @@
 ;; matches what the actual suite classifiers select. Deterministic;
 ;; missing evidence is reported, never imputed.
 
-(require "sha256.rkt")
+(require "../../util/sha256.rkt")
 
 (define v124-gate-names '("fast" "platform" "security" "workflows" "unit-fast" "slow/L4"))
 

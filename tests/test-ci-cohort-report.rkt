@@ -22,7 +22,7 @@
          racket/string
          json
          (only-in "../util/version.rkt" q-version)
-         (only-in "../scripts/run-tests/sha256.rkt" sha256-hex)
+         (only-in "../util/sha256.rkt" sha256-hex)
          "../scripts/run-tests/cohort-report.rkt")
 
 (define-runtime-path here ".")

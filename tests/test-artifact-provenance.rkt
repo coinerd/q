@@ -63,7 +63,7 @@
   (make-directory* (path-only path))
   (call-with-output-file path (lambda (out) (display text out)) #:exists 'truncate))
 
-(require (file "../scripts/run-tests/sha256.rkt"))
+(require (file "../util/sha256.rkt"))
 
 (define (bytes->hex-string bs)
   (apply string-append

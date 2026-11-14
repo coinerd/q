@@ -51,7 +51,7 @@
          racket/runtime-path
          racket/string
          racket/system
-         (file "../run-tests/sha256.rkt"))
+         (file "../../util/sha256.rkt"))
 
 ;; The identity manifest is emitted through the evidence owner's own CLI so
 ;; the prepared-env-identity@1 canonical shape (schema, artifact identity,

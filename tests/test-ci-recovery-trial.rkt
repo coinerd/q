@@ -33,7 +33,7 @@
                   trial-evidence-schema
                   assess-trial-envelope)
          (only-in (file "../scripts/run-tests/ci-recovery-benchmark-report.rkt") config-dimensions)
-         (only-in (file "../scripts/run-tests/sha256.rkt") sha256-hex))
+         (only-in (file "../util/sha256.rkt") sha256-hex))
 
 (define-runtime-path here ".")
 (define repo-root (simplify-path (build-path here "..")))
