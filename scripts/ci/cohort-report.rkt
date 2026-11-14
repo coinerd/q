@@ -16,7 +16,7 @@
 ;; the manifest alone — no network, no database, no external service.
 ;;
 ;; Usage:
-;;   racket scripts/run-tests/cohort-report.rkt --manifest <path>
+;;   racket scripts/ci/cohort-report.rkt --manifest <path>
 ;;        [--out-json path] [--out-md path] [--check]
 ;;
 ;; Determinism: identical manifest inputs produce byte-identical report

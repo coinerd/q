@@ -46,7 +46,7 @@
          racket/system
          rackunit
          rackunit/text-ui
-         (only-in "../scripts/run-tests/cohort-report.rkt" cohort-quantile-exact)
+         (only-in "../scripts/ci/cohort-report.rkt" cohort-quantile-exact)
          "../scripts/run-tests/ci-recovery-benchmark-report.rkt")
 
 (define-runtime-path project-root "..")

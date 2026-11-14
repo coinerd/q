@@ -100,7 +100,7 @@
          racket/list
          racket/string
          json
-         "../run-tests/cohort-report.rkt")
+         "cohort-report.rkt")
 
 (provide input-schema-id
          guard-verdict-jsexpr

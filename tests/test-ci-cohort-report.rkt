@@ -23,7 +23,7 @@
          json
          (only-in "../util/version.rkt" q-version)
          (only-in "../util/sha256.rkt" sha256-hex)
-         "../scripts/run-tests/cohort-report.rkt")
+         "../scripts/ci/cohort-report.rkt")
 
 (define-runtime-path here ".")
 (define fixtures-dir (build-path here "fixtures" "ci-cohort"))

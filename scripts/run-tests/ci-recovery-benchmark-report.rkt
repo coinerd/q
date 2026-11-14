@@ -59,7 +59,7 @@
          racket/runtime-path
          racket/string
          (file "../ci/prepared-env-report.rkt")
-         (file "cohort-report.rkt"))
+         (file "../ci/cohort-report.rkt"))
 
 (provide benchmark-report-schema
          actions-evidence-schema
