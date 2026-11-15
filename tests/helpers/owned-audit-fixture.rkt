@@ -777,3 +777,30 @@
                       (let* ([text (number->string (add1 index) 16)]
                              [padding (make-string (- 40 (string-length text)) #\0)])
                         (string-append padding text))))))
+
+;; The production world as the JSON the coordinator fixture consumes (paths as
+;; strings, exactly the shape the deleted Python module printed).
+(define (production-world->json world)
+  (hash 'root
+        (path->string (hash-ref world 'root))
+        'repo
+        (path->string (hash-ref world 'repo))
+        'receipt
+        (hash-ref world 'receipt)
+        'readiness
+        (hash-ref world 'readiness)))
+
+;; A one-shot producer so the coordinator fixture does the heavy real-Git and
+;; owned-Verify work in a CHILD process, exactly like the module this replaces:
+;; the caller's test process stays small, which keeps every later `subprocess`
+;; fork cheap on a loaded host (a multi-hundred-MB test heap makes each fork +
+;; exec of the coordinator's helpers measurably slower).
+(module+ main
+  (define args (vector->list (current-command-line-arguments)))
+  (unless (and (= 5 (length args)) (equal? (car args) "production-world"))
+    (error 'fixture "usage: production-world <base> <plan> <wave> <generation>"))
+  (write-json (production-world->json (build-production-owned-review-world (second args)
+                                                                        (third args)
+                                                                        (string->number (fourth args))
+                                                                        (string->number (fifth args)))))
+  (newline))

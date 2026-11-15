@@ -22,32 +22,55 @@
          "../extensions/gsd/delivery-coordinator.rkt"
          "../extensions/gsd/delivery-finalize.rkt"
          "../extensions/gsd/review-dispatch.rkt"
-         (only-in "helpers/auto-review-owned-fixture.rkt" precompile-delivery-controller-scripts!)
-         (only-in "helpers/owned-audit-fixture.rkt" build-production-owned-review-world))
+         (only-in "helpers/auto-review-owned-fixture.rkt" precompile-delivery-controller-scripts!))
+(define-runtime-path owned-audit-fixture "helpers/owned-audit-fixture.rkt")
 (module+ test
   (test-case "default production coordinator invokes installed independent runner at exact head/generation and replays remote rejection"
     ;; Fixture setup precompile: the controller's racket subprocesses are
     ;; capped at 60 s per command, so their closure must already be zo-warm
     ;; before the coordinator runs (see helpers/auto-review-owned-fixture.rkt).
     (precompile-delivery-controller-scripts!)
-    (for ([generation '(0 1)])
+    ;; QAR_GENERATIONS=0 / =1 (or `0,1`) selects a subset of the two real owned
+    ;; Verify generations, the same discipline as QAR_ONLY in the sibling
+    ;; auto-review suites: each generation is an independent world + coordinator
+    ;; round trip, so a loaded host can be bisected case by case. The default is
+    ;; both generations, which is what CI runs.
+    (define generations
+      (let ([raw (getenv "QAR_GENERATIONS")])
+        (if raw
+            (for/list ([part (in-list (string-split raw ","))])
+              (string->number (string-trim part)))
+            '(0 1))))
+    (for ([generation (in-list generations)])
       (define temp (make-temporary-file "production-review-~a" 'directory))
       (dynamic-wind
        void
        (lambda ()
          (define manifest (make-campaign-manifest 1 "w0" '() '() (path->string temp)))
          (define plan (campaign-manifest-hash manifest))
-         ;; Real declared owned-Verify world (native helper, no Python): the
-         ;; receipt's execution proof is genuinely produced, and the
-         ;; pre-existing fixture's simulated PRIOR generation history is kept.
-         (define world (build-production-owned-review-world temp plan 0 generation))
+         ;; Real declared owned-Verify world, built in a CHILD process by the
+         ;; native helper (the same shape as the module this replaces: the
+         ;; caller's test process stays small so its later forks stay cheap).
+         (define setup
+           (run-subprocess (path->string (find-executable-path "racket"))
+                           #:args (list (path->string owned-audit-fixture)
+                                        "production-world"
+                                        (path->string temp)
+                                        plan
+                                        "0"
+                                        (number->string generation))
+                           #:timeout 600))
+         (check-equal? (subprocess-result-exit-code setup)
+                       0
+                       (subprocess-result-stderr setup))
+         (define world (string->jsexpr (subprocess-result-stdout setup)))
          (define readiness (hash-ref world 'readiness))
          (check-not-false (member (hash-ref readiness 'code)
                                   '("missing-meaningful-red-proof"
                                     "legacy-red-ready"
                                     "registered-probe-ready"))
                           (format "underlying fixture readiness: ~s" readiness))
-         (define root (hash-ref world 'root))
+         (define root (string->path (hash-ref world 'root)))
          (check-true (directory-exists? (build-path root "q")))
          (define receipt (hash-ref world 'receipt))
          (define rec
