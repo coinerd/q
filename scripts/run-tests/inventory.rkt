@@ -750,9 +750,9 @@
      "sessions, durable temporary campaign journals, or subprocess/Git sandboxes. The two real sleeps "
      "in the session family are cancellation guards whose workers are reaped by tiny existing deadlines; "
      "they do not pay their nominal delays. No live provider/GitHub acceptance is claimed. "
-     "Phase B removed the seventh family (tests/test-gsd-delivery-auto-review.rkt), a shim that only "
-     "spawned the Python controller suite: its native port tests/test-gsd-delivery-auto-review-native.rkt "
-     "is @speed slow, so that family is no longer selected by this fast bucket."))
+     "Phase B removed the seventh family, the shim that only spawned the Python controller suite: "
+     "its native port tests/test-gsd-delivery-auto-review-native.rkt is @speed slow, so that "
+     "family is no longer selected by this fast bucket."))
    (hasheq
     'behavior-id
     "RETRY-LOGICAL-SEMANTICS-FAST"
