@@ -156,8 +156,28 @@
                      "no selection is printed when the diff fails"))
       (displayln "SKIP quick --changed base: git unavailable")))
 
-(test-case "quick --changed --explain renders the impact selection as a reproduction"
+(define (parent-commit-available? cwd)
+  (and git-exe
+       (parameterize ([current-directory cwd]
+                      [current-output-port (open-output-nowhere)]
+                      [current-error-port (open-output-nowhere)])
+         (eq? #t (system* git-exe "rev-parse" "--verify" "--quiet" "HEAD~1^{commit}")))))
+
+(test-case "quick --changed --explain fails closed on an empty diff"
+  ;; Deterministic in every checkout, including CI's shallow (depth 1) clone
+  ;; where HEAD~1 does not exist: an empty range is a failure, never a pass.
   (if git-exe
+      (let-values ([(status out err) (invoke "quick" "--changed" "HEAD..HEAD" "--explain")])
+        (check-not-equal? status 0)
+        (check-regexp-match #rx"empty \\(zero selection is a failure, not a pass\\)" err)
+        (check-false (regexp-match? #rx"changed-file impact selection" out)
+                     "no selection is printed for an empty diff"))
+      (displayln "SKIP quick --changed empty diff: git unavailable")))
+
+(test-case "quick --changed --explain renders the impact selection as a reproduction"
+  ;; Needs a real parent commit (CI clones with depth 1): the positive case is
+  ;; skipped there, and the fail-closed case above still runs.
+  (if (parent-commit-available? (simplify-path root))
       (let-values ([(status out err) (invoke "quick" "--changed" "HEAD~1..HEAD" "--explain")])
         (check-equal? status 0)
         (check-regexp-match #rx"reproduction only, not a PR pass" out)
@@ -165,7 +185,7 @@
         (check-regexp-match #rx"  tests/test-" out)
         ;; Plan only: nothing ran.
         (check-false (regexp-match? #rx"quick passed:" out)))
-      (displayln "SKIP quick --changed explain: git unavailable")))
+      (displayln "SKIP quick --changed explain: no parent commit (shallow clone)")))
 
 (test-case "quick --changed selection maps @covers onto the audited owners (fixture)"
   ;; Pure mapping: the owner set is the audited list, the manifest decides the
