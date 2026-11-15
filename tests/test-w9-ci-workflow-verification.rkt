@@ -300,7 +300,23 @@
     (check-false (string-contains? lint-section "check-version-expectations"))
     (check-false (string-contains? lint-section "check-lint-alignment"))
     (check-false (string-contains? lint-section "classify-metadata"))
-    (check-false (string-contains? lint-section "setup-racket")))
+    ;; §11.5 replaced the `pip install pyyaml` + inline-interpreter check with
+    ;; scripts/ci/validate-workflows.rkt, so `lint` now provisions the SAME
+    ;; pinned runtime every other lane uses (identical version expression — no
+    ;; per-job Racket drift) instead of installing a YAML library. The W1
+    ;; intent is unchanged and still pinned by the four negatives above: no
+    ;; Racket LINT work, and no compile/setup cost, on the PR critical path.
+    ;; The retired "setup-racket must be absent" proxy cannot describe a job
+    ;; whose only step is a Racket script; these positives replace it, plus the
+    ;; interpreter negatives (no pip, no python3 anywhere in ci.yml).
+    (check-true (string-contains? lint-section "uses: ./.github/actions/setup-racket"))
+    (check-true (string-contains?
+                 lint-section
+                 "racket-version: ${{ github.event.inputs.racket-version || '8.10' }}"))
+    (check-false (string-contains? lint-section "raco make"))
+    (check-false (string-contains? lint-section "raco setup"))
+    (check-false (string-contains? ci-yml "pip install"))
+    (check-false (string-contains? ci-yml "python3")))
 
   (test-case "lint-quality carries the full Racket lint suite"
     (check-true (string-contains? lint-quality-section "scripts/lint-all.rkt"))
