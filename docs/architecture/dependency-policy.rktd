@@ -285,6 +285,14 @@
        (owner . "runtime"))
       ("runtime/session/session-lifecycle.rkt" (risk . "Session lifecycle FSM; high state complexity")
                                                (owner . "runtime"))
+      ("scripts/run-tests/classify.rkt"
+       (risk
+        . "Single discovery/classification implementation for local and CI: metadata parsing, suite predicates, lane exclusions, ownership maps and inventory gates; merged from three modules so it stays the only vocabulary")
+       (owner . "tools"))
+      ("scripts/run-tests/runner.rkt"
+       (risk
+        . "Bounded parallel/queue execution with process-group ownership, per-file timeouts, result-multiset validation and telemetry; a false green here hides every downstream failure")
+       (owner . "tools"))
       ("scripts/run-tests.rkt"
        (risk
         . "Parallel test runner with subprocess orchestration, output parsing, and suite management")
@@ -437,7 +445,7 @@
        (risk
         . "Fast-lane file inventory with ownership matrix reconciliation and tier semantics; grew with the v1.00.28 workload census and grouped-lane governance; score ~21192")
        (owner . "tools"))
-      ("scripts/run-tests/cohort-report.rkt"
+      ("scripts/ci/cohort-report.rkt"
        (risk
         . "Test cohort measurement report builder (census/final-cohort aggregation, per-row verdict binding); grew with the v1.00.28 measurement campaign; score ~20888")
        (owner . "tools"))

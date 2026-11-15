@@ -66,23 +66,73 @@
   (check-regexp-match #rx"--no-tests" out))
 
 (test-case "lint-blocks-on-version-drift"
-  ;; Break info.rkt version → pre-commit should detect drift
+  ;; Run in an isolated disposable copy to avoid modifying the live workspace.
+  ;; The copy contains only the minimal tree needed for the version-sync check
+  ;; to run: info.rkt (with a drifted version), util/version.rkt (canonical),
+  ;; scripts/pre-commit.rkt, scripts/lint-all.rkt, scripts/sync-version.rkt
+  ;; (plus its dependencies version-surface.rkt and version-guard.rkt), and a
+  ;; dummy main.rkt for pre-commit's guard check.
+  ;;
+  ;; Other lint checks (format, version-validate, etc.) have their scripts
+  ;; missing in the copy, so lint-all.rkt SKIPs them. Only version-sync runs
+  ;; and detects the drift -> [FAIL] version-sync + exit 1.
+  ;;
+  ;; Regression: verify live q/info.rkt bytes are unchanged after test.
   (define info-path (build-path q-dir "info.rkt"))
-  (define original (file->string info-path))
+  (define original-bytes (file->bytes info-path))
+  (define tmp-dir (make-temporary-directory))
+
+  (define (cp src rel-dest)
+    (define dest (build-path tmp-dir rel-dest))
+    (make-directory* (path-only dest))
+    (copy-file src dest))
+
   (dynamic-wind
    (lambda ()
+     ;; Build isolated copy with drifted info.rkt version
+     (cp (build-path q-dir "info.rkt") "info.rkt")
+     (cp (build-path q-dir "util" "version.rkt") "util/version.rkt")
+     (cp (build-path q-dir "scripts" "pre-commit.rkt") "scripts/pre-commit.rkt")
+     (cp (build-path q-dir "scripts" "lint-all.rkt") "scripts/lint-all.rkt")
+     (cp (build-path q-dir "scripts" "sync-version.rkt") "scripts/sync-version.rkt")
+     (cp (build-path q-dir "scripts" "version-surface.rkt") "scripts/version-surface.rkt")
+     (cp (build-path q-dir "scripts" "version-guard.rkt") "scripts/version-guard.rkt")
+     ;; Dummy main.rkt for pre-commit's guard check
+     (call-with-output-file (build-path tmp-dir "main.rkt")
+                            (lambda (out) (display "" out))
+                            #:exists 'truncate)
+     ;; Break the copy's info.rkt version to cause drift
+     (define copy-info (file->string (build-path tmp-dir "info.rkt")))
      (call-with-output-file
-      info-path
+      (build-path tmp-dir "info.rkt")
       (lambda (out)
-        (display (regexp-replace #rx"\"[0-9]+\\.[0-9]+\\.[0-9]+\"" original "\"0.99.0\"") out))
+        (display (regexp-replace #rx"\"[0-9]+\\.[0-9]+\\.[0-9]+\"" copy-info "\"0.99.0\"") out))
       #:exists 'truncate))
    (lambda ()
-     (define-values (out code) (run-pre-commit))
+     ;; Run pre-commit --no-tests from the isolated copy
+     (define-values (sp out in err)
+       (parameterize ([current-directory tmp-dir])
+         (subprocess #f #f #f (find-executable-path "racket") "scripts/pre-commit.rkt" "--no-tests")))
+     (close-output-port in)
+     (define result (sync/timeout 120 sp))
+     (when (not result)
+       (subprocess-kill sp #t))
+     (define code
+       (if result
+           (subprocess-status sp)
+           1))
+     (define out-str (port->string out))
+     (close-input-port out)
+     (close-input-port err)
      ;; version-sync check should FAIL
-     (check-regexp-match #rx"\\[FAIL\\] version-sync" out)
-     (check-not-equal? code 0))
+     (check-regexp-match #rx"\\[FAIL\\] version-sync" out-str)
+     (check-not-equal? code 0)
+     ;; Regression: live info.rkt bytes unchanged
+     (check-equal? (file->bytes info-path) original-bytes))
    (lambda ()
-     (call-with-output-file info-path (lambda (out) (display original out)) #:exists 'truncate))))
+     ;; Cleanup: recursively remove temp directory
+     (when (directory-exists? tmp-dir)
+       (delete-directory/files tmp-dir)))))
 
 ;; --- Mode label ---
 

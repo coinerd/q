@@ -5,4 +5,6 @@
 (require rackunit)
 
 (module+ test
+  (displayln "GMD-W7-TIMEOUT-STARTED")
+  (flush-output)
   (sleep 600))

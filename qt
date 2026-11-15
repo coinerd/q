@@ -1,0 +1,445 @@
+#!/usr/bin/env racket
+#lang racket
+(require racket/runtime-path
+         racket/port
+         racket/string
+         "scripts/testing/quick-audit.rkt"
+         "scripts/testing/quick-runner.rkt"
+         "scripts/testing/full-plan.rkt")
+(define-runtime-path root ".")
+(define (fail fmt . args)
+  (apply eprintf (string-append "qt: " fmt "\n") args)
+  (exit 1))
+
+;; A closed stdout (`./qt full --explain | head`) is a normal consumer ending the
+;; stream, not a qt failure: writing stops quietly. Only the EPIPE case is
+;; swallowed; every other write error still surfaces. Verdicts are computed
+;; before printing, so this can never turn a red run green.
+;; One call writes exactly one line (content plus its terminating newline), so
+;; the printed plan starts at the first line and every line ends in `\n` even
+;; when the pipe closes mid-plan.
+(define (emit-line line #:port [port (current-output-port)])
+  ;; After EPIPE, redirect the port to nowhere: exit still flushes the current
+  ;; output port, and a second failing flush would print a spurious error.
+  ;; The writes and the explicit flush share one handler, so a half-written
+  ;; line never leaks its newline into a later (broken) port.
+  (with-handlers ([exn:fail:filesystem:errno?
+                   (lambda (e)
+                     ;; EPIPE (32) is a consumer closing the pipe; every other
+                     ;; write error (ENOSPC, EIO, EBADF) is real and re-raised.
+                     (define errno (exn:fail:filesystem:errno-errno e))
+                     (unless (and (pair? errno) (equal? (car errno) 32))
+                       (raise e))
+                     (when (eq? port (current-output-port))
+                       (current-output-port (open-output-nowhere))))])
+    (display line port)
+    (newline port)
+    ;; Flush inside the handler: a closed pipe must fail HERE, not at process
+    ;; exit (where the port is no longer current and the EPIPE cannot be
+    ;; redirected). Small plans are otherwise buffered until exit.
+    (flush-output port)))
+(define args (vector->list (current-command-line-arguments)))
+(define command (and (pair? args) (car args)))
+(define rest-args
+  (if (pair? args)
+      (cdr args)
+      '()))
+;; Shared option grammar. Plain commands (`quick`, `default`, `release`, and a
+;; bare `full`) use --explain/--jobs/--changed plus validated positional words;
+;; the CI-surface flags (Phase D) are accepted only by `full` (see
+;; `run-ci-surface`). Unsupported options fail BEFORE any selection or
+;; execution, and every CI flag that cannot be honored fails closed instead of
+;; being ignored silently.
+(struct cli-options
+        (jobs explain? changed? positional
+              json-out suite shard-index shard-total timeout profile ledger-path
+              record-gate? repeat sequential? mode scheduler ordering shard-plan durations
+              files ci-flags)
+        #:transparent)
+
+(define (parse-options rest)
+  (define opts
+    (hash-copy
+     (hash 'jobs 2 'explain? #f 'changed? #f 'positional '()
+           'json-out #f 'suite #f 'shard-index 0 'shard-total 1 'timeout #f
+           'profile 'local 'ledger-path #f 'record-gate? #f 'repeat 1
+           'sequential? #f 'mode 'auto 'scheduler 'batch 'ordering #f
+           'shard-plan #f 'durations #f 'files '() 'ci-flags '())))
+  (define seen (make-hash))
+  (define (mark! flag)
+    (when (hash-ref seen flag #f)
+      (fail "duplicate ~a" flag))
+    (hash-set! seen flag #t))
+  (define (ci! flag)
+    (hash-update! opts 'ci-flags (lambda (flags) (append flags (list flag)))))
+  (define (required! rest flag)
+    (when (null? rest)
+      (fail "~a requires a value" flag))
+    (car rest))
+  (define (parse-positive-int rest flag)
+    (define raw (required! rest flag))
+    (define n (string->number raw))
+    (unless (and (exact-integer? n) (positive? n))
+      (fail "~a must be a positive integer, got: ~a" flag raw))
+    n)
+  (define (parse-nonnegative-int rest flag)
+    (define raw (required! rest flag))
+    (define n (string->number raw))
+    (unless (and (exact-integer? n) (>= n 0))
+      (fail "~a must be a non-negative integer, got: ~a" flag raw))
+    n)
+  (define (parse-positive-number rest flag)
+    (define raw (required! rest flag))
+    (define n (string->number raw))
+    (unless (and (number? n) (real? n) (positive? n))
+      (fail "~a must be a positive number, got: ~a" flag raw))
+    n)
+  (let loop ([rest rest])
+    (cond
+      [(null? rest) (void)]
+      [(equal? (car rest) "--explain")
+       (when (hash-ref opts 'explain?)
+         (fail "duplicate --explain"))
+       (hash-set! opts 'explain? #t)
+       (loop (cdr rest))]
+      [(equal? (car rest) "--changed")
+       (when (hash-ref opts 'changed?)
+         (fail "duplicate --changed"))
+       (hash-set! opts 'changed? #t)
+       (loop (cdr rest))]
+      [(equal? (car rest) "--jobs")
+       (hash-set! opts 'jobs (parse-positive-int (cdr rest) "--jobs"))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--sequential")
+       (mark! "--sequential")
+       (ci! "--sequential")
+       (hash-set! opts 'sequential? #t)
+       (hash-set! opts 'jobs 1)
+       (loop (cdr rest))]
+      [(equal? (car rest) "--json-out")
+       (mark! "--json-out")
+       (ci! "--json-out")
+       (hash-set! opts 'json-out (required! (cdr rest) "--json-out"))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--suite")
+       (mark! "--suite")
+       (ci! "--suite")
+       (hash-set! opts 'suite (string->symbol (required! (cdr rest) "--suite")))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--shard-index")
+       (mark! "--shard-index")
+       (ci! "--shard-index")
+       (hash-set! opts 'shard-index (parse-nonnegative-int (cdr rest) "--shard-index"))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--shard-total")
+       (mark! "--shard-total")
+       (ci! "--shard-total")
+       (hash-set! opts 'shard-total (parse-positive-int (cdr rest) "--shard-total"))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--timeout")
+       (mark! "--timeout")
+       (ci! "--timeout")
+       (hash-set! opts 'timeout (parse-positive-number (cdr rest) "--timeout"))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--profile")
+       (mark! "--profile")
+       (ci! "--profile")
+       (hash-set! opts 'profile (string->symbol (required! (cdr rest) "--profile")))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--ledger")
+       (mark! "--ledger")
+       (ci! "--ledger")
+       (hash-set! opts 'ledger-path (required! (cdr rest) "--ledger"))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--record-gate-evidence")
+       (mark! "--record-gate-evidence")
+       (ci! "--record-gate-evidence")
+       (hash-set! opts 'record-gate? #t)
+       (loop (cdr rest))]
+      [(equal? (car rest) "--repeat")
+       (mark! "--repeat")
+       (ci! "--repeat")
+       (hash-set! opts 'repeat (parse-positive-int (cdr rest) "--repeat"))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--mode")
+       (mark! "--mode")
+       (ci! "--mode")
+       (hash-set! opts 'mode (string->symbol (required! (cdr rest) "--mode")))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--scheduler")
+       (mark! "--scheduler")
+       (ci! "--scheduler")
+       (hash-set! opts 'scheduler (string->symbol (required! (cdr rest) "--scheduler")))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--ordering")
+       (mark! "--ordering")
+       (ci! "--ordering")
+       (hash-set! opts 'ordering (string->symbol (required! (cdr rest) "--ordering")))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--shard-plan")
+       (mark! "--shard-plan")
+       (ci! "--shard-plan")
+       (hash-set! opts 'shard-plan (required! (cdr rest) "--shard-plan"))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--durations")
+       (mark! "--durations")
+       (ci! "--durations")
+       (hash-set! opts 'durations (required! (cdr rest) "--durations"))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--file")
+       (ci! "--file")
+       (hash-set! opts 'files (cons (required! (cdr rest) "--file") (hash-ref opts 'files)))
+       (loop (cddr rest))]
+      [(string-prefix? (car rest) "-") (fail "unsupported option: ~a" (car rest))]
+      [else
+       (hash-update! opts 'positional (lambda (words) (cons (car rest) words)))
+       (loop (cdr rest))]))
+  (cli-options (hash-ref opts 'jobs)
+               (hash-ref opts 'explain?)
+               (hash-ref opts 'changed?)
+               (reverse (hash-ref opts 'positional))
+               (hash-ref opts 'json-out)
+               (hash-ref opts 'suite)
+               (hash-ref opts 'shard-index)
+               (hash-ref opts 'shard-total)
+               (hash-ref opts 'timeout)
+               (hash-ref opts 'profile)
+               (hash-ref opts 'ledger-path)
+               (hash-ref opts 'record-gate?)
+               (hash-ref opts 'repeat)
+               (hash-ref opts 'sequential?)
+               (hash-ref opts 'mode)
+               (hash-ref opts 'scheduler)
+               (hash-ref opts 'ordering)
+               (hash-ref opts 'shard-plan)
+               (hash-ref opts 'durations)
+               (reverse (hash-ref opts 'files))
+               (hash-ref opts 'ci-flags)))
+
+;; `quick` reads only its own plain options: a CI-surface flag must never look
+;; like a quick option.
+(define (run-quick-command rest)
+  (define opts (parse-options rest))
+  (define jobs (cli-options-jobs opts))
+  (define explain? (cli-options-explain? opts))
+  (define changed? (cli-options-changed? opts))
+  (define positional (cli-options-positional opts))
+  (when (pair? (cli-options-ci-flags opts))
+    (fail "quick does not accept CI-surface option ~a (only ./qt full does)"
+          (car (cli-options-ci-flags opts))))
+  (when changed?
+    (fail "quick does not accept --changed (use full or default)"))
+  (when (> (length positional) 1)
+    (fail "quick accepts at most one file"))
+  (define selected
+    (and (pair? positional)
+         (let* ([p (simplify-path (path->complete-path (car positional) root))]
+                [entry (for/first ([entry audited]
+                                   #:when (equal? p (simplify-path (build-path root (car entry)))))
+                         entry)])
+           (unless entry
+             (fail "file is not admitted to quick: ~a" (car positional)))
+           entry)))
+  (define entries
+    (if selected
+        (list selected)
+        audited))
+  (for ([entry entries])
+    (unless (audit-ok? root entry)
+      (fail "audit drift or symlink: ~a" (car entry))))
+  (cond
+    [explain?
+     (printf "quick: audited selection only\n")
+     (for ([entry entries])
+       (printf "  ~a\n" (car entry)))]
+    [else
+     (define files
+       (for/list ([entry entries])
+         (path->string (simplify-path (build-path root (car entry))))))
+     (define results
+       (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
+         (run-quick files jobs)))
+     (for ([entry entries])
+       (unless (audit-ok? root entry)
+         (fail "audit drift or symlink: ~a" (car entry))))
+     (for ([r results]
+           #:unless (quick-result-valid? r))
+       (eprintf "FAILED: ~a (exit ~a, ~a failures, ~a tests)\n~a\n~a\nReproduce: ./qt quick ~a\n"
+                (quick-result-path r)
+                (quick-result-exit r)
+                (quick-result-failed r)
+                (quick-result-total r)
+                (quick-result-stdout r)
+                (quick-result-stderr r)
+                (quick-result-path r)))
+     (unless (and (= (length results) (length files))
+                  (equal? (sort (map quick-result-path results) string<?) (sort files string<?))
+                  (andmap quick-result-valid? results))
+       (fail "quick failed or produced missing/invalid results"))
+     (printf "quick passed: ~a files, ~a tests (not PR/full verification)\n"
+             (length results)
+             (apply + (map quick-result-total results)))]))
+
+;; ============================================================
+;; CI surface (`./qt full --json-out/--suite/--shard/--file/...`)
+;; ============================================================
+;; The spec is validated and resolved by full-plan.rkt, which lazily loads the
+;; runner internals. Every flag is either forwarded to scripts/run-tests or
+;; refused with a `qt: ...` message that NAMES it (never ignored silently).
+(define (run-ci-surface opts)
+  (define spec
+    (qt-ci-spec (cli-options-suite opts)
+                (cli-options-files opts)
+                (cli-options-shard-index opts)
+                (cli-options-shard-total opts)
+                (cli-options-timeout opts)
+                (cli-options-profile opts)
+                (cli-options-ledger-path opts)
+                (cli-options-json-out opts)
+                (cli-options-record-gate? opts)
+                (cli-options-repeat opts)
+                (cli-options-mode opts)
+                (cli-options-scheduler opts)
+                (cli-options-ordering opts)
+                (cli-options-shard-plan opts)
+                (cli-options-durations opts)
+                args))
+  (define plan
+    (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
+      (resolve-qt-ci-plan #f spec)))
+  (if (cli-options-explain? opts)
+      ;; Plan only: nothing executed, nothing cleaned. Output-producing flags
+      ;; cannot be honored here, so they fail closed instead of being ignored.
+      (let ()
+        (define conflicts
+          (append (if (cli-options-json-out opts) (list "--json-out") '())
+                  (if (cli-options-record-gate? opts) (list "--record-gate-evidence") '())
+                  (if (cli-options-shard-plan opts) (list "--shard-plan") '())))
+        (unless (null? conflicts)
+          (fail
+           (string-append "--explain cannot be combined with ~a: it executes nothing, so those "
+                          "outputs would be ignored (fail closed)")
+           (string-join conflicts ", ")))
+        (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
+          (for ([line (in-list (qt-ci-explain-lines plan))])
+            (emit-line line))))
+      (let ()
+        (define outcome
+          (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
+            (run-qt-ci-plan plan (cli-options-jobs opts))))
+        ;; report/measure never produce a test verdict, so they print no pass
+        ;; line. A real run either fails (the runner already printed the
+        ;; per-file evidence) or prints the honest pass line.
+        (when (qt-ci-outcome-ran? outcome)
+          (unless (zero? (qt-ci-outcome-exit-code outcome))
+            (fail "full failed (exit ~a; see the per-file evidence above)"
+                  (qt-ci-outcome-exit-code outcome)))
+          (emit-line (qt-ci-pass-line plan (qt-ci-outcome-results outcome)))))))
+
+;; `full`, `default` and `release` share one path: resolve the plan once, then
+;; either print it (--explain: nothing executed, nothing cleaned) or execute it
+;; through the same evidence rules. Only the selection and the final verdict
+;; differ per lane.
+(define (run-lane-command lane rest)
+  (define name
+    (case lane
+      [(full) "full"]
+      [(default) "default"]
+      [(release) "release"]))
+  (define opts (parse-options rest))
+  (define positional (cli-options-positional opts))
+  (define jobs (cli-options-jobs opts))
+  (define explain? (cli-options-explain? opts))
+  (define changed? (cli-options-changed? opts))
+  (define ci-flags (cli-options-ci-flags opts))
+  (cond
+    [(pair? ci-flags)
+     (cond
+       [(not (eq? lane 'full))
+        (fail "~a does not accept CI-surface option ~a (only ./qt full does)"
+              name
+              (car ci-flags))]
+       [changed?
+        (fail "--changed cannot be combined with CI-surface options (~a); --changed is an impact selection"
+              (string-join ci-flags ", "))]
+       [(pair? positional)
+        (fail
+         "full accepts no positional arguments: ~a (use --file FILE for an explicit reproduction run)"
+         (car positional))]
+       [else (run-ci-surface opts)])]
+    [else (run-plain-lane-command lane name opts positional jobs explain? changed?)]))
+
+;; Plain lanes (`full` with no CI-surface flag, `default`, `release`): behaviour
+;; and guarantees are unchanged.
+(define (run-plain-lane-command lane name opts positional jobs explain? changed?)
+  (when (and changed? (eq? lane 'release))
+    (fail "release does not accept --changed (a release covers the complete suite)"))
+  (when (and changed? (> (length positional) 1))
+    (fail "~a accepts at most one --changed base" name))
+  (when (and (not changed?) (pair? positional))
+    (fail
+     "~a accepts no positional arguments: ~a (use ./qt full --file FILE for an explicit reproduction)"
+     name
+     (car positional)))
+  (define base (and changed? (and (pair? positional) (car positional))))
+  (define plan
+    (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
+      (resolve-lane-plan lane #f #:changed? changed? #:base base)))
+  (cond
+    [explain?
+     ;; Plan only: nothing executed, nothing cleaned. Selection failures print
+     ;; `qt: ...` and exit 1 exactly like an execution failure, and a renderer
+     ;; failure is reported the same way instead of escaping as a stack trace.
+     (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
+       (for ([line (in-list (plan-explain-lines plan))])
+         (emit-line line)))]
+    [else
+     ;; The verdict is computed BEFORE anything is printed: a closed stdout must
+     ;; never be able to skip these checks and report success. `lane-verdict` is
+     ;; pure (full-plan.rkt); the message and exit code are chosen AFTER all
+     ;; output has been written.
+     (define run
+       (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
+         (run-plan plan jobs)))
+     (define violations (full-run-surface-violations run))
+     (define blocking
+       (if (eq? lane 'release)
+           (release-blocking (release-obligations))
+           '()))
+     (define verdict (lane-verdict lane (full-run-valid? run) violations blocking))
+     (emit-line (plan-preamble plan jobs))
+     ;; Per-file evidence first, then managed-surface results: the guard
+     ;; reports, it never restores. Failure messages come last.
+     (for ([line (in-list (full-failure-lines run))])
+       (emit-line line #:port (current-error-port)))
+     (for ([line (in-list (full-surface-violation-lines run))])
+       (emit-line line #:port (current-error-port)))
+     (when (eq? lane 'release)
+       ;; Printed whether or not the suite passed: these unverified obligations
+       ;; are exactly why a release pass line is not available.
+       (for ([line (in-list (release-obligation-lines (release-obligations)))])
+         (emit-line line)))
+     (case verdict
+       [(invalid) (fail "~a failed or produced missing/invalid results" name)]
+       [(surface)
+        (fail "~a modified managed repository surface(s): ~a (detected, not restored)"
+              name
+              (string-join violations ", "))]
+       [(unverified) (fail "~a" (release-unverified-message blocking))]
+       [(ok)
+        (case lane
+          [(release) (emit-line (release-pass-line run))]
+          [(full) (emit-line (full-pass-line run))]
+          [else (emit-line (default-pass-line run))])])]))
+
+(cond
+  [(not command) (fail "missing command: use quick, full, default or release")]
+  [(equal? command "quick") (run-quick-command rest-args)]
+  [(equal? command "full") (run-lane-command 'full rest-args)]
+  [(equal? command "default") (run-lane-command 'default rest-args)]
+  [(equal? command "release") (run-lane-command 'release rest-args)]
+  [else
+   (fail
+    (string-append "unsupported command: ~a; only quick, full, default and release are available "
+                   "(reproduce a single test with ./qt full --file FILE)")
+    command)])

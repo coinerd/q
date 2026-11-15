@@ -141,7 +141,8 @@
  ("extensions/gsd/owner-correction.rkt" (current-owner-correction-root . CONFIGURATION)
                                          (current-owner-correction-cut . SERVICE_HANDLE))
  ;; BUG-0079: test/embedding seam overriding the approved-head publisher
- ;; (default shells the trusted gsd-delivery.py controller through the ONE
+ ;; (default runs the trusted native publish-head action,
+ ;; scripts/gsd-delivery-publish.rkt, through the ONE
  ;; controller-environment credential boundary); never set in prod.
  ("extensions/gsd/delivery-publication.rkt" (current-gsd-approved-head-publisher . OTHER_REVIEWED))
  ;; BUG-0088 governed supplemental evidence replan: trusted host

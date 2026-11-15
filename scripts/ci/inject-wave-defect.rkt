@@ -144,8 +144,10 @@
 ;; non-zero exit.
 ;;   'nonzero-exit+token  a CLI that exits non-zero and names the typed refusal
 ;;   'token               a CLI that prints the typed verdict and exits 0
-;;   'suite-exit0         a fixture suite that passes only after observing the
-;;                        typed refusal internally (exit 0 == refused)
+;;   'suite-declares      a native owner suite whose DECLARED cases (count + the
+;;                        typed refusal vocabulary they carry) are the witness:
+;;                        the row is refused only when every owner still
+;;                        declares them, and a mutated copy must go red
 ;;   'library             an in-process guard returning the typed outcome
 (struct row (id defect guard guard-paths signal injected clean) #:transparent)
 
@@ -520,140 +522,202 @@
 ;; F6 / F11 — GitHub API route contract / amended approval contract
 ;; ---------------------------------------------------------------------------
 
-;; A fixture suite is a valid guard witness only when it actually ran and passed
-;; its own assertions: exit 0 alone is vacuous (an empty suite would "refuse" by
-;; passing). The witness therefore requires a `Ran N tests` line with at least
-;; the row's declared minimum, an OK verdict, and every typed refusal token
-;; present in the suite source — the suite must assert the refusal the row
-;; claims. Both halves of each row replay the same offline suite: its failing
-;; direction is the injected-defect witness, its green direction (the suite
-;; asserts the correct route/authorized merge too) is the clean control.
-(define suite-cache (make-hash))
+;; Phase B deleted the two offline Python contract suites that first guarded
+;; these rows; their native RackUnit ports are the owners now:
+;;   F6  — tests/test-gsd-delivery-api-native.rkt (API READ layer: routes,
+;;         memoized reads, typed refusals) and
+;;         tests/test-gsd-delivery-read-ladder.rkt (the read ladder that resolves
+;;         PRs through the real `head={owner}:{branch}` filter);
+;;   F11 — tests/test-gsd-delivery-merge.rkt (recorded operator authorization,
+;;         the non-author APPROVED review, and their typed refusals).
+;;
+;; The witness keeps the row's original semantics: a suite that declares the
+;; row's cases IS the refusal witness (an empty or gutted suite must not be able
+;; to "refuse" by declaring nothing), so it pins three SOURCE facts per owner —
+;; the file exists, it still declares at least the recorded number of
+;; `test-case` forms, and it still names the typed refusal vocabulary the row
+;; refuses by. A rename or a dropped case that carried the token therefore goes
+;; red here. The owners' own green run is gated by the fast suite on every
+;; change and is not re-executed here: together they are ~7.5 min of real-Git
+;; fixture work, which is a second wall clock for the same witness.
+;;
+;; Both halves replay the same contract. The injected half hands the witness a
+;; MUTATED COPY of each owner in a scratch root — the two mutations the Python
+;; fixtures carried: a refusal string changed (the route / typed reason the row
+;; is made of is no longer named) and a case dropped — so the witness must go
+;; red on its own terms; the clean half checks the real owners and must go
+;; green.
+(struct suite-owner (rel min-cases tokens) #:transparent)
 
-(define (line-indent line)
-  (- (string-length line) (string-length (string-trim line #:left? #t))))
+(define f6-owners
+  (list (suite-owner "tests/test-gsd-delivery-api-native.rkt"
+                     46
+                     '("pulls?state=all" "exn:fail:delivery-action"))
+        (suite-owner "tests/test-gsd-delivery-read-ladder.rkt"
+                     41
+                     '("head=coinerd:" "pulls?state=open" "resolve-existing-pr"))))
 
-(define (assertion-opener? line)
-  (regexp-match? #rx"^[ \t]*(?:self\\.)?assert|^[ \t]*with self\\.assertRaises" line))
+(define f11-owners
+  (list (suite-owner "tests/test-gsd-delivery-merge.rkt"
+                     10
+                     '("merge-authorization refuses every under-specified direction"
+                       "reviewed-head-approval refuses a non-approved, anonymous or misbound review"
+                       "no-operator-authorization"
+                       "no-review-artifact"
+                       "head-binding-mismatch"))))
 
-;; The lines belonging to the assertion statement that starts at `i`: the
-;; opener plus every following line indented deeper than it. Comment tokens that
-;; merely sit in the same blank-line-separated block are NOT part of any window,
-;; so a token only counts when it is inside an assertion statement.
-(define (assertion-window lines i)
-  (define base (line-indent (vector-ref lines i)))
-  (define (walk j acc)
-    (cond
-      [(>= j (vector-length lines)) (reverse acc)]
-      [(and (non-empty-string? (string-trim (vector-ref lines j)))
-            (> (line-indent (vector-ref lines j)) base))
-       (walk (add1 j) (cons (vector-ref lines j) acc))]
-      [else (reverse acc)]))
-  (string-join (walk (add1 i) (list (vector-ref lines i))) "\n"))
+(define suite-owner-cache (make-hash))
 
-(define (assertion-windows source)
-  (define lines (list->vector (string-split source "\n")))
-  (for/list ([i (in-range (vector-length lines))]
-             #:when (assertion-opener? (vector-ref lines i)))
-    (assertion-window lines i)))
+;; Declared `test-case` forms: `raco fmt` puts each form at the start of its own
+;; line, so the line-level count is exact and needs no reader (the owners are
+;; `#lang` modules whose cases live in a `module+ test` submodule).
+(define (declared-case-count source)
+  (for/fold ([n 0]) ([line (in-list (string-split source "\n"))])
+    (if (string-prefix? (string-trim line) "(test-case")
+        (add1 n)
+        n)))
 
-(define (assertion-count source)
-  (length (assertion-windows source)))
-
-(define (asserted-token? source token)
-  (for/or ([window (in-list (assertion-windows source))])
-    (and (string-contains? window token) #t)))
-
-(define (suite-outcome root rel min-tests min-assertions tokens)
+;; owner-outcome : path? suite-owner? -> (hasheq 'rel 'witnessed? 'detail)
+(define (owner-outcome root spec)
+  (define rel (suite-owner-rel spec))
   (define path (build-path root rel))
-  (define key (path->string path))
-  (define result
-    (hash-ref suite-cache
-              key
-              (lambda ()
-                (define source (and (file-exists? path) (file->string path)))
-                (define source-text (or source ""))
-                (define-values (code output) (capture (list (python-exe) (path->string path)) root))
-                (define ran-match (regexp-match #px"Ran ([0-9]+) tests?" output))
-                (define ran (and ran-match (string->number (second ran-match))))
-                (define assertions (assertion-count source-text))
-                (define ok? (and (string-contains? output "OK") #t))
-                (define missing
-                  (for/list ([tok (in-list tokens)]
-                             #:unless (asserted-token? source-text tok))
-                    tok))
-                (hash-set* (hash)
-                           'code
-                           code
-                           'output
-                           output
-                           'ran
-                           (or ran 0)
-                           'assertions
-                           assertions
-                           'ok?
-                           (and (zero? code)
-                                ok?
-                                ran
-                                (>= ran min-tests)
-                                (>= assertions min-assertions)
-                                (null? missing))))))
-  (define accepted? (hash-ref result 'ok?))
-  (values
-   (hash-ref result 'code)
-   (hash-ref result 'output)
-   accepted?
-   (format
-    "~a test(s) ran (minimum ~a), ~a assertion line(s) (minimum ~a), OK=~a, tokens asserted: ~a"
-    (hash-ref result 'ran)
-    min-tests
-    (hash-ref result 'assertions)
-    min-assertions
-    (and accepted? #t)
-    (string-join tokens "/"))))
+  (define min-cases (suite-owner-min-cases spec))
+  (define source (and (file-exists? path) (file->string path)))
+  (cond
+    [(not source) (hasheq 'rel rel 'witnessed? #f 'detail (format "~a: owner file missing" rel))]
+    [else
+     (define declared (declared-case-count source))
+     (define missing
+       (for/list ([tok (in-list (suite-owner-tokens spec))]
+                  #:unless (string-contains? source tok))
+         tok))
+     (cond
+       [(pair? missing)
+        (hasheq 'rel
+                rel
+                'witnessed?
+                #f
+                'detail
+                (format "~a: refusal vocabulary missing (~a)" rel (string-join missing " / ")))]
+       [(< declared min-cases)
+        (hasheq 'rel
+                rel
+                'witnessed?
+                #f
+                'detail
+                (format "~a: only ~a declared case(s), the row pins ~a" rel declared min-cases))]
+       [else
+        (hasheq 'rel
+                rel
+                'witnessed?
+                #t
+                'detail
+                (format "~a: ~a declared case(s) (minimum ~a), refusal vocabulary present"
+                        rel
+                        declared
+                        min-cases))])]))
+
+(define (owners-outcome root owners)
+  (for/list ([spec (in-list owners)])
+    (owner-outcome root spec)))
+
+(define (owners-detail outcomes)
+  (string-join (for/list ([o (in-list outcomes)])
+                 (hash-ref o 'detail))
+               "; "))
+
+;; The injected half: one mutated copy per owner, written under a scratch root
+;; that mirrors each owner's repository-relative path. `mutations` is parallel
+;; to `owners`; every mutation must turn its owner's witness red.
+(define (mutated-owners-injected root owners mutations)
+  (define scratch (scratch-dir "owners"))
+  (for ([spec (in-list owners)]
+        [mutation (in-list mutations)])
+    (define rel (suite-owner-rel spec))
+    (write-text! (build-path scratch rel) (mutation (file->string (build-path root rel)))))
+  (define outcomes (owners-outcome scratch owners))
+  (delete-directory/files scratch #:must-exist? #f)
+  outcomes)
+
+;; A refusal string the row is made of, rewritten: the mutation the Python
+;; fixtures carried (the typed reason / the route spelling the row refuses by
+;; stops being named).
+(define (rename-token from to)
+  (lambda (source)
+    (define replaced (regexp-replace* (regexp (regexp-quote from)) source to))
+    ;; A mutation that changed nothing would let the injection pass vacuously.
+    (when (equal? replaced source)
+      (error 'inject-wave-defect "injected mutation ~a matched nothing" from))
+    replaced))
+
+;; A dropped guard: the source loses its LAST declared case (the copy is no
+;; longer a runnable module, which is the point — the witness must reject it on
+;; the declared-case budget before anything is executed).
+(define (drop-last-case source)
+  (define lines (string-split source "\n"))
+  (define at
+    (for/last ([line (in-list lines)]
+               [i (in-naturals)]
+               #:when (string-prefix? (string-trim line) "(test-case"))
+      i))
+  (unless at
+    (error 'inject-wave-defect "no (test-case form to drop"))
+  (string-join (take lines at) "\n"))
 
 (define (f6-injected root)
-  (define-values (code output accepted? witness)
-    (suite-outcome root
-                   "tests/test-gsd-delivery-api-contract.py"
-                   11
-                   15
-                   (list "head=coinerd:" "pulls?state=open")))
-  (values code (format "wrong {owner}/{repo} head filter: ~a" witness) accepted?))
+  ;; The F6 defect itself: the resolver's head filter is spelled
+  ;; `head={owner}/{repo}:{branch}`, which matches nothing, and the API layer
+  ;; stops raising its typed delivery-action refusal.
+  (define outcomes
+    (mutated-owners-injected root
+                             f6-owners
+                             (list (rename-token "exn:fail:delivery-action" "exn:fail:delivery")
+                                   (rename-token "head=coinerd:" "head=coinerd/q:"))))
+  (values
+   0
+   (format "wrong {owner}/{repo} head filter + non-typed API refusal injected into owner copies: ~a"
+           (owners-detail outcomes))
+   (andmap (lambda (o) (not (hash-ref o 'witnessed?))) outcomes)))
 
 (define (f6-clean root)
-  (define-values (code output accepted? witness)
-    (suite-outcome root
-                   "tests/test-gsd-delivery-api-contract.py"
-                   11
-                   15
-                   (list "head=coinerd:" "pulls?state=open")))
-  (values code
-          (format "offline API-contract suite green path (correct head filter): ~a" witness)
-          accepted?))
+  (define outcomes (owners-outcome root f6-owners))
+  (values 0
+          (format "native API/read-ladder owners (correct head filter, typed refusals): ~a"
+                  (owners-detail outcomes))
+          (andmap (lambda (o) (hash-ref o 'witnessed?)) outcomes)))
 
 (define (f11-injected root)
-  (define-values (code output accepted? witness)
-    (suite-outcome root
-                   "tests/test-gsd-delivery-approval-contract.py"
-                   15
-                   25
-                   (list "no-operator-authorization" "no-review-artifact" "head-binding-mismatch")))
-  (values code
-          (format "absent authorization / absent APPROVED review artifact: ~a" witness)
-          accepted?))
+  ;; The F11 defect: a merge under an under-specified authorization, refused only
+  ;; by a weakened (non-typed) reason — and, in the second variant, an approval
+  ;; case that silently disappears.
+  (define variants
+    (list (cons "weakened approval refusal string"
+                (list (rename-token "no-operator-authorization" "operator-authorization")))
+          (cons "dropped approval case" (list drop-last-case))))
+  (define outcomes
+    (for/list ([variant (in-list variants)])
+      (define results (mutated-owners-injected root f11-owners (cdr variant)))
+      (hasheq 'note
+              (car variant)
+              'rejected-every-owner
+              (andmap (lambda (o) (not (hash-ref o 'witnessed?))) results)
+              'detail
+              (owners-detail results))))
+  (values 0
+          (string-join (for/list ([o (in-list outcomes)])
+                         (format "~a -> ~a: ~a"
+                                 (hash-ref o 'note)
+                                 (if (hash-ref o 'rejected-every-owner) "rejected" "NOT REJECTED")
+                                 (hash-ref o 'detail)))
+                       " | ")
+          (andmap (lambda (o) (hash-ref o 'rejected-every-owner)) outcomes)))
 
 (define (f11-clean root)
-  (define-values (code output accepted? witness)
-    (suite-outcome root
-                   "tests/test-gsd-delivery-approval-contract.py"
-                   15
-                   25
-                   (list "no-operator-authorization" "no-review-artifact" "head-binding-mismatch")))
-  (values code
-          (format "offline approval-contract suite green path (recorded authorization + review): ~a"
-                  witness)
-          accepted?))
+  (define outcomes (owners-outcome root f11-owners))
+  (values 0
+          (format "native merge-suite approval cases (recorded authorization + APPROVED review): ~a"
+                  (owners-detail outcomes))
+          (andmap (lambda (o) (hash-ref o 'witnessed?)) outcomes)))
 
 ;; F7 — stale recorded head and cross-artifact timing disagreement
 ;; ---------------------------------------------------------------------------
@@ -711,27 +775,30 @@
 ;; F8 — opaque failure surfacing
 ;; ---------------------------------------------------------------------------
 
-(define (f8-classify root line)
+;; The guard is scripts/gsd-delivery-git.rkt's classify-failure (the Python
+;; controller whose classify_failure this was extracted from is deleted). The
+;; probe is a tiny racket program that requires the REAL module by absolute
+;; path and prints the typed reason for one (stderr, args) shape, so the row
+;; measures the shipped classifier rather than a copy of it.
+(define (f8-classify root stderr-literal)
   (define program
-    (string-append "import importlib.util as u\n"
-                   "spec = u.spec_from_file_location('g', r'"
-                   (path->string (build-path root "scripts" "gsd-delivery.py"))
-                   "')\n"
-                   "m = u.module_from_spec(spec)\nspec.loader.exec_module(m)\n"
-                   "print(m.classify_failure(['git', 'fetch', 'origin', 'refs/heads/campaign/x'], "
-                   "'git', 128, "
-                   line
-                   "))\n"))
-  (define tmp (make-temporary-file "q-w6-f8-~a.py"))
+    (string-append "#lang racket/base\n"
+                   "(require (file "
+                   (format "~s" (path->string (build-path root "scripts" "gsd-delivery-git.rkt")))
+                   "))\n"
+                   "(displayln (classify-failure \"git\" 128 "
+                   stderr-literal
+                   " (list \"git\" \"fetch\" \"origin\" \"refs/heads/campaign/x\")))\n"))
+  (define tmp (make-temporary-file "q-w6-f8-~a.rkt"))
   (dynamic-wind (lambda () (write-text! tmp program))
-                (lambda () (capture (list (python-exe) (path->string tmp)) root))
+                (lambda () (capture (list (racket-exe) (path->string tmp)) root))
                 (lambda ()
                   (when (file-exists? tmp)
                     (delete-file tmp)))))
 
 (define (f8-injected root)
   (define-values (code output)
-    (f8-classify root "format(\"fatal: couldn't find remote ref refs/heads/campaign/x\")"))
+    (f8-classify root "\"fatal: couldn't find remote ref refs/heads/campaign/x\""))
   (values code
           output
           (decided-verdict? code output "remote-ref-missing:" (list "delivery command failed"))))
@@ -1011,13 +1078,14 @@
         'library
         f5-injected
         f5-clean)
-   (row "F6"
-        "PR resolution uses the head={owner}/{repo}:{branch} filter, which matches nothing"
-        "tests/test-gsd-delivery-api-contract.py (offline API contract fixtures)"
-        '("tests/test-gsd-delivery-api-contract.py")
-        'suite-exit0
-        f6-injected
-        f6-clean)
+   (row
+    "F6"
+    "PR resolution uses the head={owner}/{repo}:{branch} filter, which matches nothing"
+    "tests/test-gsd-delivery-api-native.rkt + tests/test-gsd-delivery-read-ladder.rkt (native API route / read-ladder owners)"
+    '("tests/test-gsd-delivery-api-native.rkt" "tests/test-gsd-delivery-read-ladder.rkt")
+    'suite-declares
+    f6-injected
+    f6-clean)
    (row "F7"
         "an artifact pins a stale recorded head and contradicts its own structured timing"
         "scripts/ci/verify-artifact-provenance.rkt (provenance/determinism lint)"
@@ -1027,8 +1095,8 @@
         f7-clean)
    (row "F8"
         "a delivery subprocess failure surfaces as a bare exit code instead of a typed reason"
-        "gsd-delivery classify_failure (typed failure classification)"
-        '("scripts/gsd-delivery.py")
+        "scripts/gsd-delivery-git.rkt classify-failure (typed failure classification)"
+        '("scripts/gsd-delivery-git.rkt")
         'library
         f8-injected
         f8-clean)
@@ -1048,9 +1116,9 @@
         f10-clean)
    (row "F11"
         "a merge is attempted with no recorded operator authorization or no APPROVED review artifact"
-        "tests/test-gsd-delivery-approval-contract.py (amended approval contract fixtures)"
-        '("tests/test-gsd-delivery-approval-contract.py")
-        'suite-exit0
+        "tests/test-gsd-delivery-merge.rkt (native approval cases)"
+        '("tests/test-gsd-delivery-merge.rkt")
+        'suite-declares
         f11-injected
         f11-clean)
    (row
@@ -1077,11 +1145,13 @@
   (list "scripts/ci/inject-wave-defect.rkt"
         "tests/test-wave-integrity-adversarial.rkt"
         "tests/test-wave-delivery-integrity-register.rkt"
-        ;; The suite guards for the two suite-exit0 rows are inputs too: the
-        ;; token witness is a secondary, static check, so swapping in a vacuous
-        ;; passing suite must change a recorded digest and force regeneration.
-        "tests/test-gsd-delivery-api-contract.py"
-        "tests/test-gsd-delivery-approval-contract.py"
+        ;; The native owner suites for the two suite-witnessed rows are inputs
+        ;; too: the declared-case budget and the refusal vocabulary are the
+        ;; witness, so swapping in a vacuous owner must change a recorded digest
+        ;; and force regeneration.
+        "tests/test-gsd-delivery-api-native.rkt"
+        "tests/test-gsd-delivery-read-ladder.rkt"
+        "tests/test-gsd-delivery-merge.rkt"
         "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/extend-register-f12-f13.py"
         "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/injection-matrix-gen.py"
         "artifacts/wave-delivery-integrity/v1.00.31-w0/failure-register.json"

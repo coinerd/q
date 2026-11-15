@@ -21,7 +21,7 @@ never a live branch) and runs the *shipped* guard against the injection:
 |---|---|
 | `nonzero-exit+token` | the guard is a CLI that must BOTH exit non-zero and name the typed refusal: a warning-mode regression that prints the token and exits 0 is recorded as `ok`, never as `refused` |
 | `token` | the guard prints a DECIDED typed verdict and exits 0 (verdict-printing CLI); a crash that prints the verdict text and exits non-zero is refused |
-| `suite-exit0` | the guard is a fixture suite; the row is refused only when the suite ran (`Ran N tests` with at least the row's declared minimum), reported `OK`, exited 0, met a minimum number of assertion statements, and asserts every typed refusal token the row claims inside an assertion statement (opener line plus its more-indented continuation lines) — a dummy suite with passing tests and the tokens in comments is refused |
+| `suite-declares` | the guard is a native owner suite (`tests/**/*.rkt`); the row is refused only when every owner still *declares* the row: the file exists, it declares at least the recorded number of `test-case` forms, and its source still names every typed refusal token the row claims — a renamed refusal or a dropped case fails here |
 | `library` | the guard is an in-process API returning the typed outcome |
 
 A row is `refused` **only** when the guard's own typed refusal is observed. `ok`
@@ -33,9 +33,9 @@ Two negative controls keep the rehearsal from proving nothing:
 * **clean synthetic wave** — an un-injected (healthy) variant of every row is run
   through the same guard and must be *accepted*: for the two gate rows the clean
   trio must exit 0 with `GSD wave evidence PASS` (not merely lack the injected
-  refusal token), for the suite rows the suite's own green path must run its
-  declared minimum of tests with `OK`, and for the fixture/API rows the healthy
-  call must report its success verdict; and
+  refusal token), for the two owner rows every owner must still declare its case
+  budget and refusal vocabulary, and for the fixture/API rows the healthy call
+  must report its success verdict; and
 * **missing guard** — with the guard files absent from the rehearsal root, every
   row must report `guard-missing` (fail closed) instead of `skipped`, so a guard
   cannot be neutered by omission.
@@ -47,12 +47,12 @@ byte-identically. Determinism holds because fixtures pin the git identity and
 commit dates, scratch paths are scrubbed to `<scratch>`, and the rehearsal head is the
 generation-time tip (`git rev-parse HEAD`) — a committed artifact cannot carry its
 own commit hash, so the operative content binding is the rehearsal-inputs digest
-over the harness, both tests, both suite guards, the register, the reproduction
-artifact and the generators.
+over the harness, both tests, the three native owner suites, the register, the
+reproduction artifact and the generators.
 
 ## Result — verdict `PERMANENT`
 
-Rehearsal head `32ecc7d7bad167a237fe945f0f53b72c341560b7`. This head names a
+Rehearsal head `ac42741072bcf4da716c2c4ce579139fdf7b1664`. This head names a
 **published** commit that carries the recorded content: the matrix itself is
 bound by `rehearsal-inputs-digest` over its inputs, and the head is the
 observation anchor. It must survive publication, because a pre-squash branch
@@ -85,12 +85,12 @@ reproduction digest over `w4-reproduction.json`.
 | F3 | evidence `implementation-sha` differs from the durable receipt head | `scripts/gsd-wave-gate.rkt` | `head-binding-mismatch: evidence implementation-sha aaaa… differs from the durable receipt head dddd…` | 1 |
 | F4 | the record commit also touches a non-evidence source path | `scripts/gsd-evidence-bind.rkt record-commit` | `impure-record-commit: src/a.rkt` | 0 |
 | F5 | a wave records verified while its branch was never pushed | `verify-with-delivery-receipt` | `branch-not-published` marker, no journal (`journal=#f remote-pending=#t`) | 0 |
-| F6 | PR resolution uses `head={owner}/{repo}:{branch}`, which matches nothing | `tests/test-gsd-delivery-api-contract.py` | wrong head filter rejected; 11 tests ran (minimum 11), `OK`, suite source asserts `resolve_existing_pr` / `head=` | 0 |
+| F6 | PR resolution uses `head={owner}/{repo}:{branch}`, which matches nothing | `tests/test-gsd-delivery-api-native.rkt` + `tests/test-gsd-delivery-read-ladder.rkt` (native API route / read-ladder owners) | mutated owner copies rejected: `refusal vocabulary missing (exn:fail:delivery-action)` / `refusal vocabulary missing (head=coinerd:)`; the real owners declare 46 + 41 cases | 0 |
 | F7 | an artifact pins a stale recorded head and contradicts its own structured timing | `scripts/ci/verify-artifact-provenance.rkt` | `provenance-drift: … recorded head 8299409c… does not resolve to a commit` | 2 |
-| F8 | a delivery subprocess failure surfaces as a bare exit code | `gsd-delivery.py classify_failure` | `remote-ref-missing: refs/heads/campaign/x is not published on origin; push the verified head first` | 0 |
+| F8 | a delivery subprocess failure surfaces as a bare exit code | `scripts/gsd-delivery-git.rkt classify-failure` | `remote-ref-missing: refs/heads/campaign/x is not published on origin; push the verified head first` | 0 |
 | F9 | a wave is marked done while its delivery journal reads delivery-pending | `try-complete-wave! #:delivery-proof 'require-delivered` | `completion-result-status: delivery-pending-cannot-complete` | 0 |
 | F10 | a rolled-back wave leaves its completion event leading the durable record | `completion-outbox-invariant?` + `reconcile-completion-outbox!` | `outbox-leads-record` then reconcile → `ok` | 0 |
-| F11 | a merge with no recorded operator authorization or no APPROVED review artifact | `tests/test-gsd-delivery-approval-contract.py` | absent authorization / absent APPROVED review artifact; 15 tests ran (minimum 15), `OK`, suite source asserts `no-operator-authorization` / `no-review-artifact` / `head-binding-mismatch` | 0 |
+| F11 | a merge with no recorded operator authorization or no APPROVED review artifact | `tests/test-gsd-delivery-merge.rkt` (native approval cases) | `weakened approval refusal string -> rejected` (`refusal vocabulary missing (no-operator-authorization)`) and `dropped approval case -> rejected` (`only 9 declared case(s), the row pins 10`) | 0 |
 | F12 | a finalized-looking trio carries sentinel placeholders in identity and narrative fields | `scripts/gsd-wave-gate.rkt` CLI, plus the in-process minimum-content half for a terse narrative | `placeholder-evidence: independent reviewer identity is a placeholder`; the terse trio yields `insufficient-review-content` | 1 |
 | F13 | the authored plan body is amended while the frozen snapshot still reports clean | `seed-and-bind-plan-snapshot!` | `frozen-contract-stale` (frozen snapshot intact) | 0 |
 
@@ -101,8 +101,10 @@ empty `failing-rows`.
 The dispatch signals in the table are the point of the `signal` column: three
 shipped guards fail closed with a non-zero exit *and* name the refusal (a
 warning-mode regression that only prints the token is caught as `ok`), two print a
-typed verdict and exit 0 (verdict-printing CLIs), two are fixture suites whose
-witnessed green run *is* the refusal witness, and six are in-process APIs.
+typed verdict and exit 0 (verdict-printing CLIs), two are native owner suites
+whose declared case budget and refusal vocabulary *are* the refusal witness (the
+owners' own green run is gated by the fast suite on every change), and six are
+in-process APIs.
 Recording the signal with each row keeps the matrix from implying an exit-code
 polarity the guards do not share.
 
@@ -138,8 +140,20 @@ neutered guard rather than inherit a `PERMANENT` verdict:
   refusal; and
 * the unit-level polarity witness `(token-refusal 0 token token)` → `#f`,
   `(token-refusal 1 token token)` → `#t` is asserted by the rehearsal test;
-* a suite that prints `Ran N tests … OK` and then exits 99 makes F6/F11 `ok`,
-  their clean controls `refused`, and the verdict `NOT PERMANENT`; and
+* **mutating an owner** turns its row red: the rehearsal hands the witness a
+  mutated *copy* of each native owner in a scratch root — the F6 defect itself
+  (the resolver's `head={owner}/{repo}:{branch}` spelling, plus a de-typed
+  `exn:fail:delivery` refusal) and the F11 defect (a renamed
+  `no-operator-authorization` refusal, and a copy that dropped its last declared
+  case) — and every copy is rejected, with the reason naming the owner and the
+  half that fired (`refusal vocabulary missing (…)`, `only 9 declared case(s),
+  the row pins 10`);
+* **deleting an owner** makes the register rows fail: with
+  `tests/test-gsd-delivery-api-native.rkt` removed from a scratch worktree, F6
+  reports `guarded-fail` instead of `guarded-pass`, and renaming the F11
+  approval case there does the same to F11 — the register's owner witness is
+  `file exists` + declared-case budget + refusal vocabulary, so omission and
+  gutting are both red; and
 * `pure-verdict?` matches the F4 success verdict exactly (never by substring, so
   `impure-record-commit` cannot satisfy `pure`), asserted by the test;
 * a `gsd-evidence-bind` stub that prints `digest-mismatch` / `impure-record-commit`
@@ -149,14 +163,17 @@ neutered guard rather than inherit a `PERMANENT` verdict:
   verdict (e.g. `digest-mismatch` and `digest-ok`, or `impure-record-commit` and
   `pure`) makes F2/F4 `ok` and their clean controls `refused`: a decided verdict
   must be a verdict LINE on exit 0 with no contradictory verdict line alongside;
-* swapping in a vacuous passing suite for either suite row changes a recorded
+* swapping in a vacuous passing owner for either owner row changes a recorded
   rehearsal-input digest, so the committed `PERMANENT` verdict no longer matches
-  and `tests/test-wave-integrity-adversarial.rkt` fails (the suites are content
-  inputs, and the test asserts both are present in `rehearsal-inputs`);
-* dummy suites (enough passing tests, typed tokens only in comments) make F6/F11
-  `ok` because the witness requires assertion-backed tokens (tokens inside an
-  assertion statement, not merely in the same block) and a minimum number of
-  assertion statements; the witness reports the assertion count.
+  and `tests/test-wave-integrity-adversarial.rkt` fails (the owners are content
+  inputs, and the test asserts all three are present in `rehearsal-inputs`);
+* an owner that no longer *names* the row's refusal vocabulary makes F6/F11
+  `ok` (and their clean control `refused`); under the missing-guard control —
+  the guard files absent from the rehearsal root — F6/F11 report `guard-missing`
+  like every other row; and an owner deleted from a *real* root is caught earlier
+  still: the rehearsal-inputs digest cannot be computed, so the harness fails
+  closed at exit 1 instead of claiming `PERMANENT`. The witness is the
+  declaration, not merely a green run.
 
 ## Red-first evidence
 
@@ -192,3 +209,39 @@ the last **published** commit at bake time (`b7c1ac83a…`) for the same reason
 as before: a pre-squash branch tip becomes unfetchable once the repair branch
 is squash-merged. The content binding remains `rehearsal-inputs-digest`, not
 the anchor.
+
+## Fourth re-stamp — Phase B deleted the Python parity suites (part A)
+
+Phase B deleted the last Python test suites, and two of them were this
+rehearsal's F6/F11 witnesses. The rows now point at their native RackUnit
+owners instead of at a Python fixture suite:
+
+| Row | Owner(s) now |
+|---|---|
+| F6 | `tests/test-gsd-delivery-api-native.rkt` (API READ layer: routes, memoized reads, typed refusals) + `tests/test-gsd-delivery-read-ladder.rkt` (the read ladder that resolves PRs through the real `head={owner}:{branch}` filter) |
+| F11 | `tests/test-gsd-delivery-merge.rkt` (recorded operator authorization, the non-author APPROVED review, and their typed refusals) |
+
+The `suite-exit0` signal was replaced by `suite-declares`: a Racket owner suite
+is witnessed by what it *declares* — the file exists, it declares at least the
+row's recorded number of `test-case` forms, and its source still names the
+row's typed refusal vocabulary. The owners' green run is not re-executed inside
+the rehearsal: together they are ~7.5 minutes of real-Git fixture work that the
+fast suite already runs on every change, so re-running them here would pay the
+same wall clock twice for a witness the fast gate already produces. The
+injections became real mutations of owner *copies* (the wrong head-filter
+spelling, a de-typed refusal, a renamed approval refusal, a dropped case), so
+the witness is shown to be falsifiable rather than merely asserted; and the
+register's owner witness was falsified the same way in a scratch worktree (owner
+removed → `guarded-fail`; F11 approval case renamed → `guarded-fail`).
+
+Inputs: the two deleted Python suites left `rehearsal-inputs`, and the three
+native owners joined it, so the rehearsal now binds ten inputs. F8's guard moved
+from `scripts/gsd-delivery.py classify_failure` to
+`scripts/gsd-delivery-git.rkt classify-failure` in the same series (the Python
+controller that owned it was deleted). The register digest is unchanged
+(`4ce067d627506b3b…`, 13 rows) because no register row text moved. The matrix
+was regenerated by `run-rehearsal` itself and `SHA256SUMS` re-signed; the head
+anchor is re-stamped to `ac4274107…` (the generation-time tip, which carries
+these inputs). The `v1.00.32-w6/raw/injection-matrix-gen.py` snapshot still
+carries `1.00.31` path literals in its `BOUND` list, so the matrix was produced
+by the harness directly rather than by that snapshot copy.

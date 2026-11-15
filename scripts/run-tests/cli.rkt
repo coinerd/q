@@ -10,7 +10,7 @@
          racket/string
          (only-in racket/future processor-count)
          (only-in "profiles.rkt" known-profiles)
-         (only-in "scheduler-order.rkt" known-orderings default-ordering))
+         (only-in "shard-plan.rkt" known-orderings default-ordering))
 
 (provide usage
          parse-args

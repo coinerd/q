@@ -27,7 +27,7 @@
          racket/runtime-path
          racket/string
          racket/system
-         "../../scripts/run-tests/work-counters.rkt")
+         "work-counters.rkt")
 
 (provide private-fixture?
          private-fixture-root

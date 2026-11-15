@@ -101,20 +101,21 @@ concurrency:
 jobs:
   # ────────────────────────────────────────────────────────────
   # Gate 1: Lint — lightweight, required, fast PR feedback
-  # v1.00.26 W1 (§7): the PR-critical path keeps only the governance
-  # controller tests and workflow YAML validation. The Racket lint
-  # suite (lint-all, version-expectations, lint-alignment, metadata
-  # inventory/lint) moved to the parallel `lint-quality` job so
-  # downstream jobs (fast-env → test …) no longer wait for Racket lint
-  # steps. `lint` and `lint-quality` are both required.
+  # v1.00.26 W1 (§7): the PR-critical path keeps only workflow YAML
+  # validation. The Racket lint suite (lint-all, version-expectations,
+  # lint-alignment, metadata inventory/lint) moved to the parallel
+  # `lint-quality` job so downstream jobs (fast-env → test …) no longer
+  # wait for Racket lint steps. The former Python controller gate
+  # (`python3 -m unittest discover -s scripts/github`) is gone with the
+  # last Python test under scripts/github: the protected-wave finalizer
+  # controller scenarios are Racket now (tests/test-wave-finalizer-*.rkt)
+  # and run in the `test` job, so `lint` carries no inert discovery step.
+  # `lint` and `lint-quality` are both required.
   # ────────────────────────────────────────────────────────────
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
-      - name: Protected governance controller tests
-        run: python3 -m unittest discover -s scripts/github -p 'test_*.py'
 
       - name: Workflow YAML validation
         run: |
@@ -166,7 +167,7 @@ jobs:
         run: racket scripts/check-lint-alignment.rkt
 
       # Metadata lint (blocking): the repo-owned classifier
-      # scripts/run-tests/classify-metadata.rkt is the SINGLE discovery
+      # scripts/run-tests/classify.rkt is the SINGLE discovery
       # implementation for both local and CI. Both modes invoke the exact
       # same command from the checkout root, so the inventory is identical
       # by construction (invariants I4/I5). Enforcement flipped at v1.00.06
@@ -176,14 +177,14 @@ jobs:
       # discovery branch remains; the parity contract is pinned by
       # tests/ci/metadata-discovery-test.rkt + tests/metadata-discovery/fixture/.
       - name: metadata-inventory (artifact)
-        run: racket scripts/run-tests/classify-metadata.rkt --metadata-inventory-json > metadata-inventory.json
+        run: racket scripts/run-tests/classify.rkt --metadata-inventory-json > metadata-inventory.json
       - name: Upload metadata inventory
         uses: actions/upload-artifact@v7
         with:
           name: metadata-inventory-${{ github.sha }}
           path: metadata-inventory.json
       - name: metadata-lint (blocking)
-        run: racket scripts/run-tests/classify-metadata.rkt --lint-metadata
+        run: racket scripts/run-tests/classify.rkt --lint-metadata
 
   # ────────────────────────────────────────────────────────────
   # Gate 1b: Prepared environment producer (v1.00.16 W3 cutover)
@@ -941,65 +942,48 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts-run proof-bundle
-          SHARD_JSONS="$(find shard-results -name test-results.json | LC_ALL=C sort)"
-          if [ -z "$SHARD_JSONS" ]; then
-            echo "producer: no shard results downloaded (refusing to write a bundle)" >&2
-            exit 1
-          fi
-          : > artifacts-run/shards.jsonl
-          for f in $SHARD_JSONS; do
-            jq -c --arg artifact "$(basename "$(dirname "$f")")" \
-              '{artifact: $artifact,
-                shard: .run_summary.shard,
-                head_sha: .run_summary.run_sha,
-                file_count: .run_summary.file_count,
-                pass: .run_summary.pass,
-                fail: .run_summary.fail,
-                timeout: .run_summary.timeout,
-                skip: .run_summary.skip,
-                wall_clock_seconds: .run_summary.wall_clock_seconds}' "$f" >> artifacts-run/shards.jsonl
-          done
-          # Fail closed: every recorded shard must carry its own
-          # shard-side run-SHA attestation (see the shard stamp step).
-          if ! jq -se 'length > 0 and all(.head_sha != null)' artifacts-run/shards.jsonl >/dev/null; then
-            echo "producer: a shard result lacks its shard-side run-SHA attestation (refusing to write a bundle)" >&2
-            exit 1
-          fi
-          jq -s --arg run_sha "$GITHUB_SHA" '{
-            run_sha: $run_sha,
-            suite: "fast",
-            sharded: true,
-            shards: (sort_by(.artifact)),
-            file_count: (map(.file_count) | add),
-            pass: (map(.pass) | add),
-            fail: (map(.fail) | add),
-            timeout: (map(.timeout) | add),
-            skip: (map(.skip) | add),
-            wall_clock_seconds: (map(.wall_clock_seconds) | max),
-            elapsed_ms_basis: "max shard wall_clock_seconds; shards execute in parallel so the suite completed when the slowest shard completed"
-          }' artifacts-run/shards.jsonl > artifacts-run/fast-suite-results-summary.json
+          # Phase D: the shard aggregation and its verdict now live in ONE
+          # Racket verifier (scripts/ci/verify-shard-results.rkt), replacing
+          # the per-shard jq projection plus jq reduce that used to build the
+          # summary here. It checks shard presence/count, the runner's
+          # run-summary schema, the shard-side run-SHA binding, per-file
+          # completeness and non-duplication, count self-consistency and
+          # required-check accounting, and only then writes the aggregate
+          # document. The document keeps the same field names/values the jq
+          # reduce produced, so verify-result-truth and the claim digests
+          # below are unchanged consumers.
+          #
+          # Independent shard-count expectation, derived from the SAME repo
+          # variable that expands the test matrix — never from the downloaded
+          # artifacts (a green job with a missing/misnamed artifact would
+          # otherwise shrink the summary and pass).
+          SHARD_EXPECT="${{ vars.FAST_SHARD_COUNT == '4' && '4' || vars.FAST_SHARD_COUNT == '6' && '6' || vars.FAST_SHARD_COUNT == '8' && '8' || '3' }}"
+          racket scripts/ci/verify-shard-results.rkt \
+            --shard-root shard-results \
+            --expect-shards "$SHARD_EXPECT" \
+            --expect-sha "$GITHUB_SHA" \
+            --require-shard-checks test \
+            --suite fast \
+            --aggregate-out artifacts-run/fast-suite-results-summary.json \
+            --selected-paths-out artifacts-run/selected-paths.txt \
+            --counts-out artifacts-run/aggregate-counts.env \
+            --summary-out artifacts-run/fast-suite-summary.md
           SUMMARY="artifacts-run/fast-suite-results-summary.json"
-          FILE_TOTAL="$(jq '.file_count' "$SUMMARY")"
-          PASS_TOTAL="$(jq '.pass' "$SUMMARY")"
-          FAIL_TOTAL="$(jq '.fail' "$SUMMARY")"
-          TIMEOUT_TOTAL="$(jq '.timeout' "$SUMMARY")"
-          SKIP_TOTAL="$(jq '.skip' "$SUMMARY")"
-          if [ "$FILE_TOTAL" -eq 0 ] || [ "$FAIL_TOTAL" -ne 0 ] || [ "$TIMEOUT_TOTAL" -ne 0 ] || [ "$SKIP_TOTAL" -ne 0 ]; then
-            echo "producer: refusing to write a proof bundle over a non-clean aggregate (files=$FILE_TOTAL fail=$FAIL_TOTAL timeout=$TIMEOUT_TOTAL skip=$SKIP_TOTAL)" >&2
-            exit 1
-          fi
+          cat artifacts-run/fast-suite-summary.md >> "$GITHUB_STEP_SUMMARY"
+          # The verifier fails closed on missing/duplicate shards, unattested
+          # or stale run SHAs, non-clean aggregates and zero executed tests, so
+          # reaching this line means the aggregate is clean. FILE_TOTAL,
+          # PASS_TOTAL, FAIL_TOTAL, TIMEOUT_TOTAL, SKIP_TOTAL and ELAPSED_MS
+          # come from the verified aggregate (same values the jq reads
+          # produced).
+          source artifacts-run/aggregate-counts.env
           echo "producer: clean fast-suite aggregate (files=$FILE_TOTAL pass=$PASS_TOTAL fail=$FAIL_TOTAL timeout=$TIMEOUT_TOTAL skip=$SKIP_TOTAL)"
           # BUG-0073 (v1.00.30 W0): result-truth verification at the
-          # required aggregate boundary.  The structural refusal above is
+          # required aggregate boundary.  The verifier refusal above is
           # necessary but not sufficient: a green claim (proof bundle) is
           # minted below only if scripts/ci/verify-result-truth.rkt also
           # verifies shard presence, totals consistency and the run-SHA
           # binding for the aggregate and every shard.  Fail closed.
-          # Independent shard-count expectation, derived from the SAME
-          # repo variable that expands the test matrix — never from the
-          # downloaded artifacts (a green job with a missing/misnamed
-          # artifact would otherwise shrink the summary and pass).
-          SHARD_EXPECT="${{ vars.FAST_SHARD_COUNT == '4' && '4' || vars.FAST_SHARD_COUNT == '6' && '6' || vars.FAST_SHARD_COUNT == '8' && '8' || '3' }}"
           racket scripts/ci/verify-result-truth.rkt \
             --aggregate "$SUMMARY" \
             --expect-shards "$SHARD_EXPECT" \
@@ -1010,14 +994,13 @@ jobs:
           COMPLETED_AT="$CREATED_AT"
           RESULT_SHA="sha256:$(sha256sum "$SUMMARY" | cut -d' ' -f1)"
           RESULT_SIZE="$(stat -c%s "$SUMMARY")"
-          ELAPSED_MS="$(jq '(.wall_clock_seconds * 1000) | floor' "$SUMMARY")"
           START_EPOCH="$(( $(date -u +%s) - ( (ELAPSED_MS + 999) / 1000 ) ))"
           STARTED_AT="$(date -u -d "@${START_EPOCH}" '+%Y-%m-%dT%H:%M:%SZ')"
           INVENTORY_SHA="sha256:$(git ls-files tests | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
-          racket scripts/run-tests/classify-metadata.rkt --metadata-inventory-json > artifacts-run/metadata-inventory.json
+          racket scripts/run-tests/classify.rkt --metadata-inventory-json > artifacts-run/metadata-inventory.json
           METADATA_SHA="sha256:$(sha256sum artifacts-run/metadata-inventory.json | cut -d' ' -f1)"
           COVERS_SHA="sha256:$(git grep -h '@covers' -- tests | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
-          SELECTED_SHA="sha256:$(jq -s '[.[].files[].path] | unique | .[]' $SHARD_JSONS | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+          SELECTED_SHA="sha256:$(sha256sum artifacts-run/selected-paths.txt | cut -d' ' -f1)"
           RUNNER_REV="$(git rev-parse "$GITHUB_SHA":scripts/run-tests.rkt)"
           FLAGS_SHA="sha256:$(printf '%s' '--suite fast --jobs 4 --shard-index <shard> --shard-total <total> --json-out test-results.json' | sha256sum | cut -d' ' -f1)"
           LOCK_SHA="sha256:$(sha256sum ci/racket-package-lock.rktd | cut -d' ' -f1)"
@@ -1127,7 +1110,7 @@ jobs:
             "digest_sources": {
               "note": "annotations for auditors; consume.rkt write ignores unknown claim-document keys",
               "inventory_digest": "sha256 over `git ls-files tests | sort`",
-              "metadata_manifest_digest": "sha256 over scripts/run-tests/classify-metadata.rkt --metadata-inventory-json",
+              "metadata_manifest_digest": "sha256 over scripts/run-tests/classify.rkt --metadata-inventory-json",
               "covers_manifest_digest": "sha256 over sorted `git grep -h '@covers' -- tests` lines",
               "selected_manifest_digest": "sha256 over the executed selection: sorted union of .files[].path across all shard test-results.json",
               "runner_revision_sha": "blob sha of scripts/run-tests.rkt at GITHUB_SHA",

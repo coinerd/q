@@ -287,9 +287,14 @@
     (check-not-false lint-section)
     (check-not-false lint-quality-section))
 
-  (test-case "lint is lightweight: governance + YAML validation only"
-    (check-true (string-contains? lint-section "Protected governance controller tests"))
+  (test-case "lint is lightweight: workflow YAML validation only"
     (check-true (string-contains? lint-section "Workflow YAML validation"))
+    ;; The Python controller gate is gone with the last Python test under
+    ;; scripts/github: the finalizer controller scenarios are Racket now
+    ;; (tests/test-wave-finalizer-controller.rkt) and run in the `test` job, so
+    ;; no inert discovery step may remain on the PR-critical path.
+    (check-false (string-contains? lint-section "Protected governance controller tests"))
+    (check-false (regexp-match? #rx"(?m:^ +run:.*unittest)" lint-section))
     ;; no Racket lint work may remain on the PR critical path
     (check-false (string-contains? lint-section "scripts/lint-all.rkt"))
     (check-false (string-contains? lint-section "check-version-expectations"))

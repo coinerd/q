@@ -795,9 +795,8 @@
 ;;   - forced #:mode 'grouped-in-process actually runs grouped (execution-mode-of)
 ;;     and a parsed-output fixture executes exactly once, even a failing one;
 ;;   - a healthy fixture after the failure proves the grouped host survives;
-;;   - the zero-parsed-output route is asserted via its named telemetry — its
-;;     counter reads exactly 2 BY CONTRACT (grouped attempt + named subprocess
-;;     rerun), never forced to 1;
+;;   - zero-parsed grouped execution is inconclusive and never replayed;
+;;     its external counter reads exactly 1;
 ;;   - a policy-grouped request in an un-expanded area names 'area-not-expanded
 ;;     without changing the area rollout;
 ;;   - plain raco, direct racket, and runner-subprocess routes execute exactly
@@ -854,8 +853,13 @@
         out)))))
 
 (define (r92-make-counter-fixture kind)
-  (define fixture (make-temporary-file "r92-counter-~a.rkt"))
-  (define counter (make-temporary-file "r92-counter-count-~a" #f (path-only fixture)))
+  ;; Each fixture lives in its OWN private directory. A shared temp directory can
+  ;; contain an unrelated sibling (e.g. a stale `info.rkt`), which makes
+  ;; `raco test <file>` fail for reasons unrelated to the fixture; a private
+  ;; directory keeps the R92 contract environment-independent.
+  (define dir (make-temporary-directory))
+  (define fixture (build-path dir "r92-counter.rkt"))
+  (define counter (build-path dir "counter"))
   ;; Pre-create the external counter file so fixtures can append to it.
   (call-with-output-file counter #:exists 'truncate void)
   (r92-write-counter-fixture fixture counter kind)
@@ -875,8 +879,10 @@
     (apply system*/exit-code args)))
 
 (define (r92-cleanup! fixture counter)
-  (delete-file fixture)
-  (delete-file counter))
+  ;; Both live in one private directory; remove it wholesale.
+  (define dir (path-only fixture))
+  (when (directory-exists? dir)
+    (delete-directory/files dir)))
 
 (test-case "BUG-0092: forced grouped-in-process actually runs grouped, exactly once"
   (define run (runner-ref 'run-single-file))
@@ -922,7 +928,7 @@
   (r92-cleanup! bad bad-counter)
   (r92-cleanup! good good-counter))
 
-(test-case "BUG-0092: zero-parsed-output route names its fallback; counter is 2 by contract"
+(test-case "BUG-0092: zero-parsed grouped execution is never replayed"
   (define run (runner-ref 'run-single-file))
   (define mode-of (grouped-runner-ref 'execution-mode-of))
   (define-values (fixture counter) (r92-make-counter-fixture 'zero-parsed))
@@ -930,13 +936,26 @@
     (parameterize ([(grouped-runner-ref 'current-requested-execution-mode) #f])
       (run fixture #:timeout 60000 #:mode 'grouped-in-process)))
   (check-equal? ((runner-ref 'test-file-result-exit-code) result) 0)
-  (check-true (>= ((runner-ref 'test-file-result-total) result) 1))
-  ;; named fallback telemetry for the intentional subprocess rerun
-  (check-equal? ((parse-ref 'test-file-result-grouped-fallback-reason) result) 'zero-parsed-output)
-  (check-equal? (mode-of fixture) 'subprocess)
-  ;; NOT forced to 1: grouped attempt + named subprocess rerun execute the
-  ;; file exactly twice BY CONTRACT.
+  (check-equal? ((runner-ref 'test-file-result-total) result) 0)
+  (check-equal? ((parse-ref 'classify-test-result) result) 'ZERO_PARSED)
+  (check-false ((parse-ref 'test-file-result-grouped-fallback-reason) result))
+  (check-equal? (mode-of fixture) 'grouped-in-process)
+  (check-equal? (r92-count-invocations counter) 1)
+  ;; Exercise aggregate strictness on the same grouped fixture, without replay.
+  (define run-suite (grouped-runner-ref 'run-suite-once))
+  (define (suite-exit strict?)
+    (let/ec return
+      (parameterize ([current-output-port (open-output-string)]
+                     [current-error-port (open-output-string)]
+                     [exit-handler (lambda (code) (return code))])
+        (define-values (code results)
+          (run-suite (list fixture) 1 60000 strict? 'all 1 1 'grouped-in-process #f #f #f))
+        (check-equal? ((parse-ref 'classify-test-result) (car results)) 'ZERO_PARSED)
+        code)))
+  (check-equal? (suite-exit #t) 4)
   (check-equal? (r92-count-invocations counter) 2)
+  (check-equal? (suite-exit #f) 0)
+  (check-equal? (r92-count-invocations counter) 3)
   (r92-cleanup! fixture counter))
 
 (test-case "BUG-0092: policy-grouped request in an un-expanded area names its fallback"

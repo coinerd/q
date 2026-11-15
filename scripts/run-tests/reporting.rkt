@@ -13,7 +13,7 @@
          racket/path
          racket/list
          json
-         (only-in "classify-metadata.rkt" get-file-metadata)
+         (only-in "classify.rkt" get-file-metadata)
          (only-in "ledger.rkt"
                   summarize-ledger-results
                   ledger-summary-counts
@@ -464,9 +464,17 @@
 ;; per-file result fields must be present and well-typed — malformed
 ;; required result fields produce descriptive problems.
 ;;
-;; Returns a list of problem strings; the empty list means the artifact is
-;; valid. Never raises.
-(define (validate-run-summary-json js)
+;; Returns projection/type problems, not whole-envelope or semantic validation.
+;; An empty list means only the checked fields passed. Never raises.
+(define (validate-run-summary-json input)
+  (define js
+    (if (hash? input)
+        input
+        (hasheq)))
+  (define summary
+    (if (hash-has-key? js 'run_summary)
+        (hash-ref js 'run_summary)
+        js))
   (define problems '())
   (define (problem msg)
     (set! problems (cons msg problems)))
@@ -477,21 +485,27 @@
   (define (check-type field v pred what)
     (unless (pred v)
       (problem (format "~a: expected ~a, got ~s" field what v))))
-  ;; Required top-level fields (shared by old and new schema).
+  (unless (hash? input)
+    (problem (format "root: expected object, got ~s" input)))
+  (unless (hash? summary)
+    (problem (format "run_summary: expected object, got ~s" summary)))
+  (unless (hash? summary)
+    (set! summary (hasheq)))
+  ;; Required summary fields (nested in producer envelopes, flat in legacy artifacts).
   (for ([f '(runner_version suite profile execution_mode)])
-    (unless (hash-has-key? js f)
+    (unless (hash-has-key? summary f)
       (problem (format "missing required field ~a" f)))
-    (when (hash-has-key? js f)
-      (check-type f (hash-ref js f) string-field? "a string")))
+    (when (hash-has-key? summary f)
+      (check-type f (hash-ref summary f) string-field? "a string")))
   (for ([f '(file_count pass fail timeout skip wall_clock_seconds)])
-    (unless (hash-has-key? js f)
+    (unless (hash-has-key? summary f)
       (problem (format "missing required field ~a" f)))
-    (when (hash-has-key? js f)
-      (check-type f (hash-ref js f) number-field? "a number")))
-  (unless (hash-has-key? js 'shard)
+    (when (hash-has-key? summary f)
+      (check-type f (hash-ref summary f) number-field? "a number")))
+  (unless (hash-has-key? summary 'shard)
     (problem "missing required field shard"))
-  (when (hash-has-key? js 'shard)
-    (define sh (hash-ref js 'shard))
+  (when (hash-has-key? summary 'shard)
+    (define sh (hash-ref summary 'shard))
     (cond
       [(eq? sh (json-null)) (void)]
       [(hash? sh)
@@ -501,10 +515,10 @@
          (when (hash-has-key? sh f)
            (check-type f (hash-ref sh f) number-field? "a number")))]
       [else (problem (format "shard: expected null or object, got ~s" sh))]))
-  (unless (hash-has-key? js 'metadata_completeness)
+  (unless (hash-has-key? summary 'metadata_completeness)
     (problem "missing required field metadata_completeness"))
-  (when (hash-has-key? js 'metadata_completeness)
-    (define mc (hash-ref js 'metadata_completeness))
+  (when (hash-has-key? summary 'metadata_completeness)
+    (define mc (hash-ref summary 'metadata_completeness))
     (cond
       [(hash? mc)
        (for ([f '(explicit heuristic missing)])
@@ -540,6 +554,8 @@
   ;; scheduler object IS present, every field inside it must be well-typed.
   (when (hash-has-key? js 'extra)
     (define extra (hash-ref js 'extra))
+    (unless (hash? extra)
+      (problem (format "extra: expected object, got ~s" extra)))
     (when (hash? extra)
       (when (hash-has-key? extra 'scheduler)
         (define sched (hash-ref extra 'scheduler))
@@ -547,11 +563,20 @@
             (for ([(k v) (in-hash sched)])
               (cond
                 [(eq? k 'scheduler_mode)
-                 (unless (string-field? v)
-                   (problem (format "extra.scheduler.scheduler_mode: expected string, got ~s" v)))]
+                 (unless (member v '("batch" "queue"))
+                   (problem (format "extra.scheduler.scheduler_mode: expected batch or queue, got ~s"
+                                    v)))]
                 [else
-                 (unless (number-field? v)
-                   (problem (format "extra.scheduler.~a: expected number, got ~s" k v)))]))
+                 (unless (or (number-field? v)
+                             (and (equal? (hash-ref sched 'scheduler_mode #f) "queue")
+                                  (memq k
+                                        '(queue_wait_ms worker_busy_ms
+                                                        worker_idle_ms
+                                                        serial_partition_ms
+                                                        parallel_partition_ms))
+                                  (eq? v (json-null))))
+                   (problem
+                    (format "extra.scheduler.~a: expected number or queue-only null, got ~s" k v)))]))
             (problem (format "extra.scheduler: expected object, got ~s" sched))))
       (when (hash-has-key? extra 'prepared_environment)
         (define pe (hash-ref extra 'prepared_environment))
@@ -559,12 +584,13 @@
           [(not (hash? pe))
            (problem (format "extra.prepared_environment: expected object, got ~s" pe))]
           [else
-           (define result (hash-ref pe 'result #f))
-           (unless (member result '("restored" "rebuilt" "unavailable"))
-             (problem
-              (format
-               "extra.prepared_environment.result: expected restored/rebuilt/unavailable, got ~s"
-               result)))
+           (when (hash-has-key? pe 'result)
+             (define result (hash-ref pe 'result))
+             (unless (member result '("restored" "rebuilt" "unavailable"))
+               (problem
+                (format
+                 "extra.prepared_environment.result: expected restored/rebuilt/unavailable, got ~s"
+                 result))))
            (for ([f '(restore_ms fallback_ms)])
              (when (hash-has-key? pe f)
                (define v (hash-ref pe f))

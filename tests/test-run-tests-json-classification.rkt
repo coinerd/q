@@ -238,6 +238,97 @@
       (define partial-artifact artifact)
       (check-equal? (validate-run-summary-json artifact) '()))
 
+    (test-case "W1 fixture: empty prepared_environment object validates (raw envelope)"
+      (define artifact
+        (read-json (open-input-string
+                    (string-append
+                     "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\","
+                     "\"profile\":\"local\",\"execution_mode\":\"subprocess\","
+                     "\"file_count\":1,\"pass\":1,\"fail\":0,"
+                     "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
+                     "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+                     "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
+                     "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],"
+                     "\"extra\":{\"prepared_environment\":{}}}"))))
+      (check-equal? (validate-run-summary-json artifact) '()))
+
+    (test-case "W1 fixture: partial prepared_environment with only restore_ms validates (raw envelope)"
+      (define artifact
+        (read-json (open-input-string
+                    (string-append
+                     "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\","
+                     "\"profile\":\"local\",\"execution_mode\":\"subprocess\","
+                     "\"file_count\":1,\"pass\":1,\"fail\":0,"
+                     "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
+                     "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+                     "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
+                     "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],"
+                     "\"extra\":{\"prepared_environment\":{\"restore_ms\":120}}}"))))
+      (check-equal? (validate-run-summary-json artifact) '()))
+
+    (test-case "W1 fixture: partial prepared_environment with only result validates (raw envelope)"
+      (define artifact
+        (read-json (open-input-string
+                    (string-append
+                     "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\","
+                     "\"profile\":\"local\",\"execution_mode\":\"subprocess\","
+                     "\"file_count\":1,\"pass\":1,\"fail\":0,"
+                     "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
+                     "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+                     "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
+                     "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],"
+                     "\"extra\":{\"prepared_environment\":{\"result\":\"rebuilt\"}}}"))))
+      (check-equal? (validate-run-summary-json artifact) '()))
+
+    (test-case "W1 fixture: empty prepared_environment object validates (flattened)"
+      (define artifact
+        (read-json (open-input-string
+                    (string-append
+                     "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\","
+                     "\"profile\":\"local\",\"execution_mode\":\"subprocess\","
+                     "\"file_count\":1,\"pass\":1,\"fail\":0,"
+                     "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
+                     "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+                     "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
+                     "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],"
+                     "\"extra\":{\"prepared_environment\":{}}}"))))
+      ;; Flattened: no run_summary key -- fields at top level
+      (check-equal? (validate-run-summary-json artifact) '()))
+
+    (test-case "W1 fixture: wrong type in prepared_environment still rejected"
+      (define artifact
+        (read-json (open-input-string
+                    (string-append
+                     "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\","
+                     "\"profile\":\"local\",\"execution_mode\":\"subprocess\","
+                     "\"file_count\":1,\"pass\":1,\"fail\":0,"
+                     "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
+                     "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+                     "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
+                     "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],"
+                     "\"extra\":{\"prepared_environment\":{\"restore_ms\":\"slow\"}}}"))))
+      (define problems (validate-run-summary-json artifact))
+      (check-pred pair? problems)
+      (check-not-false (ormap (lambda (p) (regexp-match "restore_ms: expected number or null" p))
+                              problems)))
+
+    (test-case "W1 fixture: wrong type for result in prepared_environment still rejected"
+      (define artifact
+        (read-json (open-input-string
+                    (string-append
+                     "{\"runner_version\":\"1.0.23\",\"suite\":\"fast\","
+                     "\"profile\":\"local\",\"execution_mode\":\"subprocess\","
+                     "\"file_count\":1,\"pass\":1,\"fail\":0,"
+                     "\"timeout\":0,\"skip\":0,\"wall_clock_seconds\":0.5,\"shard\":null,"
+                     "\"metadata_completeness\":{\"explicit\":0,\"heuristic\":0,\"missing\":0},"
+                     "\"files\":[{\"path\":\"tests/example.rkt\",\"category\":\"PASS\","
+                     "\"exit_code\":0,\"passed\":1,\"failed\":0,\"total\":1}],"
+                     "\"extra\":{\"prepared_environment\":{\"result\":42}}}"))))
+      (define problems (validate-run-summary-json artifact))
+      (check-pred pair? problems)
+      (check-not-false (ormap (lambda (p) (regexp-match "prepared_environment.result: expected" p))
+                              problems)))
+
     (test-case "W1 fixture: malformed required result fields produce problems"
       (define malformed-artifact
         (read-json (open-input-string
@@ -253,5 +344,81 @@
       (check-not-false (ormap (lambda (p) (regexp-match "files\\[0\\].category: expected a string" p))
                               problems)))))
 
-(define failures (+ (run-tests suite) (run-tests w1-fixture-suite)))
+(define queue-suite
+  (test-suite "queue JSON validation"
+    (test-case "queue producer round trip and scheduler nullability"
+      (define-values (file dir)
+        (write-temp-test
+         (string-append "#lang racket/base\n"
+                        "(require rackunit rackunit/text-ui)\n"
+                        "(run-tests (test-suite \"ok\" (test-case \"ok\" (check-true #t))))\n")))
+      (define out (build-path dir "results.json"))
+      (dynamic-wind
+       void
+       (lambda ()
+         (define-values (code stdout stderr)
+           (run/capture
+            (format "racket scripts/run-tests.rkt --scheduler queue --json-out ~a ~a" out file)))
+         (check-equal? code 0 stderr)
+         (define payload (call-with-input-file out read-json))
+         (define sched (hash-ref (hash-ref payload 'extra) 'scheduler))
+         (define artifact
+           (hash-set* (hash-ref payload 'run_summary)
+                      'files
+                      (hash-ref payload 'files)
+                      'extra
+                      (hash-ref payload 'extra)))
+         (define nullable
+           '(queue_wait_ms worker_busy_ms worker_idle_ms serial_partition_ms parallel_partition_ms))
+         (check-equal? (validate-run-summary-json payload) '())
+         (for ([bad (list 'null #f 42 "bad" '())])
+           (check-pred pair? (validate-run-summary-json bad))
+           (check-pred pair? (validate-run-summary-json (hash-set payload 'extra bad)))
+           (check-pred pair? (validate-run-summary-json (hash-set artifact 'extra bad)))
+           (check-pred pair? (validate-run-summary-json (hash-set payload 'run_summary bad))))
+         (check-pred pair? (validate-run-summary-json (hash-remove payload 'files)))
+         (check-pred pair? (validate-run-summary-json (hash-set payload 'files 'null)))
+         (check-pred pair? (validate-run-summary-json (hash-set payload 'run_summary (hasheq))))
+         (check-equal? (hash-ref sched 'scheduler_mode) "queue")
+         (for ([key (in-list nullable)])
+           (check-equal? (hash-ref sched key) (json-null)))
+         (check-equal? (validate-run-summary-json artifact) '())
+         (define (with-scheduler s)
+           (hash-set payload 'extra (hash-set (hash-ref payload 'extra) 'scheduler s)))
+         (define numeric-sched
+           (for/fold ([s sched]) ([key (in-list nullable)])
+             (hash-set s key 42)))
+         (for* ([base (in-list (list payload artifact))]
+                [mode (in-list (list "unknown" "" "QUEUE"))])
+           (define bad-sched (hash-set numeric-sched (quote scheduler_mode) mode))
+           (define bad-extra (hash-set (hash-ref base (quote extra)) (quote scheduler) bad-sched))
+           (check-not-false (ormap (lambda (p) (regexp-match? #rx"extra.scheduler.scheduler_mode" p))
+                                   (validate-run-summary-json
+                                    (hash-set base (quote extra) bad-extra)))))
+         (check-equal? (validate-run-summary-json
+                        (with-scheduler (hash-set numeric-sched 'scheduler_mode "batch")))
+                       '())
+         (check-equal? (validate-run-summary-json (with-scheduler (hash-remove numeric-sched
+                                                                               'scheduler_mode)))
+                       '())
+         (for ([key (in-list nullable)])
+           (check-equal? (validate-run-summary-json (with-scheduler (hash-set sched key 42))) '())
+           (check-pred pair? (validate-run-summary-json (with-scheduler (hash-set sched key "bad"))))
+           (check-pred pair?
+                       (validate-run-summary-json
+                        (with-scheduler (hash-set (hash-set numeric-sched 'scheduler_mode "batch")
+                                                  key
+                                                  (json-null))))))
+         (for ([key '(worker_count process_start_count gc_count first_batch_ms)])
+           (check-pred pair?
+                       (validate-run-summary-json (with-scheduler (hash-set sched key (json-null))))))
+         (check-pred pair?
+                     (validate-run-summary-json
+                      (with-scheduler (hash-set sched 'scheduler_mode (json-null)))))
+         (check-pred pair?
+                     (validate-run-summary-json (with-scheduler (hash-remove sched
+                                                                             'scheduler_mode)))))
+       (lambda () (delete-dir/safe dir))))))
+
+(define failures (+ (run-tests suite) (run-tests w1-fixture-suite) (run-tests queue-suite)))
 (exit failures)

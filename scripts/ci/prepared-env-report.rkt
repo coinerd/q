@@ -58,7 +58,7 @@
 ;; as history, never substituted.
 
 (require json
-         (file "../run-tests/sha256.rkt")
+         (file "../../util/sha256.rkt")
          racket/file
          racket/list
          racket/path

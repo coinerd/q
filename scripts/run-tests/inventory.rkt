@@ -326,8 +326,7 @@
 
 (require racket/port
          racket/file
-         (only-in "classify.rkt" collect-test-files)
-         (only-in "classify-filters.rkt" unit-fast-file?))
+         (only-in "classify.rkt" collect-test-files unit-fast-file?))
 
 ;; ============================================================
 ;; unit-fast eligibility audit (W3)
@@ -678,7 +677,7 @@
 ;; matches what the actual suite classifiers select. Deterministic;
 ;; missing evidence is reported, never imputed.
 
-(require "sha256.rkt")
+(require "../../util/sha256.rkt")
 
 (define v124-gate-names '("fast" "platform" "security" "workflows" "unit-fast" "slow/L4"))
 
@@ -705,18 +704,18 @@
 
 ;; Gate name -> sorted list of selected test files (repository walk).
 (define (gate-membership)
-  (hasheq "fast"
-          (collect-test-files 'fast)
-          "platform"
-          (collect-test-files 'platform)
-          "security"
-          (collect-test-files 'security)
-          "workflows"
-          (collect-test-files 'workflows)
-          "unit-fast"
-          (collect-test-files 'unit-fast)
-          "slow/L4"
-          (collect-test-files 'slow)))
+  (hash "fast"
+        (collect-test-files 'fast)
+        "platform"
+        (collect-test-files 'platform)
+        "security"
+        (collect-test-files 'security)
+        "workflows"
+        (collect-test-files 'workflows)
+        "unit-fast"
+        (collect-test-files 'unit-fast)
+        "slow/L4"
+        (collect-test-files 'slow)))
 
 ;; v1.00.24 W0 candidate behavior table plus declared maintenance rows.
 ;; Original freeze membership is preserved; automatic review adds one current
@@ -734,7 +733,6 @@
     'members
     '("tests/test-gsd-auto-review-integration.rkt" "tests/test-gsd-auto-review-loop.rkt"
                                                    "tests/test-gsd-auto-review-production.rkt"
-                                                   "tests/test-gsd-delivery-auto-review.rkt"
                                                    "tests/test-gsd-review-dispatch.rkt"
                                                    "tests/test-gsd-review-rejection.rkt"
                                                    "tests/test-gsd-review-runtime.rkt")
@@ -748,10 +746,13 @@
     (string-append
      "Automatic-review bug-delivery bucket: fresh read/bash-only sessions, receipt/fence-bound dispatch, "
      "durable rejection and ordinary retry, real local-Git controller approval/publication and recovery. "
-     "All seven families are fast-classified extension integration tests, not unit-fast: they compose "
+     "All six families are fast-classified extension integration tests, not unit-fast: they compose "
      "sessions, durable temporary campaign journals, or subprocess/Git sandboxes. The two real sleeps "
      "in the session family are cancellation guards whose workers are reaped by tiny existing deadlines; "
-     "they do not pay their nominal delays. No live provider/GitHub acceptance is claimed."))
+     "they do not pay their nominal delays. No live provider/GitHub acceptance is claimed. "
+     "Phase B removed the seventh family, the shim that only spawned the Python controller suite: "
+     "its native port tests/test-gsd-delivery-auto-review-native.rkt is @speed slow, so that "
+     "family is no longer selected by this fast bucket."))
    (hasheq
     'behavior-id
     "RETRY-LOGICAL-SEMANTICS-FAST"
@@ -1429,20 +1430,20 @@
 (define tier-known-gates (append v124-gate-names '("tui")))
 
 (define (tier-gate-membership)
-  (hasheq "fast"
-          (collect-test-files 'fast)
-          "platform"
-          (collect-test-files 'platform)
-          "security"
-          (collect-test-files 'security)
-          "workflows"
-          (collect-test-files 'workflows)
-          "unit-fast"
-          (collect-test-files 'unit-fast)
-          "slow/L4"
-          (collect-test-files 'slow)
-          "tui"
-          (collect-test-files 'tui)))
+  (hash "fast"
+        (collect-test-files 'fast)
+        "platform"
+        (collect-test-files 'platform)
+        "security"
+        (collect-test-files 'security)
+        "workflows"
+        (collect-test-files 'workflows)
+        "unit-fast"
+        (collect-test-files 'unit-fast)
+        "slow/L4"
+        (collect-test-files 'slow)
+        "tui"
+        (collect-test-files 'tui)))
 
 ;; Owner chain: a v1.00.24 behavior-row owner when the family belongs to
 ;; exactly one owner's rows, else the first --ownership-map area whose

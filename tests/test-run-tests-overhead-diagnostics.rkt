@@ -14,7 +14,7 @@
          (only-in "../util/version.rkt" q-version)
          racket/system
          racket/string
-         "../scripts/run-tests/overhead.rkt")
+         "../scripts/run-tests/runner.rkt")
 
 (define-runtime-path here ".")
 (define project-root (simplify-path (build-path here "..")))

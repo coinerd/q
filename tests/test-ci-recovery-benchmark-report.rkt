@@ -46,12 +46,12 @@
          racket/system
          rackunit
          rackunit/text-ui
-         (only-in "../scripts/run-tests/cohort-report.rkt" cohort-quantile-exact)
-         "../scripts/run-tests/ci-recovery-benchmark-report.rkt")
+         (only-in "../scripts/ci/cohort-report.rkt" cohort-quantile-exact)
+         "../scripts/ci/ci-recovery-benchmark-report.rkt")
 
 (define-runtime-path project-root "..")
 (define script-path
-  (build-path project-root "scripts" "run-tests" "ci-recovery-benchmark-report.rkt"))
+  (build-path project-root "scripts" "ci" "ci-recovery-benchmark-report.rkt"))
 
 ;; ---------------------------------------------------------------------------
 ;; Small uniform assertion helpers (keep nesting shallow and identical)

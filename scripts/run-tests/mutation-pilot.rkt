@@ -153,8 +153,8 @@
 
 ;; module-text-parses? : string? -> boolean?
 ;; Strip leading #lang / #reader / shebang LINES (same rationale as
-;; run-tests/impact.rkt: language readers are nondeterministic code
-;; execution), then read every datum — any read error fails validation.
+;; scripts/testing/changed-selection.rkt: language readers are nondeterministic
+;; code execution), then read every datum — any read error fails validation.
 (define (module-text-parses? text)
   (with-handlers ([exn:fail:read? (lambda (_) #f)]
                   [exn:fail? (lambda (_) #f)])

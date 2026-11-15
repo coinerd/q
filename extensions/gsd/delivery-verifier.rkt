@@ -1169,9 +1169,6 @@
 ;;    ones void the whole declaration, and zero accepted commands refuses —
 ;;    never a silent drop, never a partial green;
 ;;  - executable spans retain document order and join with &&.
-(define (normalize-declared-verify declaration)
-  (hash-ref (verify-declaration-extraction declaration) 'canonical ""))
-
 ;; The wave's DECLARED Verify section with the parser's structural verdict.
 ;; Returns three values:
 ;;   declaration    — the historical OR-selection (readable doc first, plan

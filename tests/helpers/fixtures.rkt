@@ -16,7 +16,7 @@
 (require racket/file
          (only-in "../../util/message/protocol-types.rkt" message? message-kind)
          (only-in "test-sandbox.rkt" with-test-sandbox test-sandbox-project-dir test-sandbox?)
-         "../../scripts/run-tests/work-counters.rkt")
+         "work-counters.rkt")
 
 (provide with-temp-dir
          with-env-var

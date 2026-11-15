@@ -768,11 +768,19 @@
       (check-true (string-contains? section "actions/upload-artifact@v7"))
       (check-true (string-contains? section "retention-days: 14"))
       ;; N2: real counts are aggregated per shard and the producer FAILS on
-      ;; any non-clean aggregate (zero skips, failures, timeouts).
-      (check-true (string-contains? section "SKIP_TOTAL")
+      ;; any non-clean aggregate (zero skips, failures, timeouts). Phase D:
+      ;; the counts now come from scripts/ci/verify-shard-results.rkt (the
+      ;; jq reduce is gone), so the counts env + refusal live there.
+      (check-true (string-contains? section "source artifacts-run/aggregate-counts.env")
+                  "the claim counts must come from the verified aggregate")
+      (check-true (string-contains? section "scripts/ci/verify-shard-results.rkt")
+                  "the producer must verify the shard evidence in Racket")
+      (define shard-verifier
+        (file->string (build-path repo-root "scripts" "ci" "verify-shard-results.rkt")))
+      (check-true (string-contains? shard-verifier "SKIP_TOTAL")
                   "the zero-skip assertion must read the aggregated skip count")
-      (check-true (string-contains? section "FAIL_TOTAL"))
-      (check-true (string-contains? section
+      (check-true (string-contains? shard-verifier "FAIL_TOTAL"))
+      (check-true (string-contains? shard-verifier
                                     "refusing to write a proof bundle over a non-clean aggregate"))
       ;; the producer job itself never gates on bundle_ok and never consumes
       (check-false (string-contains? section "bundle_ok"))

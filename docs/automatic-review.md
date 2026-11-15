@@ -501,8 +501,11 @@ The actual isolated `/go` loop (`tests/test-gsd-auto-review-loop.rkt`) publishes
 rejection, loses the checkpoint outcome/marker, resumes from committed evidence,
 and enters exactly one ordinary fenced retry and fresh generation review. Only
 model transport responses are deterministic; controller statuses are not mocked.
-The real-Git strict controller suite is registered by
-`tests/test-gsd-delivery-auto-review.rkt`. These are not live GitHub delivery or
+The real-Git strict controller suite is owned by
+`tests/test-gsd-delivery-auto-review-native.rkt` (slow lane). Phase B deleted the
+shim that used to spawn the Python controller suite from the fast bucket, so the
+fast gate no longer runs these real-Git controller regressions; they run in the
+slow/all suites. These are not live GitHub delivery or
 independent model acceptance: preliminary Codex findings are not an acceptance
 substitute. `tests/test-gsd-review-runtime.rkt` additionally exercises the actual
 default provider builder with real temporary q settings/auth files, a fresh empty

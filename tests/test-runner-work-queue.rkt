@@ -26,8 +26,8 @@
 ;;     and timeout cleanup are all bounded.
 ;;  5. progress output stays interpretable ("." / "T" / "S" / "F").
 ;;  6. queue-mode GC is coordinator-owned (no worker races a counter) and
-;;     deterministic + telemetry-visible: one GC every 5 completions plus
-;;     the final completion, recorded in telemetry 'gc_count / 'gc_pause_ms.
+;;     deterministic + telemetry-visible: GC every 5 completions and at the
+;;     final completion, coalesced when they coincide.
 
 (require rackunit
          rackunit/text-ui
@@ -182,17 +182,17 @@
                     "queue mode: run-suite-once results sorted by input order")
       (delete-dir/safe dir))
 
-    (test-case "profile skips remain skips under queue"
+    (test-case "child exit 5 is a failure, not a profile skip"
       (define dir (make-temporary-file "w2q-skip-~a" 'directory))
       (define skip-file (write-fixture! dir "skip.rkt" fixture-skip))
       (define stdout
         (capture-stdout
          (lambda ()
-           (check-equal?
+           (check-not-equal?
             (classify-test-result (car (run-all-files (list skip-file) 1 #f #:scheduler 'queue)))
             'SKIPPED_BY_PROFILE
-            "queue: exit 5 classifies SKIPPED_BY_PROFILE"))))
-      (check-true (string-contains? stdout "S") "queue: progress prints 'S' for a profile skip")
+            "queue: child exit 5 must not be a profile skip"))))
+      (check-true (string-contains? stdout "F") "queue: progress prints 'F' for a failed child")
       (delete-dir/safe dir))
 
     (test-case "per-file meta timeout and explicit timeout retain kill/classification semantics under queue"
@@ -274,7 +274,7 @@
       (define t (thread (lambda () (run-all-files (list sleepy quick) 2 #f #:scheduler 'queue))))
       (sleep 0.3)
       (break-thread t)
-      (check-not-false (sync/timeout 5000 t)
+      (check-not-false (sync/timeout 5 t)
                        "queue: coordinator thread exits within 5s of a break (no deadlock)")
       (delete-dir/safe dir))
 
@@ -288,7 +288,7 @@
                   "queue: timed-out subprocess is reaped promptly")
       (delete-dir/safe dir))
 
-    (test-case "output progress remains interpretable: . T S F all emitted"
+    (test-case "output progress remains interpretable: . T F emitted"
       (define dir (make-temporary-file "w2q-progress-~a" 'directory))
       (define ok (write-fixture! dir "ok.rkt" fixture-ok))
       (define timeout-file (write-fixture! dir "timeout.rkt" fixture-sleep30))
@@ -297,7 +297,7 @@
       (define stdout
         (capture-stdout (lambda ()
                           (run-all-files (list ok timeout-file skip boom) 2 #f #:scheduler 'queue))))
-      (for ([ch (in-list '("." "T" "S" "F"))])
+      (for ([ch (in-list '("." "T" "F"))])
         (check-true (string-contains? stdout ch) (format "queue: progress stream contains ~a" ch)))
       (check-true (regexp-match? #rx"[\r\n]$" stdout)
                   "queue: progress stream ends with a newline (interpretable)")
@@ -315,9 +315,7 @@
       (define-values (r1 t1) (run-with-telemetry))
       (define-values (r2 t2) (run-with-telemetry))
       (check-equal? (length r1) 6)
-      (check-equal? (hash-ref t1 'gc_count #f)
-                    6
-                    "gc_count records every completion (coordinator-owned, no worker races)")
+      (check-equal? (hash-ref t1 'gc_count #f) 2 "gc_count records the fifth and final collections")
       (check-equal? (map car (hash-ref t1 'batches #f))
                     (map car (hash-ref t2 'batches #f))
                     "GC/batch schedule shape (size + sequence) deterministic across runs")

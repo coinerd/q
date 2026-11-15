@@ -50,7 +50,10 @@
                             "GSD-BRANCH-DELIVERY-PRIVATE-TEMPLATE")
                       string<?)))
 
-(test-case "automatic-review bucket owns exactly seven fast integration families"
+(test-case "automatic-review bucket owns exactly six fast integration families"
+  ;; Phase B deleted the seventh family, the shim that only spawned the Python
+  ;; controller suite; its native slow-lane port is owned outside this fast
+  ;; bucket, so the fast membership is now six.
   (define row
     (findf (lambda (r) (equal? (hash-ref r 'behavior-id) "GSD-AUTOMATIC-INDEPENDENT-REVIEW"))
            inv:v124-behavior-table))
@@ -62,7 +65,6 @@
                 '("tests/test-gsd-auto-review-integration.rkt"
                   "tests/test-gsd-auto-review-loop.rkt"
                   "tests/test-gsd-auto-review-production.rkt"
-                  "tests/test-gsd-delivery-auto-review.rkt"
                   "tests/test-gsd-review-dispatch.rkt"
                   "tests/test-gsd-review-rejection.rkt"
                   "tests/test-gsd-review-runtime.rkt")))

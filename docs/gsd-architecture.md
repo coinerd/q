@@ -216,9 +216,12 @@ path at all.
 The in-tree `.planning/scratch/...` root is no longer advertised, written by
 the guidance, or exempted by the delivery-evidence set. Both evidence owners
 agree: `delivery-verifier.rkt` counts untracked in-tree paths as evidence, and
-`scripts/gsd-delivery.py` now treats every untracked or modified path inside
-the checkout as ordinary working-tree dirt. There is no `.planning/scratch/`
-delivery-SYNC tolerance left to rely on, and new work must not assume one.
+the native delivery sync (`scripts/gsd-delivery-sync.rkt`) now treats every
+untracked or modified path inside the checkout as ordinary working-tree dirt —
+its `git status --porcelain --untracked-files=all` result must be exactly empty,
+with no exclusion list to misparse a `->`-shaped path. There is no
+`.planning/scratch/` delivery-SYNC tolerance left to rely on, and new work must
+not assume one.
 
 ## Policy and guards
 

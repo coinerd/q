@@ -11,13 +11,88 @@ that implement it.
 |---|---|---|---|
 | smoke | ~40s | Quick sanity | `--suite smoke` |
 | unit-fast | ~30s | Developer iteration tier (see [Tier semantics](#tier-semantics)) | `--suite unit-fast` |
-| fast | ~1m | Broad PR regression (CI per PR); full minus slow | `--suite fast` |
+| fast | ~1m | Broad PR regression (CI per PR); full minus slow and `tui-file?` matches | `--suite fast` |
 | broad | ~5m | Alias for all discoverable tests | `--suite broad` |
 | runtime | ~2m | Runtime/provider/tool | `--suite runtime` |
 | tui | ~2m | TUI rendering/state | `--suite tui` |
 | workflows | ~3m | Integration workflows | `--suite workflows` |
 | slow | ~5m | Long-running | `--suite slow` |
 | all | ~5m | Everything | `--suite all` |
+
+## The `./qt` test commands
+
+`./qt` is the single local test entry point. Every command states what a pass
+does and does not prove, and every command has an `--explain` mode that prints
+the plan without executing or cleaning anything.
+
+| Command | Selection | Pass line |
+|---|---|---|
+| `./qt quick` | small audited, fingerprinted set | `quick passed: ...` |
+| `./qt full` | every discovered test file (complete available suite) | `full passed: ...` |
+| `./qt default` | fast/PR lane: `full` minus the excluded files below | `default passed: ...` |
+| `./qt release` | `full` plus the release obligation list | never a release pass line it cannot support |
+
+None of these commands is PR/CI or candidate verification. The pass lines embed
+that disclosure, and `--explain` prints the `NOT VERIFIED` / `NOT PROVIDED`
+lists so the gap stays visible.
+
+### Default-lane predicate set
+
+The lane filter is derived from repository metadata (`@speed`, `@mutates`,
+`@isolation`, `@requires`) through the classifiers in
+`scripts/run-tests/classify.rkt`. There is no hand-maintained file list. A file
+is excluded from the default lane when ANY of these holds:
+
+- `slow-file?` — `@speed slow`/`perf`, or a slow name/path pattern;
+- `mutating-file?`, or a declared `@mutates` value other than `none`;
+- a declared `@isolation` value other than `none` — the predicate is
+  vocabulary-agnostic, so any declared value other than `none` excludes; for
+  example `process`, `temp-dir`, `subprocess` and `sandboxed-home`;
+- `@requires` containing `network`, `terminal`, `browser` or `provider-key`.
+
+`./qt default --explain` prints the same predicate set plus exclusion counts by
+reason and the names of the excluded files (first 20, then `(+ N more)`), so the
+printed claim cannot drift from the filter and a silently excluded file is
+visible.
+
+#### `./qt default` is not `--suite fast`
+
+The two selections are related but **not equivalent**, and `./qt default` must
+never be treated as a PR-gate equivalent:
+
+- `--suite fast` applies `slow-file?` **and `tui-file?`**. It therefore also
+excludes every file matched by `tui-file?` — anything under `tests/tui/`,
+`interfaces/tui.rkt`, a basename starting with `test-tui-`, or a file tagged
+`@suite tui`.
+- `./qt default` applies `slow-file?`, the mutation/isolation classifiers and
+the `@requires` vocabulary above, but **not `tui-file?`** — TUI tests that are
+otherwise fast/PR-safe are **included** in the default lane.
+
+So for TUI files the default lane includes what `--suite fast` drops, while for
+other files it can exclude mutation/isolation/`@requires` files that
+`--suite fast` still runs: the two are different selections. Use `--suite fast`
+for the broad PR regression tier and `./qt default` only as the local fast/PR
+feedback lane. Neither is PR/CI verification.
+
+### `--changed [BASE]` semantics (`full` / `default`)
+
+- Selection is the working-tree diff against BASE (`origin/main`, falling back
+  to `HEAD` when BASE is omitted), including untracked files.
+- **Fail closed on an uncomputable or empty diff**: missing git, no resolvable
+  BASE, or zero changed files is an error, never an empty pass.
+- Changed files are mapped through `tests/.coverage-manifest.json` (`@covers`)
+  and the impact machinery in `scripts/testing/changed-selection.rkt`.
+- **Unattributable test files are INCLUDED (fail open)** and reported as such;
+  a changed file that maps to no test escalates to the whole lane.
+- `release` does not accept `--changed`: a release covers the complete suite.
+
+### Release obligation contract
+
+`./qt release` runs `full` and prints every release obligation as
+`[NOT VERIFIED]` or `[VERIFIED]`, whether or not the suite passed. The command
+exits non-zero while any obligation is unverified and never prints
+`release passed:` until all of them are verified. A green suite is not a
+release; the obligation list is the contract.
 
 ## Tier semantics
 
@@ -27,7 +102,7 @@ CLI exactly:
 
 | Tier | Command | Scope | Role |
 |---|---|---|---|
-| `fast` | `--suite fast` | All tests except slow patterns (per-file spawn) | **Broad PR regression tier** — the suite CI runs per PR (`.github/workflows/ci.yml`), and the declared broad fallback that escalated local impact runs widen to |
+| `fast` | `--suite fast` | All tests except slow patterns and `tui-file?` matches (per-file spawn) | **Broad PR regression tier** — the suite CI runs per PR (`.github/workflows/ci.yml`), and the declared broad fallback that escalated local impact runs widen to |
 | `unit-fast` | `--suite unit-fast` | Fast unit tests eligible for in-process/grouped execution | **Developer iteration tier** — the tier you run inside the red-green-refactor loop |
 
 `unit-fast` local SLO: **p90 ≤ 90 s of wall clock (declared target;
@@ -133,8 +208,8 @@ Selection is conservative by design:
 
 ## Local impact selection (opt-in)
 
-Change-impact selection (implemented in `scripts/run-tests/impact.rkt`, driven
-through the `scripts/run-tests.rkt` CLI) is an **opt-in local developer
+Change-impact selection (implemented in `scripts/testing/changed-selection.rkt`,
+driven through the `scripts/run-tests.rkt` CLI) is an **opt-in local developer
 workflow**. It is never invoked by CI (rationale below) and never replaces the
 normal suites.
 
@@ -266,7 +341,7 @@ v1.00.23 milestone slipping was deliberate, not silent — it waited on the
 evidence (a clean inventory) rather than on a date.
 
 **v1.00.11 re-verification:** the enforced canonical inventory was re-run at
-milestone close from a clean checkout (`racket scripts/run-tests/classify-metadata.rkt
+milestone close from a clean checkout (`racket scripts/run-tests/classify.rkt
 --lint-metadata` and `--metadata-inventory-json` from the repository root):
 exit 0 with `files=1336`, `invalid=0`, `deprecated-alias=0`,
 `missing-required=0`, `explicit=1336`, `heuristic-only=0`, inventory schema
@@ -279,7 +354,7 @@ nonzero count.
 
 **Single discovery implementation (W2):** local `--lint-metadata` and the CI
 `metadata-lint` step invoke the *identical* repository command —
-`racket scripts/run-tests/classify-metadata.rkt --lint-metadata` from the
+`racket scripts/run-tests/classify.rkt --lint-metadata` from the
 checkout root — so no CI-only discovery branch exists. The former
 `scripts/run-tests.rkt --lint-metadata` wrapper dispatch (the source of the
 W0 local-vs-CI inventory divergence) was deleted. CI also uploads a
@@ -341,12 +416,59 @@ invocation count proves exactly one execution on parsed-output routes
 `#:mode 'grouped-in-process` — actual mode asserted via `execution-mode-of`
 and `grouped-fallback-reason` telemetry), including a deliberately failing
 fixture; a healthy fixture right after the failure proves the grouped host
-survives; the intentional zero-parsed-output route is asserted via its
-named `'zero-parsed-output` telemetry (its counter reads 2 by contract:
-grouped attempt + named subprocess rerun — never forced to 1); a
+survives; a successful grouped execution with no parsed tests is
+`ZERO_PARSED`, remains grouped, and is never replayed (its counter reads 1).
+Strict mode fails with exit 4; non-strict mode leaves the result inconclusive
+and does not fail solely for zero parsed tests. An early `(exit 0)` in grouped
+execution is a failure, not a successful completion. A
 policy-grouped request in an un-expanded area names `'area-not-expanded`
 without changing the area rollout; and the runner aggregate exits nonzero
 when any file fails.
+
+## Managed Surfaces, Trust Boundary, and Grouped Results
+
+### Managed surfaces contract
+
+`info.rkt`, `README.md`, and `CHANGELOG.md` are managed repository surfaces.
+The runner snapshots their bytes and permission bits, **detects** changes made
+while a suite runs, reports each changed file, and fails the run afterwards —
+it never restores them, never saves-then-rewrites bytes, and never runs
+`git checkout` on them: either would destroy pre-existing or concurrent user
+edits. A test that mutates a managed surface is a defect; mutation coverage
+belongs in temporary fixtures (`with-temp-dir`, `with-test-sandbox`). The
+check is a before/after snapshot comparison only, so it cannot distinguish a
+test edit from a concurrent editor — it reports what changed, not who.
+
+### Quick (`./qt quick`) trust boundary
+
+Quick executes a small audited test set. It is trusted-code execution, not a
+sandbox:
+
+- **Audited code is trusted.** Fingerprints cover the test file plus its
+  reviewed local load closure and are re-checked before and after the run;
+  they are not a defense against malicious or concurrently modified source.
+- **Linux `/proc` and `setsid` are required.** Without owned process groups the
+  runner refuses up front instead of emitting one identical failure per file.
+- **No OS sandbox and no enforced memory/process limits.** Advertised limits
+  are advisory; process groups reclaim ordinary descendants only.
+- **Children inherit the caller's environment** — audited tests may read
+  `HOME`/`PATH`.
+- **Evidence is structured RackUnit log counts**, one record per input written
+  by the child to a dedicated evidence file; stdout text is never the result.
+- **Source-only loading** for repository and fixture paths: `.zo` artifacts
+  never replace reviewed sources (installed collections may use compiled
+  files).
+- **Manual dependency closure per admitted file.** Admission is a reviewed
+  list, and changing an import requires re-review and re-fingerprinting.
+
+### Grouped execution: final behaviour
+
+- **An early exit fails the file.** A grouped/in-process `(exit N)` is
+  redirected to a failure — a nonzero `N` is a failure, and an early
+  `(exit 0)` is not a successful completion.
+- **A silent grouped run is `ZERO_PARSED`.** A grouped run that completes with
+  no parsed tests is reported as `ZERO_PARSED`, remains grouped, and is never
+  replayed (a replay would run its side effects twice).
 
 ## Test Sandbox
 
@@ -392,31 +514,45 @@ Cleanup is guaranteed via `dynamic-wind`.
 
 ## Run-Summary JSON Telemetry
 
-The runner retains a versioned `scheduler` object in each run-summary JSON
-(additive; historical artifacts without it remain readable). Field contract:
+The `--json-out` envelope contains `run_summary` alongside top-level `files`
+and optional `extra`, where the versioned `scheduler` object lives. The
+run-summary validator accepts this envelope and legacy flattened summaries with
+`files` and optional `extra` at the same level as summary fields. The exported
+`validate-run-summary-json` checks a projection of required summary and per-file
+fields and selected optional telemetry types and values. An empty problem list
+is not whole-envelope validation or proof of semantic truth: it does not check,
+for example, count consistency, numeric ranges, or the aggregation formulas
+below. Roots and present `extra` values must be objects; historical artifacts
+without telemetry remain readable. Field contract:
 
 - **Units:** every `*_ms` field is milliseconds, measured with
   `current-inexact-milliseconds` (wall clock, process-local). `worker_count`
   is the number of parallel workers in the scheduler run.
-- **Nullability:** optional telemetry fields are omitted entirely (never `null`)
-  when they cannot be measured. Required result fields (`status`, `verdict`,
-  `exit_code`, `duration_ms`, `inventory_hash`) must always be present and
-  well-typed; malformed required fields are a hard error.
+- **Nullability:** only `queue_wait_ms`, `worker_busy_ms`, `worker_idle_ms`,
+  `serial_partition_ms`, and `parallel_partition_ms` accept JSON `null`, and
+  only when `scheduler_mode` is `"queue"`. Other scheduler fields must be
+  numeric, except `scheduler_mode`, which when present must be `"batch"` or
+  `"queue"`. Scheduler telemetry and `scheduler_mode` are optional.
 - **Aggregation formulas:**
-  - `queue_wait_ms`, `worker_busy_ms`, `worker_idle_ms` are file-count-derived
-    aggregates (per-file waits/busy/idle summed over scheduled files).
-  - `serial_partition_ms` and `parallel_partition_ms` are distinct fields; the
-    legacy `first_batch_*` fields are retained for compatibility and reflect
-    whichever partition ran last, never shared mutable state between the serial
-    and parallel calls.
-  - `process_start_count` is the total start count; `subprocess_count` /
-    `grouped_count` break it down by actual start kind.
-  - `gc_count` counts GC runs and `gc_pause_ms` the cumulative pause, read from
-    the process statistics available at summary time.
+  - In batch mode `queue_wait_ms`, `worker_busy_ms`, `worker_idle_ms` are
+    estimates derived from batch durations and file counts, not direct measurements.
+    In queue mode these fields and both partition timing fields are `null`:
+    overlapping per-file durations cannot determine elapsed partition time.
+  - `serial_partition_ms` and `parallel_partition_ms` are distinct scheduler
+    fields. At `extra` level, optional `serial_first_batch_ms` and
+    `parallel_first_batch_ms` describe each partition's first batch; legacy
+    `first_batch_ms` describes the first partition that ran (serial if present).
+  - `process_start_count` equals `subprocess_count`: both count actual
+    subprocess-mode files. `grouped_in_process_count` counts files run in
+    grouped-in-process mode; it is not a count of process starts.
+  - `gc_count` counts explicit runner-requested major collections, and
+    `gc_pause_ms` sums their wall-clock durations; neither includes automatic GC.
   - `scheduler_mode` is `"batch"` (the default) or `"queue"`; queue mode is
     the bounded, work-conserving worker pool introduced in W2 (exactly `jobs`
-    long-lived workers; GC every 5th file completion plus a final major GC,
-    run only by the coordinator so no worker ever races the GC counter).
+    long-lived workers; the coordinator requests a major GC at every fifth
+    completion and at the final completion. When these coincide there is only
+    one collection, not a duplicate. Empty partitions request none. Batch mode
+    follows the same rule in units of completed batches).
     `worker_count` equals `jobs` in queue mode and the batch width in batch mode.
 - **Runner execution vs workflow elapsed time:** runner fields (`queue_wait_ms`,
   `worker_busy_ms`, `worker_idle_ms`, partition times, total `duration_ms`)
@@ -424,10 +560,11 @@ The runner retains a versioned `scheduler` object in each run-summary JSON
   workflow elapsed time (job wall time, queueing, provisioning, checkout,
   setup) is a different quantity and is never folded into runner telemetry.
 - **Prepared-environment state:** the summary includes a `prepared_environment`
-  object with `state` ∈ `restored` | `rebuilt` | `unavailable`, plus
-  `restore_ms` / `fallback_ms` where known. The value comes exclusively from
-  the explicit environment contract (`ENV_SETUP_STATE`,
-  `ENV_SETUP_RESTORE_MS`, `ENV_SETUP_FALLBACK_MS`) populated by CI; local runs
+  object with `result` ∈ `restored` | `rebuilt` | `unavailable`, plus
+  `restore_ms` / `fallback_ms` where known. The value comes from
+  `Q_PREPARED_ENV_STATE`, `Q_PREPARED_ENV_RESTORE_MS`, and
+  `Q_PREPARED_ENV_FALLBACK_MS` (with `Q_PREPARED_ENV_RESULT` as a legacy
+  state alias); local runs
   without those variables report `unavailable` — they never invent `restored`.
 
 ## Gate Evidence

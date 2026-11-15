@@ -95,12 +95,16 @@
 (test-case "classify: TIMEOUT (exit 2)"
   (check-equal? (classify-test-result (make-result 2 0 0 0 "" "")) 'TIMEOUT))
 
-(test-case "classify: SKIPPED_BY_PROFILE (exit 5)"
-  (check-equal? (classify-test-result (make-result 5 0 0 0 "" "")) 'SKIPPED_BY_PROFILE))
+;; Truthful skip contract (runner truth repair): a raw child exit 5 is NOT a
+;; profile skip — only the explicit `profile-skipped-result` subtype is, and it
+;; is constructed by the profile layer that decided to skip. A child that exits
+;; 5 for its own reasons must never be reclassified as a benign skip.
+(test-case "classify: a raw child exit 5 is not a profile skip"
+  (check-equal? (classify-test-result (make-result 5 0 0 0 "" "")) 'UNKNOWN_FAILURE))
 
-(test-case "classify: SKIPPED_BY_PROFILE (keyword in output)"
+(test-case "classify: a skip keyword in output cannot downgrade a failure"
   (check-equal? (classify-test-result (make-result 1 0 0 0 "skipped_by_profile" ""))
-                'SKIPPED_BY_PROFILE))
+                'UNKNOWN_FAILURE))
 
 (test-case "classify: USER_BREAK"
   (check-equal? (classify-test-result (make-result 1 0 0 0 "user break" "")) 'USER_BREAK))

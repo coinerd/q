@@ -47,7 +47,7 @@
          racket/path
          racket/port
          racket/string
-         (file "../run-tests/sha256.rkt"))
+         (file "../../util/sha256.rkt"))
 
 ;; ---------------------------------------------------------------------------
 ;; Reporting

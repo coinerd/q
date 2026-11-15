@@ -11,7 +11,7 @@
          racket/file
          racket/list
          racket/string
-         (prefix-in meta: (file "../scripts/run-tests/classify-metadata.rkt")))
+         (prefix-in meta: (file "../scripts/run-tests/classify.rkt")))
 
 ;; ------------------------------------------------------------------
 ;; Helpers

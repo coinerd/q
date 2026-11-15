@@ -28,13 +28,14 @@
                   collect-test-files
                   get-file-metadata
                   mutating-file?
-                  restore-repo-surfaces!
+                  repo-surface-files
                   clean-stale-bytecode!
                   file-has-rackunit-tests?
                   shard-files
                   print-lint-report)
          (only-in "parse.rkt"
                   test-file-result
+                  test-file-result?
                   test-file-result-path
                   test-file-result-exit-code
                   test-file-result-total
@@ -74,8 +75,7 @@
                   print-shard-plan-report
                   print-starvation-tail-report
                   load-duration-snapshot
-                  shard-plan-mode)
-         (only-in "scheduler-order.rkt"
+                  shard-plan-mode
                   default-ordering
                   current-max-age-seconds
                   prepare-ordering
@@ -87,8 +87,7 @@
                   ordering-record->jsexpr)
          (only-in "gate-evidence.rkt" record-gate-evidence! gate-evidence-refusal)
          (only-in "inventory.rkt" print-inventory compute-inventory-hash)
-         (only-in "overhead.rkt" print-overhead-diagnostics)
-         (only-in "impact.rkt"
+         (only-in "../testing/changed-selection.rkt"
                   run-impact-selection!
                   print-impact-explain
                   selection->jsexpr
@@ -112,7 +111,25 @@
          current-requested-execution-mode
          execution-mode-of
          execution-eligibility-reason
-         main)
+         main
+         ;; Phase C fold: overhead diagnostics + local feedback telemetry
+         ;; (formerly overhead.rkt).
+         (struct-out overhead-result)
+         make-overhead-result
+         run-overhead-command
+         collect-overhead-diagnostics
+         format-overhead-result
+         print-overhead-diagnostics
+         local-p90-min-samples
+         local-loop-p90
+         slo-verdict
+         machine-context
+         local-feedback-loops
+         area-mode-rows
+         collect-local-p90
+         check-local-p90-record
+         check-local-p90-file
+         implementation-sha)
 
 ;; ── W0 fast-gate budget instrumentation (schema-additive) ─────────────
 ;; Wall clock at module load: the retained per-job JSON can then attribute
@@ -148,7 +165,7 @@
         (define exit-code (ctrl 'exit-code))
         (define stdout-bytes (string->bytes/utf-8 (get-output-string stdout-out)))
         (define stderr-bytes (string->bytes/utf-8 (get-output-string stderr-out)))
-        (define merged-bytes (bytes-append stdout-bytes stderr-bytes))
+        (define merged-bytes (bytes-append stdout-bytes #"\n" stderr-bytes))
         (define-values (parsed-passed parsed-failed parsed-total) (parse-raco-output merged-bytes))
         (define-values (passed failed total)
           (normalize-counts exit-code parsed-passed parsed-failed parsed-total))
@@ -167,7 +184,7 @@
      (define exit-code (ctrl 'exit-code))
      (define stdout-bytes (string->bytes/utf-8 (get-output-string stdout-out)))
      (define stderr-bytes (string->bytes/utf-8 (get-output-string stderr-out)))
-     (define merged-bytes (bytes-append stdout-bytes stderr-bytes))
+     (define merged-bytes (bytes-append stdout-bytes #"\n" stderr-bytes))
      (define-values (parsed-passed parsed-failed parsed-total) (parse-raco-output merged-bytes))
      (define-values (passed failed total)
        (normalize-counts exit-code parsed-passed parsed-failed parsed-total))
@@ -198,7 +215,7 @@
         (or timeout 120000))))
 
 (define (parse-result-bytes test-path stdout-bytes stderr-bytes exit-code elapsed-ms)
-  (define merged-bytes (bytes-append stdout-bytes stderr-bytes))
+  (define merged-bytes (bytes-append stdout-bytes #"\n" stderr-bytes))
   (define-values (parsed-passed parsed-failed parsed-total) (parse-raco-output merged-bytes))
   (define-values (passed failed total)
     (normalize-counts exit-code parsed-passed parsed-failed parsed-total))
@@ -249,7 +266,6 @@
 ;;   'declared-process-isolation      file declares @isolation process|subprocess
 ;;   'declared-mutation               file declares a truthy @mutates token
 ;;   'missing-module-plus-test-form   no real (module+ test ...) submodule
-;;   'zero-parsed-output              eligible, but grouped load parsed no tests
 (define (execution-eligibility-reason resolved-path)
   (define meta (get-file-metadata resolved-path))
   (define isolation (hash-ref meta 'isolation #f))
@@ -327,10 +343,9 @@
       (make-resolved-module-path (cons resolved-path '(test)))
       (make-resolved-module-path resolved-path)))
 
-;; Grouped/in-process execution requires a real (module+ test ...) submodule:
-;; that is the only form whose dynamic-require both runs the tests and keeps
-;; rackunit reporting intact. Anything else — module+ main suites, top-level
-;; checks, comment-only mentions — runs as a raco subprocess (W3 policy).
+;; Grouped/in-process execution requires a real (module+ test ...) submodule.
+;; Silent checks can still produce ZERO_PARSED and are not replayed. Other
+;; forms, including main-only and top-level checks, run as raco subprocesses.
 (define (in-process-eligible? resolved-path)
   (not (execution-eligibility-reason resolved-path)))
 
@@ -363,7 +378,7 @@
 ;; not terminate the host runner: custodians do not guard the exit handler, so
 ;; an unguarded (exit 0) silently kills the whole suite (observed W3: output
 ;; truncated at file 323 with process exit 0). Redirect exit to an exception
-;; so the worker thread records the file's intended exit code instead.
+;; so the worker records a failure without terminating the host.
 (struct in-process-test-exit exn:fail (code))
 
 (define (make-in-process-exit-handler exit-box)
@@ -371,7 +386,7 @@
     (raise (in-process-test-exit (format "test file requested (exit ~a) during in-process execution"
                                          code)
                                  (current-continuation-marks)
-                                 (if (and (number? code) (= code 0)) 0 1)))))
+                                 (if (and (exact-integer? code) (not (zero? code))) code 1)))))
 
 (define (run-single-file/in-process test-path
                                     #:timeout [timeout #f]
@@ -395,8 +410,8 @@
     ;; call-site #:mode 'grouped-in-process is a deliberate per-call
     ;; escalation and is never downgraded by an un-expanded area — the
     ;; characterization suite's parity contract depends on that. The
-    ;; in-process eligibility and zero-parsed-output fallbacks still apply to
-    ;; every path; no production default changes.
+    ;; In-process eligibility still applies to every path; completed silent
+    ;; runs are not replayed. No production default changes.
     [(and (not (equal? requested-mode "grouped-in-process"))
           (let-values ([(mode fallback) (area-grouped-decision resolved-path)])
             (and (eq? mode 'subprocess) (or fallback 'area-not-expanded))))
@@ -415,32 +430,37 @@
      (define stderr-out (open-output-string))
      (define exit-code (box #f))
      (define cust (make-custodian))
-     (define worker
-       (parameterize ([current-custodian cust])
-         (thread
-          (lambda ()
-            (with-handlers ([in-process-test-exit?
-                             (lambda (e) (set-box! exit-code (in-process-test-exit-code e)))]
-                            [exn:fail? (lambda (e)
-                                         (displayln (exn->string e) stderr-out)
-                                         ;; v1.00.24 W7: mirror raco test's module-
-                                         ;; exception phrasing so grouped and
-                                         ;; subprocess outputs classify identically.
-                                         (fprintf stderr-out
-                                                  "~a: raco test: test raised an exception~n"
-                                                  (path->string (file-name-from-path resolved-path)))
-                                         (set-box! exit-code 1))])
-              (parameterize ([current-output-port stdout-out]
-                             [current-error-port stderr-out]
-                             [current-directory (in-process-cwd resolved-path)]
-                             [current-command-line-arguments #()]
-                             [exit-handler (make-in-process-exit-handler exit-code)]
-                             [current-namespace (make-base-namespace)])
-                (dynamic-require (in-process-module-path resolved-path) #f)
-                (set-box! exit-code 0)))))))
-     (define completed? (sync/timeout (/ file-timeout 1000.0) worker))
-     (unless completed?
-       (custodian-shutdown-all cust))
+     (define completed?
+       (dynamic-wind
+        void
+        (lambda ()
+          (define worker
+            (parameterize ([current-custodian cust])
+              (thread (lambda ()
+                        (with-handlers
+                            ([in-process-test-exit? (lambda (e)
+                                                      (displayln (exn-message e) stderr-out)
+                                                      (define code (in-process-test-exit-code e))
+                                                      (set-box! exit-code (if (= code 2) 1 code)))]
+                             [exn:fail? (lambda (e)
+                                          (displayln (exn->string e) stderr-out)
+                                          ;; v1.00.24 W7: mirror raco test's module-
+                                          ;; exception phrasing so grouped and
+                                          ;; subprocess outputs classify identically.
+                                          (fprintf stderr-out
+                                                   "~a: raco test: test raised an exception~n"
+                                                   (path->string (file-name-from-path resolved-path)))
+                                          (set-box! exit-code 1))])
+                          (parameterize ([current-output-port stdout-out]
+                                         [current-error-port stderr-out]
+                                         [current-directory (in-process-cwd resolved-path)]
+                                         [current-command-line-arguments #()]
+                                         [exit-handler (make-in-process-exit-handler exit-code)]
+                                         [current-namespace (make-base-namespace)])
+                            (dynamic-require (in-process-module-path resolved-path) #f)
+                            (set-box! exit-code 0)))))))
+          (sync/timeout (/ file-timeout 1000.0) worker))
+        (lambda () (custodian-shutdown-all cust))))
      (define stdout-bytes (string->bytes/utf-8 (get-output-string stdout-out)))
      (define stderr-bytes (string->bytes/utf-8 (get-output-string stderr-out)))
      (define outcome
@@ -448,22 +468,11 @@
            (let ([result (parse-result-bytes test-path
                                              stdout-bytes
                                              stderr-bytes
-                                             (or (unbox exit-code) 0)
+                                             (or (unbox exit-code) 1)
                                              (elapsed))])
-             (if (and (= (test-file-result-exit-code result) 0) (= (test-file-result-total result) 0))
-                 ;; W6: grouped loading runs the module body, but files whose
-                 ;; tests are bare test-case/check-* forms (no rackunit/text-ui
-                 ;; run-tests self-report) pass silently — dynamic-require
-                 ;; produces no per-check output. raco test's discovery wrapper
-                 ;; prints pass counts, so re-run such files as a subprocess
-                 ;; instead of surfacing a zero-parsed strict failure. This
-                 ;; reproduces the pre-grouped (subprocess) behavior exactly.
-                 ;; W7: that fallback now carries a stable named reason.
-                 (run-single-file/subprocess test-path
-                                             #:timeout timeout
-                                             #:requested-mode requested-mode
-                                             #:fallback-reason 'zero-parsed-output)
-                 result))
+             ;; Never replay a completed test: side effects would run twice.
+             ;; A silent grouped run remains zero-parsed for strict validation.
+             result)
            (test-file-result test-path
                              2
                              stdout-bytes
@@ -494,6 +503,35 @@
     [(null? lst) '()]
     [else (cons (take lst (min n (length lst))) (split-list (drop lst (min n (length lst))) n))]))
 
+;; Scheduler ownership prevents a dead coordinator or worker from leaving
+;; registered subprocess groups running after the partition ends.
+(define (call-with-scheduler-ownership thunk)
+  (define cust (make-custodian))
+  (define owner (current-thread))
+  (define watcher
+    (thread (lambda ()
+              (sync owner)
+              (custodian-shutdown-all cust))))
+  (dynamic-wind void
+                (lambda ()
+                  (parameterize ([current-custodian cust]
+                                 [current-subprocess-custodian-mode 'kill]
+                                 [subprocess-group-enabled #t])
+                    (thunk)))
+                (lambda ()
+                  (custodian-shutdown-all cust)
+                  (kill-thread watcher))))
+
+(define (validate-result-multiset! files results)
+  (define unmatched
+    (for/fold ([remaining files]) ([result (in-list results)])
+      (unless (and (test-file-result? result)
+                   (member (test-file-result-path result) remaining equal?))
+        (error 'run-all-files "unexpected or duplicate worker result"))
+      (remove (test-file-result-path result) remaining equal?)))
+  (unless (null? unmatched)
+    (error 'run-all-files "missing worker results for ~a" unmatched)))
+
 (define (run-all-files files
                        jobs
                        timeout
@@ -505,19 +543,25 @@
   ;;   'batch — W1 fixed-batch barrier (default, rollback-safe).
   ;;   'queue — bounded work-conserving worker pool (see
   ;;            run-all-files/queue for the GC policy).
-  (if (eq? scheduler 'queue)
-      (run-all-files/queue files
-                           jobs
-                           timeout
-                           #:mode mode
-                           #:first-batch-ms-box first-batch-ms-box
-                           #:telemetry telemetry)
-      (run-all-files/batch files
-                           jobs
-                           timeout
-                           #:mode mode
-                           #:first-batch-ms-box first-batch-ms-box
-                           #:telemetry telemetry)))
+  (define results
+    (if (eq? scheduler 'queue)
+        (run-all-files/queue files
+                             jobs
+                             timeout
+                             #:mode mode
+                             #:first-batch-ms-box first-batch-ms-box
+                             #:telemetry telemetry)
+        (call-with-scheduler-ownership (lambda ()
+                                         (run-all-files/batch files
+                                                              jobs
+                                                              timeout
+                                                              #:mode mode
+                                                              #:first-batch-ms-box first-batch-ms-box
+                                                              #:telemetry telemetry)))))
+  ;; Every scheduled occurrence must have exactly one result. A worker that
+  ;; dies without publishing must never make the remaining files look green.
+  (validate-result-multiset! files results)
+  results)
 
 ;; W1 fixed-batch barrier scheduler. When called without #:scheduler this is
 ;; byte-identical to the pre-W2 implementation, so `batch` remains the
@@ -541,6 +585,7 @@
   (define batch-size jobs)
   (define batches (split-list files batch-size))
   (define gc-counter 0)
+  (define gc-runs 0)
   (define gc-pause-ms 0)
   (define total-batches (length batches))
   (when telemetry
@@ -550,19 +595,37 @@
   (for ([batch (in-list batches)]
         [batch-idx (in-naturals)])
     (define batch-start (current-inexact-milliseconds))
+    (define previous-count (length (unbox results)))
     (define batch-threads
       (for/list ([f (in-list batch)])
-        (thread (lambda ()
-                  (define result (run-single-file f #:timeout (or timeout 120000) #:mode mode))
-                  (define exit-code (test-file-result-exit-code result))
-                  (cond
-                    [(eq? (classify-test-result result) 'SKIPPED_BY_PROFILE) (display "S")]
-                    [(= exit-code 0) (display ".")]
-                    [(= exit-code 2) (display "T")]
-                    [else (display "F")])
-                  (flush-output)
-                  (add-result! result)))))
+        (thread
+         (lambda ()
+           (define result
+             (with-handlers ([exn:fail? (lambda (e)
+                                          (test-file-result f
+                                                            1
+                                                            #""
+                                                            (string->bytes/utf-8 (exn-message e))
+                                                            0
+                                                            0
+                                                            0
+                                                            0
+                                                            (current-requested-execution-mode)
+                                                            #f))])
+               (run-single-file f #:timeout (or timeout 120000) #:mode mode)))
+           (define exit-code (test-file-result-exit-code result))
+           (cond
+             [(eq? (classify-test-result result) 'SKIPPED_BY_PROFILE) (display "S")]
+             [(= exit-code 0) (display ".")]
+             [(= exit-code 2) (display "T")]
+             [else (display "F")])
+           (flush-output)
+           (add-result! result)))))
     (for-each thread-wait batch-threads)
+    ;; Do not start another batch if one of these workers failed to publish.
+    (define current-results (unbox results))
+    (validate-result-multiset! batch
+                               (take current-results (- (length current-results) previous-count)))
     (when (and first-batch-ms-box (= batch-idx 0))
       (set-box! first-batch-ms-box (exact-round (- (current-inexact-milliseconds) batch-t0))))
     (when telemetry
@@ -575,9 +638,10 @@
     (when (or (= 0 (modulo gc-counter 5)) (= gc-counter total-batches))
       (define gc-start (current-inexact-milliseconds))
       (collect-garbage 'major)
+      (set! gc-runs (add1 gc-runs))
       (set! gc-pause-ms (+ gc-pause-ms (- (current-inexact-milliseconds) gc-start)))))
   (when telemetry
-    (hash-set! telemetry 'gc_count gc-counter)
+    (hash-set! telemetry 'gc_count gc-runs)
     (hash-set! telemetry 'gc_pause_ms (exact-round gc-pause-ms)))
   (newline)
   (define file-order
@@ -602,18 +666,33 @@
 ;;
 ;; GC policy (deterministic and telemetry-visible): the coordinator — this
 ;; thread, the only one that touches the GC counters — performs a major GC
-;; after every 5th file completion and once more when the partition drains,
-;; mirroring batch mode's every-5th-batch-plus-last schedule. Workers never
+;; after every 5th file completion and at the final completion, coalescing
+;; the two triggers when they coincide, as in batch mode. Workers never
 ;; race the GC counter. `gc_count` / `gc_pause_ms` are reported exactly like
 ;; batch mode; per-file durations are recorded as (1 . duration-ms)
-;; "batches" in completion order (reversed consing, callers reverse) so the
-;; W1 partition-scheduler fields remain well-defined.
+;; "batches" in completion order (reversed consing, callers reverse). These
+;; overlapping durations cannot establish queue partition or worker timings.
 (define (run-all-files/queue files
                              jobs
                              timeout
                              #:mode [mode 'subprocess]
                              #:first-batch-ms-box [first-batch-ms-box #f]
                              #:telemetry [telemetry #f])
+  ;; Group ownership cannot contain descendants that deliberately escape it.
+  (call-with-scheduler-ownership (lambda ()
+                                   (run-all-files/queue/owned files
+                                                              jobs
+                                                              timeout
+                                                              #:mode mode
+                                                              #:first-batch-ms-box first-batch-ms-box
+                                                              #:telemetry telemetry))))
+
+(define (run-all-files/queue/owned files
+                                   jobs
+                                   timeout
+                                   #:mode [mode 'subprocess]
+                                   #:first-batch-ms-box [first-batch-ms-box #f]
+                                   #:telemetry [telemetry #f])
   (define t0 (current-inexact-milliseconds))
   (define total (length files))
   (define worker-count (max 1 (if (exact-nonnegative-integer? jobs) jobs 1)))
@@ -640,69 +719,81 @@
        (for/list ([i (in-range worker-count)])
          (thread
           (lambda ()
-            (let loop ()
-              (define item (channel-get work-ch))
-              (unless (eq? item stop-sentinel)
-                (with-handlers
-                    ([exn:fail? (lambda (e)
-                                  ;; Failure isolation: never kill the worker, never
-                                  ;; hang the coordinator, never discard the result.
-                                  (add-result! (test-file-result item
+            ;; Defer breaks across handoff and publication; enable them only
+            ;; after an item's cleanup and exception handlers are installed.
+            (parameterize-break
+             #f
+             (let loop ()
+               (define item (channel-get work-ch))
+               (unless (eq? item stop-sentinel)
+                 ;; A break deferred during publication or idle receive belongs
+                 ;; to the preceding boundary, not this newly handed-off file.
+                 (with-handlers ([exn:break? void])
+                   (parameterize-break #t (sync/timeout 0 never-evt)))
+                 (define item-custodian (make-custodian))
+                 (define-values (result file-dur)
+                   (dynamic-wind
+                    void
+                    (lambda ()
+                      (with-handlers ([exn? (lambda (e)
+                                              (values
+                                               (test-file-result item
                                                                  1
                                                                  #""
-                                                                 #""
+                                                                 (string->bytes/utf-8 (exn-message e))
                                                                  0
                                                                  0
                                                                  0
                                                                  0
                                                                  (current-requested-execution-mode)
-                                                                 #f))
-                                  (channel-put done-ch 0))]
-                     [exn:break? (lambda (e)
-                                   ;; Cancellation bound: a break inside a worker is
-                                   ;; converted to a recorded failure + done signal so
-                                   ;; the coordinator can never wait on a dead worker.
-                                   (add-result! (test-file-result item
-                                                                  1
-                                                                  #""
-                                                                  #""
-                                                                  0
-                                                                  0
-                                                                  0
-                                                                  0
-                                                                  (current-requested-execution-mode)
-                                                                  #f))
-                                   (channel-put done-ch 0))])
-                  (define t-file (current-inexact-milliseconds))
-                  (define result (run-single-file item #:timeout (or timeout 120000) #:mode mode))
-                  (define file-dur (exact-round (- (current-inexact-milliseconds) t-file)))
-                  (define exit-code (test-file-result-exit-code result))
-                  (cond
-                    [(eq? (classify-test-result result) 'SKIPPED_BY_PROFILE) (display "S")]
-                    [(= exit-code 0) (display ".")]
-                    [(= exit-code 2) (display "T")]
-                    [else (display "F")])
-                  (flush-output)
-                  (add-result! result)
-                  (channel-put done-ch file-dur))
-                (loop)))))))
+                                                                 #f)
+                                               0))])
+                        (parameterize ([current-custodian item-custodian])
+                          (parameterize-break
+                           #t
+                           (define t-file (current-inexact-milliseconds))
+                           (define r (run-single-file item #:timeout (or timeout 120000) #:mode mode))
+                           (values r (exact-round (- (current-inexact-milliseconds) t-file)))))))
+                    (lambda () (custodian-shutdown-all item-custodian))))
+                 (define exit-code (test-file-result-exit-code result))
+                 (cond
+                   [(eq? (classify-test-result result) 'SKIPPED_BY_PROFILE) (display "S")]
+                   [(= exit-code 0) (display ".")]
+                   [(= exit-code 2) (display "T")]
+                   [else (display "F")])
+                 (flush-output)
+                 (add-result! result)
+                 (channel-put done-ch file-dur)
+                 (loop))))))))
      ;; Work-conserving distribution over unbuffered channels: the
      ;; coordinator hands out a new item exactly when a worker reports a
      ;; completion, so at most `worker-count` items are ever in flight and
      ;; no unbuffered put can deadlock (every put has a receiver waiting).
+     (define (queue-await evt)
+       ;; A dead worker must fail the partition instead of stranding the
+       ;; coordinator on a work or completion channel indefinitely.
+       (define tagged
+         (apply sync
+                (handle-evt evt (lambda (value) (cons #t value)))
+                (for/list ([worker (in-list workers)])
+                  (handle-evt (thread-dead-evt worker) (lambda (_) (cons #f worker))))))
+       (unless (car tagged)
+         (error 'run-all-files/queue "worker terminated unexpectedly"))
+       (cdr tagged))
      (for ([i (in-range (min worker-count total))])
-       (channel-put work-ch (list-ref files i)))
+       (queue-await (channel-put-evt work-ch (list-ref files i))))
      (define sent (min worker-count total))
      ;; Coordinator: consume completions, refill work as workers free up,
      ;; run the deterministic GC schedule, record telemetry, then join the
      ;; workers (all stopped by now).
      (define gc-counter 0)
+     (define gc-runs 0)
      (define gc-pause-ms 0)
      (define batches-seen '())
      (for ([i (in-range total)])
-       (define file-dur (sync done-ch))
+       (define file-dur (queue-await done-ch))
        (when (< sent total)
-         (channel-put work-ch (list-ref files sent))
+         (queue-await (channel-put-evt work-ch (list-ref files sent)))
          (set! sent (add1 sent)))
        (when (and first-batch-ms-box (not (unbox first-batch-ms-box)))
          (set-box! first-batch-ms-box (exact-round (- (current-inexact-milliseconds) t0))))
@@ -711,14 +802,13 @@
        (when (or (= 0 (modulo gc-counter 5)) (= gc-counter total))
          (define gc-start (current-inexact-milliseconds))
          (collect-garbage 'major)
+         (set! gc-runs (add1 gc-runs))
          (set! gc-pause-ms (+ gc-pause-ms (- (current-inexact-milliseconds) gc-start)))))
-     ;; All `total` items are done; every worker is blocked on work-ch.
-     (for ([i (in-range worker-count)])
-       (channel-put work-ch stop-sentinel))
-     (for-each thread-wait workers)
+     ;; All work is acknowledged; the enclosing custodian shuts down idle
+     ;; workers after this result is constructed.
      (when telemetry
        (hash-set! telemetry 'batches batches-seen)
-       (hash-set! telemetry 'gc_count gc-counter)
+       (hash-set! telemetry 'gc_count gc-runs)
        (hash-set! telemetry 'gc_pause_ms (exact-round gc-pause-ms)))
      (newline)
      (define file-order
@@ -810,19 +900,29 @@
           'worker_count
           worker-count
           'queue_wait_ms
-          (sum 'queue_wait_ms (list serial-fields parallel-fields))
+          (if (eq? scheduler 'queue)
+              'null
+              (sum 'queue_wait_ms (list serial-fields parallel-fields)))
           'worker_busy_ms
-          (sum 'worker_busy_ms (list serial-fields parallel-fields))
+          (if (eq? scheduler 'queue)
+              'null
+              (sum 'worker_busy_ms (list serial-fields parallel-fields)))
           'worker_idle_ms
-          (sum 'worker_idle_ms (list serial-fields parallel-fields))
+          (if (eq? scheduler 'queue)
+              'null
+              (sum 'worker_idle_ms (list serial-fields parallel-fields)))
           'serial_partition_ms
-          (if serial-fields
-              (hash-ref serial-fields 'partition_ms)
-              0)
+          (if (eq? scheduler 'queue)
+              'null
+              (if serial-fields
+                  (hash-ref serial-fields 'partition_ms)
+                  0))
           'parallel_partition_ms
-          (if parallel-fields
-              (hash-ref parallel-fields 'partition_ms)
-              0)
+          (if (eq? scheduler 'queue)
+              'null
+              (if parallel-fields
+                  (hash-ref parallel-fields 'partition_ms)
+                  0))
           'process_start_count
           subprocess-count
           'subprocess_count
@@ -880,6 +980,46 @@
     (if m
         (cadr m)
         "unknown")))
+
+(define (surface-kind path)
+  (when (link-exists? path)
+    (error (quote run-suite-once) "unsafe surface symlink: ~a" path))
+  (define kind (file-or-directory-type path #f))
+  (when (and kind (not (eq? kind (quote file))))
+    (error (quote run-suite-once) "unsafe surface type: ~a" path))
+  (when kind
+    (define stat (file-or-directory-stat path #f))
+    (unless (= (bitwise-and (hash-ref stat (quote mode)) #o170000) #o100000)
+      (error (quote run-suite-once) "unsafe non-regular surface: ~a" path))
+    (when (> (hash-ref stat (quote hardlink-count)) 1)
+      (error (quote run-suite-once) "unsafe surface hardlink: ~a" path)))
+  kind)
+
+;; Managed surfaces are DETECTED, never rewritten: restoring saved bytes (or a
+;; git checkout) would destroy pre-existing or concurrent user edits. A test
+;; that mutates them is a defect and fails the suite; mutation coverage belongs
+;; in temporary fixtures.
+(define (surface-state root name)
+  (define path (build-path root name))
+  (if (surface-kind path)
+      (cons (file->bytes path) (file-or-directory-permissions path (quote bits)))
+      (cons #f #f)))
+
+;; Reports (does not raise) so the caller can finish printing evidence and
+;; still fail closed afterwards.
+(define (call-with-surface-guard root thunk)
+  (define before
+    (for/list ([name (in-list repo-surface-files)])
+      (cons name (surface-state root name))))
+  (define violations (box '()))
+  (dynamic-wind void
+                thunk
+                (lambda ()
+                  (set-box! violations
+                            (for/list ([entry (in-list before)]
+                                       #:unless (equal? (cdr entry) (surface-state root (car entry))))
+                              (car entry)))))
+  (unbox violations))
 
 (define (run-suite-once suite-files
                         jobs
@@ -953,28 +1093,37 @@
     (printf ";; run-tests: serializing ~a mutation-sensitive file~a before parallel batches~n"
             (length serial-files)
             (if (= (length serial-files) 1) "" "s")))
-  (define serial-results
-    (if (pair? serial-files)
-        (run-all-files serial-files
-                       1
-                       timeout-ms
-                       #:mode mode
-                       #:first-batch-ms-box serial-first-batch-ms-box
-                       #:telemetry serial-tel
-                       #:scheduler scheduler)
-        '()))
-  (when (pair? serial-files)
-    (restore-repo-surfaces! base-dir))
-  (define parallel-results
-    (if (pair? parallel-files)
-        (run-all-files parallel-files
-                       jobs
-                       timeout-ms
-                       #:mode mode
-                       #:first-batch-ms-box parallel-first-batch-ms-box
-                       #:telemetry parallel-tel
-                       #:scheduler scheduler)
-        '()))
+  ;; One guard around every execution path (sequential, serial and parallel):
+  ;; a test that rewrites a managed surface fails the suite instead of being
+  ;; silently reverted.
+  (define serial-results-box (box '()))
+  (define parallel-results-box (box '()))
+  (define surface-violations
+    (call-with-surface-guard
+     base-dir
+     (lambda ()
+       (set-box! serial-results-box
+                 (if (pair? serial-files)
+                     (run-all-files serial-files
+                                    1
+                                    timeout-ms
+                                    #:mode mode
+                                    #:first-batch-ms-box serial-first-batch-ms-box
+                                    #:telemetry serial-tel
+                                    #:scheduler scheduler)
+                     '()))
+       (set-box! parallel-results-box
+                 (if (pair? parallel-files)
+                     (run-all-files parallel-files
+                                    jobs
+                                    timeout-ms
+                                    #:mode mode
+                                    #:first-batch-ms-box parallel-first-batch-ms-box
+                                    #:telemetry parallel-tel
+                                    #:scheduler scheduler)
+                     '())))))
+  (define serial-results (unbox serial-results-box))
+  (define parallel-results (unbox parallel-results-box))
   (define file-order
     (for/hash ([f (in-list suite-files)]
                [i (in-naturals)])
@@ -983,6 +1132,8 @@
     (sort (append skipped-results serial-results parallel-results)
           <
           #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
+  ;; The suite boundary must also account for skipped and partitioned files.
+  (validate-result-multiset! suite-files results)
   (define total-elapsed (exact-round (- (current-inexact-milliseconds) t0)))
   (define exec-end-ms (current-inexact-milliseconds))
   (define runner-version (detect-runner-version))
@@ -1102,6 +1253,15 @@
         (printf "  ~a (exit=0 but no rackunit output parsed)~n" (test-file-result-path s)))
       (exit 4)))
   (define exit-code (summary-exit-code failed-files timeout-files))
+  (when (pair? surface-violations)
+    ;; Evidence above is already printed/persisted; now fail closed without
+    ;; touching the files. The snapshot diff cannot distinguish a test
+    ;; mutation from a concurrent edit, so it is never auto-reverted.
+    (error (quote run-suite-once)
+           (string-append "managed surface(s) changed during this run: "
+                          (string-join surface-violations ", ")
+                          "; mutation coverage belongs in temporary fixtures "
+                          "(the runner never restores user files)")))
   (when (and (zero? exit-code) (> repeat-total 1))
     (printf ";; Run ~a/~a: PASS~n" repeat-num repeat-total))
   (values exit-code results))
@@ -1544,10 +1704,602 @@
                            #:shard-total shard-total))
   (exit 0))
 
+;; ─────────────────────────────────────────────────────────────────────
+;; Test-runner overhead diagnostics (moved verbatim from the former
+;; overhead.rkt; W0 of v0.99.30 + v1.00.27 W4 local feedback telemetry).
+;; The CLI (`--check` / `--collect-local`) is dispatched from this module's
+;; direct-invocation guard below, so there is no second `module+ main`.
+;; ─────────────────────────────────────────────────────────────────────
+
+(struct overhead-result (label command exit-code elapsed-ms stdout stderr) #:transparent)
+
+(define (make-overhead-result label command exit-code elapsed-ms stdout stderr)
+  (overhead-result label command exit-code elapsed-ms stdout stderr))
+
+(define (now-ms)
+  (current-inexact-milliseconds))
+
+(define (elapsed-since t0)
+  (exact-round (- (now-ms) t0)))
+
+(define (run-overhead-command label executable args #:cwd [cwd (current-directory)])
+  (define exe-path (find-executable-path executable))
+  (unless exe-path
+    (error 'run-overhead-command "executable not found: ~a" executable))
+  (define stdout-out (open-output-string))
+  (define stderr-out (open-output-string))
+  (define command-text (string-join (cons executable args) " "))
+  (define t0 (now-ms))
+  (define-values (_proc stdin _pid _stderr ctrl)
+    (parameterize ([current-directory cwd])
+      (apply values (apply process*/ports stdout-out #f stderr-out exe-path args))))
+  (when stdin
+    (close-output-port stdin))
+  (ctrl 'wait)
+  (define exit-code (ctrl 'exit-code))
+  (make-overhead-result label
+                        command-text
+                        exit-code
+                        (elapsed-since t0)
+                        (get-output-string stdout-out)
+                        (get-output-string stderr-out)))
+
+(define (write-file path content)
+  (call-with-output-file path #:exists 'replace (lambda (out) (display content out))))
+
+(define (collect-overhead-diagnostics #:base-dir [base-dir (current-directory)])
+  (define temp-dir (make-temporary-file "q-run-tests-overhead-~a" 'directory))
+  (define empty-file (build-path temp-dir "empty.rkt"))
+  (define rackunit-file (build-path temp-dir "rackunit-empty.rkt"))
+  (write-file empty-file "#lang racket/base\n(void)\n")
+  (write-file rackunit-file
+              (string-append
+               "#lang racket\n"
+               "(require rackunit rackunit/text-ui)\n"
+               "(run-tests (test-suite \"empty\" (test-case \"ok\" (check-true #t))))\n"))
+  (define representative (build-path base-dir "tests" "test-version.rkt"))
+  (define commands
+    (append
+     (list (list "racket-noop" "racket" (list "-e" "(void)"))
+           (list "racket-empty" "racket" (list (path->string empty-file)))
+           (list "raco-empty" "raco" (list "test" (path->string empty-file)))
+           (list "raco-rackunit-empty" "raco" (list "test" (path->string rackunit-file))))
+     (if (file-exists? representative)
+         (list (list "raco-representative-test" "raco" (list "test" (path->string representative))))
+         '())))
+  (dynamic-wind void
+                (lambda ()
+                  (for/list ([cmd (in-list commands)])
+                    (match cmd
+                      [(list label exe args) (run-overhead-command label exe args #:cwd base-dir)])))
+                (lambda ()
+                  (when (directory-exists? temp-dir)
+                    (delete-directory/files temp-dir)))))
+
+(define (format-overhead-result r)
+  (format "  ~a: ~ams exit=~a cmd=~a"
+          (overhead-result-label r)
+          (overhead-result-elapsed-ms r)
+          (overhead-result-exit-code r)
+          (overhead-result-command r)))
+
+(define (print-overhead-diagnostics #:base-dir [base-dir (current-directory)])
+  (displayln "═══════════════════════════════════════════════════════════")
+  (displayln "              TEST RUNNER OVERHEAD DIAGNOSTIC")
+  (displayln "═══════════════════════════════════════════════════════════")
+  (printf "  Base dir:   ~a~n" (path->string (simplify-path base-dir)))
+  (printf "  Racket:     ~a~n" (or (find-executable-path "racket") "not found"))
+  (printf "  raco:       ~a~n" (or (find-executable-path "raco") "not found"))
+  (newline)
+  (define results (collect-overhead-diagnostics #:base-dir base-dir))
+  (for ([r (in-list results)])
+    (displayln (format-overhead-result r)))
+  (newline)
+  (displayln "Interpretation:")
+  (displayln "  - racket-noop approximates raw Racket process startup cost.")
+  (displayln "  - raco-empty approximates per-file raco test harness overhead.")
+  (displayln "  - raco-rackunit-empty approximates parser-visible rackunit overhead.")
+  (displayln "  - raco-representative-test samples one normal project test when available.")
+  (displayln "═══════════════════════════════════════════════════════════")
+  results)
+
+;; ── v1.00.27 W4 (#9592): L0/L1/L2 local feedback telemetry ─────────────
+;; Real p90 evidence for the three local feedback loops of
+;; docs/TEST_CONVENTIONS.md: L0 = single test file (≤5s), L1 = direct unit
+;; impact (≤30s), L2 = transitive impact = the unit-fast tier (≤120s).
+;; The collector measures representative invocations ≥20 times per loop
+;; (first sample cold, remaining samples warm, every sample a fresh
+;; run-tests process), stamps machine context and the W3-governed
+;; grouped/subprocess mode per area, and computes every SLO verdict from
+;; the samples. Verdicts are never hand-written: --check re-derives p90
+;; (linear interpolation) and the verdict from the recorded samples and
+;; rejects hand-editing, missing fields, failed samples, sample counts
+;; below the minimum, and any area mode contradicting the W3
+;; grouped-expansion configuration.
+
+(define local-p90-min-samples 20)
+
+;; v1.00.27-w4: L2 local p90 SLO adjusted 120s -> 240s through the governed
+;; evidence record artifacts/tier-ownership/v1.00.27-w4/slo-evidence-record.md
+;; (measured p90 234.9s over 20 samples of the unit-fast tier; see
+;; artifacts/tier-ownership/v1.00.27-w4/local-p90.json).
+(define local-feedback-slo-table (list (cons "L0" 5000) (cons "L1" 30000) (cons "L2" 240000)))
+
+(define (slo-budget-for label)
+  (cond
+    [(assoc label local-feedback-slo-table)
+     =>
+     cdr]
+    [else #f]))
+
+(define (percentile-rank xs p)
+  ;; Linear interpolation on the sorted sample list: rank = p*(n-1).
+  (define sorted (sort (map exact->inexact xs) <))
+  (define n (length sorted))
+  (when (zero? n)
+    (error 'percentile-rank "empty sample list"))
+  (define rank (* p (sub1 n)))
+  (define lo (floor rank))
+  (define hi (ceiling rank))
+  (define vlo (list-ref sorted (inexact->exact lo)))
+  (if (= lo hi)
+      vlo
+      (+ vlo (* (- rank lo) (- (list-ref sorted (inexact->exact hi)) vlo)))))
+
+(define (local-loop-p90 elapsed-ms-list)
+  (exact-round (percentile-rank elapsed-ms-list 0.9)))
+
+(define (slo-verdict p90-ms budget-ms)
+  (if (<= p90-ms budget-ms) "meet" "miss"))
+
+(define (machine-context)
+  (define loadavg-path "/proc/loadavg")
+  (define-values (l1 l5 l15)
+    (if (file-exists? loadavg-path)
+        (let* ([parts (string-split (string-trim (file->string loadavg-path)) " ")])
+          (values (string->number (first parts))
+                  (string->number (second parts))
+                  (string->number (third parts))))
+        (values #f #f #f)))
+  (hasheq 'cpu-count
+          (processor-count)
+          'load-1
+          (or l1 0.0)
+          'load-5
+          (or l5 0.0)
+          'load-15
+          (or l15 0.0)
+          'platform
+          (symbol->string (system-type))
+          'racket
+          (version)))
+
+(define (local-feedback-loops base-dir)
+  (define (loop-def label description argv paths)
+    (hasheq 'loop
+            label
+            'description
+            description
+            'argv
+            argv
+            'paths
+            paths
+            'slo-ms
+            (slo-budget-for label)))
+  (list
+   (loop-def "L0"
+             "current behavior: the single test file being edited (explicit-file mode)"
+             (list "racket" "scripts/run-tests.rkt" "tests/ci/metadata-discovery-test.rkt")
+             (list "tests/ci/metadata-discovery-test.rkt"))
+   (loop-def "L1"
+             "direct unit impact: direct tests of changed modules + required local contract tests"
+             (list "racket"
+                   "scripts/run-tests.rkt"
+                   "tests/ci/metadata-discovery-test.rkt"
+                   "tests/ci/verify-lock-selection-test.rkt"
+                   "tests/test-version.rkt")
+             (list "tests/ci/metadata-discovery-test.rkt"
+                   "tests/ci/verify-lock-selection-test.rkt"
+                   "tests/test-version.rkt"))
+   (loop-def "L2"
+             "transitive impact: the full unit-fast developer iteration tier"
+             (list "racket" "scripts/run-tests.rkt" "--suite" "unit-fast")
+             (list "tests/ci/metadata-discovery-test.rkt"
+                   "tests/ci/verify-lock-selection-test.rkt"))))
+
+(define (expected-area-mode area-string)
+  ;; grouped-area-config is string-keyed (test-file-area convention).
+  (define policy (hash-ref (grouped-area-config) area-string 'subprocess))
+  (if (eq? policy 'grouped) "grouped" "subprocess"))
+
+(define (area-mode-rows paths #:base-dir [base-dir (current-directory)])
+  (parameterize ([current-directory base-dir])
+    (for/list ([p (in-list paths)])
+      (define-values (mode fallback-reason) (area-grouped-decision p))
+      (define area (test-file-area p))
+      (hasheq 'path
+              (if (string? p)
+                  p
+                  (path->string p))
+              'area
+              (if (symbol? area)
+                  (symbol->string area)
+                  area)
+              'mode
+              (if (eq? mode 'grouped) "grouped" "subprocess")
+              'fallback-reason
+              (and fallback-reason (symbol->string fallback-reason))))))
+
+(define (grouped-config-jsexpr)
+  (define cfg (grouped-area-config->jsexpr))
+  (hasheq 'source
+          "artifacts/tier-ownership/v1.00.27-w3/grouped-expansion.json"
+          'default-mode
+          "subprocess"
+          'areas
+          (for/list ([(area policy) (in-hash cfg)])
+            (hasheq 'area
+                    (if (symbol? area)
+                        (symbol->string area)
+                        area)
+                    'mode
+                    (if (member policy '(grouped "grouped")) "grouped" "subprocess")))))
+
+(define (implementation-sha #:base-dir [base-dir (current-directory)])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (eprintf "warning: implementation-sha: git rev-parse failed: ~a\n"
+                                        (exn-message e))
+                               "unknown")])
+    (define r (run-overhead-command "git rev-parse" "git" (list "rev-parse" "HEAD") #:cwd base-dir))
+    (define line (string-trim (overhead-result-stdout r)))
+    (if (regexp-match? #px"^[0-9a-f]{40,64}$" line)
+        line
+        (begin
+          (eprintf "warning: implementation-sha: unexpected rev-parse output ~s\n" line)
+          "unknown"))))
+
+(define (iso-utc-now)
+  (define d (seconds->date (current-seconds) #t))
+  (define (pad2 x)
+    (~r x #:min-width 2 #:pad-string "0"))
+  (format "~a-~a-~aT~a:~a:~aZ"
+          (date-year d)
+          (pad2 (date-month d))
+          (pad2 (date-day d))
+          (pad2 (date-hour d))
+          (pad2 (date-minute d))
+          (pad2 (date-second d))))
+
+(define (collect-local-p90 #:base-dir [base-dir (current-directory)]
+                           #:loops [loops #f]
+                           #:samples-per-loop [samples-per-loop local-p90-min-samples]
+                           #:cold-samples [cold-samples 1])
+  (define loop-defs (or loops (local-feedback-loops base-dir)))
+  (define mc (machine-context))
+  (define loop-records
+    (for/list ([l (in-list loop-defs)])
+      (define label (hash-ref l 'loop))
+      (define argv (hash-ref l 'argv))
+      (define samples
+        (for/list ([i (in-range samples-per-loop)])
+          (define start (if (< i cold-samples) "cold" "warm"))
+          (define r (run-overhead-command label (first argv) (rest argv) #:cwd base-dir))
+          (unless (zero? (overhead-result-exit-code r))
+            (eprintf "warning: ~a sample ~a exited ~a\n"
+                     label
+                     (add1 i)
+                     (overhead-result-exit-code r)))
+          (hasheq 'i
+                  (add1 i)
+                  'start
+                  start
+                  'elapsed-ms
+                  (overhead-result-elapsed-ms r)
+                  'exit-code
+                  (overhead-result-exit-code r))))
+      (define p90 (local-loop-p90 (map (lambda (s) (hash-ref s 'elapsed-ms)) samples)))
+      (define slo (hash-ref l 'slo-ms))
+      (hasheq 'loop
+              label
+              'description
+              (hash-ref l 'description)
+              'command
+              (string-join argv " ")
+              'paths
+              (hash-ref l 'paths)
+              'area-modes
+              (area-mode-rows (hash-ref l 'paths) #:base-dir base-dir)
+              'sample-count
+              (length samples)
+              'samples
+              samples
+              'p90-ms
+              p90
+              'slo-ms
+              slo
+              'verdict
+              (slo-verdict p90 slo))))
+  (hasheq
+   'version
+   1
+   'wave
+   "v1.00.27-w4"
+   'ticket
+   "#9592"
+   'generated-at
+   (iso-utc-now)
+   'implementation-sha
+   (implementation-sha #:base-dir base-dir)
+   'method
+   (hasheq
+    'p90
+    "linear interpolation"
+    'rank
+    "0.9*(n-1)"
+    'cold-samples
+    cold-samples
+    'warm-samples
+    (max 0 (- samples-per-loop cold-samples))
+    'note
+    "each sample is a fresh run-tests process; cold = first invocation of the loop in this collection, warm = subsequent invocations")
+   'machine
+   mc
+   'grouped-config
+   (grouped-config-jsexpr)
+   'loops
+   loop-records))
+
+(define (check-local-p90-record rec)
+  (define violations '())
+  (define (bad fmt . args)
+    (set! violations (cons (apply format fmt args) violations)))
+  (define (need h field ctx)
+    (unless (and (hash? h) (hash-has-key? h field))
+      (bad "~a: missing required field: ~a" ctx field)))
+  (if (not (hash? rec))
+      (bad "record is not a JSON object")
+      (let ()
+        (for ([f (in-list '(version wave
+                                    ticket
+                                    generated-at
+                                    implementation-sha
+                                    method
+                                    machine
+                                    grouped-config
+                                    loops))])
+          (need rec f "record"))
+        (define mc (hash-ref rec 'machine #f))
+        (when (hash? mc)
+          (for ([f (in-list '(cpu-count load-1 load-5 load-15 platform racket))])
+            (need mc f "machine")))
+        (define sha (hash-ref rec 'implementation-sha #f))
+        (when (string? sha)
+          (unless (regexp-match? #px"^[0-9a-f]{40,64}$" sha)
+            (bad "implementation-sha ~a is not a 40/64-hex commit sha" sha)))
+        (define method (hash-ref rec 'method #f))
+        (when (hash? method)
+          (for ([f (in-list '(p90 rank))])
+            (need method f "method")))
+        (define gcfg (hash-ref rec 'grouped-config #f))
+        (when (hash? gcfg)
+          (for ([f (in-list '(source default-mode areas))])
+            (need gcfg f "grouped-config"))
+          (when (hash-has-key? gcfg 'source)
+            (unless (equal? (hash-ref gcfg 'source)
+                            "artifacts/tier-ownership/v1.00.27-w3/grouped-expansion.json")
+              (bad "grouped-config source must reference the W3 governed expansion artifact")))
+          (define areas (hash-ref gcfg 'areas #f))
+          (when (list? areas)
+            (unless (pair? areas)
+              (bad "grouped-config: areas must not be empty"))
+            (for ([row (in-list areas)])
+              (need row 'area "grouped-config area row")
+              (need row 'mode "grouped-config area row"))))
+        (define loops (hash-ref rec 'loops #f))
+        (unless (and (list? loops) (= (length loops) 3))
+          (bad "record: loops must contain exactly L0, L1, L2"))
+        (when (and (list? loops) (= (length loops) 3))
+          (define labels (map (lambda (l) (hash-ref l 'loop #f)) loops))
+          (unless (equal? labels '("L0" "L1" "L2"))
+            (bad "record: loops must be labeled L0, L1, L2 (got ~a)" labels)))
+        (when (list? loops)
+          (for ([l (in-list loops)])
+            (define label (hash-ref l 'loop "?"))
+            (for ([f (in-list '(loop description
+                                     command
+                                     paths
+                                     area-modes
+                                     sample-count
+                                     samples
+                                     p90-ms
+                                     slo-ms
+                                     verdict))])
+              (need l f label))
+            (define count (hash-ref l 'sample-count #f))
+            (when (and (hash-has-key? l 'sample-count) (not (integer? count)))
+              (bad "~a: sample-count must be an integer" label))
+            (when (and (integer? count) (< count local-p90-min-samples))
+              (bad "~a: sample-count ~a is below the minimum of ~a real telemetry samples"
+                   label
+                   count
+                   local-p90-min-samples))
+            (define samples (hash-ref l 'samples #f))
+            (when (list? samples)
+              (when (and (integer? count) (not (= (length samples) count)))
+                (bad "~a: sample-count ~a does not match ~a recorded samples"
+                     label
+                     count
+                     (length samples)))
+              (for ([s (in-list samples)])
+                (for ([f (in-list '(i start elapsed-ms exit-code))])
+                  (need s f (format "~a sample" label)))
+                (unless (member (hash-ref s 'start #f) '("cold" "warm"))
+                  (bad "~a sample ~a: start must be cold or warm" label (hash-ref s 'i "?")))
+                (define ms (hash-ref s 'elapsed-ms #f))
+                (unless (and (integer? ms) (>= ms 0))
+                  (bad "~a sample ~a: elapsed-ms must be a non-negative integer"
+                       label
+                       (hash-ref s 'i "?")))
+                (unless (equal? (hash-ref s 'exit-code #f) 0)
+                  (bad "~a sample ~a: exit-code ~a is not 0 (failed runs are not latency evidence)"
+                       label
+                       (hash-ref s 'i "?")
+                       (hash-ref s 'exit-code "?")))))
+            (define elapsed-list
+              (and (list? samples)
+                   (not (null? samples))
+                   (andmap (lambda (s) (and (hash? s) (hash-has-key? s 'elapsed-ms))) samples)
+                   (map (lambda (s) (hash-ref s 'elapsed-ms)) samples)))
+            (define slo (hash-ref l 'slo-ms #f))
+            (when (hash-has-key? l 'slo-ms)
+              (unless (equal? slo (slo-budget-for label))
+                (bad "~a: slo-ms ~a contradicts the declared budget ~a"
+                     label
+                     slo
+                     (slo-budget-for label))))
+            (when (list? elapsed-list)
+              (define recomputed (local-loop-p90 elapsed-list))
+              (define recorded-p90 (hash-ref l 'p90-ms #f))
+              (when (integer? recorded-p90)
+                (unless (= recorded-p90 recomputed)
+                  (bad
+                   "~a: p90-ms ~a does not match recomputed p90 ~a (linear interpolation over samples)"
+                   label
+                   recorded-p90
+                   recomputed)))
+              (when (integer? slo)
+                (define expected-verdict (slo-verdict recomputed slo))
+                (define recorded-verdict (hash-ref l 'verdict #f))
+                (unless (equal? recorded-verdict expected-verdict)
+                  (bad
+                   "~a: verdict '~a' is not the computed verdict '~a' (SLO verdicts are computed, never hand-written)"
+                   label
+                   recorded-verdict
+                   expected-verdict))))
+            (define rows (hash-ref l 'area-modes #f))
+            (unless (and (list? rows) (pair? rows))
+              (bad "~a: area-modes must list the grouped/subprocess mode per area" label))
+            (when (list? rows)
+              (for ([row (in-list rows)])
+                (define area (hash-ref row 'area #f))
+                (define mode (hash-ref row 'mode #f))
+                (unless (string? area)
+                  (bad "~a: area-mode row is missing area" label))
+                (unless (member mode '("grouped" "subprocess"))
+                  (bad "~a: area-mode row for ~a has invalid mode ~a" label area mode))
+                (when (and (string? area) (member mode '("grouped" "subprocess")))
+                  (define expected (expected-area-mode area))
+                  (unless (equal? mode expected)
+                    (bad
+                     "~a: area mode for ~a contradicts the W3 grouped configuration (recorded ~a, governed ~a)"
+                     label
+                     area
+                     mode
+                     expected)))))))))
+  (reverse violations))
+
+(define (check-local-p90-file path)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (list (format "local-p90 check could not read ~a: ~a" path (exn-message e))))])
+    (define rec (with-input-from-file path read-json))
+    (check-local-p90-record rec)))
+
+;; Overhead-diagnostics CLI (body moved verbatim from overhead.rkt's
+;; `module+ main`; `argv` is the command-line vector supplied by the
+;; direct-invocation guard in this module).
+
+(define (overhead-cli argv)
+  (define (usage)
+    (displayln "usage: racket scripts/run-tests/runner.rkt --check <local-p90.json>")
+    (displayln
+     "       racket scripts/run-tests/runner.rkt --collect-local [--samples N] [--out PATH] [--loop L0|L1|L2]"))
+  (cond
+    [(and (>= (vector-length argv) 2) (equal? (vector-ref argv 0) "--check"))
+     (define path (vector-ref argv 1))
+     (define violations (check-local-p90-file path))
+     (if (null? violations)
+         (begin
+           (printf "local-p90 OK: ~a (loops L0/L1/L2 verified, verdicts recomputed)\n" path)
+           (exit 0))
+         (begin
+           (printf "local-p90 check FAILED for ~a:\n" path)
+           (for ([v (in-list violations)])
+             (printf "  - ~a\n" v))
+           (exit 1)))]
+    [(and (>= (vector-length argv) 1) (equal? (vector-ref argv 0) "--collect-local"))
+     (define samples local-p90-min-samples)
+     (define out #f)
+     (define loop-filter #f)
+     (let go ([i 1])
+       (when (< i (vector-length argv))
+         (define a (vector-ref argv i))
+         (cond
+           [(and (equal? a "--samples") (< (add1 i) (vector-length argv)))
+            (set! samples (string->number (vector-ref argv (add1 i))))
+            (go (+ i 2))]
+           [(and (equal? a "--out") (< (add1 i) (vector-length argv)))
+            (set! out (vector-ref argv (add1 i)))
+            (go (+ i 2))]
+           [(and (equal? a "--loop") (< (add1 i) (vector-length argv)))
+            (set! loop-filter (vector-ref argv (add1 i)))
+            (go (+ i 2))]
+           [else
+            (eprintf "unknown or incomplete option: ~a\n" a)
+            (go (add1 i))])))
+     (unless (and (integer? samples) (>= samples 1))
+       (set! samples local-p90-min-samples))
+     (define loops
+       (if loop-filter
+           (filter (lambda (l) (equal? (hash-ref l 'loop) loop-filter))
+                   (local-feedback-loops (current-directory)))
+           #f))
+     (when (and loop-filter (null? loops))
+       (eprintf "unknown loop ~a (expected L0, L1, or L2)\n" loop-filter)
+       (exit 2))
+     (define rec (collect-local-p90 #:loops loops #:samples-per-loop samples))
+     (for ([l (in-list (hash-ref rec 'loops))])
+       (printf "~a: p90=~ams slo=~ams verdict=~a samples=~a command=~a\n"
+               (hash-ref l 'loop)
+               (hash-ref l 'p90-ms)
+               (hash-ref l 'slo-ms)
+               (hash-ref l 'verdict)
+               (hash-ref l 'sample-count)
+               (hash-ref l 'command)))
+     (if out
+         (begin
+           (call-with-output-file out
+                                  (lambda (port)
+                                    (write-json rec port)
+                                    (newline port))
+                                  #:exists 'replace)
+           (printf "wrote ~a\n" out))
+         (write-json rec))]
+    [else
+     (usage)
+     (exit 2)]))
+
+;; Direct-invocation guard (Phase D step 1).
+;; `scripts/run-tests.rkt` is now a compatibility adapter that owns the
+;; command-line entry point and delegates selection/execution/reporting to the
+;; shared CI engine in `scripts/testing/full-plan.rkt`. runner.rkt therefore
+;; autoruns only when IT is the module that was actually run (`racket
+;; scripts/run-tests/runner.rkt`), never when the facade loads it for its
+;; re-exports. Matching is on paths, not on a file name, so a copy of
+;; runner.rkt still autoruns and a copy of the facade still runs the adapter.
+;;
+;; The overhead diagnostics CLI (formerly overhead.rkt's `module+ main`) shares
+;; this entry point: its two subcommands are dispatched here instead of through
+;; a second `module+ main`, which would double-run on direct invocation.
 (define invoked-directly?
-  (let ([run-file (find-system-path 'run-file)])
+  (let ([run-file (find-system-path 'run-file)]
+        [source (variable-reference->module-source (#%variable-reference))])
     (and (path? run-file)
-         (let ([base (file-name-from-path run-file)])
-           (and base (equal? (path->string base) "run-tests.rkt"))))))
+         (path? source)
+         (equal? (simplify-path (path->complete-path run-file))
+                 (simplify-path (path->complete-path source))))))
 (when invoked-directly?
-  (main (vector->list (current-command-line-arguments))))
+  (define argv (current-command-line-arguments))
+  (if (and (> (vector-length argv) 0) (member (vector-ref argv 0) '("--check" "--collect-local")))
+      (overhead-cli argv)
+      (main (vector->list argv))))

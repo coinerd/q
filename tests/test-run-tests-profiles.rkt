@@ -152,7 +152,7 @@
       #f))
 
 (define sha256-hex*
-  (dynamic-require (build-path project-root "scripts" "run-tests" "sha256.rkt")
+  (dynamic-require (build-path project-root "util" "sha256.rkt")
                    'sha256-hex
                    (lambda () (error 'w2-overlap "sha256.rkt no longer exports sha256-hex"))))
 
@@ -231,7 +231,7 @@
          (check-equal? (hash-ref fjs 'category) "SKIPPED_BY_PROFILE"))
        (lambda () (delete-dir/safe dir))))
 
-    (test-case "executed profile skip renders S rather than F"
+    (test-case "executed exit 5 is a failure even with skip-like output"
       (define-values (file dir)
         (write-temp-test
          "test-runtime-skip.rkt"
@@ -242,9 +242,9 @@
                     (lambda ()
                       (define-values (code stdout stderr)
                         (run/capture (format "racket scripts/run-tests.rkt ~a" file)))
-                      (check-equal? code 0 stderr)
-                      (check-true (regexp-match? #rx"(^|\n)S\n" stdout))
-                      (check-false (regexp-match? #rx"(^|\n)F\n" stdout)))
+                      (check-not-equal? code 0 stderr)
+                      (check-false (regexp-match? #rx"(^|\n)S\n" stdout))
+                      (check-true (regexp-match? #rx"(^|\n)F\n" stdout)))
                     (lambda () (delete-dir/safe dir))))
 
     ;; ── W2 (#9590) fast-queue hold contract ──

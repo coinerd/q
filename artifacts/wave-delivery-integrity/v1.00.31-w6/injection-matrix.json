@@ -40,10 +40,10 @@
     },
     {
      "exit-code": 0,
-     "guard": "tests/test-gsd-delivery-api-contract.py (offline API contract fixtures)",
+     "guard": "tests/test-gsd-delivery-api-native.rkt + tests/test-gsd-delivery-read-ladder.rkt (native API route / read-ladder owners)",
      "id": "F6",
      "outcome": "accepted",
-     "reason": "offline API-contract suite green path (correct head filter): 11 test(s) ran (minimum 11), 17 assertion line(s) (minimum 15), OK=#t, tokens asserted: head=coinerd:/pulls?state=open"
+     "reason": "native API/read-ladder owners (correct head filter, typed refusals): tests/test-gsd-delivery-api-native.rkt: 46 declared case(s) (minimum 46), refusal vocabulary present; tests/test-gsd-delivery-read-ladder.rkt: 41 declared case(s) (minimum 41), refusal vocabulary present"
     },
     {
      "exit-code": 0,
@@ -54,7 +54,7 @@
     },
     {
      "exit-code": 0,
-     "guard": "gsd-delivery classify_failure (typed failure classification)",
+     "guard": "scripts/gsd-delivery-git.rkt classify-failure (typed failure classification)",
      "id": "F8",
      "outcome": "accepted",
      "reason": "delivery command failed (git, exit 128); inspect authentication, repository refs and required artifacts locally"
@@ -75,10 +75,10 @@
     },
     {
      "exit-code": 0,
-     "guard": "tests/test-gsd-delivery-approval-contract.py (amended approval contract fixtures)",
+     "guard": "tests/test-gsd-delivery-merge.rkt (native approval cases)",
      "id": "F11",
      "outcome": "accepted",
-     "reason": "offline approval-contract suite green path (recorded authorization + review): 15 test(s) ran (minimum 15), 28 assertion line(s) (minimum 25), OK=#t, tokens asserted: no-operator-authorization/no-review-artifact/head-binding-mismatch"
+     "reason": "native merge-suite approval cases (recorded authorization + APPROVED review): tests/test-gsd-delivery-merge.rkt: 10 declared case(s) (minimum 10), refusal vocabulary present"
     },
     {
      "exit-code": 0,
@@ -127,27 +127,31 @@
   "row-count": 13,
   "sha256": "4ce067d627506b3b6894ab4bfe50dea09097f44c1f79c91d7cf754d6b1d02d18"
  },
- "rehearsal-head": "32ecc7d7bad167a237fe945f0f53b72c341560b7",
+ "rehearsal-head": "ac42741072bcf4da716c2c4ce579139fdf7b1664",
  "rehearsal-inputs": [
   {
    "path": "scripts/ci/inject-wave-defect.rkt",
-   "sha256": "532c5fa7f758978169d727586e194748e5b9f48ff331a4c41a752ff85a313b72"
+   "sha256": "1be3a6c781713ccf64e8381bdb3c96effc51030aca562398b2fad73ef542b19b"
   },
   {
    "path": "tests/test-wave-integrity-adversarial.rkt",
-   "sha256": "4072f085ab8df258f36cf9385ed9a5e06ebc34c618d731d7e4d3cf80e85eed20"
+   "sha256": "acc63e641217119bbf6110c883bd71e8ad52904382af5d79ee9430fd2c4b3ed5"
   },
   {
    "path": "tests/test-wave-delivery-integrity-register.rkt",
-   "sha256": "e9b7c7569f67dac58e886f00b6540297929cb12b65b68bbdcd2b0531893afa25"
+   "sha256": "5e496f63a0bd552e8d29be8154089f34dcb6a96537527534807d98b801c3d950"
   },
   {
-   "path": "tests/test-gsd-delivery-api-contract.py",
-   "sha256": "07b796736e3b024fa03f09a69cacd670e3c73097a55b6930604f07d0560664f9"
+   "path": "tests/test-gsd-delivery-api-native.rkt",
+   "sha256": "d6fbdb563f78b2be9e5d5f689b9da422700bdd950ec19fe06819a73b5ce5a865"
   },
   {
-   "path": "tests/test-gsd-delivery-approval-contract.py",
-   "sha256": "0bc295d9e043bbbaca4067ace2b6de601f7e89b1bf4d5df807b87cd521857480"
+   "path": "tests/test-gsd-delivery-read-ladder.rkt",
+   "sha256": "c42566307f44cf6e09bef34ff53e30ec92be79964fc9536b4df94211e7de01ab"
+  },
+  {
+   "path": "tests/test-gsd-delivery-merge.rkt",
+   "sha256": "510eed015050ab9781691870b4c891f48f1a7bef1c9f6810796591731fbefd80"
   },
   {
    "path": "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/extend-register-f12-f13.py",
@@ -166,7 +170,7 @@
    "sha256": "b1e6314872dc058fe5ea4576c2f894c76fe2d33ad88e0449633493d0ed6d0471"
   }
  ],
- "rehearsal-inputs-digest": "edd51df17e4dcd1ca2cc7e47dcd2f9ba9589adad332b6314d9a93836504d2a72",
+ "rehearsal-inputs-digest": "6571bacec31f532591413256daac2360024bd5cb61f206b90f6aa90d919c5953",
  "rows": [
   {
    "exit-code": 0,
@@ -215,12 +219,12 @@
   },
   {
    "exit-code": 0,
-   "guard": "tests/test-gsd-delivery-api-contract.py (offline API contract fixtures)",
+   "guard": "tests/test-gsd-delivery-api-native.rkt + tests/test-gsd-delivery-read-ladder.rkt (native API route / read-ladder owners)",
    "id": "F6",
    "injected-defect": "PR resolution uses the head={owner}/{repo}:{branch} filter, which matches nothing",
    "outcome": "refused",
-   "reason": "wrong {owner}/{repo} head filter: 11 test(s) ran (minimum 11), 17 assertion line(s) (minimum 15), OK=#t, tokens asserted: head=coinerd:/pulls?state=open",
-   "signal": "suite-exit0"
+   "reason": "wrong {owner}/{repo} head filter + non-typed API refusal injected into owner copies: tests/test-gsd-delivery-api-native.rkt: refusal vocabulary missing (exn:fail:delivery-action); tests/test-gsd-delivery-read-ladder.rkt: refusal vocabulary missing (head=coinerd:)",
+   "signal": "suite-declares"
   },
   {
    "exit-code": 2,
@@ -233,7 +237,7 @@
   },
   {
    "exit-code": 0,
-   "guard": "gsd-delivery classify_failure (typed failure classification)",
+   "guard": "scripts/gsd-delivery-git.rkt classify-failure (typed failure classification)",
    "id": "F8",
    "injected-defect": "a delivery subprocess failure surfaces as a bare exit code instead of a typed reason",
    "outcome": "refused",
@@ -260,12 +264,12 @@
   },
   {
    "exit-code": 0,
-   "guard": "tests/test-gsd-delivery-approval-contract.py (amended approval contract fixtures)",
+   "guard": "tests/test-gsd-delivery-merge.rkt (native approval cases)",
    "id": "F11",
    "injected-defect": "a merge is attempted with no recorded operator authorization or no APPROVED review artifact",
    "outcome": "refused",
-   "reason": "absent authorization / absent APPROVED review artifact: 15 test(s) ran (minimum 15), 28 assertion line(s) (minimum 25), OK=#t, tokens asserted: no-operator-authorization/no-review-artifact/head-binding-mismatch",
-   "signal": "suite-exit0"
+   "reason": "weakened approval refusal string -> rejected: tests/test-gsd-delivery-merge.rkt: refusal vocabulary missing (no-operator-authorization) | dropped approval case -> rejected: tests/test-gsd-delivery-merge.rkt: only 9 declared case(s), the row pins 10",
+   "signal": "suite-declares"
   },
   {
    "exit-code": 1,

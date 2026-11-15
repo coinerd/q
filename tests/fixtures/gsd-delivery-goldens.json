@@ -1,0 +1,688 @@
+{
+  "captured_from_commit": "5155dc3f7b96fc99a7e3722bd31a725e72888af2",
+  "captured_with": "python3 3.12.3; the oracle was imported by path (importlib.util.spec_from_file_location) and driven through the SAME fixtures the suites build: each suite's own parity driver for api/checks/trusted_check/protection/validate_merge, open_pr/gh_post/gh_put, resolve_pr/pr_ci/review and classify_failure, and the `gsd-delivery.py sync|preflight` CLI for the two subprocess oracles (stdout JSON + exit code).",
+  "groups": [
+    {
+      "cases": [
+        {
+          "case": "{fixtures [[\"repos/coinerd/api-parity-1/pulls/7\" \"{\\\"number\\\":7,\\\"state\\\":\\\"closed\\\"}\"]]\n spec {fn \"api\"\n route \"pulls/7\"\n slug \"coinerd/api-parity-1\"}}",
+          "label": "api-object",
+          "outcome": {
+            "ok": true,
+            "value": {
+              "number": 7,
+              "state": "closed"
+            }
+          }
+        },
+        {
+          "case": "{fixtures [[\"repos/coinerd/api-parity-2/pulls/8\" \"not json at all\"]]\n spec {fn \"api\"\n route \"pulls/8\"\n slug \"coinerd/api-parity-2\"}}",
+          "label": "api-malformed-json",
+          "outcome": {
+            "ok": false,
+            "reason": "malformed GitHub response for pulls/8"
+          }
+        },
+        {
+          "case": "{fixtures [[\"repos/coinerd/api-parity-3/pulls/9\" \"42\"]]\n spec {fn \"api\"\n route \"pulls/9\"\n slug \"coinerd/api-parity-3\"}}",
+          "label": "api-scalar-payload",
+          "outcome": {
+            "ok": false,
+            "reason": "malformed GitHub response for pulls/9"
+          }
+        },
+        {
+          "case": "{fixtures [[\"repos/coinerd/api-parity-4/commits/4444444444444444444444444444444444444444/check-runs?per_page=100&page=1\" \"{\\\"total_count\\\":1}\"]]\n spec {fn \"checks\"\n sha \"4444444444444444444444444444444444444444\"\n slug \"coinerd/api-parity-4\"}}",
+          "label": "checks-missing-check-runs",
+          "outcome": {
+            "ok": false,
+            "reason": "invalid check result"
+          }
+        },
+        {
+          "case": "{fixtures [[\"repos/coinerd/api-parity-5/commits/5555555555555555555555555555555555555555/check-runs?per_page=100&page=1\" \"{\\\"check_runs\\\":[7],\\\"total_count\\\":2}\"]]\n spec {fn \"checks\"\n sha \"5555555555555555555555555555555555555555\"\n slug \"coinerd/api-parity-5\"}}",
+          "label": "checks-non-object-run",
+          "outcome": {
+            "ok": false,
+            "reason": "invalid check run entry"
+          }
+        },
+        {
+          "case": "{fixtures [[\"repos/coinerd/api-parity-6/commits/6666666666666666666666666666666666666666/check-runs?per_page=100&page=1\" \"{\\\"check_runs\\\":[],\\\"total_count\\\":\\\"1\\\"}\"]]\n spec {fn \"checks\"\n sha \"6666666666666666666666666666666666666666\"\n slug \"coinerd/api-parity-6\"}}",
+          "label": "checks-string-total",
+          "outcome": {
+            "ok": false,
+            "reason": "malformed check-total"
+          }
+        },
+        {
+          "case": "{fixtures [[\"repos/coinerd/api-parity-7/commits/7777777777777777777777777777777777777777/check-runs?per_page=100&page=1\" \"{\\\"check_runs\\\":[{\\\"app\\\":{\\\"id\\\":15368},\\\"conclusion\\\":\\\"success\\\",\\\"details_url\\\":\\\"https://github.com/attacker/q/actions/runs/999/job/123\\\",\\\"head_sha\\\":\\\"7777777777777777777777777777777777777777\\\",\\\"id\\\":42,\\\"name\\\":\\\"ci\\\",\\\"status\\\":\\\"completed\\\"}],\\\"total_count\\\":1}\"]]\n spec {event \"pull_request\"\n fn \"trusted_check\"\n name \"ci\"\n sha \"7777777777777777777777777777777777777777\"\n slug \"coinerd/api-parity-7\"}}",
+          "label": "trusted-check-foreign-details",
+          "outcome": {
+            "ok": false,
+            "reason": "check has no authenticated Actions run: ci"
+          }
+        },
+        {
+          "case": "{fixtures [[\"repos/coinerd/api-parity-8/commits/8888888888888888888888888888888888888888/check-runs?per_page=100&page=1\" \"{\\\"check_runs\\\":[{\\\"app\\\":{\\\"id\\\":15368},\\\"conclusion\\\":\\\"success\\\",\\\"details_url\\\":\\\"https://github.com/coinerd/api-parity-8/actions/runs/777/job/123\\\",\\\"head_sha\\\":\\\"8888888888888888888888888888888888888888\\\",\\\"id\\\":42,\\\"name\\\":\\\"ci\\\",\\\"status\\\":\\\"completed\\\"}],\\\"total_count\\\":1}\"] [\"repos/coinerd/api-parity-8/actions/runs/777\" \"{\\\"conclusion\\\":\\\"success\\\",\\\"event\\\":\\\"push\\\",\\\"head_branch\\\":\\\"campaign/w1\\\",\\\"head_sha\\\":\\\"8888888888888888888888888888888888888888\\\",\\\"path\\\":\\\".github/workflows/ci.yml\\\",\\\"repository\\\":{\\\"full_name\\\":\\\"coinerd/q\\\"},\\\"status\\\":\\\"completed\\\"}\"]]\n spec {event \"pull_request\"\n fn \"trusted_check\"\n name \"ci\"\n sha \"8888888888888888888888888888888888888888\"\n slug \"coinerd/api-parity-8\"}}",
+          "label": "trusted-check-event-mismatch",
+          "outcome": {
+            "ok": false,
+            "reason": "check workflow/ref/event mismatch: ci"
+          }
+        },
+        {
+          "case": "{fixtures [[\"repos/coinerd/api-parity-9/commits/9999999999999999999999999999999999999999/check-runs?per_page=100&page=1\" \"{\\\"check_runs\\\":[{\\\"app\\\":{\\\"id\\\":15368},\\\"conclusion\\\":\\\"success\\\",\\\"details_url\\\":\\\"https://github.com/coinerd/api-parity-9/actions/runs/888/job/123\\\",\\\"head_sha\\\":\\\"9999999999999999999999999999999999999999\\\",\\\"id\\\":42,\\\"name\\\":\\\"ci\\\",\\\"status\\\":\\\"completed\\\"}],\\\"total_count\\\":1}\"] [\"repos/coinerd/api-parity-9/actions/runs/888\" \"{\\\"conclusion\\\":\\\"success\\\",\\\"event\\\":\\\"pull_request\\\",\\\"head_branch\\\":\\\"campaign/w1\\\",\\\"head_sha\\\":\\\"9999999999999999999999999999999999999999\\\",\\\"path\\\":\\\".github/workflows/ci.yml\\\",\\\"repository\\\":{\\\"full_name\\\":\\\"coinerd/api-parity-9\\\"},\\\"status\\\":\\\"completed\\\"}\"]]\n spec {event \"pull_request\"\n fn \"trusted_check\"\n name \"ci\"\n sha \"9999999999999999999999999999999999999999\"\n slug \"coinerd/api-parity-9\"}}",
+          "label": "trusted-check-success",
+          "outcome": {
+            "ok": true,
+            "value": null
+          }
+        },
+        {
+          "case": "{fixtures [[\"repos/coinerd/api-parity-10/branches/main/protection\" \"{\\\"allow_deletions\\\":{\\\"enabled\\\":false},\\\"allow_force_pushes\\\":{\\\"enabled\\\":false},\\\"enforce_admins\\\":{\\\"enabled\\\":true},\\\"required_status_checks\\\":{\\\"contexts\\\":[\\\"ci\\\",\\\"lint\\\"],\\\"strict\\\":false}}\"]]\n spec {fn \"protection\"\n names [\"ci\"]\n slug \"coinerd/api-parity-10\"}}",
+          "label": "protection-weakened",
+          "outcome": {
+            "ok": false,
+            "reason": "default branch protection is absent or weakened"
+          }
+        },
+        {
+          "case": "{fixtures [[\"repos/coinerd/api-parity-11/branches/main/protection\" \"{\\\"allow_deletions\\\":{\\\"enabled\\\":false},\\\"allow_force_pushes\\\":{\\\"enabled\\\":false},\\\"enforce_admins\\\":{\\\"enabled\\\":true},\\\"required_status_checks\\\":{\\\"contexts\\\":[\\\"ci\\\"],\\\"strict\\\":true}}\"]]\n spec {fn \"protection\"\n names [\"ci\" \"lint\"]\n slug \"coinerd/api-parity-11\"}}",
+          "label": "protection-missing-name",
+          "outcome": {
+            "ok": false,
+            "reason": "branch protection does not require expected checks: lint"
+          }
+        },
+        {
+          "case": "{fixtures []\n spec {commit {parents [{sha \"cccccccccccccccccccccccccccccccccccccccc\"}]\n sha \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}\n fn \"validate_merge\"\n head \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n merge \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n pr {base {ref \"main\"\n repo {full_name \"coinerd/q\"}}\n head {repo {full_name \"coinerd/q\"}\n sha \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}\n merge_commit_sha \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n merged false\n merged_at null\n number 7\n state \"open\"}\n slug \"coinerd/q\"}}",
+          "label": "validate-merge-not-merged",
+          "outcome": {
+            "ok": false,
+            "reason": "implementation PR is not merged"
+          }
+        },
+        {
+          "case": "{fixtures []\n spec {commit {parents [{sha \"cccccccccccccccccccccccccccccccccccccccc\"}]\n sha \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}\n fn \"validate_merge\"\n head \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n merge \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n pr {base {ref \"main\"\n repo {full_name \"coinerd/q\"}}\n head {repo {full_name \"coinerd/q\"}\n sha \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}\n merge_commit_sha \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n merged true\n merged_at \"2026-01-01T00:00:00Z\"\n number 7\n state \"closed\"}\n slug \"coinerd/q\"}}",
+          "label": "validate-merge-success",
+          "outcome": {
+            "ok": true,
+            "value": null
+          }
+        }
+      ],
+      "name": "gsd-delivery-api",
+      "oracle": "mod.api / mod.checks / mod.trusted_check / mod.protection / mod.validate_merge",
+      "tokens": []
+    },
+    {
+      "cases": [
+        {
+          "case": "{fn \"branch_owner\"\n slug \"coinerd/q\"}",
+          "label": "branch-owner",
+          "outcome": {
+            "ok": true,
+            "value": "coinerd"
+          }
+        },
+        {
+          "case": "{fn \"branch_owner\"\n slug \"coinerd\"}",
+          "label": "branch-owner-malformed",
+          "outcome": {
+            "ok": false,
+            "reason": "malformed repository slug: coinerd"
+          }
+        },
+        {
+          "case": "{branch \"campaign/none\"\n fn \"resolve_prs_for_branch\"\n slug \"coinerd/ladder-02\"\n state \"open\"}",
+          "label": "resolve-prs-none",
+          "outcome": {
+            "ok": true,
+            "value": null
+          }
+        },
+        {
+          "case": "{branch \"campaign/w9\"\n fn \"resolve_prs_for_branch\"\n slug \"coinerd/ladder-04\"\n state \"open\"}",
+          "label": "resolve-pr-prs-multiple",
+          "outcome": {
+            "ok": false,
+            "reason": "multiple pull requests already target branch campaign/w9"
+          }
+        },
+        {
+          "case": "{branch \"campaign/none\"\n fn \"resolve_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 0}",
+          "label": "resolve-pr-none",
+          "outcome": {
+            "ok": true,
+            "value": {
+              "branch": "campaign/none",
+              "plan-id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "status": "none",
+              "wave": 0
+            }
+          }
+        },
+        {
+          "case": "{branch \"campaign/w1\"\n fn \"resolve_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 0}",
+          "label": "resolve-pr-open",
+          "outcome": {
+            "ok": true,
+            "value": {
+              "branch": "campaign/w1",
+              "head": "{{head}}",
+              "plan-id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "pr": 7,
+              "status": "resolved",
+              "wave": 0
+            }
+          }
+        },
+        {
+          "case": "{branch \"campaign/w1\"\n expected_head \"{{main}}\"\n fn \"resolve_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 0}",
+          "label": "resolve-pr-unexpected-state",
+          "outcome": {
+            "ok": false,
+            "reason": "resolved pull request has an unexpected state"
+          }
+        },
+        {
+          "case": "{branch \"campaign/w1\"\n expected_head \"{{main}}\"\n fn \"resolve_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 0}",
+          "label": "resolve-pr-no-usable-number",
+          "outcome": {
+            "ok": false,
+            "reason": "resolved pull request has no usable number"
+          }
+        },
+        {
+          "case": "{branch \"campaign/w1\"\n expected_head \"{{main}}\"\n fn \"resolve_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 0}",
+          "label": "resolve-pr-no-head-sha",
+          "outcome": {
+            "ok": false,
+            "reason": "resolved pull request has no full head SHA"
+          }
+        },
+        {
+          "case": "{branch \"campaign/w1\"\n expected_head \"{{main}}\"\n fn \"resolve_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 0}",
+          "label": "resolve-pr-branch-mismatch",
+          "outcome": {
+            "ok": false,
+            "reason": "resolved pull request branch does not match expected branch"
+          }
+        },
+        {
+          "case": "{branch \"campaign/w1\"\n expected_head \"{{main}}\"\n fn \"resolve_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 0}",
+          "label": "resolve-pr-identity",
+          "outcome": {
+            "ok": false,
+            "reason": "implementation PR must be a same-repository main-base pull request"
+          }
+        },
+        {
+          "case": "{branch \"campaign/w1\"\n expected_head \"{{main}}\"\n fn \"resolve_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 0}",
+          "label": "resolve-pr-fetched-mismatch",
+          "outcome": {
+            "ok": false,
+            "reason": "resolved pull-request head does not match fetched ref"
+          }
+        },
+        {
+          "case": "{branch \"campaign/w2\"\n expected_head \"{{receipt}}\"\n fn \"resolve_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}",
+          "label": "resolve-pr-merged-resume",
+          "outcome": {
+            "ok": true,
+            "value": {
+              "branch": "campaign/w2",
+              "head": "{{tip}}",
+              "plan-id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "pr": 3,
+              "status": "resolved",
+              "wave": 1
+            }
+          }
+        },
+        {
+          "case": "{branch \"campaign/drift\"\n expected_head \"{{receipt}}\"\n fn \"resolve_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}",
+          "label": "resolve-pr-receipt-drift",
+          "outcome": {
+            "ok": false,
+            "reason": "receipt head {{receipt-12}} is verified but later wave-branch commits touch non-evidence paths: src-drift; re-verify before merge"
+          }
+        },
+        {
+          "case": "{branch \"campaign/none\"\n fn \"resolve_merged_pr\"\n slug \"coinerd/ladder-13\"}",
+          "label": "resolve-merged-pr-none",
+          "outcome": {
+            "ok": true,
+            "value": null
+          }
+        },
+        {
+          "case": "{branch \"campaign/w2\"\n expected_head \"deadbeef\"\n fn \"resolve_merged_pr\"\n slug \"coinerd/ladder-13\"}",
+          "label": "resolve-merged-pr-requires-sha",
+          "outcome": {
+            "ok": false,
+            "reason": "merged resolution requires a full expected-head SHA"
+          }
+        },
+        {
+          "case": "{fn \"validate_pr_identity\"\n pr {base {ref \"main\"\n repo {full_name \"coinerd/q\"}\n sha \"cccccccccccccccccccccccccccccccccccccccc\"}\n head {ref \"campaign/w1\"\n repo {full_name \"coinerd/q\"}\n sha \"dddddddddddddddddddddddddddddddddddddddd\"}\n merge_commit_sha \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n merged null\n merged_at null\n number 1\n state \"open\"}\n slug \"coinerd/q\"}",
+          "label": "validate-pr-identity-ok",
+          "outcome": {
+            "ok": true,
+            "value": null
+          }
+        },
+        {
+          "case": "{fn \"validate_pr_identity\"\n pr {base {ref \"main\"\n repo {full_name \"coinerd/q\"}\n sha \"cccccccccccccccccccccccccccccccccccccccc\"}\n head {ref \"campaign/w1\"\n repo {full_name \"attacker/q\"}\n sha \"dddddddddddddddddddddddddddddddddddddddd\"}\n merge_commit_sha \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n merged null\n merged_at null\n number 1\n state \"open\"}\n slug \"coinerd/q\"}",
+          "label": "validate-pr-identity-fork",
+          "outcome": {
+            "ok": false,
+            "reason": "implementation PR must be a same-repository main-base pull request"
+          }
+        },
+        {
+          "case": "{fn \"policy_names\"\n ref \"{{main}}\"\n repo \"{{repo}}\"}",
+          "label": "policy-names-ok",
+          "outcome": {
+            "ok": true,
+            "value": [
+              "ci"
+            ]
+          }
+        },
+        {
+          "case": "{fn \"policy_names\"\n ref \"{{pre-policy}}\"\n repo \"{{repo}}\"}",
+          "label": "policy-names-absent",
+          "outcome": {
+            "ok": false,
+            "reason": "required-check policy is absent at {{pre-policy}}"
+          }
+        },
+        {
+          "case": "{fn \"policy_names\"\n ref \"{{bad-policy}}\"\n repo \"{{repo}}\"}",
+          "label": "policy-names-malformed",
+          "outcome": {
+            "ok": false,
+            "reason": "malformed required-check policy at {{bad-policy}}"
+          }
+        },
+        {
+          "case": "{action \"review\"\n expected_head \"{{receipt}}\"\n fn \"require_receipt_tip\"\n repo \"{{repo}}\"\n tip \"{{main}}\"}",
+          "label": "require-receipt-tip-not-ancestor",
+          "outcome": {
+            "ok": false,
+            "reason": "receipt head {{receipt-12}} is not an ancestor of tip {{main-12}}; the wave branch may have been rewritten; re-verify before review"
+          }
+        },
+        {
+          "case": "{action \"review\"\n expected_head \"{{receipt}}\"\n fn \"require_receipt_tip\"\n repo \"{{repo}}\"\n tip \"{{tip}}\"}",
+          "label": "require-receipt-tip-evidence-ok",
+          "outcome": {
+            "ok": true,
+            "value": null
+          }
+        },
+        {
+          "case": "{action \"review\"\n expected_head \"{{receipt}}\"\n fn \"require_receipt_tip\"\n repo \"{{repo}}\"\n tip \"{{drift}}\"}",
+          "label": "require-receipt-tip-drift",
+          "outcome": {
+            "ok": false,
+            "reason": "receipt head {{receipt-12}} is verified but later wave-branch commits touch non-evidence paths: src-drift; re-verify before review"
+          }
+        },
+        {
+          "case": "{branch \"campaign/w1\"\n fn \"pr_ci\"\n number 1\n repo \"{{repo}}\"}",
+          "label": "pr-ci-not-open",
+          "outcome": {
+            "ok": false,
+            "reason": "pull request is not open"
+          }
+        },
+        {
+          "case": "{branch \"campaign/w1\"\n fn \"pr_ci\"\n number 1\n repo \"{{repo}}\"}",
+          "label": "pr-ci-green",
+          "outcome": {
+            "ok": true,
+            "value": {
+              "branch": "campaign/w1",
+              "head": "{{head}}",
+              "pr": 1,
+              "status": "green"
+            }
+          }
+        },
+        {
+          "case": "{branch \"campaign/w1\"\n fn \"pr_ci\"\n number 1\n repo \"{{repo}}\"}",
+          "label": "pr-ci-fetched-mismatch",
+          "outcome": {
+            "ok": false,
+            "reason": "pull-request head does not match fetched ref"
+          }
+        }
+      ],
+      "name": "gsd-delivery-read-ladder",
+      "oracle": "mod.resolve_pr / mod.pr_ci / mod.review and their helpers (branch_owner, resolve_prs_for_branch, resolve_existing_pr, resolve_merged_pr, validate_pr_identity, require_receipt_tip, policy_names)",
+      "tokens": [
+        "head: wave-branch head commit (40 hex) - {{head}}, {{head-12}}",
+        "tip: campaign/w2 tip commit - {{tip}}, {{tip-12}}",
+        "receipt: durable receipt head commit - {{receipt}}, {{receipt-12}}",
+        "main: main branch commit - {{main}}, {{main-12}}",
+        "drift: campaign/drift tip commit - {{drift}}, {{drift-12}}",
+        "pre-policy: commit without the required-check policy - {{pre-policy}}, {{pre-policy-12}}",
+        "bad-policy: commit with a malformed policy - {{bad-policy}}, {{bad-policy-12}}",
+        "repo: temp git subject path - {{repo}}"
+      ]
+    },
+    {
+      "cases": [
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-1/pulls?state=open&head=coinerd:campaign/w1\" . \"[]\") (\"repos/coinerd/s5-1/pulls\" . \"{\\\"number\\\":1}\") (\"repos/coinerd/s5-1/pulls/1\" . \"{\\\"base\\\":{\\\"ref\\\":\\\"main\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-1\\\"},\\\"sha\\\":\\\"cccccccccccccccccccccccccccccccccccccccc\\\"},\\\"head\\\":{\\\"ref\\\":\\\"campaign/w1\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-1\\\"},\\\"sha\\\":\\\"{{w1-tip}}\\\"},\\\"number\\\":1,\\\"state\\\":\\\"open\\\"}\")]\n spec {branch \"campaign/w1\"\n fn \"open_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}}",
+          "label": "coinerd/s5-1",
+          "outcome": {
+            "ok": true,
+            "value": {
+              "branch": "campaign/w1",
+              "head": "{{w1-tip}}",
+              "pr": 1,
+              "status": "opened"
+            }
+          }
+        },
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-2/pulls?state=open&head=coinerd:campaign/w1\" . \"[{\\\"base\\\":{\\\"ref\\\":\\\"main\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-2\\\"},\\\"sha\\\":\\\"cccccccccccccccccccccccccccccccccccccccc\\\"},\\\"head\\\":{\\\"ref\\\":\\\"campaign/w1\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-2\\\"},\\\"sha\\\":\\\"{{w1-tip}}\\\"},\\\"number\\\":1,\\\"state\\\":\\\"open\\\"}]\") (\"repos/coinerd/s5-2/pulls/1\" . \"{\\\"base\\\":{\\\"ref\\\":\\\"main\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-2\\\"},\\\"sha\\\":\\\"cccccccccccccccccccccccccccccccccccccccc\\\"},\\\"head\\\":{\\\"ref\\\":\\\"campaign/w1\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-2\\\"},\\\"sha\\\":\\\"{{w1-tip}}\\\"},\\\"number\\\":1,\\\"state\\\":\\\"open\\\"}\")]\n spec {branch \"campaign/w1\"\n fn \"open_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}}",
+          "label": "coinerd/s5-2",
+          "outcome": {
+            "ok": true,
+            "value": {
+              "branch": "campaign/w1",
+              "head": "{{w1-tip}}",
+              "pr": 1,
+              "status": "opened"
+            }
+          }
+        },
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-3/pulls?state=open&head=coinerd:campaign/w1\" . \"[]\")]\n spec {branch \"campaign/w1\"\n fn \"open_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}}",
+          "label": "coinerd/s5-3",
+          "outcome": {
+            "ok": false,
+            "reason": "delivery command failed (gh, exit 74); inspect authentication, repository refs and required artifacts locally"
+          }
+        },
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-4/pulls?state=open&head=coinerd:campaign/w1\" . \"[]\") (\"repos/coinerd/s5-4/pulls\" . \"[]\")]\n spec {branch \"campaign/w1\"\n fn \"open_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}}",
+          "label": "coinerd/s5-4",
+          "outcome": {
+            "ok": false,
+            "reason": "malformed GitHub mutation response"
+          }
+        },
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-5/pulls?state=open&head=coinerd:campaign/w1\" . \"[]\") (\"repos/coinerd/s5-5/pulls\" . \"{}\")]\n spec {branch \"campaign/w1\"\n fn \"open_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}}",
+          "label": "coinerd/s5-5",
+          "outcome": {
+            "ok": false,
+            "reason": "GitHub pull-request creation response has no usable number"
+          }
+        },
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-6/pulls?state=open&head=coinerd:campaign/w1\" . \"[]\") (\"repos/coinerd/s5-6/pulls\" . \"{\\\"number\\\":2}\") (\"repos/coinerd/s5-6/pulls/2\" . \"{\\\"base\\\":{\\\"ref\\\":\\\"main\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-6\\\"},\\\"sha\\\":\\\"cccccccccccccccccccccccccccccccccccccccc\\\"},\\\"head\\\":{\\\"ref\\\":\\\"campaign/w1\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-6\\\"},\\\"sha\\\":\\\"{{w1-tip}}\\\"},\\\"number\\\":2,\\\"state\\\":\\\"closed\\\"}\")]\n spec {branch \"campaign/w1\"\n fn \"open_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}}",
+          "label": "coinerd/s5-6",
+          "outcome": {
+            "ok": false,
+            "reason": "pull request is not open"
+          }
+        },
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-7/pulls?state=open&head=coinerd:campaign/w1\" . \"[]\") (\"repos/coinerd/s5-7/pulls\" . \"{\\\"number\\\":2}\") (\"repos/coinerd/s5-7/pulls/2\" . \"{\\\"base\\\":{\\\"ref\\\":\\\"main\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-7\\\"},\\\"sha\\\":\\\"cccccccccccccccccccccccccccccccccccccccc\\\"},\\\"head\\\":{\\\"ref\\\":\\\"campaign/w1\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-7\\\"},\\\"sha\\\":\\\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\\\"},\\\"number\\\":2,\\\"state\\\":\\\"open\\\"}\")]\n spec {branch \"campaign/w1\"\n fn \"open_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}}",
+          "label": "coinerd/s5-7",
+          "outcome": {
+            "ok": false,
+            "reason": "fetched implementation branch tip differs from pull-request head"
+          }
+        },
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-8/pulls?state=open&head=coinerd:campaign/w1\" . \"[]\") (\"repos/coinerd/s5-8/pulls\" . \"{\\\"number\\\":2}\") (\"repos/coinerd/s5-8/pulls/2\" . \"{\\\"base\\\":{\\\"ref\\\":\\\"main\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-8\\\"},\\\"sha\\\":\\\"cccccccccccccccccccccccccccccccccccccccc\\\"},\\\"head\\\":{\\\"ref\\\":\\\"campaign/other\\\",\\\"repo\\\":{\\\"full_name\\\":\\\"coinerd/s5-8\\\"},\\\"sha\\\":\\\"{{w1-tip}}\\\"},\\\"number\\\":2,\\\"state\\\":\\\"open\\\"}\")]\n spec {branch \"campaign/w1\"\n fn \"open_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}}",
+          "label": "coinerd/s5-8",
+          "outcome": {
+            "ok": false,
+            "reason": "pull request branch does not match expected branch"
+          }
+        },
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-9/pulls?state=open&head=coinerd:campaign/w1\" . \"[]\") (\"repos/coinerd/s5-9/pulls?state=open&head=coinerd:campaign/drift\" . \"[]\")]\n spec {branch \"campaign/drift\"\n expected_head \"{{receipt}}\"\n fn \"open_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}}",
+          "label": "coinerd/s5-9",
+          "outcome": {
+            "ok": false,
+            "reason": "receipt head {{receipt-12}} is verified but later wave-branch commits touch non-evidence paths: src-drift; re-verify before delivery"
+          }
+        },
+        {
+          "case": "{fixtures []\n spec {branch \"  \"\n fn \"open_pr\"\n plan \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n repo \"{{repo}}\"\n wave 1}}",
+          "label": "coinerd/s5-10",
+          "outcome": {
+            "ok": false,
+            "reason": "open-pr requires --expected-branch"
+          }
+        },
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-11/pulls\" . \"{\\\"number\\\":7}\")]\n spec {fields {base \"main\"\n title \"T\"}\n fn \"gh_post\"\n repo \"{{repo}}\"\n route \"pulls\"\n slug \"coinerd/s5-11\"}}",
+          "label": "coinerd/s5-11",
+          "outcome": {
+            "ok": true,
+            "value": {
+              "number": 7
+            }
+          }
+        },
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-12/pulls/7/merge\" . \"[]\")]\n spec {fields {merge_method \"squash\"}\n fn \"gh_put\"\n repo \"{{repo}}\"\n route \"pulls/7/merge\"\n slug \"coinerd/s5-12\"}}",
+          "label": "coinerd/s5-12",
+          "outcome": {
+            "ok": false,
+            "reason": "malformed GitHub mutation response"
+          }
+        },
+        {
+          "case": "{fixtures [(\"repos/coinerd/s5-13/pulls/7/merge\" . \"{\\\"merged\\\":true}\")]\n spec {fields {merge_method \"squash\"}\n fn \"gh_put\"\n repo \"{{repo}}\"\n route \"pulls/7/merge\"\n slug \"coinerd/s5-13\"}}",
+          "label": "coinerd/s5-13",
+          "outcome": {
+            "ok": true,
+            "value": {
+              "merged": true
+            }
+          }
+        }
+      ],
+      "name": "gsd-delivery-write",
+      "oracle": "mod.open_pr / mod.gh_post / mod.gh_put",
+      "tokens": [
+        "repo: temp git subject path - {{repo}}",
+        "w1-tip: campaign/w1 tip commit - {{w1-tip}}, {{w1-tip-12}}",
+        "w2-tip: campaign/w2 tip commit - {{w2-tip}}, {{w2-tip-12}}",
+        "receipt: durable receipt head commit - {{receipt}}, {{receipt-12}}",
+        "drift-tip: campaign/drift tip commit - {{drift-tip}}, {{drift-tip-12}}"
+      ]
+    },
+    {
+      "cases": [
+        {
+          "case": "{action \"sync\"\n expected_branch \"campaign/w1\"\n fixture_state \"branch=main, clean, behind origin\"}",
+          "label": "sync-success",
+          "outcome": {
+            "exit": 0,
+            "ok": true,
+            "value": {
+              "branch": "main",
+              "head": "{{head}}",
+              "status": "synchronized"
+            }
+          }
+        },
+        {
+          "case": "{action \"sync\"\n expected_branch \"campaign/w1\"\n fixture_state \"branch=unrelated, clean\"}",
+          "label": "sync-unrelated-branch",
+          "outcome": {
+            "exit": 2,
+            "ok": false,
+            "reason": "synchronization refused: HEAD is 'unrelated', expected 'campaign/w1' (unrelated branch changes not accepted)",
+            "value": {
+              "reason": "synchronization refused: HEAD is 'unrelated', expected 'campaign/w1' (unrelated branch changes not accepted)",
+              "status": "delivery-pending"
+            }
+          }
+        },
+        {
+          "case": "{action \"sync\"\n expected_branch \"campaign/w1\"\n fixture_state \"branch=main, dirty tracked file\"}",
+          "label": "sync-dirty-checkout",
+          "outcome": {
+            "exit": 2,
+            "ok": false,
+            "reason": "dirty checkout; refusing synchronization",
+            "value": {
+              "reason": "dirty checkout; refusing synchronization",
+              "status": "delivery-pending"
+            }
+          }
+        },
+        {
+          "case": "{action \"sync\"\n expected_branch \"campaign/w1\"\n fixture_state \"detached HEAD\"}",
+          "label": "sync-detached-head",
+          "outcome": {
+            "exit": 2,
+            "ok": false,
+            "reason": "detached HEAD; refusing synchronization",
+            "value": {
+              "reason": "detached HEAD; refusing synchronization",
+              "status": "delivery-pending"
+            }
+          }
+        },
+        {
+          "case": "{action \"sync\"\n expected_branch \"campaign/w1\"\n fixture_state \"branch=main, divergent local commit\"}",
+          "label": "sync-diverged-checkout",
+          "outcome": {
+            "exit": 2,
+            "ok": false,
+            "reason": "delivery command failed (git, exit 128); inspect authentication, repository refs and required artifacts locally",
+            "value": {
+              "reason": "delivery command failed (git, exit 128); inspect authentication, repository refs and required artifacts locally",
+              "status": "delivery-pending"
+            }
+          }
+        }
+      ],
+      "name": "gsd-delivery-sync",
+      "oracle": "python3 scripts/gsd-delivery.py sync --repo <subject> --expected-branch campaign/w1",
+      "tokens": [
+        "head: fast-forwarded HEAD commit - {{head}}, {{head-12}}"
+      ]
+    },
+    {
+      "cases": [
+        {
+          "case": "{action \"preflight\"\n expected_branch \"campaign/w1\"\n expected_head \"{{head}}\"\n fixture_state \"wave branch published at the expected head\"\n plan \"2222222222222222222222222222222222222222222222222222222222222222\"\n wave 0}",
+          "label": "preflight-ready",
+          "outcome": {
+            "exit": 0,
+            "ok": true,
+            "value": {
+              "branch": "campaign/w1",
+              "head": "{{head}}",
+              "plan-id": "2222222222222222222222222222222222222222222222222222222222222222",
+              "receipt-head": "{{head}}",
+              "status": "ready",
+              "wave": 0
+            }
+          }
+        },
+        {
+          "case": "{action \"preflight\"\n expected_branch \"campaign/absent\"\n expected_head \"{{head}}\"\n fixture_state \"wave branch absent on origin\"\n plan \"2222222222222222222222222222222222222222222222222222222222222222\"\n wave 0}",
+          "label": "preflight-absent-branch",
+          "outcome": {
+            "exit": 2,
+            "ok": false,
+            "reason": "branch-not-published: branch campaign/absent is not published on origin; push the verified head {{head-12}}... first (underlying: remote-ref-missing: refs/heads/campaign/absent is not published on origin; push the verified head first (git, exit 128))",
+            "value": {
+              "reason": "branch-not-published: branch campaign/absent is not published on origin; push the verified head {{head-12}}... first (underlying: remote-ref-missing: refs/heads/campaign/absent is not published on origin; push the verified head first (git, exit 128))",
+              "status": "delivery-pending"
+            }
+          }
+        }
+      ],
+      "name": "gsd-delivery-preflight",
+      "oracle": "python3 scripts/gsd-delivery.py preflight --repo <subject> --plan <plan> --wave 0",
+      "tokens": [
+        "head: wave head commit - {{head}}, {{head-12}}",
+        "repo: temp git subject path - {{repo}}"
+      ]
+    },
+    {
+      "cases": [
+        {
+          "case": "{args [\"git\" \"-C\" \"/repo\" \"fetch\" \"origin\" \"refs/heads/campaign/v1.00.30-w4\"]\n cmd \"git\"\n exit 128\n stderr \"fatal: couldn't find remote ref refs/heads/campaign/v1.00.30-w4\"}",
+          "label": "remote-ref-missing-names-ref",
+          "outcome": {
+            "ok": true,
+            "value": "remote-ref-missing: refs/heads/campaign/v1.00.30-w4 is not published on origin; push the verified head first (git, exit 128)"
+          }
+        },
+        {
+          "case": "{args [\"git\" \"-C\" \"/repo\" \"fetch\" \"origin\" \"refs/heads/campaign/v1.00.32-w3:refs/remotes/origin/campaign/v1.00.32-w3\"]\n cmd \"git\"\n exit 128\n stderr \"fatal: couldn't find remote ref\"}",
+          "label": "remote-ref-missing-from-args",
+          "outcome": {
+            "ok": true,
+            "value": "remote-ref-missing: refs/heads/campaign/v1.00.32-w3 is not published on origin; push the verified head first (git, exit 128)"
+          }
+        },
+        {
+          "case": "{args [\"git\" \"-C\" \"/repo\" \"push\" \"origin\" \"refs/heads/campaign/w3\"]\n cmd \"git\"\n exit 1\n stderr \" ! [rejected]        campaign/w3 -> campaign/w3 (non-fast-forward)\"}",
+          "label": "non-fast-forward",
+          "outcome": {
+            "ok": true,
+            "value": "non-fast-forward: the remote ref diverged; fetch, reanchor the verified head and retry (git, exit 1)"
+          }
+        },
+        {
+          "case": "{args [\"git\" \"-C\" \"/repo\" \"rev-parse\" \"refs/remotes/origin/ghost\"]\n cmd \"git\"\n exit 128\n stderr \"fatal: ambiguous argument 'refs/remotes/origin/ghost': unknown revision\"}",
+          "label": "unknown-ref",
+          "outcome": {
+            "ok": true,
+            "value": "unknown-ref: git referenced an unknown revision; inspect the repository refs locally before retrying (git, exit 128)"
+          }
+        },
+        {
+          "case": "{args [\"gh\" \"api\" \"repos/example/q\"]\n cmd \"gh\"\n exit 1\n stderr \"gh: To get started with GitHub, gh auth login\"}",
+          "label": "auth-failure",
+          "outcome": {
+            "ok": true,
+            "value": "GitHub authentication failed (check: gh auth status); credentials are never logged or exposed"
+          }
+        },
+        {
+          "case": "{args [\"git\" \"-C\" \"/repo\" \"status\"]\n cmd \"git\"\n exit 128\n stderr \"fatal: not a git repository (or any of the parent directories)\"}",
+          "label": "unclassified-generic",
+          "outcome": {
+            "ok": true,
+            "value": "delivery command failed (git, exit 128); inspect authentication, repository refs and required artifacts locally"
+          }
+        },
+        {
+          "case": "{args [\"git\" \"fetch\" \"origin\" \"refs/heads/campaign/x\"]\n cmd \"git\"\n exit 128\n stderr \"fatal: couldn't find remote ref refs/heads/campaign/x\"}",
+          "label": "register-f8-missing-remote-ref",
+          "outcome": {
+            "ok": true,
+            "value": "remote-ref-missing: refs/heads/campaign/x is not published on origin; push the verified head first (git, exit 128)"
+          }
+        }
+      ],
+      "name": "gsd-delivery-failure-classification",
+      "oracle": "mod.classify_failure(args, name, exit_code, stderr)",
+      "tokens": []
+    }
+  ],
+  "schema": "gsd-delivery-goldens/1",
+  "source": "scripts/gsd-delivery.py",
+  "source_revision": "d236422dee374a6a02ac05691fc9c85d25881aeb"
+}

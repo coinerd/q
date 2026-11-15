@@ -108,8 +108,18 @@ observation before authorizing merge.
 
 ### 2.3 Finalizer deployment boundary
 
-`scripts/github/wave-finalizer.py` *(quarantined)* is the canonical finalizer code protected in q
-by the same protected-main review and CI path. It is intentionally an adapter-
+`scripts/github/wave-finalizer.rkt` is the canonical finalizer code protected in q
+by the same protected-main review and CI path. The Python original it was ported from
+(`scripts/github/wave-finalizer.py`, quarantined until then) has been deleted, so the port
+now stands on its own: its behaviour is pinned by four RackUnit suites, three of which
+compare against goldens captured from that Python original at its final revision
+(`tests/fixtures/wave-finalizer-goldens.json`) —
+`scripts/github/wave-finalizer.rkt` (model, sealed prepared snapshot, protection policy),
+`wave-finalizer-adapter.rkt` (the `gh`/`git` adapter over one budgeted delivery session) and
+`wave-finalizer-controller.rkt` (prepare/finalize/issue+board sync and a runnable CLI). The
+controller CLI still requires the launcher to inject the digest-verifying attestation adapter
+(`Q_WAVE_FINALIZER_REPO`, `Q_WAVE_FINALIZER_ATTESTATION_CMD`); it refuses otherwise, exactly as the
+Python original refused without an injected client. It is intentionally an adapter-
 only controller: it does not invoke `git` or `gh`. The injected authenticated
 GitHub adapter and the launcher that verifies the deployed finalizer digest are
 outside this repository boundary. Operators must not infer that committing the

@@ -551,7 +551,7 @@
     [(write-datum)
      ;; Automatic independent review (BUG_PLAN slice B): serialize one
      ;; JSON-shaped hash datum as a .rktd artifact. The trusted controller
-     ;; (gsd-delivery.py auto-review) owns ALL semantic validation; this
+     ;; (the native auto-review dispatch) owns ALL semantic validation; this
      ;; boundary only guarantees the committed bytes are a single well-formed
      ;; Racket hash datum (never string-built Racket syntax, never evaluated).
      ;; argv: <in.json> <out.rktd>

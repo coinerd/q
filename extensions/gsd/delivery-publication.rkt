@@ -11,7 +11,6 @@
          racket/list
          racket/path
          racket/string
-         racket/runtime-path
          (only-in "../../util/json/checksum.rkt" sha256-string)
          (only-in "../../sandbox/subprocess.rkt"
                   run-subprocess
@@ -30,7 +29,7 @@
          (only-in "evidence-repair-format.rkt" canonical-evidence-digest)
          (only-in "supplemental-evidence-publication.rkt"
                   load-supplemental-supersession-proposal!)
-         (only-in "delivery-handoff.rkt" controller-environment redact-delivery-text)
+         (only-in "delivery-handoff.rkt" redact-delivery-text)
          ;; R76 (BUG-0076): shared authenticated delivery-root validation.
          (only-in "git-root-layout.rkt" resolve-explicit-delivery-root!)
          (only-in "campaign-state.rkt"
@@ -58,6 +57,9 @@
                   supplemental-owned-proof?
                   proof-reference-matches-receipt?)
          (only-in "attempt-artifacts.rkt" record-delivered-branches)
+         ;; Phase B slice S11: the `publish-head` action is native Racket, so the
+         ;; publication owner never spawns python3.
+         (only-in "../../scripts/gsd-delivery-publish.rkt" delivery-publish-head!)
          (only-in "../../sandbox/subprocess.rkt"
                   run-subprocess
                   subprocess-result-stdout
@@ -77,8 +79,6 @@
          default-approved-head-publisher
          publish-approved-head!
          publish-supplemental-supersession!)
-
-(define-runtime-path default-delivery-controller-script "../../scripts/gsd-delivery.py")
 
 (define (hex? value n)
   (and (string? value) (= (string-length value) n) (regexp-match? #px"^[0-9a-f]+$" value)))
@@ -365,11 +365,6 @@
                   #:when (hash-has-key? prior key))
        (values key (hash-ref prior key)))))))
 
-(define (parse-controller-result stdout)
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (define data (string->jsexpr stdout))
-    (and (hash? data) data)))
-
 (define (default-approved-head-publisher base
                                          plan
                                          wave
@@ -378,12 +373,12 @@
                                          attempt-fence
                                          coordinator-fence
                                          evidence)
-  ;; R76 (BUG-0076): the snapshot-derived --repo is no longer trusted
+  ;; R76 (BUG-0076): the snapshot-derived repo is no longer trusted
   ;; blindly. The recorded repository identity must validate as a real git
   ;; work tree whose toplevel realpath-equals it (the same authenticated-root
   ;; law the verifier applies to branch contexts); an unverifiable identity
   ;; is a typed blocked stop with the redacted refusal reason — publication
-  ;; never shells the controller against an unauthenticated checkout.
+  ;; never runs the action against an unauthenticated checkout.
   (define publisher-root
     (with-handlers ([exn:fail?
                      (lambda (e)
@@ -395,45 +390,32 @@
   (if (hash? publisher-root)
       publisher-root
       (let ([publisher-root
-             ;; validated absolute root path (run-subprocess args are strings)
-             (if (path? publisher-root) (path->string publisher-root) publisher-root)])
-      (define result
-        (run-subprocess "python3"
-                        #:args (list (path->string default-delivery-controller-script)
-                                     "publish-head"
-                                     "--repo"
-                                     publisher-root
-                                     "--plan"
-                                     plan
-                                     "--wave"
-                                     (number->string wave)
-                                     "--expected-branch"
-                                     (hash-ref snapshot 'branch)
-                                     "--expected-head"
-                                     (hash-ref snapshot 'head)
-                                     "--expected-origin"
-                                     (hash-ref snapshot 'origin)
-                                     "--expected-tree"
-                                     (hash-ref snapshot 'tree))
-                        #:directory base
-                        #:environment (controller-environment)
-                        #:timeout 240
-                        #:process-group? #t))
-      (cond
-        [(or (subprocess-result-timed-out? result)
-             (subprocess-result-truncated? result)
-             (not (zero? (subprocess-result-exit-code result))))
-         (define parsed (parse-controller-result (subprocess-result-stdout result)))
-         (hasheq 'status
-                 "blocked"
-                 'reason
-                 (redact-delivery-text (format "~a"
-                                               (or (and parsed (hash-ref parsed 'reason #f))
-                                                   (subprocess-result-stderr result)
-                                                   "publication controller refused"))))]
-        [else
-         (or (parse-controller-result (subprocess-result-stdout result))
-             (hasheq 'status "blocked" 'reason "publication controller returned malformed JSON"))]))))
+             ;; validated absolute root path (the native action takes a path)
+             (if (path? publisher-root) publisher-root (string->path publisher-root))])
+        ;; Phase B slice S11: the SAME arguments the Python shell carried
+        ;; (branch/head/origin/tree identity + campaign plan/wave binding) go to
+        ;; the native action. A typed refusal is the SAME redacted blocked stop;
+        ;; its reason string is the Python action's exact `Pending` reason.
+        (with-handlers ([exn:fail?
+                         (lambda (error)
+                           (hasheq 'status
+                                   "blocked"
+                                   'reason
+                                   (redact-delivery-text (exn-message error))))])
+          (define result
+            (delivery-publish-head! publisher-root
+                                    (hash-ref snapshot 'branch)
+                                    (hash-ref snapshot 'head)
+                                    #:expected-origin (hash-ref snapshot 'origin)
+                                    #:expected-tree (hash-ref snapshot 'tree)
+                                    #:plan plan
+                                    #:wave wave))
+          (if (hash? result)
+              result
+              (hasheq 'status
+                      "blocked"
+                      'reason
+                      "publication controller returned malformed JSON"))))))
 
 (define current-gsd-approved-head-publisher (make-parameter default-approved-head-publisher))
 

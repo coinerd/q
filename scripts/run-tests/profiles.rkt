@@ -10,7 +10,7 @@
          racket/string
          json
          (only-in "parse.rkt"
-                  make-test-file-result
+                  profile-skipped-result
                   test-file-result-path
                   test-file-result-grouped-fallback-reason)
          (only-in "classify.rkt" base-dir normalize-test-path))
@@ -71,15 +71,19 @@
 (define (make-skipped-result path profile requirements)
   (define skipped (skipped-requirements profile requirements))
   (define reason
-    (format "SKIPPED_BY_PROFILE profile=~a requires=~a" profile (string-join skipped ",")))
-  (make-test-file-result path
-                         skipped-result-exit-code
-                         (string->bytes/utf-8 (string-append reason "\n"))
-                         #""
-                         0
-                         0
-                         0
-                         0))
+    (format "SKIPPED_BY_PROFILE profile=~a requires=~a"
+            profile
+            (string-join (map normalize-requirement skipped) ",")))
+  (profile-skipped-result path
+                          skipped-result-exit-code
+                          (string->bytes/utf-8 (string-append reason "\n"))
+                          #""
+                          0
+                          0
+                          0
+                          0
+                          #f
+                          #f))
 
 ;; ── v1.00.27 W3 (#9591): per-area grouped-expansion policy ──────────────
 ;;

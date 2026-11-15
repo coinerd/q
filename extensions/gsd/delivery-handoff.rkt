@@ -1,7 +1,17 @@
 #lang racket/base
 ;; Durable coordinator handoff, distinct from implementation DONE/outbox state.
-;; The authenticated external controller owns publication readback. No worker
-;; approves/merges PRs and no runtime module imports scripts-layer modules.
+;; No worker approves or merges PRs, and no worker ever holds the delivery
+;; credential boundary.
+;;
+;; Phase B slice S10: the authenticated readback is NATIVE. delivery-readback
+;; calls the `status` proof ported in scripts/gsd-delivery-status.rkt (the
+;; Python controller it replaced is deleted); the arguments (repo, plan, wave,
+;; campaign root), the JSON payload and the typed-stop semantics are unchanged,
+;; so every consumer keeps its exact reason chain. The action is resolved
+;; LAZILY (see native-status-action): the native port reaches back into this
+;; module through the shared bounded-git seam
+;; (scripts/gsd-delivery-git.rkt requires controller-environment from here), so a
+;; static require would close a module cycle.
 ;;
 ;; v1.00.30 (delivery runtime finalization): every proof decision the
 ;; coordinator loop makes is factored HERE so go-orchestrator never
@@ -11,8 +21,7 @@
 ;; 40-hex merge SHA from the authenticated controller. Local evidence
 ;; files are never parsed as proof — stale regex fixtures cannot count
 ;; as true production proof.
-(require json
-         racket/file
+(require racket/file
          racket/format
          racket/path
          racket/runtime-path
@@ -27,7 +36,11 @@
          (only-in "delivery-journal.rkt" load-delivery-journal)
          (only-in "planning-paths.rkt" wave-evidence-report-rel-path)
          (only-in "delivery-receipt.rkt" delivery-receipt-blocker)
-         "../../sandbox/subprocess.rkt")
+         ;; The credential boundary (sanitize-env) every delivery subprocess
+         ;; still crosses, native actions included.
+         (only-in "../../sandbox/subprocess.rkt" sanitize-env)
+         (rename-in "../../scripts/gsd-credential-env.rkt"
+                    [controller-environment gsd-controller-environment]))
 (provide verified-wave-merge-sha
          delivery-handoff-status
          delivery-readback
@@ -46,12 +59,29 @@
          campaign-delivery-view-for-pass
          delivered-predecessor-resolver
          pending-delivery-message
-         ;; B2b: the coordinator's default controller shells gsd-delivery.py
-         ;; through the SAME credential boundary as readback; these helpers
-         ;; are exported for reuse (never re-implement the boundary).
+         ;; B2b/S10: the coordinator's delivery seam runs native actions through
+         ;; the SAME credential boundary as readback; these helpers are exported
+         ;; for reuse (never re-implement the boundary).
          controller-environment
          redact-delivery-text)
-(define-runtime-path controller "../../scripts/gsd-delivery.py")
+;; ============================================================
+;; Native readback action (Phase B slice S10)
+;; ============================================================
+
+;; scripts/gsd-delivery-git.rkt requires controller-environment FROM THIS MODULE
+;; (the single credential boundary), and the native status port sits on top of
+;; it. A static require would therefore close a module cycle, so the ONE native
+;; action is resolved from its runtime path at first use and memoized for the
+;; process lifetime.
+(define-runtime-path native-status-module "../../scripts/gsd-delivery-status.rkt")
+
+(define native-status-action
+  (let ([action #f])
+    (lambda ()
+      (or action
+          (let ([resolved (dynamic-require native-status-module 'delivery-status!)])
+            (set! action resolved)
+            resolved)))))
 
 ;; ============================================================
 ;; Credential boundary for the coordinator-owned trusted controller
@@ -71,16 +101,12 @@
 ;; storage (gh auth login) is the required path; the controller's
 ;; auth-failure reason plus delivery-action-hint make that explicit
 ;; instead of silently degrading.
-(define CREDENTIAL-ENV-NAMES '("GH_TOKEN" "GITHUB_TOKEN"))
 
-(define (controller-environment)
-  (define incoming (current-environment-variables))
-  (define env (sanitize-env))
-  (for ([name (in-list CREDENTIAL-ENV-NAMES)])
-    (define value (environment-variables-ref incoming (string->bytes/utf-8 name)))
-    (when value
-      (environment-variables-set! env (string->bytes/utf-8 name) value)))
-  env)
+
+;; The credential boundary lives in scripts/gsd-credential-env.rkt so the
+;; scripts-level delivery seams do not depend on an extension module. Re-exported
+;; here so every existing caller keeps its API.
+(define controller-environment gsd-controller-environment)
 
 ;; Credential-shaped assignments never surface in operator-visible text.
 (define (redact-delivery-text text)
@@ -110,31 +136,22 @@
         (lambda (e)
           (hasheq 'status "delivery-pending" 'reason (redact-delivery-text (exn-message e))))])
     (define repo (delivery-readback-repo base-dir))
-    (define result
-      (run-subprocess "python3"
-                      #:args (list (path->string controller)
-                                   "status"
-                                   "--campaign-root"
-                                   (path->string (path->complete-path base-dir))
-                                   "--repo"
-                                   (path->string (path->complete-path repo))
-                                   "--plan"
-                                   plan-id
-                                   "--wave"
-                                   (number->string wave-index))
-                      #:directory base-dir
-                      #:environment (controller-environment)
-                      #:timeout 240
-                      #:process-group? #t))
-    (define data (string->jsexpr (subprocess-result-stdout result)))
+    ;; The native action receives exactly the argv the Python controller did:
+    ;; the same campaign root, the same authenticated repository, the same
+    ;; campaign/wave identity. A refusal raises the typed delivery-action
+    ;; exception whose MESSAGE is the reason Python's exit-2 payload carried, so
+    ;; the with-handlers above turns it into the same delivery-pending payload
+    ;; (a spent budget, timeout or truncated read is a typed refusal too).
+    (define data
+      ((native-status-action) (path->string (path->complete-path repo))
+                              plan-id
+                              wave-index
+                              #:campaign-root (path->string (path->complete-path base-dir))))
     (if (and
          (hash? data)
-         (not (subprocess-result-timed-out? result))
-         (not (subprocess-result-truncated? result))
          (or
           (equal? (hash-ref data 'status #f) "delivery-pending")
           (and
-           (zero? (subprocess-result-exit-code result))
            (equal? (hash-ref data 'plan-id #f) plan-id)
            (equal? (hash-ref data 'wave #f) wave-index)
            (receipt-bound-proof-merge-sha data base-dir plan-id wave-index #:require-journal? #t))))
@@ -319,7 +336,7 @@
      'next-steps
      (list "Open implementation PR from retained delivery branch"
            "Obtain independent review and required checks; protected squash merge"
-           (string-append "python3 scripts/gsd-delivery.py prepare --campaign-root <campaign-root> "
+           (string-append "racket scripts/gsd-delivery-merge.rkt prepare --campaign-root <campaign-root> "
                           "--repo <repo> --plan <plan-id> --wave <n> --pr <merged-PR> "
                           "--evidence <frozen trio source> --output <fresh directory>")
            "Review and validate the gate-red binding trio; protected binding PR"
@@ -390,15 +407,15 @@
                 (newline out))))
            path))))
 
-;; Actionable operator hint naming the controller CLI. --campaign-root is
-;; mandatory for prepare (frozen-snapshot provenance); gh credential
-;; storage or a coordinator-held token is required for authenticated
-;; readback.
+;; Actionable operator hint naming the native controller CLIs (Phase B S10: no
+;; delivery action is a Python shell any more). --campaign-root is mandatory for
+;; status and prepare (frozen-snapshot provenance); gh credential storage or a
+;; coordinator-held token is required for authenticated readback.
 (define (delivery-action-hint plan-id wave-index)
   (format
    (string-append
-    "hint: python3 scripts/gsd-delivery.py status --campaign-root <campaign-root> --repo <repo> --plan ~a --wave ~a; "
-    "after the protected merge run 'prepare' with --campaign-root <campaign-root> "
+    "hint: racket scripts/gsd-delivery-status.rkt status --campaign-root <campaign-root> --repo <repo> --plan ~a --wave ~a; "
+    "after the protected merge run 'racket scripts/gsd-delivery-merge.rkt prepare' with --campaign-root <campaign-root> "
     "(gh credential storage via 'gh auth login' or a coordinator GH_TOKEN/GITHUB_TOKEN "
     "is required for authenticated readback)")
    plan-id
@@ -452,10 +469,8 @@
                                 verified)))
   ;; The pure decision consumes a wave INDEX; the human text is built here
   ;; from the durable wave (it also persists the pending handoff record).
-  (define pending
-    (and raw-pending (cons (campaign-wave-index (car raw-pending)) (cdr raw-pending))))
-  (define pending-message
-    (and raw-pending (pending-delivery-message base-dir plan-id raw-pending)))
+  (define pending (and raw-pending (cons (campaign-wave-index (car raw-pending)) (cdr raw-pending))))
+  (define pending-message (and raw-pending (pending-delivery-message base-dir plan-id raw-pending)))
   (define reloaded (load-campaign-record base-dir plan-id))
   (define live (or reloaded current))
   ;; A campaign that had durable progress and then lost its record is a hard
