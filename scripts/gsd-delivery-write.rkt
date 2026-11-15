@@ -1,13 +1,12 @@
 #lang racket/base
 
-;; Phase B slice S5 — native GitHub WRITE seam plus the `open-pr` action of
-;; scripts/gsd-delivery.py.
+;; Phase B slice S5 — native GitHub WRITE seam plus the `open-pr` action of the
+;; deleted Python delivery controller.
 ;;
 ;; Scope law: this module is the MUTATION seam (`gh_put`, `gh_post`) and the
-;; ONE action that uses it so far (`open_pr`). It is NOT wired into
-;; extensions/gsd/delivery-coordinator.rkt, it does not edit or replace
-;; scripts/gsd-delivery.py, and the Python controller stays the production path
-;; until an explicit later slice says otherwise. It reuses the S3 read layer
+;; ONE action that uses it (`open_pr`). It IS dispatched by
+;; extensions/gsd/delivery-coordinator.rkt, which is the production path since
+;; the Phase B final deletion removed the Python controller. It reuses the S3 read layer
 ;; (scripts/gsd-delivery-api.rkt: the api session with its memo + `#:refresh?`
 ;; bypass), the S4 read-only ladder helpers (scripts/gsd-delivery-pr.rkt:
 ;; repository, refresh, resolve-existing-pr, validate-pr-identity,
@@ -76,8 +75,8 @@
 ;;     never duplicated.
 ;;
 ;; Documented deviation (fail closed, never open):
-;;   * `gh_graphql` has NO counterpart in scripts/gsd-delivery.py: the
-;;     controller contains no GraphQL call at all, so there is no Python argv or
+;;   * `gh_graphql` has NO counterpart in the deleted Python controller: it
+;;     contained no GraphQL call at all, so there is no Python argv or
 ;;     refusal string to be byte-identical to. It is provided because this slice
 ;;     owns the write seam, and its argv follows the project's only documented
 ;;     GraphQL shape (scripts/github/wave-finalizer-adapter.rkt:
@@ -127,7 +126,7 @@
          delivery-write-main)
 
 ;; ============================================================
-;; Constants (mirror scripts/gsd-delivery.py)
+;; Constants (mirror the deleted Python controller; recorded in the goldens fixture)
 ;; ============================================================
 
 ;; Python's gh_put/gh_post pass `timeout=60`; the shared runner clamps it to the

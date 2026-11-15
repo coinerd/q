@@ -3,10 +3,11 @@
 ;; Phase B slice S3 — native GitHub API read layer of the delivery controller.
 ;;
 ;; Scope law: this module is the READ layer only (`api`, `checks`,
-;; `trusted_check`, `protection`, `validate_merge`, `fetch_head` of
-;; scripts/gsd-delivery.py). It performs no mutation, is NOT yet wired into
-;; extensions/gsd/delivery-coordinator.rkt, and the Python controller stays the
-;; production path until an explicit later slice says otherwise.
+;; `trusted_check`, `protection`, `validate_merge`, `fetch_head` of the deleted
+;; Python delivery controller). It performs no mutation; the native actions that
+;; use it are dispatched by extensions/gsd/delivery-coordinator.rkt, which is
+;; the production path since the Phase B final deletion removed the Python
+;; controller.
 ;;
 ;; Every subprocess goes through the shared bounded seam
 ;; (scripts/gsd-delivery-git.rkt): ONE total process budget, credential
@@ -131,7 +132,7 @@
          actions-app-id)
 
 ;; ============================================================
-;; Constants (mirror scripts/gsd-delivery.py)
+;; Constants (mirror the deleted Python controller; recorded in the goldens fixture)
 ;; ============================================================
 
 ;; GitHub's own Actions app id: only runs dispatched by GitHub Actions are

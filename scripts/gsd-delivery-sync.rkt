@@ -1,13 +1,12 @@
 #lang racket/base
 
-;; Phase B slice S2 — native port of the `sync` action of
-;; scripts/gsd-delivery.py.
+;; Phase B slice S2 — native port of the `sync` action of the deleted Python
+;; delivery controller.
 ;;
-;; Scope law: this module replaces the Python `sync` action ONLY. Every other
-;; gsd-delivery.py action still dispatches to Python through
-;; delivery-coordinator.rkt (the read-only `preflight` action is native since
-;; slice S1). Production dispatch for the coordinator's `sync` stage never
-;; spawns python3 any more.
+;; Scope law: this module implements the `sync` action ONLY; every other action
+;; lives in its own native module, and extensions/gsd/delivery-coordinator.rkt
+;; dispatches all of them. No delivery stage spawns python3 since the Phase B
+;; final deletion removed the Python controller.
 ;;
 ;; Parity with the Python action is the contract — sync(repo, expected_branch):
 ;;   1. a nonblank --expected-branch is mandatory (else

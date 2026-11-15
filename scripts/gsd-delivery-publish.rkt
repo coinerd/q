@@ -1,12 +1,12 @@
 #lang racket/base
 
-;; Phase B slice S11 — native port of the `publish-head` action of
-;; scripts/gsd-delivery.py.
+;; Phase B slice S11 — native port of the `publish-head` action of the deleted
+;; Python delivery controller.
 ;;
-;; Scope law: this module replaces the Python `publish-head` action ONLY — the
+;; Scope law: this module replaces that ONE action — the
 ;; one implementation-head publication producer the delivery publication owner
 ;; (extensions/gsd/delivery-publication.rkt, `default-approved-head-publisher`)
-;; shells today. Nothing else of the Python controller is reproduced here: the
+;; runs today. Nothing else of the Python controller is reproduced here: the
 ;; `prepare`/`auto-review`/`_finalize_implementation` ladder (single-parent
 ;; protected binding commit construction, evidence trio binding, review
 ;; staging) lives in the separately ported merge/binding slices and is NOT part
@@ -85,7 +85,7 @@
          delivery-publish-head-main)
 
 ;; ============================================================
-;; Constants (mirror scripts/gsd-delivery.py)
+;; Constants (mirror the deleted Python controller; recorded in the goldens fixture)
 ;; ============================================================
 
 (define protected-branches '("main" "master"))

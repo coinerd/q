@@ -1,16 +1,16 @@
 #lang racket/base
 
 ;; Phase B slice S4 — native port of the READ-ONLY delivery ladder actions
-;; `resolve-pr`, `pr-ci` and `review` of scripts/gsd-delivery.py, together with
-;; the helpers those actions share (resolve_pr, resolve_merged_pr,
+;; `resolve-pr`, `pr-ci` and `review` of the deleted Python delivery controller,
+;; together with the helpers those actions share (resolve_pr, resolve_merged_pr,
 ;; resolve_existing_pr, resolve_prs_for_branch, branch_owner,
 ;; validate_pr_identity, require_receipt_tip, policy_names, blob_or_none,
 ;; refresh, repository, EXCLUDED_PREFIXES, full_sha).
 ;;
-;; Scope law: this module is the READ-ONLY ladder only. It mutates nothing, it
-;; is NOT wired into extensions/gsd/delivery-coordinator.rkt, and
-;; scripts/gsd-delivery.py stays the production path until an explicit later
-;; slice says otherwise. It reuses the S3 read layer
+;; Scope law: this module is the READ-ONLY ladder only. It mutates nothing; it
+;; IS dispatched by extensions/gsd/delivery-coordinator.rkt, which is the
+;; production path since the Phase B final deletion removed the Python
+;; controller. It reuses the S3 read layer
 ;; (scripts/gsd-delivery-api.rkt: make-delivery-api-session, api-call,
 ;; checks/trusted-check/protection, validate-merge, fetch-head) and the shared
 ;; bounded seam (scripts/gsd-delivery-git.rkt).
@@ -169,7 +169,7 @@
          validate-trio)
 
 ;; ============================================================
-;; Constants (mirror scripts/gsd-delivery.py)
+;; Constants (mirror the deleted Python controller; recorded in the goldens fixture)
 ;; ============================================================
 
 (define-runtime-path this-source "gsd-delivery-pr.rkt")

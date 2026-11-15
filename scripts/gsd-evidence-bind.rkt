@@ -43,7 +43,7 @@
   (list "docs/reports/gsd-wave-evidence/"
         "docs/reports/gsd-wave-reviews/"
         "docs/reports/gsd-wave-validation/"))
-;; Same contract as scripts/gsd-delivery.py digest(): the changed-content
+;; Same contract as the original delivery controller's digest(): the changed-content
 ;; digest of base...head excluding the three record directories.
 (define exclusion-specs
   (list ":(exclude)docs/reports/gsd-wave-evidence/**"

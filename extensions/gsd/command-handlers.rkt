@@ -823,8 +823,8 @@
                #:timeout-sec effective-timeout
                ;; B2b/C: the /go request carries the production delivery
                ;; coordinator so the wave-blocked checkpoint can drive
-               ;; authenticated delivery INSIDE /go (it shells
-               ;; gsd-delivery.py through the credential boundary). No
+               ;; authenticated delivery INSIDE /go (it runs the native
+               ;; delivery actions through the credential boundary). No
                ;; implementation wave is rerun to repair delivery.
                #:delivery-coordinator default-delivery-coordinator
                ;; Carried on the request across the TUI campaign thread and

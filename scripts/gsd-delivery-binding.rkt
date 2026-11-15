@@ -1,7 +1,7 @@
 #lang racket/base
 
-;; Phase B slice S8 — native port of the BINDING ladder actions of
-;; scripts/gsd-delivery.py:
+;; Phase B slice S8 — native port of the BINDING ladder actions of the deleted
+;; Python delivery controller:
 ;;
 ;;   binding-review   -> read_staged_trio  (the deterministic staged-trio reader)
 ;;   binding-pr       -> binding_publish   (Python: `binding_pr = binding_publish`)
@@ -12,8 +12,9 @@
 ;; Scope law: this module implements exactly those five actions. The coordinator
 ;; (extensions/gsd/delivery-coordinator.rkt) dispatches every binding stage here
 ;; (Phase B slice S9), so no binding stage spawns python3; this module does not
-;; edit scripts/gsd-delivery.py, and every module it reuses (S3 api, S4 read
-;; ladder, S5 write seam, S6 status, S7 merge) is READ-ONLY here. The ONE mutation this slice performs is Python's
+;; touch the deleted Python controller, and every module it reuses (S3 api, S4
+;; read ladder, S5 write seam, S6 status, S7 merge) is READ-ONLY here.
+;; The ONE mutation this slice performs is Python's
 ;; `gh_post(slug, "pulls", {title,body,head,base})` through the S5 write seam,
 ;; plus the non-force push of the deterministic binding branch — exactly the two
 ;; writes binding_publish performs.
@@ -161,7 +162,7 @@
          delivery-binding-main)
 
 ;; ============================================================
-;; Constants (mirror scripts/gsd-delivery.py)
+;; Constants (mirror the deleted Python controller; recorded in the goldens fixture)
 ;; ============================================================
 
 (define-runtime-path this-source "gsd-delivery-binding.rkt")

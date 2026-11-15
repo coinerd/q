@@ -1,12 +1,13 @@
 #lang racket/base
 
 ;; Phase B slice S6 — native port of the delivery-proof `status` and the
-;; read-only `governance` actions of scripts/gsd-delivery.py.
+;; read-only `governance` actions of the deleted Python delivery controller
+;; (its recorded behavior lives in tests/fixtures/gsd-delivery-goldens.json).
 ;;
 ;; Scope law: this module implements exactly two actions and mutates nothing.
-;; It is NOT wired into extensions/gsd/delivery-coordinator.rkt, it does not
-;; edit scripts/gsd-delivery.py, and the Python controller stays the production
-;; path until an explicit later slice says otherwise. It reuses the S3 read
+;; Both are dispatched by extensions/gsd/delivery-coordinator.rkt, which is the
+;; production path since the Phase B final deletion removed the Python
+;; controller. It reuses the S3 read
 ;; layer (scripts/gsd-delivery-api.rkt: make-delivery-api-session,
 ;; validate-merge, fetch-head, protection, trusted-check), the S4 read-only
 ;; ladder helpers (scripts/gsd-delivery-pr.rkt: make-delivery-pr-context,
@@ -116,7 +117,7 @@
          governance-check-name)
 
 ;; ============================================================
-;; Constants (mirror scripts/gsd-delivery.py)
+;; Constants (mirror the deleted Python controller; recorded in the goldens fixture)
 ;; ============================================================
 
 (define-runtime-path this-source "gsd-delivery-status.rkt")

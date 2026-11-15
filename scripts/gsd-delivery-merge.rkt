@@ -2,11 +2,12 @@
 
 ;; Phase B slice S7 — native port of the MUTATING delivery ladder actions
 ;; `merge` (plus its `merge_authorization` / `reviewed_head_approval` proofs)
-;; and `prepare` of scripts/gsd-delivery.py.
+;; and `prepare` of the deleted Python delivery controller.
 ;;
-;; Scope law: this module implements exactly those two actions. It is NOT wired
-;; into extensions/gsd/delivery-coordinator.rkt (the coordinator still shells to
-;; the Python controller), it does not edit scripts/gsd-delivery.py, and the
+;; Scope law: this module implements exactly those two actions. Both are
+;; dispatched by extensions/gsd/delivery-coordinator.rkt, which is the
+;; production path since the Phase B final deletion removed the Python
+;; controller; the
 ;; S3/S4/S5/S6 modules it reuses (gsd-delivery-api.rkt, gsd-delivery-git.rkt,
 ;; gsd-delivery-pr.rkt, gsd-delivery-write.rkt, gsd-delivery-status.rkt) are
 ;; READ-ONLY here. The one mutation this slice performs — and the ONLY one it is
@@ -155,7 +156,7 @@
          delivery-merge-main)
 
 ;; ============================================================
-;; Constants (mirror scripts/gsd-delivery.py)
+;; Constants (mirror the deleted Python controller; recorded in the goldens fixture)
 ;; ============================================================
 
 (define-runtime-path this-source "gsd-delivery-merge.rkt")

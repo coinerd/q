@@ -1,10 +1,10 @@
 #lang racket/base
 
-;; S12 native port of the automatic independent review dispatch
-;; (`scripts/gsd-delivery.py` action `auto-review`, phases `prepare` and
-;; `finalize`).
+;; S12 native port of the automatic independent review dispatch (the `auto-review`
+;; action, phases `prepare` and `finalize`, of the deleted Python delivery
+;; controller).
 ;;
-;; The Python action is the behaviour contract: every refusal message and
+;; The Python action was the behaviour contract: every refusal message and
 ;; every refusal ORDER is byte-identical, the typed request/result JSON keeps
 ;; the same shape, and the same laws hold:
 ;;
@@ -130,7 +130,7 @@
 (define helper-command-timeout 60.0)
 
 ;; ============================================================
-;; Constants (mirror scripts/gsd-delivery.py)
+;; Constants (mirror the deleted Python controller; recorded in the goldens fixture)
 ;; ============================================================
 
 (define owned-audit-mode "owned-proof-audit-v1")

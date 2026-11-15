@@ -2,7 +2,7 @@
 
 ;; Phase B shared seam: the bounded-git runner, the typed failure
 ;; classification and the controller-environment handling that the native
-;; gsd-delivery.py ports share. Extracted verbatim from the S1 `preflight` port
+;; delivery-action ports share. Extracted verbatim from the S1 `preflight` port
 ;; (scripts/gsd-delivery-preflight.rkt) so the S2 `sync` port
 ;; (scripts/gsd-delivery-sync.rkt) reuses exactly the proven infrastructure
 ;; instead of re-deriving it. Both actions keep the SAME contract:
@@ -81,7 +81,7 @@
          read-flag-value)
 
 ;; ============================================================
-;; Constants (mirror scripts/gsd-delivery.py)
+;; Constants (mirror the deleted Python controller; recorded in the goldens fixture)
 ;; ============================================================
 
 ;; delivery-handoff run-subprocess timeout (seconds) in the Python action's

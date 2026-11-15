@@ -1,13 +1,13 @@
 #lang racket/base
 
-;; Phase B slice S1 — native port of the READ-ONLY `preflight` action of
-;; scripts/gsd-delivery.py (Register F5, v1.00.31 W3).
+;; Phase B slice S1 — native port of the READ-ONLY `preflight` action of the
+;; deleted Python delivery controller (Register F5, v1.00.31 W3).
 ;;
-;; Scope law: this module replaces the Python `preflight` action ONLY. Every
-;; other gsd-delivery.py action (status/prepare/sync/merge/resolve-pr/review/
-;; open-pr/pr-ci/binding-*/governance/publish-head/auto-review) dispatches to
-;; Python through delivery-coordinator.rkt unless another native slice owns it
-;; (S2 owns `sync` via scripts/gsd-delivery-sync.rkt).
+;; Scope law: this module implements the `preflight` action ONLY; every other
+;; action lives in its own native module (sync, the read ladder, the write seam,
+;; status/governance, merge/prepare, the binding ladder, publish-head,
+;; auto-review) and extensions/gsd/delivery-coordinator.rkt dispatches all of
+;; them. No delivery stage spawns python3 since the Phase B final deletion.
 ;;
 ;; The bounded-git runner, the typed failure classification, the budget and the
 ;; exit-2 CLI surface are the SHARED seam in scripts/gsd-delivery-git.rkt; this
@@ -71,7 +71,7 @@
 (define classify-exec-failure git:classify-exec-failure)
 
 ;; ============================================================
-;; Constants (mirror scripts/gsd-delivery.py)
+;; Constants (mirror the deleted Python controller; recorded in the goldens fixture)
 ;; ============================================================
 
 (define policy-path "scripts/required-pr-checks.policy")
