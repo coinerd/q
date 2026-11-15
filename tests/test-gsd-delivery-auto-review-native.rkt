@@ -6,14 +6,17 @@
 ;; Slow lane on purpose: the approved-finalize case drives the strict gate and the
 ;; whole helper chain, which intermittently stalls on a loaded host (a normal run
 ;; is 30-45s). The tight bound turns a stall into a TIMEOUT failure inside the
-;; nightly budget instead of a half-hour hang; the fast lane keeps the Python
-;; oracle until the controller deletion lands.
+;; nightly budget instead of a half-hour hang. Phase B deleted both the Python
+;; oracle and the fast-bucket shim that spawned it, so this suite is the owner
+;; and it runs in the slow/all suites rather than the PR fast gate.
 ;; @covers scripts/gsd-delivery-auto-review.rkt
 ;;
 ;; S12 native port of the automatic independent review dispatch
 ;; (`auto-review` prepare + finalize). This file ports the THIRTY Python
-;; regressions in `tests/test-gsd-delivery-auto-review.py` to native RackUnit
-;; cases; each case names the Python case it replaces. The behaviour contract
+;; regressions of the automatic-review controller suite to native RackUnit
+;; cases; each case names the Python case it replaces. (That suite, and the
+;; filename it carried, is preserved in git history: Phase B deleted the file
+;; once this port and the goldens covered it.) The behaviour contract
 ;; is unchanged:
 ;;
 ;;   * prepare is honest: a valid trio passes through as `reviewed`, a real

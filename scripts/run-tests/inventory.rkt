@@ -733,7 +733,6 @@
     'members
     '("tests/test-gsd-auto-review-integration.rkt" "tests/test-gsd-auto-review-loop.rkt"
                                                    "tests/test-gsd-auto-review-production.rkt"
-                                                   "tests/test-gsd-delivery-auto-review.rkt"
                                                    "tests/test-gsd-review-dispatch.rkt"
                                                    "tests/test-gsd-review-rejection.rkt"
                                                    "tests/test-gsd-review-runtime.rkt")
@@ -747,10 +746,13 @@
     (string-append
      "Automatic-review bug-delivery bucket: fresh read/bash-only sessions, receipt/fence-bound dispatch, "
      "durable rejection and ordinary retry, real local-Git controller approval/publication and recovery. "
-     "All seven families are fast-classified extension integration tests, not unit-fast: they compose "
+     "All six families are fast-classified extension integration tests, not unit-fast: they compose "
      "sessions, durable temporary campaign journals, or subprocess/Git sandboxes. The two real sleeps "
      "in the session family are cancellation guards whose workers are reaped by tiny existing deadlines; "
-     "they do not pay their nominal delays. No live provider/GitHub acceptance is claimed."))
+     "they do not pay their nominal delays. No live provider/GitHub acceptance is claimed. "
+     "Phase B removed the seventh family (tests/test-gsd-delivery-auto-review.rkt), a shim that only "
+     "spawned the Python controller suite: its native port tests/test-gsd-delivery-auto-review-native.rkt "
+     "is @speed slow, so that family is no longer selected by this fast bucket."))
    (hasheq
     'behavior-id
     "RETRY-LOGICAL-SEMANTICS-FAST"
