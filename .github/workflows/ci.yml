@@ -106,34 +106,27 @@ jobs:
   # lint-alignment, metadata inventory/lint) moved to the parallel
   # `lint-quality` job so downstream jobs (fast-env → test …) no longer
   # wait for Racket lint steps. The former Python controller gate
-  # (`python3 -m unittest discover -s scripts/github`) is gone with the
-  # last Python test under scripts/github: the protected-wave finalizer
+  # (`unittest discover -s scripts/github`) is gone with the last Python
+  # test under scripts/github: the protected-wave finalizer
   # controller scenarios are Racket now (tests/test-wave-finalizer-*.rkt)
   # and run in the `test` job, so `lint` carries no inert discovery step.
   # `lint` and `lint-quality` are both required.
+  # Testing refactor §11.5: the workflow-YAML check is Racket
+  # (scripts/ci/validate-workflows.rkt), so this job provisions the SAME
+  # pinned runtime every other lane uses instead of pip-installing a YAML
+  # library — the last CI scriptlet interpreter is gone.
   # ────────────────────────────────────────────────────────────
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+
       - name: Workflow YAML validation
-        run: |
-          pip install pyyaml
-          python3 -c "
-          import yaml, glob, sys
-          errors = []
-          for f in glob.glob('.github/workflows/*.yml'):
-            try: yaml.safe_load(open(f))
-            except Exception as e: errors.append(f'{f}: {e}')
-          for f in glob.glob('.github/actions/*/action.yml'):
-            try: yaml.safe_load(open(f))
-            except Exception as e: errors.append(f'{f}: {e}')
-          if errors:
-            for e in errors: print(f'ERROR: {e}')
-            sys.exit(1)
-          print('All workflows and actions valid YAML')
-          "
+        run: racket scripts/ci/validate-workflows.rkt
 
   lint-quality:
     runs-on: ubuntu-latest
@@ -515,7 +508,8 @@ jobs:
         if: always()
         run: |
           if [ -n "${EAGER_GATE_START_MS:-}" ]; then
-            echo "seconds=$(python3 -c "print(round(($(date +%s%3N) - $EAGER_GATE_START_MS) / 1000, 3))")" >> "$GITHUB_OUTPUT"
+            ELAPSED_MS=$(( $(date +%s%3N) - EAGER_GATE_START_MS ))
+            racket scripts/ci/elapsed-seconds.rkt --ms "$ELAPSED_MS" >> "$GITHUB_OUTPUT"
           fi
 
       # W2 containment telemetry (issue #9688) + W4 compiled-root telemetry

@@ -66,8 +66,6 @@
 
 (define (racket-exe)
   (or (find-executable-path "racket") "racket"))
-(define (python-exe)
-  (or (find-executable-path "python3") (find-executable-path "python") "python3"))
 (define (git-exe)
   (or (find-executable-path "git") "git"))
 
@@ -722,22 +720,50 @@
 ;; F7 — stale recorded head and cross-artifact timing disagreement
 ;; ---------------------------------------------------------------------------
 
+;; The F7 red fixture value: the exact v1.00.30-w4 rollback-drill shape (a
+;; stale recorded head plus prose phase timings that contradict the structured
+;; `eager-fallback-ms` numbers). It used to be emitted by the frozen generator
+;; artifacts/wave-delivery-integrity/v1.00.31-w5/raw/matrix-gen.py
+;; (`--emit-f7-fixture`, i.e. `canon(F7_FIXTURE)` = python
+;; json.dumps(indent=1, sort_keys=True, ensure_ascii=True) plus a newline).
+;; The rehearsal emits it in Racket through the SAME canonical renderer the
+;; matrix itself uses, so the bytes are unchanged and the rehearsal needs no
+;; Python interpreter at all (§11.5).
+(define f7-fixture
+  (hash 'schema
+        "prepared-env-rollback-drill@1"
+        'milestone
+        895
+        'wave
+        "W4"
+        'issue
+        9690
+        'note
+        (string-append "F7 red fixture: reconstructs the v1.00.30-w4 rollback-drill "
+                       "internal inconsistency (blocked-wave artifacts never landed); "
+                       "prose phase timings 260/245 ms contradict eager-fallback-ms "
+                       "247/256 ms")
+        'steps
+        (list (hash 'step 1
+                    'name "eager-boundary-fallback"
+                    'observed "fallback resolved in 260 ms on the first attempt"
+                    'verdict "pass")
+              (hash 'step 2
+                    'name "restore-path-relink"
+                    'observed "restore relink completed in 245 ms"
+                    'verdict "pass"))
+        'timing
+        (hash 'eager-fallback-ms (list 247 256) 'restore-relink-ms (list 245 245))
+        'recorded-head
+        "8299409c9cf6330a85e66cbe5a9ba445bf739d27"))
+
 (define (f7-injected root)
   (define scratch (scratch-dir "f7"))
   (define fixture (build-path scratch "artifacts/f7-repro/v9.99.99-w0"))
-  (define gen (build-path root "artifacts/wave-delivery-integrity/v1.00.31-w5/raw/matrix-gen.py"))
-  (define-values (gen-code _gen-out)
-    (capture (list (python-exe)
-                   (path->string gen)
-                   "--emit-f7-fixture"
-                   (path->string (build-path scratch "emitted")))
-             root))
-  (define emitted (build-path scratch "emitted/rollback-drill.json"))
-  (when (zero? gen-code)
-    (write-text! (build-path fixture "rollback-drill.json") (file->string emitted))
-    (write-text! (build-path fixture "SHA256SUMS")
-                 (format "~a  artifacts/f7-repro/v9.99.99-w0/rollback-drill.json\n"
-                         (sha256-file (build-path fixture "rollback-drill.json")))))
+  (write-text! (build-path fixture "rollback-drill.json") (canonical-json f7-fixture))
+  (write-text! (build-path fixture "SHA256SUMS")
+               (format "~a  artifacts/f7-repro/v9.99.99-w0/rollback-drill.json\n"
+                       (sha256-file (build-path fixture "rollback-drill.json"))))
   (define lint (build-path root "scripts/ci/verify-artifact-provenance.rkt"))
   (define-values (code output)
     (capture (list (racket-exe)

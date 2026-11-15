@@ -86,6 +86,13 @@ jobs:
         with:
           persist-credentials: false
 
+      # Testing refactor §11.5: the context document below is written by the
+      # pinned Racket toolchain, so this gate job installs the same runtime
+      # every other lane uses instead of relying on a runner interpreter.
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: '8.10'
+
       - name: Bind and validate the trusted trial identity
         id: gate
         shell: bash
@@ -141,20 +148,10 @@ jobs:
           # Persist validated context BEFORE any reusable workflow code runs.
           # Offline reconciliation uses this even when cancellation prevents
           # the pending collector from ever starting.
-          python3 - <<'PY'
-          import os, json, hashlib, subprocess, datetime
-          e = os.environ
-          count = int(e['FAST_SHARD_COUNT']) if e['FAST_SHARD_COUNT'] in ('4', '6', '8') else 3
-          inventory = subprocess.check_output(['git', 'ls-files', 'tests']).splitlines()
-          digest = hashlib.sha256(b''.join(p + b'\n' for p in sorted(inventory))).hexdigest()
-          doc = {'trial-id': e['TRIAL_ID'], 'attempt': int(e['TRIAL_ATTEMPT']), 'treatment': e['TREATMENT'],
-                 'run-id': int(e['RUN_ID']), 'run-attempt': int(e['RUN_ATTEMPT']), 'head-sha': e['DISPATCH_SHA'],
-                 'workflow-revision-sha': e['WORKFLOW_SHA'], 'shard-total': count,
-                 'shard-plan': ','.join(str(n) for n in range(count)), 'test-inventory-digest': digest,
-                 'created-at-utc': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
-          with open('trial-context.json', 'w') as f:
-              json.dump(doc, f)
-          PY
+          # scripts/ci/trial-context.rkt writes the same eleven fields (typed
+          # identically) the retired inline scriptlet wrote: identity, shard
+          # plan, and the sha256 over the SORTED `git ls-files tests` lines.
+          racket scripts/ci/trial-context.rkt --out trial-context.json
           {
             echo "## Trusted trial gate passed"
             echo "- treatment: \`$TREATMENT\`, trial \`$TRIAL_ID\`, attempt \`$TRIAL_ATTEMPT\`"
