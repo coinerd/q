@@ -167,9 +167,13 @@ neutered guard rather than inherit a `PERMANENT` verdict:
   rehearsal-input digest, so the committed `PERMANENT` verdict no longer matches
   and `tests/test-wave-integrity-adversarial.rkt` fails (the owners are content
   inputs, and the test asserts all three are present in `rehearsal-inputs`);
-* an owner whose cases all pass but which no longer *names* the row's refusal
-  vocabulary makes F6/F11 `ok`, and an owner deleted outright reports
-  `guard-missing`: the witness is the declaration, not merely a green run.
+* an owner that no longer *names* the row's refusal vocabulary makes F6/F11
+  `ok` (and their clean control `refused`); under the missing-guard control —
+  the guard files absent from the rehearsal root — F6/F11 report `guard-missing`
+  like every other row; and an owner deleted from a *real* root is caught earlier
+  still: the rehearsal-inputs digest cannot be computed, so the harness fails
+  closed at exit 1 instead of claiming `PERMANENT`. The witness is the
+  declaration, not merely a green run.
 
 ## Red-first evidence
 
