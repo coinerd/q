@@ -93,11 +93,19 @@
          ;; Pure lane decision, mapped to messages/exit codes by the CLI after
          ;; all output has been written
          lane-verdict
-         ;; Changed-file selection (`--changed [BASE]`)
+         ;; Changed-file selection (`--changed [BASE]`, `--changed BASE..HEAD`)
          (struct-out change-report)
          working-tree-changed
+         commits-changed
          changed-selection
+         quick-changed-owners
          change-report-lines
+         ;; CI lanes (`--lane NAME`): one policy table, no YAML numbers
+         (struct-out qt-lane)
+         qt-lanes
+         qt-lane-ref
+         ;; Release candidate verification (`./qt release --candidate SHA`)
+         release-candidate-check
          ;; Resolved plan shared by `--explain` and execution
          (struct-out lane-plan)
          resolve-lane-plan
@@ -505,6 +513,12 @@
            resolved
            (path->string root)))
   (define all (remove-duplicates (append (git-lines diff-text) (git-lines untracked-text))))
+  (define-values (rels outside) (diff-paths->rels all prefix))
+  (values rels resolved outside))
+
+;; Repository-root-relative diff paths -> selection-root-relative paths. Paths
+;; outside the selection root are returned separately (never silently dropped).
+(define (diff-paths->rels all prefix)
   (define mapped
     (for/list ([p (in-list all)])
       (cond
@@ -515,11 +529,64 @@
                            #:unless (eq? (cdr m) 'outside))
                   (car m))
                 string<?)
-          resolved
           (sort (for/list ([m (in-list mapped)]
                            #:when (eq? (cdr m) 'outside))
                   (car m))
                 string<?)))
+
+;; Diff between two commits (`BASE..HEAD`). Both refs must resolve to
+;; commits: a typo'd base is a selection failure, never "nothing changed".
+;; Returns (values changed-rels label outside-rels).
+(define (commits-changed base head root)
+  (unless (find-executable-path "git")
+    (error 'full-plan
+           "cannot compute the diff ~a..~a under ~a: git is not available (fail closed)"
+           base
+           head
+           (path->string root)))
+  (define (resolves? ref name)
+    (define resolved?
+      (and (string? ref)
+           (positive? (string-length ref))
+           (git-ok? root "rev-parse" "--verify" "--quiet" (string-append ref "^{commit}"))))
+    (unless resolved?
+      (error
+       'full-plan
+       "cannot compute the diff ~a..~a under ~a: ~a ref ~a does not resolve to a commit (fail closed)"
+       base
+       head
+       (path->string root)
+       name
+       ref))
+    resolved?)
+  (resolves? base "base")
+  (resolves? head "head")
+  (define-values (prefix-ok? prefix-text) (git-run root (list "rev-parse" "--show-prefix")))
+  (define prefix
+    (if prefix-ok?
+        (string-trim prefix-text)
+        ""))
+  (define-values (ok? text) (git-run root (list "diff" "--name-only" "--no-renames" base head)))
+  (unless ok?
+    (error 'full-plan
+           "cannot compute the diff ~a..~a under ~a: git failed (fail closed)"
+           base
+           head
+           (path->string root)))
+  (define-values (rels outside) (diff-paths->rels (remove-duplicates (git-lines text)) prefix))
+  (values rels (format "~a..~a" base head) outside))
+
+;; `./qt quick --changed`: conservative impact selection over the audited quick
+;; owners, through the SAME @covers/impact machinery as the full/default lane.
+;; Unattributable owners are INCLUDED (fail open) and any escalation includes
+;; every owner, so the selection can only widen; it is a reproduction, never a
+;; PR/CI claim.
+(define (quick-changed-owners root
+                              owner-rels
+                              changed
+                              #:base [base "working tree"]
+                              #:outside [outside '()])
+  (changed-selection root owner-rels changed #:base base #:outside outside))
 
 ;; What the working-tree diff means for one lane. `included` is exactly what
 ;; the command would run; `excluded` is what it would skip and why.
@@ -564,19 +631,28 @@
 
 ;; One line per attribution decision, so `--explain` states WHY each file is in
 ;; or out of the changed selection.
+;; The changed-selection header: a commit range and a working-tree diff are
+;; DIFFERENT inputs (a range sees no untracked files), and the report must say
+;; which one produced the selection.
+(define (change-report-source-line report)
+  (define base (change-report-base report))
+  (if (and (string? base) (string-contains? base ".."))
+      (format "changed: commit range ~a (git diff --name-only BASE HEAD)" base)
+      (format "changed: working-tree diff against ~a (git diff --name-only BASE plus untracked files)"
+              base)))
+
 (define (change-report-lines report)
   (define unattributable (change-report-unattributable report))
   (define escalations (change-report-escalations report))
   (append
    (list
-    (format "changed: working-tree diff against ~a (git diff --name-only BASE plus untracked files)"
-            (change-report-base report))
+    (change-report-source-line report)
     (format "changed files: ~a" (length (change-report-changed report)))
     (format
      "changed mapping: @covers manifest (~a attributed test files) plus the impact dependency graph"
      (change-report-covers-count report))
     (format
-     "changed attribution: ~a of ~a lane files carry no @covers attribution and are INCLUDED (fail open)"
+     "changed attribution: ~a of ~a selected files carry no @covers attribution and are INCLUDED (fail open)"
      (length unattributable)
      (+ (length (change-report-included report)) (length (change-report-excluded report))))
     (if (null? escalations)
@@ -1778,7 +1854,102 @@
 ;; selection identity (suite / shard / explicit reproduction), the explicit
 ;; reproduction spelling, and the shard-plan mode. Plain `./qt full --explain`
 ;; never reaches this function, so its output stays byte-identical.
-(define (qt-ci-explain-lines plan)
+;; ============================================================
+;; CI lanes (`./qt --lane NAME`)
+;; ============================================================
+;; One table is the policy metadata CI reads instead of hard-coding suite,
+;; profile and timeout in YAML. A lane names an EXISTING runner suite (never a
+;; second selection scheme) plus the shard-plan/timeout policy the engine
+;; already implements. `shard-total` is a lane default: a workflow matrix that
+;; enumerates shards still owns the index/total it instantiates and may pass
+;; them explicitly. Unknown lanes fail closed and list the valid names.
+(struct qt-lane (name suite timeout shard-total shard-plan description) #:transparent)
+
+(define qt-lanes
+  (list
+   (qt-lane 'fast 'fast #f 1 #f "fast PR regression tier")
+   (qt-lane 'fast-shard 'fast #f 1 "active" "duration-aware fast tier (requires --shard-total > 1)")
+   (qt-lane 'platform 'platform #f 1 #f "curated platform-cross subset")
+   (qt-lane 'security 'security #f 1 #f "security suite")
+   (qt-lane 'workflows 'workflows 90 2 #f "workflow/contract suite (two shards)")
+   (qt-lane 'arch 'arch #f 1 #f "architecture suite")
+   (qt-lane 'tui 'tui 60 1 #f "TUI suite")
+   (qt-lane 'smoke 'smoke #f 1 #f "smoke suite")
+   (qt-lane 'release-smoke 'release-smoke 120 1 #f "release smoke suite")
+   (qt-lane 'unit-fast 'unit-fast #f 1 #f "unit-fast suite")
+   (qt-lane 'slow 'slow #f 1 #f "slow suite")
+   (qt-lane 'all 'all #f 1 #f "complete discovered suite")))
+
+;; Resolve a lane name to its policy entry. An unknown name is an error that
+;; NAMES every valid lane (fail closed, never a silent fallback to `fast`).
+(define (qt-lane-ref name)
+  (define wanted
+    (if (symbol? name)
+        name
+        (string->symbol name)))
+  (or (for/first ([lane (in-list qt-lanes)]
+                  #:when (eq? (qt-lane-name lane) wanted))
+        lane)
+      (error 'full-plan
+             "unknown --lane: ~a (valid: ~a)"
+             wanted
+             (string-join (map (lambda (l) (symbol->string (qt-lane-name l))) qt-lanes) ", "))))
+
+;; ============================================================
+;; Release candidate verification (`./qt release --candidate SHA`)
+;; ============================================================
+;; A release entry point that accepts a candidate must verify the EXACT
+;; candidate it was handed: a different HEAD, or a checkout with uncommitted
+;; changes, is refused before anything runs (release obligations stay
+;; unconditional). `sha` must be a commit id (hex), never a moving ref.
+(define (release-candidate-check root sha)
+  (define text
+    (and sha
+         (if (path? sha)
+             (path->string sha)
+             sha)))
+  (unless (and (string? text) (regexp-match? #px"^[0-9a-f]{7,40}$" text))
+    (error 'full-plan
+           "--candidate must be a commit SHA (7-40 lowercase hex characters), got: ~a"
+           (or text "<missing>")))
+  (unless (find-executable-path "git")
+    (error 'full-plan
+           "cannot verify --candidate ~a under ~a: git is not available (fail closed)"
+           text
+           (path->string root)))
+  (define-values (head-ok? head-text) (git-run root (list "rev-parse" "--verify" "--quiet" "HEAD")))
+  (unless head-ok?
+    (error 'full-plan
+           "cannot verify --candidate ~a under ~a: HEAD does not resolve (fail closed)"
+           text
+           (path->string root)))
+  (define head (string-trim head-text))
+  (unless (string-prefix? head text)
+    (error
+     'full-plan
+     "--candidate ~a does not match the checkout at ~a (HEAD is ~a); refusing to verify a different tree"
+     text
+     (path->string root)
+     head))
+  (define-values (status-ok? status-text)
+    (git-run root (list "status" "--porcelain" "--untracked-files=no")))
+  (unless status-ok?
+    (error 'full-plan
+           "cannot verify --candidate ~a under ~a: git status failed (fail closed)"
+           text
+           (path->string root)))
+  (define dirty (git-lines status-text))
+  (when (pair? dirty)
+    (error
+     'full-plan
+     "--candidate ~a names a dirty checkout at ~a (~a tracked change(s)); refusing to verify uncommitted bytes"
+     text
+     (path->string root)
+     (length dirty)))
+  ;; The verified identity is the resolved commit, never the caller's spelling.
+  head)
+
+(define (qt-ci-explain-lines plan #:command [command "./qt full"])
   (define spec (qt-ci-plan-spec plan))
   (define mode (qt-ci-plan-mode plan))
   (define suite (qt-ci-plan-suite plan))
@@ -1792,7 +1963,10 @@
         (qt-ci-run-files plan)))
   (append
    (list
-    (format "full: ~a under ~a" (qt-ci-selection-noun plan) (path->string (qt-ci-plan-root plan)))
+    (format "~a: ~a under ~a"
+            (if (equal? command "./qt full") "full" command)
+            (qt-ci-selection-noun plan)
+            (path->string (qt-ci-plan-root plan)))
     (format "label: ~a" (qt-ci-label plan))
     (format "selection: ~a files (selection only; nothing executed, nothing cleaned)" (length files))
     (format "coverage: ~a" (qt-ci-coverage-line plan))
@@ -1819,22 +1993,23 @@
        '())
    (list (full-timeout-policy-line files)
          (full-mutation-policy-line files)
-         (full-execution-support-line "./qt full"))
+         (full-execution-support-line command))
    files
    (list "")
-   (list "NOT VERIFIED by ./qt full:")
+   (list (format "NOT VERIFIED by ~a:" command))
    (for/list ([item (in-list full-obligations)])
      (format "  - ~a" item))
    (list "")
-   (list "NOT PROVIDED by ./qt full (counted by other gates):")
+   (list (format "NOT PROVIDED by ~a (counted by other gates):" command))
    (for/list ([item (in-list full-not-provided)])
      (format "  - ~a" item))))
 
 (define qt-ci-pass-pattern #rx"^full passed: [0-9]+ files, [0-9]+ tests \\([^)]+\\)$")
 
-(define (qt-ci-pass-line plan results)
+(define (qt-ci-pass-line plan results #:command [command "full"])
   (define tests (for/sum ([r (in-list results)]) (qt-result-total r)))
-  (format "full passed: ~a files, ~a tests (~a; ~a)"
+  (format "~a passed: ~a files, ~a tests (~a; ~a)"
+          command
           (length results)
           tests
           (qt-ci-label plan)
