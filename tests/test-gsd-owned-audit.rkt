@@ -5,7 +5,7 @@
 ;; @isolation process
 ;; @mutates repo
 ;; @timeout 1500
-;; @covers scripts/gsd-delivery-auto-review.rkt scripts/gsd-binding-data.rkt scripts/gsd-gates/owned-audit.rkt extensions/gsd/review-proof.rkt scripts/gsd-wave-gate.rkt
+;; @covers scripts/gsd-delivery-auto-review.rkt scripts/gsd-binding-data.rkt scripts/gsd-gates/owned-audit.rkt extensions/gsd/review-proof.rkt
 ;;
 ;; Native port of the deleted `tests/test-gsd-owned-audit.py` (thirteen
 ;; cases) plus the "blocked readiness cannot downgrade authentic legacy

@@ -47,7 +47,7 @@
                                     "legacy-red-ready"
                                     "registered-probe-ready"))
                           (format "underlying fixture readiness: ~s" readiness))
-         (define root (string->path (hash-ref world 'root)))
+         (define root (hash-ref world 'root))
          (check-true (directory-exists? (build-path root "q")))
          (define receipt (hash-ref world 'receipt))
          (define rec
