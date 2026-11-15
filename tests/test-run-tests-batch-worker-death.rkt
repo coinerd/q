@@ -78,13 +78,20 @@
                      (with-handlers ([exn? values])
                        (call-with-values
                         (lambda ()
-                          ;; Omit #:scheduler to exercise the default batch path.
+                          ;; The deterministic batch barrier is the only scheduler.
                           (run-suite-once selected 2 30000 #f "explicit" 1 1 'subprocess #f #f 'vps))
                         list)))))))
+      ;; A worker is "active" while it is inside the runner's per-file
+      ;; execution path (`run-single-file`, its subprocess executor, or the
+      ;; result builder that waits on the child). The marker set is named rather
+      ;; than pinned to one internal frame: §11.3 folded the execution modes into
+      ;; a single subprocess path, which changes which frames are reified while a
+      ;; child is awaited.
       (define (active-workers)
+        (define entry-frames '(run-single-file run-single-file/subprocess build-result-from-process))
         (filter (lambda (t)
-                  (assq 'run-single-file/subprocess
-                        (continuation-mark-set->context (continuation-marks t))))
+                  (for/or ([frame (in-list (continuation-mark-set->context (continuation-marks t)))])
+                    (and (pair? frame) (memq (car frame) entry-frames))))
                 (descendant-threads cust (current-custodian))))
       (dynamic-wind
        void
@@ -92,7 +99,17 @@
          (unless (wait-until
                   (lambda ()
                     (and (file-exists? ready) (file-exists? passed) (= (length (active-workers)) 1))))
-           (fail "fixtures did not reach one blocked worker after the passing fixture ran"))
+           (fail (format
+                  "fixtures did not reach one blocked worker after the passing fixture ran (~a)"
+                  (hasheq 'ready
+                          (file-exists? ready)
+                          'passed
+                          (file-exists? passed)
+                          'workers
+                          (length (active-workers))
+                          'contexts
+                          (for/list ([t (in-list (descendant-threads cust (current-custodian)))])
+                            (continuation-mark-set->context (continuation-marks t)))))))
          (kill-thread (car (active-workers)))
          (define outcome (sync/timeout 5 results))
          (unless outcome

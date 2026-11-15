@@ -29,7 +29,7 @@
                   platform-file?
                   shard-files
                   get-file-metadata)
-         (only-in "../scripts/run-tests/cli.rkt" known-suites)
+         (only-in "../scripts/run-tests/runner.rkt" known-suites)
          (only-in "../scripts/run-tests/inventory.rkt" compute-inventory-hash selected-paths-digest))
 
 (define-runtime-path fixture-root "../tests/fixtures/run-tests-discovery")

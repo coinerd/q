@@ -22,7 +22,7 @@
 (require rackunit
          rackunit/text-ui
          racket/port
-         (only-in "../scripts/run-tests/parse.rkt" make-test-file-result test-result->jsexpr)
+         (only-in "../scripts/run-tests/reporting.rkt" make-test-file-result test-result->jsexpr)
          (only-in "../scripts/run-tests/reporting.rkt"
                   compute-verdict
                   summary-exit-code
@@ -179,100 +179,11 @@
    (check-false (hash-ref unknown-record 'known_failure))))
 
 ;; ---------------------------------------------------------------------------
-;; W7: additive per-file execution-mode telemetry.
+;; Old-evidence compatibility: pre-W7 per-file JSON carries;; requested_execution_mode / effective_execution_mode /
+;; grouped_fallback_reason. Those fields described the grouped executor, which
+;; is deleted (§11.3), so the writer no longer emits them — retained CI
+;; artifacts remain readable and are never assumed to lack or own any key.
 ;; ---------------------------------------------------------------------------
-
-;; Stable named fallback reasons. When grouped mode is requested but a file
-;; executes in subprocess, grouped_fallback_reason must name exactly why.
-(define known-fallback-reasons
-  (list "module-test-missing" "side-effect-unsafe" "worker-incompatible" "unknown"))
-
-(define (effective-field r)
-  (hash-ref (test-result->jsexpr r) 'effective_execution_mode))
-(define (requested-field r)
-  (hash-ref (test-result->jsexpr r) 'requested_execution_mode))
-(define (fallback-field r)
-  (hash-ref (test-result->jsexpr r) 'grouped_fallback_reason))
-
-(define-test-suite
- execution-mode-telemetry-tests
- (test-case "pre-W7 construction still yields all three additive keys"
-   (define r (make-passed "test-a.rkt" 5))
-   (define j (test-result->jsexpr r))
-   (check-true (hash-has-key? j 'requested_execution_mode))
-   (check-true (hash-has-key? j 'effective_execution_mode))
-   (check-true (hash-has-key? j 'grouped_fallback_reason))
-   (check-equal? (requested-field r) "subprocess")
-   (check-equal? (effective-field r) "subprocess")
-   (check-false (fallback-field r)))
- (test-case "grouped request honored → effective grouped, no fallback reason"
-   (define r
-     (make-test-file-result "test-a.rkt" 0 #"" #"" 100 1 0 1 #:requested-execution-mode "grouped"))
-   (check-equal? (requested-field r) "grouped")
-   (check-equal? (effective-field r) "grouped")
-   (check-false (fallback-field r)))
- (test-case "grouped request that ran subprocess names a stable fallback reason"
-   (define r
-     (make-test-file-result "test-a.rkt"
-                            0
-                            #""
-                            #""
-                            100
-                            1
-                            0
-                            1
-                            #:requested-execution-mode "grouped"
-                            #:grouped-fallback-reason 'module-test-missing))
-   (check-equal? (requested-field r) "grouped")
-   (check-equal? (effective-field r) "subprocess")
-   (define reason (fallback-field r))
-   (check-true (string? reason))
-   (check-not-false (member reason known-fallback-reasons)
-                    "fallback reason must be from the stable named set"))
- (test-case "fallback reason is a JSON string, not a symbol serialization artifact"
-   (define r
-     (make-test-file-result "test-a.rkt"
-                            0
-                            #""
-                            #""
-                            100
-                            1
-                            0
-                            1
-                            #:requested-execution-mode "grouped"
-                            #:grouped-fallback-reason 'side-effect-unsafe))
-   (check-equal? (fallback-field r) "side-effect-unsafe"))
- (test-case "effective mode never claims grouped while a fallback reason is present"
-   (define r
-     (make-test-file-result "test-a.rkt"
-                            0
-                            #""
-                            #""
-                            100
-                            1
-                            0
-                            1
-                            #:requested-execution-mode "grouped"
-                            #:grouped-fallback-reason 'side-effect-unsafe))
-   (check-not-equal? (effective-field r) "grouped"))
- (test-case "telemetry survives a JSON round-trip"
-   (define r
-     (make-test-file-result "test-a.rkt"
-                            0
-                            #""
-                            #""
-                            100
-                            1
-                            0
-                            1
-                            #:requested-execution-mode "grouped"
-                            #:grouped-fallback-reason 'module-test-missing))
-   (define round-tripped
-     (read-json (open-input-string (with-output-to-string (lambda ()
-                                                            (write-json (test-result->jsexpr r)))))))
-   (check-equal? (hash-ref round-tripped 'requested_execution_mode) "grouped")
-   (check-equal? (hash-ref round-tripped 'effective_execution_mode) "subprocess")
-   (check-equal? (hash-ref round-tripped 'grouped_fallback_reason) "module-test-missing")))
 
 (define-test-suite
  old-evidence-compat-tests
@@ -282,7 +193,8 @@
      "{\"path\":\"tests/old.rkt\",\"category\":\"PASS\",\"exit_code\":0,\"elapsed_ms\":10,\"passed\":1,\"failed\":0,\"total\":1,\"output\":\"ok\"}")
    (define parsed (read-json (open-input-string old-json)))
    (check-equal? (hash-ref parsed 'path) "tests/old.rkt")
-   ;; Additive consumers must use defaults, never assume presence.
+   ;; Consumers that still look at the grouped-era keys must use defaults, never
+   ;; assume presence.
    (check-false (hash-ref parsed 'requested_execution_mode #f))
    (check-false (hash-ref parsed 'effective_execution_mode #f))
    (check-false (hash-ref parsed 'grouped_fallback_reason #f)))
@@ -299,5 +211,4 @@
                                   format-verdict-line-tests
                                   print-summary-verdict-tests
                                   ledger-jsexpr-escalation-tests
-                                  execution-mode-telemetry-tests
                                   old-evidence-compat-tests)))

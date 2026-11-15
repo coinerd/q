@@ -791,30 +791,12 @@
 ;; executes a file. Every fixture appends one line to an EXTERNAL counter file
 ;; (path embedded as a literal) on each execution of its (module+ test ...)
 ;; submodule, so the invocation count is observable from this test process in
-;; every mode. Contract pinned here:
-;;   - forced #:mode 'grouped-in-process actually runs grouped (execution-mode-of)
-;;     and a parsed-output fixture executes exactly once, even a failing one;
-;;   - a healthy fixture after the failure proves the grouped host survives;
-;;   - zero-parsed grouped execution is inconclusive and never replayed;
-;;     its external counter reads exactly 1;
-;;   - a policy-grouped request in an un-expanded area names 'area-not-expanded
-;;     without changing the area rollout;
+;; every mode. Contract pinned here (the grouped-executor cases are deleted
+;; together with the executor, §11.3):
 ;;   - plain raco, direct racket, and runner-subprocess routes execute exactly
 ;;     once each; the runner aggregate exits nonzero on a failing file.
 
 (define-runtime-path runner-submodule-path "../scripts/run-tests/runner.rkt")
-(define-runtime-path runner-parse-path "../scripts/run-tests/parse.rkt")
-
-(define (grouped-runner-ref sym)
-  ;; Shares runner-ref's module instance (same resolved path) but reaches
-  ;; exports the run-tests.rkt facade does not re-provide.
-  (hash-ref! runner-cache sym (lambda () (dynamic-require runner-submodule-path sym))))
-
-(define (parse-ref sym)
-  ;; parse.rkt exports (W7 telemetry accessors) not re-provided by the
-  ;; facade; same module instance the facade already loads.
-  (hash-ref! runner-cache sym (lambda () (dynamic-require runner-parse-path sym))))
-
 (define (r92-write-counter-fixture fixture-path counter-path kind)
   ;; kind ∈ {healthy, failing, zero-parsed}. healthy/failing self-report via
   ;; run-tests (parsed-output routes) and carry the standalone delegation
@@ -883,103 +865,6 @@
   (define dir (path-only fixture))
   (when (directory-exists? dir)
     (delete-directory/files dir)))
-
-(test-case "BUG-0092: forced grouped-in-process actually runs grouped, exactly once"
-  (define run (runner-ref 'run-single-file))
-  (define mode-of (grouped-runner-ref 'execution-mode-of))
-  (define-values (fixture counter) (r92-make-counter-fixture 'healthy))
-  (define result
-    (parameterize ([(grouped-runner-ref 'current-requested-execution-mode) #f])
-      (run fixture #:timeout 60000 #:mode 'grouped-in-process)))
-  (check-equal? ((runner-ref 'test-file-result-exit-code) result) 0)
-  (check-equal? ((runner-ref 'test-file-result-total) result) 1)
-  (check-equal? ((runner-ref 'test-file-result-passed) result) 1)
-  ;; actual execution-mode telemetry: grouped really happened
-  (check-equal? ((parse-ref 'test-file-result-requested-execution-mode) result) "grouped-in-process")
-  (check-equal? ((parse-ref 'test-file-result-grouped-fallback-reason) result) #f)
-  (check-equal? (mode-of fixture) 'grouped-in-process)
-  ;; external counter: exactly one execution, no duplicates
-  (check-equal? (r92-count-invocations counter) 1)
-  (r92-cleanup! fixture counter))
-
-(test-case "BUG-0092: grouped failing fixture executes once, fails nonzero, host survives"
-  (define run (runner-ref 'run-single-file))
-  (define mode-of (grouped-runner-ref 'execution-mode-of))
-  (define-values (bad bad-counter) (r92-make-counter-fixture 'failing))
-  (define fail-result
-    (parameterize ([(grouped-runner-ref 'current-requested-execution-mode) #f])
-      (run bad #:timeout 60000 #:mode 'grouped-in-process)))
-  ;; failing-file result: parsed failure with nonzero per-file exit
-  (check-equal? ((runner-ref 'test-file-result-exit-code) fail-result) 1)
-  (check-equal? ((runner-ref 'test-file-result-failed) fail-result) 1)
-  (check-equal? ((runner-ref 'test-file-result-total) fail-result) 1)
-  (check-equal? ((parse-ref 'test-file-result-grouped-fallback-reason) fail-result) #f)
-  (check-equal? (mode-of bad) 'grouped-in-process)
-  ;; parsed-output route: exactly one execution even when failing (no rerun)
-  (check-equal? (r92-count-invocations bad-counter) 1)
-  ;; a healthy fixture right after the failure proves the grouped host survived
-  (define-values (good good-counter) (r92-make-counter-fixture 'healthy))
-  (define healthy-result
-    (parameterize ([(grouped-runner-ref 'current-requested-execution-mode) #f])
-      (run good #:timeout 60000 #:mode 'grouped-in-process)))
-  (check-equal? ((runner-ref 'test-file-result-exit-code) healthy-result) 0)
-  (check-equal? ((runner-ref 'test-file-result-total) healthy-result) 1)
-  (check-equal? (r92-count-invocations good-counter) 1)
-  (r92-cleanup! bad bad-counter)
-  (r92-cleanup! good good-counter))
-
-(test-case "BUG-0092: zero-parsed grouped execution is never replayed"
-  (define run (runner-ref 'run-single-file))
-  (define mode-of (grouped-runner-ref 'execution-mode-of))
-  (define-values (fixture counter) (r92-make-counter-fixture 'zero-parsed))
-  (define result
-    (parameterize ([(grouped-runner-ref 'current-requested-execution-mode) #f])
-      (run fixture #:timeout 60000 #:mode 'grouped-in-process)))
-  (check-equal? ((runner-ref 'test-file-result-exit-code) result) 0)
-  (check-equal? ((runner-ref 'test-file-result-total) result) 0)
-  (check-equal? ((parse-ref 'classify-test-result) result) 'ZERO_PARSED)
-  (check-false ((parse-ref 'test-file-result-grouped-fallback-reason) result))
-  (check-equal? (mode-of fixture) 'grouped-in-process)
-  (check-equal? (r92-count-invocations counter) 1)
-  ;; Exercise aggregate strictness on the same grouped fixture, without replay.
-  (define run-suite (grouped-runner-ref 'run-suite-once))
-  (define (suite-exit strict?)
-    (let/ec return
-      (parameterize ([current-output-port (open-output-string)]
-                     [current-error-port (open-output-string)]
-                     [exit-handler (lambda (code) (return code))])
-        (define-values (code results)
-          (run-suite (list fixture) 1 60000 strict? 'all 1 1 'grouped-in-process #f #f #f))
-        (check-equal? ((parse-ref 'classify-test-result) (car results)) 'ZERO_PARSED)
-        code)))
-  (check-equal? (suite-exit #t) 4)
-  (check-equal? (r92-count-invocations counter) 2)
-  (check-equal? (suite-exit #f) 0)
-  (check-equal? (r92-count-invocations counter) 3)
-  (r92-cleanup! fixture counter))
-
-(test-case "BUG-0092: policy-grouped request in an un-expanded area names its fallback"
-  (define run (runner-ref 'run-single-file))
-  (define mode-of (grouped-runner-ref 'execution-mode-of))
-  (define-values (fixture counter) (r92-make-counter-fixture 'healthy))
-  ;; read-only observation: this test never touches the rollout config
-  (check-equal? (hash-ref ((runner-ref 'grouped-area-config)) "ci" #f) 'grouped)
-  (define result
-    (parameterize ([(grouped-runner-ref 'current-requested-execution-mode) #f])
-      (run fixture #:timeout 60000 #:mode 'grouped)))
-  (check-equal? ((parse-ref 'test-file-result-requested-execution-mode) result) "grouped")
-  (check-equal? ((parse-ref 'test-file-result-grouped-fallback-reason) result) 'area-not-expanded)
-  (check-equal? (mode-of fixture) 'subprocess)
-  (check-equal? ((runner-ref 'test-file-result-exit-code) result) 0)
-  (check-equal? (r92-count-invocations counter) 1)
-  ;; aggregate named telemetry: one grouped-not-expanded row for the area
-  (define rows ((runner-ref 'grouped-fallback-rows) (list result)))
-  (check-equal? (length rows) 1)
-  (check-equal? (hash-ref (first rows) 'area) "(other)")
-  (check-equal? (hash-ref (first rows) 'kind) "grouped-not-expanded")
-  (check-equal? (hash-ref (first rows) 'reason) "no-exact-comparison-evidence")
-  (check-equal? (hash-ref (first rows) 'files) 1)
-  (r92-cleanup! fixture counter))
 
 (test-case "BUG-0092: plain raco route executes the fixture exactly once"
   (define raco-bin (find-executable-path "raco"))

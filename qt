@@ -46,25 +46,77 @@
       '()))
 ;; Shared option grammar. Plain commands (`quick`, `default`, `release`, and a
 ;; bare `full`) use --explain/--jobs/--changed plus validated positional words;
-;; the CI-surface flags (Phase D) are accepted only by `full` (see
-;; `run-ci-surface`). Unsupported options fail BEFORE any selection or
-;; execution, and every CI flag that cannot be honored fails closed instead of
-;; being ignored silently.
+;; the CI-surface flags (Phase D) are accepted by `full`, by a bare
+;; `./qt --lane NAME`, and by `default --file FILE` (explicit reproduction).
+;; Unsupported options fail BEFORE any selection or execution, and every CI
+;; flag that cannot be honored fails closed instead of being ignored silently.
 (struct cli-options
-        (jobs explain? changed? positional
-              json-out suite shard-index shard-total timeout profile ledger-path
-              record-gate? repeat sequential? mode scheduler ordering shard-plan durations
-              files ci-flags)
-        #:transparent)
+        (jobs explain?
+              changed?
+              positional
+              json-out
+              suite
+              shard-index
+              shard-total
+              timeout
+              profile
+              ledger-path
+              record-gate?
+              repeat
+              sequential?
+              mode
+              shard-plan
+              durations
+              files
+              lane
+              candidate
+              ci-flags)
+  #:transparent)
 
 (define (parse-options rest)
   (define opts
-    (hash-copy
-     (hash 'jobs 2 'explain? #f 'changed? #f 'positional '()
-           'json-out #f 'suite #f 'shard-index 0 'shard-total 1 'timeout #f
-           'profile 'local 'ledger-path #f 'record-gate? #f 'repeat 1
-           'sequential? #f 'mode 'auto 'scheduler 'batch 'ordering #f
-           'shard-plan #f 'durations #f 'files '() 'ci-flags '())))
+    (hash-copy (hash 'jobs
+                     2
+                     'explain?
+                     #f
+                     'changed?
+                     #f
+                     'positional
+                     '()
+                     'json-out
+                     #f
+                     'suite
+                     #f
+                     'shard-index
+                     0
+                     'shard-total
+                     1
+                     'timeout
+                     #f
+                     'profile
+                     'local
+                     'ledger-path
+                     #f
+                     'record-gate?
+                     #f
+                     'repeat
+                     1
+                     'sequential?
+                     #f
+                     'mode
+                     'auto
+                     'shard-plan
+                     #f
+                     'durations
+                     #f
+                     'files
+                     '()
+                     'lane
+                     #f
+                     'candidate
+                     #f
+                     'ci-flags
+                     '())))
   (define seen (make-hash))
   (define (mark! flag)
     (when (hash-ref seen flag #f)
@@ -166,16 +218,6 @@
        (ci! "--mode")
        (hash-set! opts 'mode (string->symbol (required! (cdr rest) "--mode")))
        (loop (cddr rest))]
-      [(equal? (car rest) "--scheduler")
-       (mark! "--scheduler")
-       (ci! "--scheduler")
-       (hash-set! opts 'scheduler (string->symbol (required! (cdr rest) "--scheduler")))
-       (loop (cddr rest))]
-      [(equal? (car rest) "--ordering")
-       (mark! "--ordering")
-       (ci! "--ordering")
-       (hash-set! opts 'ordering (string->symbol (required! (cdr rest) "--ordering")))
-       (loop (cddr rest))]
       [(equal? (car rest) "--shard-plan")
        (mark! "--shard-plan")
        (ci! "--shard-plan")
@@ -185,6 +227,15 @@
        (mark! "--durations")
        (ci! "--durations")
        (hash-set! opts 'durations (required! (cdr rest) "--durations"))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--lane")
+       (mark! "--lane")
+       (ci! "--lane")
+       (hash-set! opts 'lane (required! (cdr rest) "--lane"))
+       (loop (cddr rest))]
+      [(equal? (car rest) "--candidate")
+       (mark! "--candidate")
+       (hash-set! opts 'candidate (required! (cdr rest) "--candidate"))
        (loop (cddr rest))]
       [(equal? (car rest) "--file")
        (ci! "--file")
@@ -209,12 +260,61 @@
                (hash-ref opts 'repeat)
                (hash-ref opts 'sequential?)
                (hash-ref opts 'mode)
-               (hash-ref opts 'scheduler)
-               (hash-ref opts 'ordering)
                (hash-ref opts 'shard-plan)
                (hash-ref opts 'durations)
                (reverse (hash-ref opts 'files))
+               (hash-ref opts 'lane)
+               (hash-ref opts 'candidate)
                (hash-ref opts 'ci-flags)))
+
+;; `BASE..HEAD` (a commit range) or a single base ref (working-tree diff).
+;; Anything else is malformed and fails closed before any git call.
+(define (parse-changed-range text)
+  (define parts (string-split text ".."))
+  (cond
+    [(= (length parts) 2)
+     (define base (car parts))
+     (define head (cadr parts))
+     (when (or (string=? base "") (string=? head ""))
+       (fail "malformed --changed range: ~a (expected BASE..HEAD)" text))
+     (values base head)]
+    [(= (length parts) 1)
+     (when (string=? text "")
+       (fail "--changed requires a base ref or BASE..HEAD"))
+     (values text #f)]
+    [else (fail "malformed --changed range: ~a (expected BASE..HEAD)" text)]))
+
+;; Conservative impact selection over the audited quick owners. The @covers
+;; manifest and the impact graph decide which owners a change touches; an
+;; unattributable owner is INCLUDED (fail open) and an escalation includes every
+;; owner. This is a REPRODUCTION label, never a PR claim, and an empty selection
+;; is a failure (zero files is never a pass).
+(define (quick-changed-report text)
+  (define-values (base head) (parse-changed-range text))
+  (define owners (map car audited))
+  (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
+    (define-values (changed label outside)
+      (if head
+          (commits-changed base head root)
+          (working-tree-changed base root)))
+    (when (null? changed)
+      (fail "the diff against ~a is empty (zero selection is a failure, not a pass)" label))
+    (quick-changed-owners root owners changed #:base label #:outside outside)))
+
+;; The audited entries a change report selects, in the audited (stable) order.
+(define (quick-changed-entries report)
+  (define included (change-report-included report))
+  (define entries
+    (for/list ([entry (in-list audited)]
+               #:when (member (car entry) included))
+      entry))
+  (when (null? entries)
+    (fail (string-append
+           "changed selection is empty: the diff against ~a affects none of the ~a audited quick "
+           "owners (an unattributed owner would have been INCLUDED, fail open)")
+          (change-report-base report)
+          (length audited)))
+  entries)
 
 ;; `quick` reads only its own plain options: a CI-surface flag must never look
 ;; like a quick option.
@@ -225,14 +325,16 @@
   (define changed? (cli-options-changed? opts))
   (define positional (cli-options-positional opts))
   (when (pair? (cli-options-ci-flags opts))
-    (fail "quick does not accept CI-surface option ~a (only ./qt full does)"
+    (fail "quick does not accept CI-surface option ~a (only ./qt full / ./qt --lane NAME do)"
           (car (cli-options-ci-flags opts))))
-  (when changed?
-    (fail "quick does not accept --changed (use full or default)"))
   (when (> (length positional) 1)
-    (fail "quick accepts at most one file"))
+    (fail "quick accepts at most one file or one --changed BASE..HEAD"))
+  (when (and changed? (not (= (length positional) 1)))
+    (fail "quick --changed requires BASE..HEAD (an explicit range; nothing is selected silently)"))
+  (define report (and changed? (quick-changed-report (car positional))))
   (define selected
-    (and (pair? positional)
+    (and (not changed?)
+         (pair? positional)
          (let* ([p (simplify-path (path->complete-path (car positional) root))]
                 [entry (for/first ([entry audited]
                                    #:when (equal? p (simplify-path (build-path root (car entry)))))
@@ -241,15 +343,22 @@
              (fail "file is not admitted to quick: ~a" (car positional)))
            entry)))
   (define entries
-    (if selected
-        (list selected)
-        audited))
+    (cond
+      [report (quick-changed-entries report)]
+      [selected (list selected)]
+      [else audited]))
   (for ([entry entries])
     (unless (audit-ok? root entry)
       (fail "audit drift or symlink: ~a" (car entry))))
   (cond
     [explain?
-     (printf "quick: audited selection only\n")
+     (cond
+       [report
+        (printf
+         "quick: changed-file impact selection over the audited quick owners (reproduction only, not a PR pass)\n")
+        (for ([line (in-list (change-report-lines report))])
+          (printf "~a\n" line))]
+       [else (printf "quick: audited selection only\n")])
      (for ([entry entries])
        (printf "  ~a\n" (car entry)))]
     [else
@@ -276,9 +385,12 @@
                   (equal? (sort (map quick-result-path results) string<?) (sort files string<?))
                   (andmap quick-result-valid? results))
        (fail "quick failed or produced missing/invalid results"))
-     (printf "quick passed: ~a files, ~a tests (not PR/full verification)\n"
+     (printf "quick passed: ~a files, ~a tests (~a)\n"
              (length results)
-             (apply + (map quick-result-total results)))]))
+             (apply + (map quick-result-total results))
+             (if report
+                 "changed-file impact reproduction only, not a PR pass"
+                 "not PR/full verification"))]))
 
 ;; ============================================================
 ;; CI surface (`./qt full --json-out/--suite/--shard/--file/...`)
@@ -286,22 +398,40 @@
 ;; The spec is validated and resolved by full-plan.rkt, which lazily loads the
 ;; runner internals. Every flag is either forwarded to scripts/run-tests or
 ;; refused with a `qt: ...` message that NAMES it (never ignored silently).
-(define (run-ci-surface opts)
+;;
+;; `#:lane NAME` supplies the policy metadata CI used to hard-code in YAML: the
+;; lane names an existing runner suite plus its timeout/shard-plan policy (see
+;; `qt-lanes` in full-plan.rkt). Explicit flags still win (a workflow matrix owns
+;; the shard index/total it instantiates); `--suite`/`--file` are refused with a
+;; lane because the lane already names the selection.
+(define (run-ci-surface opts #:lane [lane #f] #:command [command #f])
+  (define lane-suite (and lane (qt-lane-suite lane)))
+  (define lane-total (and lane (qt-lane-shard-total lane)))
+  (define lane-shard-plan (and lane (qt-lane-shard-plan lane)))
+  (define requested-total (cli-options-shard-total opts))
+  (define total (if (and lane (<= requested-total 1) (> lane-total 1)) lane-total requested-total))
+  (define shard-plan (or (cli-options-shard-plan opts) lane-shard-plan))
+  (when (and lane (equal? shard-plan "active") (<= total 1))
+    (fail
+     "--lane ~a needs --shard-total > 1 (a single shard makes the duration-aware plan meaningless)"
+     (qt-lane-name lane)))
+  (define label (or command (if lane "./qt --lane" "./qt full")))
+  ;; The pass line names the LANE command (`full`/`default`), the explain header
+  ;; names the exact spelling that produced the plan.
+  (define verb (if (and command (string-contains? command "default")) "default" "full"))
   (define spec
-    (qt-ci-spec (cli-options-suite opts)
+    (qt-ci-spec (or (cli-options-suite opts) lane-suite)
                 (cli-options-files opts)
                 (cli-options-shard-index opts)
-                (cli-options-shard-total opts)
-                (cli-options-timeout opts)
+                total
+                (or (cli-options-timeout opts) (and lane (qt-lane-timeout lane)))
                 (cli-options-profile opts)
                 (cli-options-ledger-path opts)
                 (cli-options-json-out opts)
                 (cli-options-record-gate? opts)
                 (cli-options-repeat opts)
                 (cli-options-mode opts)
-                (cli-options-scheduler opts)
-                (cli-options-ordering opts)
-                (cli-options-shard-plan opts)
+                shard-plan
                 (cli-options-durations opts)
                 args))
   (define plan
@@ -312,16 +442,29 @@
       ;; cannot be honored here, so they fail closed instead of being ignored.
       (let ()
         (define conflicts
-          (append (if (cli-options-json-out opts) (list "--json-out") '())
-                  (if (cli-options-record-gate? opts) (list "--record-gate-evidence") '())
-                  (if (cli-options-shard-plan opts) (list "--shard-plan") '())))
+          (append (if (cli-options-json-out opts)
+                      (list "--json-out")
+                      '())
+                  (if (cli-options-record-gate? opts)
+                      (list "--record-gate-evidence")
+                      '())
+                  (if (cli-options-shard-plan opts)
+                      (list "--shard-plan")
+                      '())))
         (unless (null? conflicts)
-          (fail
-           (string-append "--explain cannot be combined with ~a: it executes nothing, so those "
-                          "outputs would be ignored (fail closed)")
-           (string-join conflicts ", ")))
+          (fail (string-append "--explain cannot be combined with ~a: it executes nothing, so those "
+                               "outputs would be ignored (fail closed)")
+                (string-join conflicts ", ")))
+        (when lane
+          (emit-line
+           (format "lane: ~a (suite ~a; timeout ~a; shard-plan ~a; ~a)"
+                   (qt-lane-name lane)
+                   (qt-lane-suite lane)
+                   (or (cli-options-timeout opts) (qt-lane-timeout lane) "@timeout metadata")
+                   shard-plan
+                   (qt-lane-description lane))))
         (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
-          (for ([line (in-list (qt-ci-explain-lines plan))])
+          (for ([line (in-list (qt-ci-explain-lines plan #:command label))])
             (emit-line line))))
       (let ()
         (define outcome
@@ -334,7 +477,7 @@
           (unless (zero? (qt-ci-outcome-exit-code outcome))
             (fail "full failed (exit ~a; see the per-file evidence above)"
                   (qt-ci-outcome-exit-code outcome)))
-          (emit-line (qt-ci-pass-line plan (qt-ci-outcome-results outcome)))))))
+          (emit-line (qt-ci-pass-line plan (qt-ci-outcome-results outcome) #:command verb))))))
 
 ;; `full`, `default` and `release` share one path: resolve the plan once, then
 ;; either print it (--explain: nothing executed, nothing cleaned) or execute it
@@ -352,21 +495,56 @@
   (define explain? (cli-options-explain? opts))
   (define changed? (cli-options-changed? opts))
   (define ci-flags (cli-options-ci-flags opts))
+  (define lane-name (cli-options-lane opts))
+  (define candidate (cli-options-candidate opts))
+  ;; `--candidate` belongs to `release` ONLY and is verified before anything is
+  ;; selected, printed or executed: a different HEAD or a dirty checkout is
+  ;; refused. The release obligations stay unconditional.
+  (when (and candidate (not (eq? lane 'release)))
+    (fail "~a does not accept --candidate (only ./qt release --candidate SHA)" name))
+  (when (and lane-name (not (eq? lane 'full)))
+    (fail "~a does not accept --lane (use ./qt --lane NAME or ./qt full --lane NAME)" name))
+  (when (and lane-name (cli-options-suite opts))
+    (fail "--lane cannot be combined with --suite: the lane already names the suite selection"))
+  (when (and lane-name (pair? (cli-options-files opts)))
+    (fail "--lane cannot be combined with --file: the lane already names the suite selection"))
+  (when (and lane-name changed?)
+    (fail "--lane cannot be combined with --changed: a lane is the CI selection"))
+  (when candidate
+    (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
+      (release-candidate-check root candidate)))
   (cond
     [(pair? ci-flags)
      (cond
+       ;; Explicit reproduction on the PR lane: `--file` only, same label rules
+       ;; as `full --file` (never a PR pass, never sharded, no gate evidence).
+       [(eq? lane 'default)
+        (define others (filter-not (lambda (flag) (equal? flag "--file")) ci-flags))
+        (when (pair? others)
+          (fail "default does not accept CI-surface option ~a (only ./qt full / ./qt --lane NAME do)"
+                (car others)))
+        (when changed?
+          (fail "--changed cannot be combined with --file"))
+        (when (pair? positional)
+          (fail "default accepts no positional arguments: ~a (use --file FILE)" (car positional)))
+        (run-ci-surface opts #:command "./qt default")]
        [(not (eq? lane 'full))
-        (fail "~a does not accept CI-surface option ~a (only ./qt full does)"
+        (fail "~a does not accept CI-surface option ~a (only ./qt full / ./qt --lane NAME do)"
               name
               (car ci-flags))]
        [changed?
-        (fail "--changed cannot be combined with CI-surface options (~a); --changed is an impact selection"
-              (string-join ci-flags ", "))]
+        (fail
+         "--changed cannot be combined with CI-surface options (~a); --changed is an impact selection"
+         (string-join ci-flags ", "))]
        [(pair? positional)
         (fail
          "full accepts no positional arguments: ~a (use --file FILE for an explicit reproduction run)"
          (car positional))]
-       [else (run-ci-surface opts)])]
+       [else
+        (define lane-entry
+          (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
+            (and lane-name (qt-lane-ref lane-name))))
+        (run-ci-surface opts #:lane lane-entry #:command (if lane-name "./qt --lane" "./qt full"))])]
     [else (run-plain-lane-command lane name opts positional jobs explain? changed?)]))
 
 ;; Plain lanes (`full` with no CI-surface flag, `default`, `release`): behaviour
@@ -432,8 +610,52 @@
           [(full) (emit-line (full-pass-line run))]
           [else (emit-line (default-pass-line run))])])]))
 
+;; One usage table for the interface: every implemented command and option.
+;; `./qt --help` (and `./qt help`) print it and exit 0; the error text names
+;; exactly these commands, so help can never advertise a spelling that fails
+;; closed.
+(define (show-usage)
+  (displayln "Usage: ./qt COMMAND [OPTIONS]")
+  (newline)
+  (displayln "Commands:")
+  (displayln "  quick [FILE]                    Audited pure unit suite (one admitted file)")
+  (displayln
+   "  quick --changed BASE..HEAD      Changed-code impact reproduction over the audited owners")
+  (displayln "  default                         Required PR lane (fast/PR selection)")
+  (displayln "  default --file FILE             Explicit reproduction, not a complete PR pass")
+  (displayln "  full                            Complete available regression suite")
+  (displayln "  full --file FILE                Explicit reproduction, not a full/PR pass")
+  (displayln "  release --candidate SHA         Release verification of the exact candidate")
+  (displayln "  help                            This message (also --help)")
+  (newline)
+  (displayln "Options:")
+  (displayln "  --jobs N                        Bounded parallel workers (default 2)")
+  (displayln "  --explain                       Print the selection only; execute nothing")
+  (displayln "  --lane NAME                     CI lane over an existing suite/shard spec")
+  (displayln
+   "                                  (valid: fast, fast-shard, platform, security, workflows,")
+  (displayln
+   "                                   arch, tui, smoke, release-smoke, unit-fast, slow, all)")
+  (displayln "  --changed [BASE|BASE..HEAD]     Impact selection (reproduction; never a PR claim)")
+  (displayln "  --file FILE                     Explicit reproduction file (full/default only)")
+  (displayln "  --candidate SHA                 Exact release candidate (release only)")
+  (newline)
+  (displayln "Reproduce one test: ./qt full --file tests/test-foo.rkt")
+  (displayln "Run a CI lane:      ./qt --lane fast --json-out results.json")
+  (exit 0))
+
 (cond
-  [(not command) (fail "missing command: use quick, full, default or release")]
+  [(and command (or (equal? command "--help") (equal? command "-h") (equal? command "help")))
+   (show-usage)]
+  ;; A bare `./qt` plus flags is the lane surface: `./qt --lane fast ...` selects
+  ;; the CI lane, any other plain option belongs to the default PR lane. A bare
+  ;; `./qt` with NO arguments still fails closed (an accidental empty command must
+  ;; never start the PR-wide run).
+  [(null? args) (fail "missing command: use quick, full, default or release")]
+  [(or (not command) (string-prefix? command "-"))
+   (if (member "--lane" args)
+       (run-lane-command 'full args)
+       (run-lane-command 'default args))]
   [(equal? command "quick") (run-quick-command rest-args)]
   [(equal? command "full") (run-lane-command 'full rest-args)]
   [(equal? command "default") (run-lane-command 'default rest-args)]
@@ -441,5 +663,6 @@
   [else
    (fail
     (string-append "unsupported command: ~a; only quick, full, default and release are available "
-                   "(reproduce a single test with ./qt full --file FILE)")
+                   "(reproduce a single test with ./qt full --file FILE; run a CI lane with "
+                   "./qt --lane NAME)")
     command)])

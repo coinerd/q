@@ -6,12 +6,12 @@
 ;; BOUNDARY: unit
 ;;
 ;; W3: Parser/string hotspot tests.
-;; Covers edge cases for run-tests/parse.rkt pure functions
+;; Covers edge cases for run-tests/reporting.rkt pure functions
 ;; and metrics.rkt pure predicates (replicated locally
 ;; because metrics.rkt executes (main) at module load time).
 
 (require rackunit
-         "../scripts/run-tests/parse.rkt")
+         "../scripts/run-tests/reporting.rkt")
 
 ;; ═══════════════════════════════════════════════════════════════
 ;; §1: parse-raco-output — edge cases

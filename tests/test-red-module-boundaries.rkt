@@ -155,7 +155,7 @@
 (define-test-suite run-tests-boundary-tests
                    (test-case "run-tests.rkt is a valid Racket module"
                      ;; If we can require any of its sub-modules, the module is sound
-                     (check-not-false (dynamic-require "../scripts/run-tests/parse.rkt"
+                     (check-not-false (dynamic-require "../scripts/run-tests/reporting.rkt"
                                                        'test-file-result?)
                                       "sub-module exports test-file-result?"))
                    (test-case "run-tests classify sub-module accessible"

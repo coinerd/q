@@ -8,7 +8,9 @@
 
 ;; Mutation-survivor tests for runtime/memory/policy.rkt (W5, Assessment
 ;; Action 6). Added per docs/operations/test-consolidation-policy.md: the
-;; bounded mutation pilot (run-5) found 4/18 mutants killed for this module;
+;; A bounded mutation pilot (since DELETED with the refactor's experimental
+;; facilities, §11.3; runs retained under artifacts/mutation-pilot/) found
+;; 4/18 mutants killed for this module;
 ;; the surviving boundary and boolean-policy mutants are killed here.
 ;;
 ;; Before/after (pilot scope runtime/memory/policy.rkt, budget 900s):
@@ -19,6 +21,8 @@
 ;;       --modules runtime/memory/policy.rkt \
 ;;       --tests-for runtime/memory/policy.rkt=tests/memory/policy-boundary-test.rkt,tests/test-memory-policy.rkt \
 ;;       --budget 900 --out artifacts/mutation-pilot/run-6
+;;   (The invocation below is historical: the pilot script is deleted, the
+;;   runs stay as evidence.)
 ;;   re-verify (artifacts/mutation-pilot/run-8, stale .zo caches purged):
 ;;     killed 16/18, survived 2 — same two equivalent mutants. (run-7 without
 ;;     the cache purge spuriously survived line 146 boolean-and->or; killed

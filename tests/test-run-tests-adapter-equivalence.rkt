@@ -67,8 +67,6 @@
                   qt-ci-spec-record-gate?
                   qt-ci-spec-repeat
                   qt-ci-spec-mode
-                  qt-ci-spec-scheduler
-                  qt-ci-spec-ordering
                   qt-ci-spec-shard-plan
                   qt-ci-spec-durations
                   qt-ci-spec-argv
@@ -169,8 +167,6 @@
                  #:record-gate? [record-gate? #f]
                  #:repeat [repeat 1]
                  #:mode [mode 'auto]
-                 #:scheduler [scheduler 'batch]
-                 #:ordering [ordering #f]
                  #:shard-plan [shard-plan #f]
                  #:durations [durations #f]
                  #:argv [argv '("full")])
@@ -185,8 +181,6 @@
               record-gate?
               repeat
               mode
-              scheduler
-              ordering
               shard-plan
               durations
               argv))
@@ -237,11 +231,7 @@
           "--repeat"
           "3"
           "--mode"
-          "grouped"
-          "--scheduler"
-          "queue"
-          "--ordering"
-          "lpt"
+          "subprocess"
           "--shard-plan"
           "active"
           "--durations"
@@ -261,9 +251,7 @@
   (check-equal? (qt-ci-spec-json-out spec) "res.json")
   (check-true (qt-ci-spec-record-gate? spec))
   (check-equal? (qt-ci-spec-repeat spec) 3)
-  (check-equal? (qt-ci-spec-mode spec) 'grouped)
-  (check-equal? (qt-ci-spec-scheduler spec) 'queue)
-  (check-equal? (qt-ci-spec-ordering spec) 'lpt)
+  (check-equal? (qt-ci-spec-mode spec) 'subprocess)
   (check-equal? (qt-ci-spec-shard-plan spec) "active")
   (check-equal? (qt-ci-spec-durations spec) "dur.json")
   ;; gate-evidence provenance stays the compat argv itself: the runner has
@@ -432,21 +420,19 @@
   (check-true (string-contains? out
                                 "Usage: racket scripts/run-tests.rkt [OPTIONS] [TEST-FILES ...]")))
 
-(test-case "case 5: --shard-plan report prints the plan, executes nothing"
-  (define-values (status out err)
-    (invoke "scripts/run-tests.rkt"
-            "--shard-plan"
-            "report"
-            "--shard-total"
-            "2"
-            "tests/test-version.rkt"))
-  (check-equal? status 0 (string-append out err))
-  (check-true (line-with-prefix out ";; run-tests: shard-plan=report durations="))
-  (check-true (line-with-prefix out "shard 0/2:"))
-  (check-false (line-with-prefix out ";; qt:"))
-  (check-false (line-with-prefix out "full passed:"))
-  ;; a plan-only mode never prints a TEST SUMMARY block
-  (check-false (line-with-prefix out "                    TEST SUMMARY")))
+(test-case "case 5: the deleted plan modes are rejected by the surviving CLI"
+  (for ([mode (in-list '("report" "measure"))])
+    (define-values (status out err)
+      (invoke "scripts/run-tests.rkt"
+              "--shard-plan"
+              mode
+              "--shard-total"
+              "2"
+              "tests/test-version.rkt"))
+    (check-equal? status 1 (string-append out err))
+    (check-true (string-contains? err "unknown --shard-plan mode"))
+    ;; a rejected flag never executes a test
+    (check-false (line-with-prefix out "                    TEST SUMMARY"))))
 
 (test-case "case 6: --repeat 2 runs twice and prints both summaries"
   (define-values (status out err)

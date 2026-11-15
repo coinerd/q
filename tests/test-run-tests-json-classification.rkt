@@ -85,9 +85,7 @@
                       _repeat
                       _record?
                       _inventory?
-                      _diagnose?
                       _mode
-                      _scheduler
                       json-out
                       _ledger
                       _profile
@@ -100,8 +98,7 @@
                       _failure-history
                       _generate-covers-manifest?
                       _shard-plan
-                      _durations
-                      _ordering)
+                      _durations)
         (parse-args '("--json-out" "/tmp/q-results.json")))
       (check-equal? json-out "/tmp/q-results.json"))
 
@@ -139,11 +136,11 @@
                                (list (result #:path "tests/pass.rkt" #:passed 1 #:total 1)
                                      (result #:path "tests/zero.rkt" #:total 0))
                                #:suite 'unit-fast
-                               #:mode 'in-process
+                               #:mode 'subprocess
                                #:elapsed-ms 25)
          (define js (call-with-input-file out read-json))
          (check-equal? (hash-ref js 'suite) "unit-fast")
-         (check-equal? (hash-ref js 'mode) "in-process")
+         (check-equal? (hash-ref js 'mode) "subprocess")
          (define files (hash-ref js 'files))
          (check-equal? (length files) 2)
          (check-equal? (hash-ref (car files) 'category) "PASS")
@@ -344,81 +341,5 @@
       (check-not-false (ormap (lambda (p) (regexp-match "files\\[0\\].category: expected a string" p))
                               problems)))))
 
-(define queue-suite
-  (test-suite "queue JSON validation"
-    (test-case "queue producer round trip and scheduler nullability"
-      (define-values (file dir)
-        (write-temp-test
-         (string-append "#lang racket/base\n"
-                        "(require rackunit rackunit/text-ui)\n"
-                        "(run-tests (test-suite \"ok\" (test-case \"ok\" (check-true #t))))\n")))
-      (define out (build-path dir "results.json"))
-      (dynamic-wind
-       void
-       (lambda ()
-         (define-values (code stdout stderr)
-           (run/capture
-            (format "racket scripts/run-tests.rkt --scheduler queue --json-out ~a ~a" out file)))
-         (check-equal? code 0 stderr)
-         (define payload (call-with-input-file out read-json))
-         (define sched (hash-ref (hash-ref payload 'extra) 'scheduler))
-         (define artifact
-           (hash-set* (hash-ref payload 'run_summary)
-                      'files
-                      (hash-ref payload 'files)
-                      'extra
-                      (hash-ref payload 'extra)))
-         (define nullable
-           '(queue_wait_ms worker_busy_ms worker_idle_ms serial_partition_ms parallel_partition_ms))
-         (check-equal? (validate-run-summary-json payload) '())
-         (for ([bad (list 'null #f 42 "bad" '())])
-           (check-pred pair? (validate-run-summary-json bad))
-           (check-pred pair? (validate-run-summary-json (hash-set payload 'extra bad)))
-           (check-pred pair? (validate-run-summary-json (hash-set artifact 'extra bad)))
-           (check-pred pair? (validate-run-summary-json (hash-set payload 'run_summary bad))))
-         (check-pred pair? (validate-run-summary-json (hash-remove payload 'files)))
-         (check-pred pair? (validate-run-summary-json (hash-set payload 'files 'null)))
-         (check-pred pair? (validate-run-summary-json (hash-set payload 'run_summary (hasheq))))
-         (check-equal? (hash-ref sched 'scheduler_mode) "queue")
-         (for ([key (in-list nullable)])
-           (check-equal? (hash-ref sched key) (json-null)))
-         (check-equal? (validate-run-summary-json artifact) '())
-         (define (with-scheduler s)
-           (hash-set payload 'extra (hash-set (hash-ref payload 'extra) 'scheduler s)))
-         (define numeric-sched
-           (for/fold ([s sched]) ([key (in-list nullable)])
-             (hash-set s key 42)))
-         (for* ([base (in-list (list payload artifact))]
-                [mode (in-list (list "unknown" "" "QUEUE"))])
-           (define bad-sched (hash-set numeric-sched (quote scheduler_mode) mode))
-           (define bad-extra (hash-set (hash-ref base (quote extra)) (quote scheduler) bad-sched))
-           (check-not-false (ormap (lambda (p) (regexp-match? #rx"extra.scheduler.scheduler_mode" p))
-                                   (validate-run-summary-json
-                                    (hash-set base (quote extra) bad-extra)))))
-         (check-equal? (validate-run-summary-json
-                        (with-scheduler (hash-set numeric-sched 'scheduler_mode "batch")))
-                       '())
-         (check-equal? (validate-run-summary-json (with-scheduler (hash-remove numeric-sched
-                                                                               'scheduler_mode)))
-                       '())
-         (for ([key (in-list nullable)])
-           (check-equal? (validate-run-summary-json (with-scheduler (hash-set sched key 42))) '())
-           (check-pred pair? (validate-run-summary-json (with-scheduler (hash-set sched key "bad"))))
-           (check-pred pair?
-                       (validate-run-summary-json
-                        (with-scheduler (hash-set (hash-set numeric-sched 'scheduler_mode "batch")
-                                                  key
-                                                  (json-null))))))
-         (for ([key '(worker_count process_start_count gc_count first_batch_ms)])
-           (check-pred pair?
-                       (validate-run-summary-json (with-scheduler (hash-set sched key (json-null))))))
-         (check-pred pair?
-                     (validate-run-summary-json
-                      (with-scheduler (hash-set sched 'scheduler_mode (json-null)))))
-         (check-pred pair?
-                     (validate-run-summary-json (with-scheduler (hash-remove sched
-                                                                             'scheduler_mode)))))
-       (lambda () (delete-dir/safe dir))))))
-
-(define failures (+ (run-tests suite) (run-tests w1-fixture-suite) (run-tests queue-suite)))
+(define failures (+ (run-tests suite) (run-tests w1-fixture-suite)))
 (exit failures)

@@ -18,6 +18,24 @@
 ;; itself (cli.rkt parsing/validation) plus the compat presentation lines and
 ;; the view-only/impact modes that are not part of the CI surface.
 
+;; run-tests.rkt - Parallel test runner. Thin facade (v0.99.43 W0c) re-exporting
+;; the full public surface from run-tests/ sub-modules: classify.rkt (metadata,
+;; classifiers, discovery, environment profile policy), reporting.rkt (result
+;; parsing + classification, summaries, failure logs, known-failure ledger,
+;; gate evidence), inventory.rkt, shard-plan.rkt and runner.rkt (execution
+;; orchestration + the CLI grammar).
+;;
+;; Phase D step 1: this file is also the command-line entry point, as a thin
+;; COMPATIBILITY ADAPTER over the shared `./qt full` CI engine. Its argv is
+;; translated 1:1 into a `qt-ci-spec` and resolved/executed through the same
+;; `resolve-qt-ci-plan`/`run-qt-ci-plan` pair `./qt` uses, so CI and local
+;; callers share ONE implementation of selection, execution and reporting.
+;; The protected check name, the stdout summary (reporting.rkt's per-file
+;; results, TEST SUMMARY block, RUN-SUMMARY record, ledger summary), the JSON
+;; schema and the exit codes are unchanged; what stays here is the CLI contract
+;; itself (runner.rkt's parsing/validation) plus the compat presentation lines
+;; and the view-only/impact modes that are not part of the CI surface.
+
 (require racket/match
          racket/format
          racket/date
@@ -25,12 +43,7 @@
          racket/list
          json
          "run-tests/classify.rkt"
-         "run-tests/parse.rkt"
          "run-tests/reporting.rkt"
-         "run-tests/ledger.rkt"
-         "run-tests/cli.rkt"
-         "run-tests/profiles.rkt"
-         "run-tests/gate-evidence.rkt"
          "run-tests/inventory.rkt"
          "run-tests/shard-plan.rkt"
          "testing/changed-selection.rkt"
@@ -56,16 +69,6 @@
          run-single-file
          run-all-files
          run-suite-once
-         ;; v1.00.27 W3 (#9591): per-area grouped-expansion policy
-         test-file-area
-         grouped-area-config
-         grouped-area-config->jsexpr
-         grouped-expansion-artifact-path
-         grouped-config-violation
-         grouped-rollback-env-var
-         grouped-rollback-areas
-         area-grouped-decision
-         grouped-fallback-rows
          collect-test-files
          mutating-file?
          mutating-patterns
@@ -119,18 +122,6 @@
          classify-exclusion-reason
          detect-high-risk-flags
          compute-inventory-hash
-         print-overhead-diagnostics
-         collect-overhead-diagnostics
-         format-overhead-result
-         run-overhead-command
-         make-overhead-result
-         overhead-result?
-         overhead-result-label
-         overhead-result-command
-         overhead-result-exit-code
-         overhead-result-elapsed-ms
-         overhead-result-stdout
-         overhead-result-stderr
          ;; Phase D step 1: the compatibility adapter over the shared qt CI
          ;; engine. Published so tests can pin the argv translation table and
          ;; prove both front-ends resolve the SAME selection.
@@ -161,9 +152,7 @@
               repeat
               record-gate?
               inventory?
-              overhead?
               mode
-              scheduler
               json-out
               ledger-path
               profile
@@ -177,7 +166,6 @@
               covers-manifest?
               shard-plan
               durations
-              ordering
               shard-index
               shard-total
               argv)
@@ -202,7 +190,7 @@
         [(list elem more ...) (cons elem (loop more))])))
   (values (unbox index) (unbox total) filtered))
 
-;; cli.rkt stays the compat CLI's parser and validator: its messages, its
+;; runner.rkt stays the compat CLI's parser and validator: its messages, its
 ;; `usage` output and its exit codes (`--help` 0, unknown flag 2, invalid
 ;; enumerated value 2) are the protected command-line contract.
 (define (parse-compat-argv argv)
@@ -216,9 +204,7 @@
                   repeat
                   record-gate?
                   inventory?
-                  overhead?
                   mode
-                  scheduler
                   json-out
                   ledger-path
                   profile
@@ -231,8 +217,7 @@
                   failure-history
                   covers-manifest?
                   shard-plan
-                  durations
-                  ordering)
+                  durations)
     (parse-args filtered))
   (define-values (jobs*
                   sequential?*
@@ -244,7 +229,6 @@
                   record-gate*
                   inventory*
                   mode*
-                  scheduler*
                   json-out*
                   ledger*
                   profile*
@@ -257,8 +241,7 @@
                   failure-history*
                   covers*
                   shard-plan*
-                  durations*
-                  ordering*)
+                  durations*)
     (validate-args! jobs
                     sequential?
                     timeout
@@ -268,9 +251,7 @@
                     repeat
                     record-gate?
                     inventory?
-                    overhead?
                     mode
-                    scheduler
                     json-out
                     ledger-path
                     profile
@@ -283,8 +264,7 @@
                     failure-history
                     covers-manifest?
                     shard-plan
-                    durations
-                    ordering))
+                    durations))
   (compat-args jobs*
                sequential?*
                timeout*
@@ -294,9 +274,7 @@
                repeat*
                record-gate*
                inventory*
-               overhead?
                mode*
-               scheduler*
                json-out*
                ledger*
                profile*
@@ -310,7 +288,6 @@
                covers*
                shard-plan*
                durations*
-               ordering*
                shard-index
                shard-total
                argv))
@@ -333,9 +310,7 @@
 ;;   --record-gate-evidence  -> spec record-gate?
 ;;   --repeat N              -> spec repeat
 ;;   --mode NAME             -> spec mode
-;;   --scheduler NAME        -> spec scheduler
-;;   --ordering NAME         -> spec ordering (fifo default)
-;;   --shard-plan MODE       -> spec shard-plan
+;;   --shard-plan active     -> spec shard-plan
 ;;   --durations PATH        -> spec durations
 ;;   argv                    -> spec argv (gate-evidence provenance)
 ;;   --jobs N / --sequential -> execution width (not a spec field; passed to the
@@ -358,8 +333,6 @@
               (compat-args-record-gate? a)
               (compat-args-repeat a)
               (compat-args-mode a)
-              (compat-args-scheduler a)
-              (compat-args-ordering a)
               (compat-args-shard-plan a)
               (compat-args-durations a)
               (compat-args-argv a)))
@@ -377,78 +350,6 @@
 ;; The profile-aware duration plan callback, spelled exactly like the runner's.
 (define (compat-profile-skips? profile)
   (lambda (f) (profile-skips-test? profile (hash-ref (get-file-metadata f) 'requires '()))))
-
-;; `--shard-plan report` (print the plan, execute nothing, exit 0).
-(define (compat-run-shard-report rels a)
-  (define-values (dur dur-status) (load-duration-snapshot (compat-args-durations a)))
-  (printf ";; run-tests: shard-plan=~a durations=~a status=~a known=~a~n"
-          (compat-args-shard-plan a)
-          (or (compat-args-durations a) "<none>")
-          dur-status
-          (hash-count dur))
-  (unless (eq? dur-status 'ok)
-    (printf ";; run-tests: unmeasured files use the conservative p95 default duration~n"))
-  (print-shard-plan-report (build-shard-plan/safe rels
-                                                  (compat-args-shard-total a)
-                                                  #:durations dur
-                                                  #:profile-skips?
-                                                  (compat-profile-skips? (compat-args-profile a))
-                                                  #:duration-source (compat-args-durations a))))
-
-;; `--shard-plan measure` (run each selected file once, write the W0 duration
-;; snapshot, print the regenerated plan + starvation/tail checks, exit 0).
-(define (compat-run-measure rels a)
-  (define json-out (compat-args-json-out a))
-  (printf
-   ";; run-tests: shard-plan=measure files=~a jobs=1 (sequential per-file subprocess measurement)~n"
-   (length rels))
-  (define measured
-    (for/list ([f (in-list (sort rels string<?))])
-      (define r (run-single-file f #:timeout (compat-args-timeout a) #:mode 'subprocess))
-      (printf ";; run-tests: measured ~a ~as (~a)~n"
-              f
-              (~r (/ (test-file-result-elapsed-ms r) 1000.0) #:precision '(= 3))
-              (result-status r))
-      (hasheq 'path
-              f
-              'duration_seconds
-              (/ (test-file-result-elapsed-ms r) 1000.0)
-              'status
-              (result-status r))))
-  (call-with-output-file
-   json-out
-   #:exists 'truncate/replace
-   (lambda (out)
-     (write-json
-      (hasheq
-       'schema
-       "ci-durations/1"
-       'suite
-       (symbol->string (compat-args-suite a))
-       'generated_at
-       (parameterize ([date-display-format 'iso-8601])
-         (date->string (current-date) #t))
-       'measured_by
-       "--shard-plan measure (sequential subprocess per-file wall clock, includes per-file runner overhead)"
-       'files
-       measured)
-      out)
-     (newline out)))
-  (printf ";; run-tests: duration snapshot written to ~a~n" json-out)
-  (define-values (mdur mdur-status) (load-duration-snapshot json-out))
-  (printf ";; run-tests: shard-plan=measure snapshot status=~a known=~a~n"
-          mdur-status
-          (hash-count mdur))
-  (define mplan
-    (build-shard-plan/safe rels
-                           (if (> (compat-args-shard-total a) 1)
-                               (compat-args-shard-total a)
-                               3)
-                           #:durations mdur
-                           #:profile-skips? (compat-profile-skips? (compat-args-profile a))
-                           #:duration-source json-out))
-  (print-shard-plan-report mplan)
-  (print-starvation-tail-report mplan))
 
 ;; The compat presentation of an `--prioritize impact` run: the first failing
 ;; selected test, with its selection and priority reason (runner behaviour).
@@ -495,9 +396,6 @@
       (eprintf ";; run-tests: ~a~n" refusal)
       (exit 2)))
   ;; ── view-only modes (never execute a test) ───────────────────
-  (when (compat-args-overhead? a)
-    (print-overhead-diagnostics #:base-dir base-dir)
-    (exit 0))
   (when (compat-args-lint-metadata? a)
     (define summary
       (print-lint-report (if (pair? files)
@@ -612,16 +510,8 @@
     (cond
       [impact-files "impact"]
       [else (symbol->string suite)]))
-  ;; ── plan-only modes ─────────────────────────────────────────
+  ;; ── plan-only mode (`--shard-plan active`) ─────────────────
   (define plan-mode (compat-args-shard-plan a))
-  (cond
-    [(equal? plan-mode "measure")
-     (compat-run-measure rels a)
-     (exit 0)]
-    [(equal? plan-mode "report")
-     (compat-run-shard-report rels a)
-     (exit 0)]
-    [else (void)])
   (when (and (equal? plan-mode "active") (not (> shard-total 1)))
     (printf ";; run-tests: --shard-plan ~a ignored — --shard-total=~a (unsharded)~n"
             plan-mode
@@ -667,17 +557,14 @@
   (define phases (make-hasheq))
   (hash-set! phases 'selection_end_ms (current-inexact-milliseconds))
   (hash-set! phases 'execution_start_ms (current-inexact-milliseconds))
-  (printf
-   ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a mode=~a profile=~a scheduler=~a ordering=~a~n"
-   suite-label
-   (length run-files)
-   (compat-args-jobs a)
-   (compat-args-sequential? a)
-   repeat
-   (qt-effective-mode (compat-args-mode a) suite-label)
-   profile
-   (compat-args-scheduler a)
-   (or (compat-args-ordering a) default-ordering))
+  (printf ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a mode=~a profile=~a~n"
+          suite-label
+          (length run-files)
+          (compat-args-jobs a)
+          (compat-args-sequential? a)
+          repeat
+          (qt-effective-mode (compat-args-mode a) suite-label)
+          profile)
   (newline)
   (when (> repeat 1)
     (printf ";; run-tests: running suite ~a time~a for confidence gate~n"

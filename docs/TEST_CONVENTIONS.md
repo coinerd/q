@@ -103,7 +103,7 @@ CLI exactly:
 | Tier | Command | Scope | Role |
 |---|---|---|---|
 | `fast` | `--suite fast` | All tests except slow patterns and `tui-file?` matches (per-file spawn) | **Broad PR regression tier** — the suite CI runs per PR (`.github/workflows/ci.yml`), and the declared broad fallback that escalated local impact runs widen to |
-| `unit-fast` | `--suite unit-fast` | Fast unit tests eligible for in-process/grouped execution | **Developer iteration tier** — the tier you run inside the red-green-refactor loop |
+| `unit-fast` | `--suite unit-fast` | Fast unit tests (one subprocess per file) | **Developer iteration tier** — the tier you run inside the red-green-refactor loop |
 
 `unit-fast` local SLO: **p90 ≤ 90 s of wall clock (declared target;
 measured in W4).** W4 owns the baseline measurement that finalizes this
@@ -366,8 +366,8 @@ that digest for the same commit.
 ## Standalone Execution Contract (BUG-0092)
 
 Every test file must execute its tests identically under plain `raco test`,
-direct `racket` execution, and the runner's subprocess and grouped
-in-process modes. The contract (BUG-0092, R92):
+direct `racket` execution, and the runner's per-file subprocess execution.
+The contract (BUG-0092, R92):
 
 1. **Sole suite invocation in `(module+ test ...)`** — the only `run-tests`
    call lives in the `test` submodule. A file whose entry point is
@@ -395,12 +395,11 @@ in-process modes. The contract (BUG-0092, R92):
    The suite is never executed twice in any mode.
 3. **Signal failures — never merely return the integer.** When `run-tests`
    returns a nonzero failure count, the `test` submodule RAISES. It never
-   calls `(exit ...)`: the raise makes a direct racket execution exit
-   nonzero, while the grouped in-process host records the failure for that
-   file and survives to run the rest of the suite.
+   calls `(exit ...)`: the raise makes both a direct racket execution and the
+   runner's per-file subprocess exit nonzero.
 4. **Anchor every filesystem path with `define-runtime-path`** (or the
    resolved-module-path equivalent). `raco test` binds CWD to the test
-   file's directory, grouped in-process execution does the same, and direct
+   file's directory, and direct
    execution inherits the caller's CWD, so repo-relative literals (frozen
    audit artifacts, `tests/` trees, benchmark manifests) mean a different
    thing in each mode. Anchor reads to the source file — while keeping any
@@ -411,21 +410,13 @@ in-process modes. The contract (BUG-0092, R92):
 
 This contract is pinned behaviorally by the BUG-0092 section of
 `tests/test-run-tests.rkt`: a temporary counter fixture with an EXTERNAL
-invocation count proves exactly one execution on parsed-output routes
-(plain raco, direct racket, runner subprocess, and forced
-`#:mode 'grouped-in-process` — actual mode asserted via `execution-mode-of`
-and `grouped-fallback-reason` telemetry), including a deliberately failing
-fixture; a healthy fixture right after the failure proves the grouped host
-survives; a successful grouped execution with no parsed tests is
-`ZERO_PARSED`, remains grouped, and is never replayed (its counter reads 1).
-Strict mode fails with exit 4; non-strict mode leaves the result inconclusive
-and does not fail solely for zero parsed tests. An early `(exit 0)` in grouped
-execution is a failure, not a successful completion. A
-policy-grouped request in an un-expanded area names `'area-not-expanded`
-without changing the area rollout; and the runner aggregate exits nonzero
-when any file fails.
+invocation count proves exactly one execution on each surviving route
+(plain raco, direct racket, and the runner's per-file subprocess), including a
+deliberately failing fixture (no replay), and that the runner aggregate exits
+nonzero when any file fails. Strict mode still fails a file that exits 0 with
+zero parsed tests (exit 4).
 
-## Managed Surfaces, Trust Boundary, and Grouped Results
+## Managed Surfaces and Trust Boundary
 
 ### Managed surfaces contract
 
@@ -461,14 +452,34 @@ sandbox:
 - **Manual dependency closure per admitted file.** Admission is a reviewed
   list, and changing an import requires re-review and re-fingerprinting.
 
-### Grouped execution: final behaviour
+### Runner execution: one strategy
 
-- **An early exit fails the file.** A grouped/in-process `(exit N)` is
-  redirected to a failure — a nonzero `N` is a failure, and an early
-  `(exit 0)` is not a successful completion.
-- **A silent grouped run is `ZERO_PARSED`.** A grouped run that completes with
-  no parsed tests is reported as `ZERO_PARSED`, remains grouped, and is never
-  replayed (a replay would run its side effects twice).
+- **Every test file runs in its own subprocess.** `--mode auto` and
+  `--mode subprocess` are the only modes; both execute `raco test -t` (RackUnit
+  files) or `racket <file>` (everything else) per file. The grouped/in-process
+  executor and its per-area expansion policy were deleted with the rest of the
+  §11.3 experiment machinery; see below.
+- **A silent run is still `ZERO_PARSED`.** A file that exits 0 with no parsed
+  tests is never a pass — strict mode (`STRICT_TEST_RUNNER=1`) fails the run.
+
+## Removed experiment facilities (2026-11-15, §11.3)
+
+The testing-framework refactor (§11.3) deleted the experimental facilities the
+refactor itself introduced, so they are no longer part of the contract:
+
+| Removed | Why |
+|---|---|
+| `--mode grouped` / `--mode in-process`, the in-process executor, the per-area `grouped-area-config` expansion policy and its rollback env lever (`Q_GROUPED_ROLLBACK_AREAS`) | One execution strategy (subprocess per file) is the whole supported contract; the in-process path carried a documented env-leak boundary and a per-area eligibility config nobody could justify. |
+| `--scheduler queue`, the queue worker pool/coordinator, scheduler telemetry (`extra.scheduler`), and `TEST_RUNNER_SCHEDULER` | The deterministic fixed-batch barrier is the only scheduler; the queue experiment never produced paired evidence that justified activating it. |
+| `--ordering fifo\|lpt` and the ordering JSON evidence | Deterministic input order is the only ordering; LPT produced no measurable CI win. |
+| `--diagnose-overhead`, the overhead/local-p90 collectors (`runner.rkt --check` / `--collect-local`) | Local SLO evidence is measured by the L1/L2 loop commands above and retained as CI artifacts; the in-tree collector duplicated that and existed to justify the grouped mode. |
+| `--shard-plan report` and `--shard-plan measure`, the starvation/tail checks, cohort-anchored plan regeneration | `--shard-plan active` (the duration-aware plan the CI lanes consume) survives; the reporting/measurement modes were research aids. |
+| `.github/workflows/shard-plan-telemetry.yml` (the report-only shard-plan job) | The report mode it ran is deleted; `--shard-plan active` needs no telemetry lane, and the workflow only existed to produce activation evidence for a mode the shards already read from policy. |
+| `.github/workflows/test-scheduler-shadow.yml` and `.github/workflows/test-scheduler-cohort-c1.yml` (paired shadow/cohort driver) | Both existed only to compare the queue scheduler against the batch scheduler. With the queue scheduler deleted there is no second arm to compare, so the shadow/cohort experiments are deleted (the frozen artifacts under `artifacts/ci-baseline/` remain history). |
+| `scripts/run-tests/mutation-pilot.rkt` (the bounded mutation-analysis pilot, W9) | **Removal decision (2026-11-15):** the pilot produced reviewed *informational* findings for one module (`runtime/memory/policy.rkt`) across eight retained runs under `artifacts/mutation-pilot/`, and its weekly workflow job is removed with it. It never gated a merge, its operator set was a hand-maintained table, and maintaining a repo-owned mutation engine is not justified by the evidence it produced. Mutation *thinking* stays: targeted micro-mutations are reviewed by hand and recorded in the affected test's header comment.
+
+The surviving CLI rejects every removed flag (unknown option → exit 2), so an
+old command line fails loudly instead of being silently ignored.
 
 ## Test Sandbox
 
@@ -515,48 +526,31 @@ Cleanup is guaranteed via `dynamic-wind`.
 ## Run-Summary JSON Telemetry
 
 The `--json-out` envelope contains `run_summary` alongside top-level `files`
-and optional `extra`, where the versioned `scheduler` object lives. The
-run-summary validator accepts this envelope and legacy flattened summaries with
-`files` and optional `extra` at the same level as summary fields. The exported
-`validate-run-summary-json` checks a projection of required summary and per-file
-fields and selected optional telemetry types and values. An empty problem list
-is not whole-envelope validation or proof of semantic truth: it does not check,
-for example, count consistency, numeric ranges, or the aggregation formulas
-below. Roots and present `extra` values must be objects; historical artifacts
+and optional `extra`. The run-summary validator accepts this envelope and
+legacy flattened summaries with `files` and optional `extra` at the same level
+as summary fields. The exported `validate-run-summary-json` checks a projection
+of required summary and per-file fields and selected optional telemetry types
+and values. An empty problem list is not whole-envelope validation or proof of
+semantic truth: it does not check, for example, count consistency or numeric
+ranges. Roots and present `extra` values must be objects; historical artifacts
 without telemetry remain readable. Field contract:
 
-- **Units:** every `*_ms` field is milliseconds, measured with
-  `current-inexact-milliseconds` (wall clock, process-local). `worker_count`
-  is the number of parallel workers in the scheduler run.
-- **Nullability:** only `queue_wait_ms`, `worker_busy_ms`, `worker_idle_ms`,
-  `serial_partition_ms`, and `parallel_partition_ms` accept JSON `null`, and
-  only when `scheduler_mode` is `"queue"`. Other scheduler fields must be
-  numeric, except `scheduler_mode`, which when present must be `"batch"` or
-  `"queue"`. Scheduler telemetry and `scheduler_mode` are optional.
-- **Aggregation formulas:**
-  - In batch mode `queue_wait_ms`, `worker_busy_ms`, `worker_idle_ms` are
-    estimates derived from batch durations and file counts, not direct measurements.
-    In queue mode these fields and both partition timing fields are `null`:
-    overlapping per-file durations cannot determine elapsed partition time.
-  - `serial_partition_ms` and `parallel_partition_ms` are distinct scheduler
-    fields. At `extra` level, optional `serial_first_batch_ms` and
-    `parallel_first_batch_ms` describe each partition's first batch; legacy
-    `first_batch_ms` describes the first partition that ran (serial if present).
-  - `process_start_count` equals `subprocess_count`: both count actual
-    subprocess-mode files. `grouped_in_process_count` counts files run in
-    grouped-in-process mode; it is not a count of process starts.
-  - `gc_count` counts explicit runner-requested major collections, and
-    `gc_pause_ms` sums their wall-clock durations; neither includes automatic GC.
-  - `scheduler_mode` is `"batch"` (the default) or `"queue"`; queue mode is
-    the bounded, work-conserving worker pool introduced in W2 (exactly `jobs`
-    long-lived workers; the coordinator requests a major GC at every fifth
-    completion and at the final completion. When these coincide there is only
-    one collection, not a duplicate. Empty partitions request none. Batch mode
-    follows the same rule in units of completed batches).
-    `worker_count` equals `jobs` in queue mode and the batch width in batch mode.
-- **Runner execution vs workflow elapsed time:** runner fields (`queue_wait_ms`,
-  `worker_busy_ms`, `worker_idle_ms`, partition times, total `duration_ms`)
-  measure only the test-runner process on the machine that executed it. CI
+- **Required summary fields:** `runner_version`, `suite`, `profile`,
+  `execution_mode` (`auto` and `subprocess` both report `subprocess`).
+- **Pipeline phases:** `runner_start_ms`, `selection_end_ms`,
+  `execution_start_ms`, `execution_end_ms` (wall clock, process-local,
+  milliseconds). `serial_first_batch_ms`, `parallel_first_batch_ms` and the
+  legacy `first_batch_ms` describe the first batch of each partition.
+- **Per-file fields:** `path`, `category`, `exit_code`, `elapsed_ms`,
+  `passed`, `failed`, `total`, `output`, plus the additive `execution_mode`
+  (`subprocess` for every file that ran), `execution_profile` and
+  `metadata_completeness`.
+- **Removed telemetry (§11.3):** `extra.scheduler` (the batch/queue scheduler
+  object), `extra.ordering`, and `extra.grouped_expansion` are no longer
+  written. Retained artifacts that carry them still validate — the validator
+  only types the fields it still knows, and unknown keys are tolerated.
+- **Runner execution vs workflow elapsed time:** runner fields measure only the
+test-runner process on the machine that executed it. CI
   workflow elapsed time (job wall time, queueing, provisioning, checkout,
   setup) is a different quantity and is never folded into runner telemetry.
 - **Prepared-environment state:** the summary includes a `prepared_environment`

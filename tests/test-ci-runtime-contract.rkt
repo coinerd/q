@@ -265,29 +265,15 @@
         (check-not-false (member "lint" (job-needs job))
                          (format "~a needs must include lint; got ~a" job (job-needs job)))))
 
-    ;; Pin 2 (W3): shard-plan-report is relocated post-workflow; the ci.yml
-    ;; workflow tail is now test-aggregate. The job itself is byte-identical in
-    ;; .github/workflows/shard-plan-telemetry.yml (checksum-pinned via the W3
-    ;; checkpoint; deeper pins live in tests/test-w3-telemetry-relocation.rkt).
-    (test-case "shard-plan-report is relocated out of ci.yml (W3)"
-      (check-false (member "shard-plan-report" (top-jobs))
-                   "ci.yml must no longer define shard-plan-report")
-      (define telemetry-yml
-        (build-path project-root ".github" "workflows" "shard-plan-telemetry.yml"))
-      (check-true (file-exists? telemetry-yml)
-                  "the relocated report must live in shard-plan-telemetry.yml")
-      (define cp
-        (call-with-input-file (build-path project-root
-                                          "artifacts"
-                                          "ci-topology"
-                                          (format "v~a-w3" ci-topology-version)
-                                          "dag-checkpoint.json")
-                              read-json))
-      (check-equal? (sha256-hex telemetry-yml)
-                    (hash-ref (hash-ref cp 'telemetry_relocation_contract) 'telemetry_workflow_sha256)
-                    "the relocated job must stay byte-identical to the recorded relocation")
-      (check-true (regexp-match? #rx"workflow_run" (file->string telemetry-yml))
-                  "post-workflow trigger: workflow_run: CI completed"))
+    ;; Pin 2 (§11.3): the report-only shard-plan experiment (and its post-workflow
+    ;; telemetry lane) is DELETED with the other experimental facilities. The
+    ;; surviving shard-plan surface is the deterministic `--shard-plan active`
+    ;; plan the CI shards consume; no relocated report job exists anywhere.
+    (test-case "shard-plan-report is gone with the deleted experiment (§11.3)"
+      (check-false (member "shard-plan-report" (top-jobs)) "ci.yml must not define shard-plan-report")
+      (check-false
+       (file-exists? (build-path project-root ".github" "workflows" "shard-plan-telemetry.yml"))
+       "the relocated report workflow is deleted (§11.3)"))
     (test-case "test-aggregate is the ci.yml workflow tail"
       (check-equal? (job-needs "test-aggregate") '("test" "test-platform" "fast-env"))
       (for ([job (in-list (top-jobs))])
@@ -361,12 +347,14 @@
       (check-true (ormap (lambda (ln) (regexp-match? #rx"--json-out test-results.json" ln)) body)))
 
     ;; Pin 6: JSON / artifact consumers
-    (test-case "relocated report consumes retained test-results-fast-* artifacts (post-workflow)"
-      (define t
-        (file->string (build-path project-root ".github" "workflows" "shard-plan-telemetry.yml")))
-      (check-true (regexp-match? #rx"test-results-fast" t)
-                  "telemetry consumes this run's retained per-shard artifacts")
-      (check-true (regexp-match? #rx"test-results.json" t) "per-shard JSON inputs unchanged"))
+    (test-case "the fast shard lane still uploads and consumes per-shard JSON"
+      ;; §11.3 deleted the report-only telemetry experiment; the surviving
+      ;; consumer contract is the fast shard job's own retained evidence.
+      (check-false (file-exists? (build-path project-root
+                                            ".github"
+                                            "workflows"
+                                            "shard-plan-telemetry.yml"))
+                   "the deleted telemetry lane must not be reintroduced"))
     (test-case "fast test job uploads test-results-fast-<shard> JSON artifacts"
       (define body (job-body "test"))
       (check-true (ormap (lambda (ln) (regexp-match? #rx"test-results-fast-" ln)) body))

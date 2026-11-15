@@ -343,7 +343,7 @@
        (fixture-git repo
                     "update-index"
                     "--cacheinfo"
-                    (string-append "100644," blob ",scripts/run-tests/cli.rkt"))
+                    (string-append "100644," blob ",scripts/run-tests/runner.rkt"))
        (define tree (fixture-git repo "write-tree"))
        (define altered
          (fixture-git repo

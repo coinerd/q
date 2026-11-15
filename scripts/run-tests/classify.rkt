@@ -101,7 +101,13 @@
          ;; Managed repo surfaces (detection only; never rewritten)
          repo-surface-files
          ;; Bytecode cleanup
-         clean-stale-bytecode!)
+         clean-stale-bytecode!
+         ;; Environment profile skip policy (folded profiles.rkt)
+         known-profiles
+         normalize-requirement
+         profile-unavailable-requirements
+         skipped-requirements
+         profile-skips-test?)
 
 ;; ============================================================
 ;; Base directory resolution
@@ -1668,6 +1674,44 @@
         (delete-directory/files d)
         (set! cleaned (add1 cleaned)))))
   cleaned)
+
+;; ---- Environment profile skip policy (folded verbatim from the former
+;; profiles.rkt; the grouped-expansion policy it used to carry is deleted
+;; with the grouped execution mode, §11.3) ----
+
+(define known-profiles '(local vps ci headless full))
+
+(define (normalize-requirement req)
+  (cond
+    [(symbol? req) (symbol->string req)]
+    [(string? req) (string-downcase (string-trim req))]
+    [else (format "~a" req)]))
+
+(define (profile-unavailable-requirements profile)
+  (case profile
+    ;; Developer workstation: terminal/subprocess/filesystem/git are assumed;
+    ;; live provider credentials are intentionally not assumed.
+    [(local) '("provider-key")]
+    ;; VPS is headless: browser/terminal are unavailable; provider credentials
+    ;; may exist and are therefore not skipped by policy.
+    [(vps) '("browser" "terminal")]
+    ;; CI must be deterministic and non-interactive by default.
+    [(ci) '("provider-key" "browser" "terminal" "network")]
+    ;; Headless means no interactive/UI/provider dependencies.
+    [(headless) '("provider-key" "browser" "terminal")]
+    ;; Full is opt-in to run everything possible.
+    [(full) '()]
+    [else '()]))
+
+(define (skipped-requirements profile requirements)
+  (define unavailable (profile-unavailable-requirements profile))
+  (filter (lambda (req)
+            (define normalized (normalize-requirement req))
+            (and (not (string=? normalized "none")) (member normalized unavailable)))
+          requirements))
+
+(define (profile-skips-test? profile requirements)
+  (pair? (skipped-requirements profile requirements)))
 
 ;; ---- Direct CLI entry (repository command, same code path as the
 ;; run-tests.rkt facade): both consumers invoke this one function. ----

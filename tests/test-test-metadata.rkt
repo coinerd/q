@@ -168,9 +168,9 @@
 
 (require racket/string
          rackunit/text-ui
-         (only-in "../scripts/run-tests/cli.rkt" known-suites))
+         (only-in "../scripts/run-tests/runner.rkt" known-suites))
 
-(define-runtime-path cli-path "../scripts/run-tests/cli.rkt")
+(define-runtime-path cli-path "../scripts/run-tests/runner.rkt")
 (define (cli-ref sym)
   (dynamic-require cli-path sym))
 

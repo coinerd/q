@@ -6,46 +6,39 @@
 
 ;; BOUNDARY: unit
 
-;; Duration-aware shard planning (W7) — planner unit tests.
+;; Duration-aware shard planning — planner unit tests.
 ;; Determinism guard: identical inputs (inventory + duration snapshot) must
 ;; produce identical plans; the planner regenerates the plan from a
 ;; checked-in fixture snapshot and compares.
+;;
+;; SCOPE (§11.3): the `report`/`measure` experiment surfaces (plan JSON
+;; rendering, starvation/tail checks, cohort-anchored regeneration) are
+;; deleted with the modes that produced them; what remains is the
+;; deterministic plan the CI lanes consume via `--shard-plan active`.
 
 (require rackunit
          rackunit/text-ui)
 
 (require racket/runtime-path
          json
+         (only-in "../scripts/run-tests/classify.rkt" shard-files)
          (only-in "../scripts/run-tests/shard-plan.rkt"
                   build-shard-plan
                   build-shard-plan/safe
-                  plan->jsexpr
-                  plan->assignments
                   plan-shard-files
                   plan-predicted-max
-                  round-robin-predicted-max
-                  print-shard-plan-report
-                  print-starvation-tail-report
-                  write-plan-json!
                   load-duration-snapshot
                   inventory-preserved?
-                  activation-recommendation
-                  plan-mean-shard-seconds
-                  starvation-check
-                  tail-straddle-check
-                  quantile-interpolated
-                  load-cohort-wall-anchors
-                  regenerate-plan-report
-                  starvation-max-ratio
-                  tail-straddle-limit-ratio
                   shard-plan-mode
+                  shard-plan-reason
                   shard-plan-substituted
+                  shard-plan-known-count
+                  shard-plan-default-seconds
                   shard-plan-total-files
                   shard-plan-predicted
                   shard-plan-shards))
 
 (define-runtime-path fixture-path (build-path "fixtures" "shard-plan-durations.json"))
-(define-runtime-path seed-fixture-path (build-path "fixtures" "shard-plan-cohort-seed.json"))
 
 (define fixture-files
   '("tests/test-aa-slow.rkt" "tests/test-bb-slow.rkt"
@@ -59,6 +52,20 @@
 
 ;; One file deliberately absent from the snapshot → substitution must be recorded.
 (define inventory-with-substitution (append fixture-files '("tests/test-jj-unmeasured.rkt")))
+
+;; The round-robin reference prediction, computed from classify.rkt's own
+;; `shard-files` semantics plus the same duration weights (the deleted
+;; planner-comparison helper did exactly this).
+(define (round-robin-predicted-max files durations shard-total)
+  (define sorted (sort (remove-duplicates files) string<?))
+  (define weights
+    (for/hash ([f (in-list sorted)])
+      (values f (hash-ref durations f 0.0))))
+  (apply max
+         (cons 0.0
+               (for/list ([i (in-range shard-total)])
+                 (for/sum ([f (in-list (shard-files sorted i shard-total))])
+                          (hash-ref weights f 0.0))))))
 
 (define shard-plan-suite
   (test-suite "Duration-aware shard plan tests"
@@ -85,28 +92,27 @@
       (check-eq? (shard-plan-mode plan) 'duration-aware)
       (check-true (inventory-preserved? plan))
       (check-equal? (shard-plan-total-files plan) 9)
-      ;; round-robin max = aa+ad+ag = 320+12.5 ... check the invariant only:
-      ;; duration-aware max must be <= round-robin max, and strictly better
+      ;; duration-aware max must be <= the round-robin max, and strictly better
       ;; on this skew fixture (three heavy files cannot share a shard in RR).
-      (check-true (<= (plan-predicted-max plan) (round-robin-predicted-max plan)))
-      (check-true (< (plan-predicted-max plan) (round-robin-predicted-max plan))))
+      (check-true (<= (plan-predicted-max plan) (round-robin-predicted-max fixture-files dur 3)))
+      (check-true (< (plan-predicted-max plan) (round-robin-predicted-max fixture-files dur 3))))
 
     (test-case "determinism guard: identical inputs → identical plans (fixture)"
       (define-values (dur _status) (load-duration-snapshot (path->string fixture-path)))
       (define plan-a (build-shard-plan inventory-with-substitution 3 #:durations dur))
       (define plan-b (build-shard-plan inventory-with-substitution 3 #:durations dur))
-      (check-equal? (plan->assignments plan-a) (plan->assignments plan-b))
+      (check-equal? (shard-plan-shards plan-a) (shard-plan-shards plan-b))
       (check-equal? (shard-plan-predicted plan-a) (shard-plan-predicted plan-b))
-      (check-equal? (plan->jsexpr plan-a) (plan->jsexpr plan-b))
       (check-equal? (plan-shard-files plan-a 0) (plan-shard-files plan-b 0)))
 
     (test-case "determinism guard: regeneration from fixture is stable (repeat x3)"
       (define-values (dur _status) (load-duration-snapshot (path->string fixture-path)))
       (define plans
         (for/list ([_ (in-range 3)])
-          (plan->jsexpr (build-shard-plan inventory-with-substitution 3 #:durations dur))))
+          (build-shard-plan inventory-with-substitution 3 #:durations dur)))
       (for ([p (in-list (rest plans))])
-        (check-equal? p (first plans))))
+        (check-equal? (shard-plan-shards p) (shard-plan-shards (first plans)))
+        (check-equal? (shard-plan-predicted p) (shard-plan-predicted (first plans)))))
 
     (test-case "missing durations use conservative default and are recorded"
       (define-values (dur _status) (load-duration-snapshot (path->string fixture-path)))
@@ -114,10 +120,8 @@
       ;; p95 of the known durations (sorted: 7.25 9 12.5 100.75 110.25 120.5 280 300 320)
       ;; idx = floor(0.95 * 8) = 7 → 300.0
       (check-equal? (shard-plan-substituted plan) '("tests/test-jj-unmeasured.rkt"))
-      (define j (plan->jsexpr plan))
-      (check-equal? (hash-ref (hash-ref j 'durations) 'substituted_count) 1)
-      (check-equal? (hash-ref (hash-ref j 'durations) 'known) 9)
-      (check-equal? (hash-ref (hash-ref j 'durations) 'default_seconds) 300.0))
+      (check-equal? (shard-plan-known-count plan) 9)
+      (check-equal? (shard-plan-default-seconds plan) 300.0))
 
     (test-case "inventory is preserved: every file appears exactly once"
       (define-values (dur _status) (load-duration-snapshot (path->string fixture-path)))
@@ -162,199 +166,10 @@
     (test-case "fallback: planner error degrades to round-robin with reason"
       (define plan (build-shard-plan/safe fixture-files 0))
       (check-eq? (shard-plan-mode plan) 'round-robin-fallback)
-      (check-true (string? (hash-ref (plan->jsexpr plan) 'reason)))
+      (check-true (string? (shard-plan-reason plan)))
       ;; fallback still preserves the inventory
-      (check-true (inventory-preserved? plan)))
-
-    (test-case "activation recommendation: hold when no predicted improvement"
-      ;; durations disabled → all weights equal → planner cannot beat RR max
-      (define plan (build-shard-plan fixture-files 3))
-      (define rec (activation-recommendation plan))
-      (check-equal? (car rec) "hold"))
-
-    (test-case "activation recommendation: activate when prediction improves"
-      (define-values (dur _status) (load-duration-snapshot (path->string fixture-path)))
-      (define plan (build-shard-plan fixture-files 3 #:durations dur))
-      (define rec (activation-recommendation plan))
-      (check-equal? (car rec) "activate"))
-
-    (test-case "report output contains per-shard assignments and predictions"
-      (define-values (dur _status) (load-duration-snapshot (path->string fixture-path)))
-      (define plan (build-shard-plan fixture-files 3 #:durations dur))
-      (define out (open-output-string))
-      (print-shard-plan-report plan out)
-      (define text (get-output-string out))
-      (check-true (regexp-match? #rx"shard 0/3" text))
-      (check-true (regexp-match? #rx"predicted max shard" text))
-      (check-true (regexp-match? #rx"tests/test-aa-slow.rkt" text)))
-
-    (test-case "plan json round-trips through write-plan-json!"
-      (define-values (dur _status) (load-duration-snapshot (path->string fixture-path)))
-      (define plan (build-shard-plan fixture-files 3 #:durations dur))
-      (define tmp (make-temporary-file "shard-plan-~a.json"))
-      (dynamic-wind (lambda () (void))
-                    (lambda ()
-                      (write-plan-json! plan tmp)
-                      (define re-read (with-input-from-file tmp read-json))
-                      (check-equal? (hash-ref re-read 'schema) "shard-plan/1")
-                      (check-equal? (hash-ref re-read 'shard_total) 3)
-                      (check-equal? (hash-ref re-read 'file_count) 9))
-                    (lambda ()
-                      (with-handlers ([exn:fail? (lambda (_) (void))])
-                        (delete-file tmp)))))))
-
-;; ---------------------------------------------------------------------------
-;; W10 (the current campaign): starvation/tail checks, cohort wall anchors, and the
-;; duration-aware plan regeneration report.
-;; ---------------------------------------------------------------------------
-
-(define w10-plan-suite
-  (test-suite "W10 shard-plan regeneration, starvation/tail checks"
-
-    (test-case "quantile-interpolated: empty, single, interpolated, ms-rounded"
-      (check-false (quantile-interpolated '() 0.5))
-      (check-equal? (quantile-interpolated '(42.0) 0.5) 42.0)
-      (check-equal? (quantile-interpolated '(42.0) 0.95) 42.0)
-      (check-equal? (quantile-interpolated '(10.0 20.0 30.0 40.0) 0.5) 25.0)
-      ;; exact linear interpolation at k = 0.95·3 = 2.85 → 30 + 0.85·10
-      (check-equal? (quantile-interpolated '(10.0 20.0 30.0 40.0) 0.95) 38.5)
-      ;; unsorted input is sorted internally
-      (check-equal? (quantile-interpolated '(40.0 10.0 30.0 20.0) 0.5) 25.0)
-      ;; millisecond rounding keeps regenerated artifacts byte-stable
-      (check-equal? (quantile-interpolated '(1.0 2.0) 0.9999999999) 2.0))
-
-    (test-case "plan-mean-shard-seconds: mean of predicted shard durations"
-      (define-values (dur _) (load-duration-snapshot (path->string fixture-path)))
-      (define plan (build-shard-plan fixture-files 3 #:durations dur))
-      (define preds (shard-plan-predicted plan))
-      (check-equal? (plan-mean-shard-seconds plan)
-                    (exact->inexact (/ (for/sum ([p (in-list preds)]) p) (length preds)))))
-
-    (test-case "starvation-check: balanced fixture plan passes the 1.35× gate"
-      (check-equal? (starvation-max-ratio) 1.35)
-      (define-values (dur _) (load-duration-snapshot (path->string fixture-path)))
-      (define plan (build-shard-plan fixture-files 3 #:durations dur))
-      (define check (starvation-check plan))
-      (check-true (hash-ref check 'ok))
-      (check-equal? (length (hash-ref check 'per_shard)) 3)
-      (check-equal? (hash-ref check 'offending) '())
-      (check-equal? (hash-ref check 'max_ratio_limit) 1.35))
-
-    (test-case "starvation-check: a file-bound shard offends the 1.35× gate"
-      ;; one 900s file among small ones over 3 shards → its shard far exceeds
-      ;; 1.35× the mean shard duration
-      (define plan
-        (build-shard-plan '("a.rkt" "b.rkt" "c.rkt" "d.rkt" "e.rkt")
-                          3
-                          #:durations
-                          (hash "a.rkt" 900.0 "b.rkt" 10.0 "c.rkt" 10.0 "d.rkt" 10.0 "e.rkt" 10.0)))
-      (define check (starvation-check plan))
-      (check-false (hash-ref check 'ok))
-      (check-equal? (length (hash-ref check 'offending)) 1)
-      (define worst (first (hash-ref check 'offending)))
-      (check-true (> (hash-ref worst 'ratio) 1.35))
-      (check-equal? (hash-ref worst 'predicted_seconds) 900.0))
-
-    (test-case "tail-straddle-check: no fixture file straddles (all far below mean)"
-      (check-equal? (tail-straddle-limit-ratio) 2.0)
-      (define-values (dur _) (load-duration-snapshot (path->string fixture-path)))
-      (define plan (build-shard-plan fixture-files 3 #:durations dur))
-      (define check (tail-straddle-check plan))
-      (check-true (hash-ref check 'ok))
-      (check-equal? (hash-ref check 'violations) '())
-      (check-equal? (hash-ref check 'straddling_once) '()))
-
-    (test-case "tail-straddle-check: a file straddling once is recorded, not a violation"
-      ;; total 120 over 2 shards → mean 60; the 100s file straddles once
-      ;; (100 > 60) but not twice (100 < 120)
-      (define plan
-        (build-shard-plan '("big.rkt" "s1.rkt" "s2.rkt")
-                          2
-                          #:durations (hash "big.rkt" 100.0 "s1.rkt" 10.0 "s2.rkt" 10.0)))
-      (define check (tail-straddle-check plan))
-      (check-true (hash-ref check 'ok))
-      (check-equal? (length (hash-ref check 'straddling_once)) 1)
-      (check-equal? (hash-ref (first (hash-ref check 'straddling_once)) 'path) "big.rkt")
-      (check-equal? (hash-ref check 'violations) '()))
-
-    (test-case "tail-straddle-check: a file straddling TWICE is a violation"
-      ;; total 540 over 4 shards → mean 135; the 500s file exceeds 2×mean=270
-      (define plan
-        (build-shard-plan
-         '("huge.rkt" "s1.rkt" "s2.rkt" "s3.rkt" "s4.rkt")
-         4
-         #:durations (hash "huge.rkt" 500.0 "s1.rkt" 10.0 "s2.rkt" 10.0 "s3.rkt" 10.0 "s4.rkt" 10.0)))
-      (define check (tail-straddle-check plan))
-      (check-false (hash-ref check 'ok))
-      (check-equal? (length (hash-ref check 'violations)) 1)
-      (define v (first (hash-ref check 'violations)))
-      (check-equal? (hash-ref v 'path) "huge.rkt")
-      (check-true (> (hash-ref v 'ratio_to_mean) 2.0)))
-
-    (test-case "cohort wall anchors: three latest pre-W4 walls, post-W4 p50/p95, malformed rows filtered"
-      (define anchors (load-cohort-wall-anchors (path->string seed-fixture-path)))
-      (check-equal? (hash-ref anchors 'entries_total) 6) ; malformed row filtered
-      (check-equal? (length (hash-ref anchors 'three_anchors)) 3)
-      ;; latest three pre-cutoff merges: 102 (900), 103 (1000), 104 (1400)
-      (check-equal? (map (lambda (a) (hash-ref a 'number)) (hash-ref anchors 'three_anchors))
-                    (list 102 103 104))
-      (check-equal? (hash-ref anchors 'three_anchor_mean_seconds) 1100.0)
-      (define post (hash-ref anchors 'post_w4))
-      (check-equal? (hash-ref post 'count) 2)
-      (check-equal? (hash-ref post 'p50_seconds) 2600.0)
-      ; k = 0.95·1 = 0.95 → 2400 + 0.95·(2800−2400) = 2780.0
-      (check-equal? (hash-ref post 'p95_seconds) 2780.0)
-      (define full (hash-ref anchors 'full))
-      (check-equal? (hash-ref full 'count) 6)
-      ; k = 0.5·5 = 2.5 → (1000+1400)/2 = 1200.0
-      (check-equal? (hash-ref full 'p50_seconds) 1200.0)
-      ; k = 0.95·5 = 4.75 → 2400 + 0.75·(2800−2400) = 2700.0
-      (check-equal? (hash-ref full 'p95_seconds) 2700.0))
-
-    (test-case "regenerate-plan-report: deterministic, schema-shaped, checks attached"
-      (define-values (dur _) (load-duration-snapshot (path->string fixture-path)))
-      (define report
-        (regenerate-plan-report inventory-with-substitution
-                                3
-                                #:durations dur
-                                #:duration-source "fixture"
-                                #:seed-path (path->string seed-fixture-path)))
-      (check-equal? (hash-ref report 'schema) "shard-plan-regeneration/1")
-      ;; `wave` and the `spec_reference` beside it are FROZEN AUTHORING IDs:
-      ;; they name the wave and the PLAN document that specified this report
-      ;; schema. The committed example artifact
-      ;; artifacts/ci-baseline/v1.00.29-final/shard-plan-regeneration.json
-      ;; carries exactly these two values together, which is what settles their
-      ;; meaning. Deriving `wave` from q-version is wrong for that reason: a live
-      ;; report regenerated in a later release would claim to belong to a wave
-      ;; that did not author it, contradicting its own spec_reference and the
-      ;; frozen example. This assertion held before this release's bake only
-      ;; because q-version happened to be 1.00.29. Pinned literally, reason
-      ;; recorded.
-      (check-equal? (hash-ref report 'wave) "v1.00.29-w10")
-      (check-true (hash? (hash-ref report 'plan)))
-      (check-true (hash? (hash-ref (hash-ref report 'checks) 'starvation)))
-      (check-true (hash? (hash-ref (hash-ref report 'checks) 'tail_straddle)))
-      (check-true (string? (hash-ref (hash-ref report 'checks_definitions) 'starvation)))
-      (check-true (hash? (hash-ref report 'cohort_wall_anchors)))
-      (define report-2
-        (regenerate-plan-report inventory-with-substitution
-                                3
-                                #:durations dur
-                                #:duration-source "fixture"
-                                #:seed-path (path->string seed-fixture-path)))
-      (check-equal? report report-2 "regeneration must be deterministic from identical inputs"))
-
-    (test-case "print-starvation-tail-report: report-only text mentions both gates"
-      (define-values (dur _) (load-duration-snapshot (path->string fixture-path)))
-      (define plan (build-shard-plan fixture-files 3 #:durations dur))
-      (define out (open-output-string))
-      (print-starvation-tail-report plan out)
-      (define text (get-output-string out))
-      (check-true (regexp-match? #rx"starvation: ok" text))
-      (check-true (regexp-match? #rx"tail-straddle: ok" text)))))
+      (check-true (inventory-preserved? plan)))))
 
 (module+ test
   (exit (run-tests (test-suite "all shard-plan suites"
-                     shard-plan-suite
-                     w10-plan-suite))))
+                     shard-plan-suite))))

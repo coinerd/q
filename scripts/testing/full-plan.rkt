@@ -93,11 +93,19 @@
          ;; Pure lane decision, mapped to messages/exit codes by the CLI after
          ;; all output has been written
          lane-verdict
-         ;; Changed-file selection (`--changed [BASE]`)
+         ;; Changed-file selection (`--changed [BASE]`, `--changed BASE..HEAD`)
          (struct-out change-report)
          working-tree-changed
+         commits-changed
          changed-selection
+         quick-changed-owners
          change-report-lines
+         ;; CI lanes (`--lane NAME`): one policy table, no YAML numbers
+         (struct-out qt-lane)
+         qt-lanes
+         qt-lane-ref
+         ;; Release candidate verification (`./qt release --candidate SHA`)
+         release-candidate-check
          ;; Resolved plan shared by `--explain` and execution
          (struct-out lane-plan)
          resolve-lane-plan
@@ -505,6 +513,12 @@
            resolved
            (path->string root)))
   (define all (remove-duplicates (append (git-lines diff-text) (git-lines untracked-text))))
+  (define-values (rels outside) (diff-paths->rels all prefix))
+  (values rels resolved outside))
+
+;; Repository-root-relative diff paths -> selection-root-relative paths. Paths
+;; outside the selection root are returned separately (never silently dropped).
+(define (diff-paths->rels all prefix)
   (define mapped
     (for/list ([p (in-list all)])
       (cond
@@ -515,11 +529,64 @@
                            #:unless (eq? (cdr m) 'outside))
                   (car m))
                 string<?)
-          resolved
           (sort (for/list ([m (in-list mapped)]
                            #:when (eq? (cdr m) 'outside))
                   (car m))
                 string<?)))
+
+;; Diff between two commits (`BASE..HEAD`). Both refs must resolve to
+;; commits: a typo'd base is a selection failure, never "nothing changed".
+;; Returns (values changed-rels label outside-rels).
+(define (commits-changed base head root)
+  (unless (find-executable-path "git")
+    (error 'full-plan
+           "cannot compute the diff ~a..~a under ~a: git is not available (fail closed)"
+           base
+           head
+           (path->string root)))
+  (define (resolves? ref name)
+    (define resolved?
+      (and (string? ref)
+           (positive? (string-length ref))
+           (git-ok? root "rev-parse" "--verify" "--quiet" (string-append ref "^{commit}"))))
+    (unless resolved?
+      (error
+       'full-plan
+       "cannot compute the diff ~a..~a under ~a: ~a ref ~a does not resolve to a commit (fail closed)"
+       base
+       head
+       (path->string root)
+       name
+       ref))
+    resolved?)
+  (resolves? base "base")
+  (resolves? head "head")
+  (define-values (prefix-ok? prefix-text) (git-run root (list "rev-parse" "--show-prefix")))
+  (define prefix
+    (if prefix-ok?
+        (string-trim prefix-text)
+        ""))
+  (define-values (ok? text) (git-run root (list "diff" "--name-only" "--no-renames" base head)))
+  (unless ok?
+    (error 'full-plan
+           "cannot compute the diff ~a..~a under ~a: git failed (fail closed)"
+           base
+           head
+           (path->string root)))
+  (define-values (rels outside) (diff-paths->rels (remove-duplicates (git-lines text)) prefix))
+  (values rels (format "~a..~a" base head) outside))
+
+;; `./qt quick --changed`: conservative impact selection over the audited quick
+;; owners, through the SAME @covers/impact machinery as the full/default lane.
+;; Unattributable owners are INCLUDED (fail open) and any escalation includes
+;; every owner, so the selection can only widen; it is a reproduction, never a
+;; PR/CI claim.
+(define (quick-changed-owners root
+                              owner-rels
+                              changed
+                              #:base [base "working tree"]
+                              #:outside [outside '()])
+  (changed-selection root owner-rels changed #:base base #:outside outside))
 
 ;; What the working-tree diff means for one lane. `included` is exactly what
 ;; the command would run; `excluded` is what it would skip and why.
@@ -564,19 +631,28 @@
 
 ;; One line per attribution decision, so `--explain` states WHY each file is in
 ;; or out of the changed selection.
+;; The changed-selection header: a commit range and a working-tree diff are
+;; DIFFERENT inputs (a range sees no untracked files), and the report must say
+;; which one produced the selection.
+(define (change-report-source-line report)
+  (define base (change-report-base report))
+  (if (and (string? base) (string-contains? base ".."))
+      (format "changed: commit range ~a (git diff --name-only BASE HEAD)" base)
+      (format "changed: working-tree diff against ~a (git diff --name-only BASE plus untracked files)"
+              base)))
+
 (define (change-report-lines report)
   (define unattributable (change-report-unattributable report))
   (define escalations (change-report-escalations report))
   (append
    (list
-    (format "changed: working-tree diff against ~a (git diff --name-only BASE plus untracked files)"
-            (change-report-base report))
+    (change-report-source-line report)
     (format "changed files: ~a" (length (change-report-changed report)))
     (format
      "changed mapping: @covers manifest (~a attributed test files) plus the impact dependency graph"
      (change-report-covers-count report))
     (format
-     "changed attribution: ~a of ~a lane files carry no @covers attribution and are INCLUDED (fail open)"
+     "changed attribution: ~a of ~a selected files carry no @covers attribution and are INCLUDED (fail open)"
      (length unattributable)
      (+ (length (change-report-included report)) (length (change-report-excluded report))))
     (if (null? escalations)
@@ -1012,9 +1088,8 @@
 ;;   - selection goes through classify.rkt's own suite predicates
 ;;     (`collect-test-files`) and its `shard-files` semantics;
 ;;   - execution goes through runner.rkt's `run-suite-once` (mode, profile
-;;     skips, ordering, scheduler, mutation serialization, managed-surface
-;;     detection, strict zero-test detection) or `run-single-file` for the
-;;     measurement mode;
+;;     skips, mutation serialization, managed-surface detection, strict
+;;     zero-test detection);
 ;;   - evidence goes through reporting.rkt's `write-json-results!` (the exact
 ;;     runner schema) and is validated with
 ;;     `validate-run-summary-json` before the command is allowed to pass.
@@ -1036,15 +1111,17 @@
 ;; silently. `--ledger` must name an existing file: a missing path is a typo,
 ;; not evidence that no known failures exist.
 
-(define-runtime-path rt-cli "../run-tests/cli.rkt")
+(define-runtime-path rt-cli "../run-tests/runner.rkt")
 (define-runtime-path rt-runner "../run-tests/runner.rkt")
 (define-runtime-path rt-reporting "../run-tests/reporting.rkt")
-(define-runtime-path rt-ledger "../run-tests/ledger.rkt")
-(define-runtime-path rt-gate-evidence "../run-tests/gate-evidence.rkt")
+;; Aliases kept so the lazy-load call sites below name their original owner;
+;; the bindings now live in the surviving modules (Phase C fold, §11.3).
+(define-runtime-path rt-ledger "../run-tests/reporting.rkt")
+(define-runtime-path rt-gate-evidence "../run-tests/reporting.rkt")
 (define-runtime-path rt-inventory "../run-tests/inventory.rkt")
 (define-runtime-path rt-shard-plan "../run-tests/shard-plan.rkt")
-(define-runtime-path rt-profiles "../run-tests/profiles.rkt")
-(define-runtime-path rt-parse "../run-tests/parse.rkt")
+(define-runtime-path rt-profiles "../run-tests/classify.rkt")
+(define-runtime-path rt-parse "../run-tests/reporting.rkt")
 
 ;; One cache for lazily-loaded runner bindings, so the 1500-file full suite
 ;; does not re-resolve an accessor per result.
@@ -1069,10 +1146,10 @@
 (define (qt-strict-test-runner?)
   (equal? (getenv "STRICT_TEST_RUNNER") "1"))
 
-;; Mirror of cli.rkt's inline `--shard-plan` validation (the runner keeps the
-;; accepted modes in `validate-args!`, not in a registry constant).
+;; Mirror of runner.rkt's inline `--shard-plan` validation. Only the
+;; deterministic `active` plan survives (§11.3); `report`/`measure` are gone.
 (define (qt-shard-plan-modes)
-  '("report" "active" "measure"))
+  '("active"))
 
 ;; ============================================================
 ;; Spec (raw CLI values) and validation
@@ -1091,15 +1168,13 @@
                record-gate?
                repeat
                mode
-               scheduler
-               ordering
                shard-plan
                durations
                argv)
   #:transparent)
 
 (define (qt-known-suites)
-  (ci-load rt-cli "scripts/run-tests/cli.rkt" 'known-suites))
+  (ci-load rt-cli "scripts/run-tests/runner.rkt" 'known-suites))
 
 (define (qt-known-list module label name)
   (ci-load module label name))
@@ -1129,8 +1204,6 @@
   (define timeout (qt-ci-spec-timeout spec))
   (define profile (qt-ci-spec-profile spec))
   (define mode (qt-ci-spec-mode spec))
-  (define scheduler (qt-ci-spec-scheduler spec))
-  (define ordering (qt-ci-spec-ordering spec))
   (define shard-plan (qt-ci-spec-shard-plan spec))
   (define json-out (qt-ci-spec-json-out spec))
   (define ledger-path (qt-ci-spec-ledger-path spec))
@@ -1140,7 +1213,7 @@
       (error 'full-plan
              "unsupported --suite: ~a (valid: ~a)"
              suite
-             (string-join (qt-symbol-choices rt-cli "scripts/run-tests/cli.rkt" 'known-suites)
+             (string-join (qt-symbol-choices rt-cli "scripts/run-tests/runner.rkt" 'known-suites)
                           ", "))))
   (unless (and (exact-integer? total) (positive? total))
     (error 'full-plan "--shard-total must be a positive integer, got ~s" total))
@@ -1151,31 +1224,18 @@
   (when timeout
     (unless (and (real? timeout) (positive? timeout))
       (error 'full-plan "--timeout must be a positive number of seconds, got ~s" timeout)))
-  (unless (memq profile (qt-known-list rt-profiles "scripts/run-tests/profiles.rkt" 'known-profiles))
+  (unless (memq profile (qt-known-list rt-profiles "scripts/run-tests/classify.rkt" 'known-profiles))
     (error 'full-plan
            "unsupported --profile: ~a (valid: ~a)"
            profile
            (string-join
-            (qt-symbol-choices rt-profiles "scripts/run-tests/profiles.rkt" 'known-profiles)
+            (qt-symbol-choices rt-profiles "scripts/run-tests/classify.rkt" 'known-profiles)
             ", ")))
-  (unless (memq mode (qt-known-list rt-cli "scripts/run-tests/cli.rkt" 'known-modes))
+  (unless (memq mode (qt-known-list rt-cli "scripts/run-tests/runner.rkt" 'known-modes))
     (error 'full-plan
            "unsupported --mode: ~a (valid: ~a)"
            mode
-           (string-join (qt-symbol-choices rt-cli "scripts/run-tests/cli.rkt" 'known-modes) ", ")))
-  (unless (memq scheduler (qt-known-list rt-cli "scripts/run-tests/cli.rkt" 'known-schedulers))
-    (error 'full-plan
-           "unsupported --scheduler: ~a (valid: ~a)"
-           scheduler
-           (string-join (qt-symbol-choices rt-cli "scripts/run-tests/cli.rkt" 'known-schedulers)
-                        ", ")))
-  (when ordering
-    (unless (memq ordering (qt-known-list rt-cli "scripts/run-tests/cli.rkt" 'known-orderings))
-      (error 'full-plan
-             "unsupported --ordering: ~a (valid: ~a)"
-             ordering
-             (string-join (qt-symbol-choices rt-cli "scripts/run-tests/cli.rkt" 'known-orderings)
-                          ", "))))
+           (string-join (qt-symbol-choices rt-cli "scripts/run-tests/runner.rkt" 'known-modes) ", ")))
   (when (and ledger-path qt-contract?)
     (unless (file-exists? (path->complete-path (string->path ledger-path)))
       (error 'full-plan "--ledger file does not exist: ~a" ledger-path)))
@@ -1184,19 +1244,7 @@
       (error 'full-plan
              "unsupported --shard-plan: ~a (valid: ~a)"
              shard-plan
-             (string-join (qt-shard-plan-modes) ", ")))
-    (when (equal? shard-plan "measure")
-      (unless json-out
-        (error 'full-plan
-               "--shard-plan measure requires --json-out PATH (duration snapshot destination)"))
-      (when (and (pair? files) qt-contract?)
-        (error
-         'full-plan
-         "--shard-plan measure cannot be combined with --file (explicit reproduction is not a measurement pass)")))
-    (when (and (equal? shard-plan "report") json-out qt-contract?)
-      (error
-       'full-plan
-       "--json-out is not written by --shard-plan report (the plan is printed; drop --json-out or use report output)")))
+             (string-join (qt-shard-plan-modes) ", "))))
   (when (and (pair? files) suite)
     (error
      'full-plan
@@ -1210,52 +1258,7 @@
     (error
      'full-plan
      "--file (explicit reproduction) cannot --record-gate-evidence (gate evidence claims a suite PASS)"))
-  ;; Plan-only modes never execute the flags below, so accepting them would be
-  ;; a silent ignore. Name every offender and fail closed.
-  (define conflicts
-    (if qt-contract?
-        (qt-shard-plan-conflicts spec)
-        '()))
-  (unless (null? conflicts)
-    (error
-     'full-plan
-     "cannot combine --shard-plan ~a with ~a: they would be ignored (fail closed, never silently ignored)"
-     shard-plan
-     (string-join conflicts ", ")))
   (void))
-
-(define (qt-shard-plan-conflicts spec)
-  (define shard-plan (qt-ci-spec-shard-plan spec))
-  (define common
-    (append (if (> (qt-ci-spec-repeat spec) 1)
-                (list "--repeat")
-                '())
-            (if (qt-ci-spec-record-gate? spec)
-                (list "--record-gate-evidence")
-                '())
-            (if (qt-ci-spec-ledger-path spec)
-                (list "--ledger")
-                '())
-            (if (not (eq? (qt-ci-spec-mode spec) 'auto))
-                (list "--mode")
-                '())
-            (if (not (eq? (qt-ci-spec-scheduler spec) 'batch))
-                (list "--scheduler")
-                '())
-            (if (qt-ci-spec-ordering spec)
-                (list "--ordering")
-                '())
-            (if (positive? (qt-ci-spec-shard-index spec))
-                (list "--shard-index")
-                '())))
-  (cond
-    [(equal? shard-plan "report")
-     (append common
-             (if (qt-ci-spec-timeout spec)
-                 (list "--timeout")
-                 '()))]
-    [(equal? shard-plan "measure") common]
-    [else '()]))
 
 ;; ============================================================
 ;; Selection (classify.rkt predicates + shard-files semantics)
@@ -1360,14 +1363,14 @@
               spec))
 
 ;; Duration-aware shard plan over the resolved selection, using shard-plan.rkt's
-;; own planner and duration loader (active/measure/report all share this).
+;; own planner and duration loader (`--shard-plan active`).
 (define (qt-ci-build-shard-plan plan total)
   (define spec (qt-ci-plan-spec plan))
   (define durations (qt-ci-spec-durations spec))
   (define profile (qt-ci-spec-profile spec))
   (define load-dur (ci-load rt-shard-plan "scripts/run-tests/shard-plan.rkt" 'load-duration-snapshot))
   (define build (ci-load rt-shard-plan "scripts/run-tests/shard-plan.rkt" 'build-shard-plan/safe))
-  (define skips (ci-load rt-profiles "scripts/run-tests/profiles.rkt" 'profile-skips-test?))
+  (define skips (ci-load rt-profiles "scripts/run-tests/classify.rkt" 'profile-skips-test?))
   (define-values (dur dur-status) (load-dur durations))
   (when (qt-ci-presentation)
     (printf ";; qt: shard-plan durations=~a status=~a known=~a~n"
@@ -1381,7 +1384,7 @@
          #:duration-source durations))
 
 ;; The exact files this plan would execute. `active` consumes the duration-aware
-;; plan; every other mode uses classify.rkt's round-robin `shard-files`.
+;; plan; every other configuration uses classify.rkt's round-robin `shard-files`.
 (define (qt-ci-run-files plan)
   (define rels (qt-ci-plan-rels plan))
   (define total (qt-ci-plan-shard-total plan))
@@ -1506,95 +1509,13 @@
   doc)
 
 (define (qt-result-total r)
-  ((ci-load rt-parse "scripts/run-tests/parse.rkt" 'test-file-result-total) r))
+  ((ci-load rt-parse "scripts/run-tests/reporting.rkt" 'test-file-result-total) r))
 
-(define (qt-result-elapsed-ms r)
-  ((ci-load rt-parse "scripts/run-tests/parse.rkt" 'test-file-result-elapsed-ms) r))
-
-;; ============================================================
-;; Sub-modes: shard-plan report / measure, then test execution
-;; ============================================================
-
-;; `report`: print the duration-aware plan and execute nothing (exit 0).
-(define (run-qt-ci-shard-report! plan)
-  (define total (qt-ci-plan-shard-total plan))
-  (define shard-plan (qt-ci-build-shard-plan plan total))
-  (printf ";; qt: shard-plan=report shard-total=~a (plan only; no tests executed)~n" total)
-  ((ci-load rt-shard-plan "scripts/run-tests/shard-plan.rkt" 'print-shard-plan-report) shard-plan))
-
-;; `measure`: run each selected file once (through the runner's own
-;; run-single-file) and write the W0 duration snapshot to --json-out, then print
-;; the regenerated plan plus the starvation/tail checks. It is a measurement
-;; pass: it produces no test verdict and never reports a pass line.
-;; `measure` delegates per-file execution to the runner's `run-single-file`; the
-;; W0 duration-snapshot envelope is replicated here because the runner keeps
-;; that branch inside its `main` (no reusable function to call). The shape
-;; (schema/suite/generated_at/measured_by/files[path,duration_seconds,status])
-;; is identical to the runner's.
-(define (run-qt-ci-measure! plan)
-  (define spec (qt-ci-plan-spec plan))
-  (define json-out (qt-ci-spec-json-out spec))
-  (define timeout (qt-ci-spec-timeout spec))
-  (define files (sort (qt-ci-plan-rels plan) string<?))
-  (define run-one (ci-load rt-runner "scripts/run-tests/runner.rkt" 'run-single-file))
-  (define status (ci-load rt-reporting "scripts/run-tests/reporting.rkt" 'result-status))
-  (define write-json (ci-load 'json "json" 'write-json))
-  (define date->string (ci-load 'racket/date "racket/date" 'date->string))
-  (define current-date (ci-load 'racket/date "racket/date" 'current-date))
-  (define date-display-format (ci-load 'racket/date "racket/date" 'date-display-format))
-  (printf ";; qt: shard-plan=measure files=~a jobs=1 (sequential per-file subprocess measurement)~n"
-          (length files))
-  (define measured
-    (for/list ([f (in-list files)])
-      (define r (run-one f #:timeout (and timeout (* timeout 1000)) #:mode 'subprocess))
-      (printf ";; qt: measured ~a ~as (~a)~n" f (/ (qt-result-elapsed-ms r) 1000.0) (status r))
-      (hasheq 'path f 'duration_seconds (/ (qt-result-elapsed-ms r) 1000.0) 'status (status r))))
-  (call-with-output-file
-   json-out
-   #:exists 'truncate/replace
-   (lambda (out)
-     (write-json
-      (hasheq
-       'schema
-       "ci-durations/1"
-       'suite
-       (qt-ci-suite-label plan)
-       'generated_at
-       (parameterize ([date-display-format 'iso-8601])
-         (date->string (current-date) #t))
-       'measured_by
-       "--shard-plan measure (sequential subprocess per-file wall clock, includes per-file runner overhead)"
-       'files
-       measured)
-      out)
-     (newline out)))
-  (printf ";; qt: duration snapshot written to ~a~n" json-out)
-  (define load-dur (ci-load rt-shard-plan "scripts/run-tests/shard-plan.rkt" 'load-duration-snapshot))
-  (define-values (mdur mstatus) (load-dur json-out))
-  (printf ";; qt: shard-plan=measure snapshot status=~a known=~a~n" mstatus (hash-count mdur))
-  ;; Regenerate the plan from the FRESH snapshot (never from --durations), with
-  ;; the CI fast-lane shard count (3) when no explicit sharding was requested.
-  (define build (ci-load rt-shard-plan "scripts/run-tests/shard-plan.rkt" 'build-shard-plan/safe))
-  (define skips (ci-load rt-profiles "scripts/run-tests/profiles.rkt" 'profile-skips-test?))
-  (define profile (qt-ci-spec-profile spec))
-  (define mplan
-    (build files
-           (if (> (qt-ci-plan-shard-total plan) 1)
-               (qt-ci-plan-shard-total plan)
-               3)
-           #:durations mdur
-           #:profile-skips?
-           (lambda (f) (skips profile (hash-ref (get-file-metadata f) 'requires '())))
-           #:duration-source json-out))
-  ((ci-load rt-shard-plan "scripts/run-tests/shard-plan.rkt" 'print-shard-plan-report) mplan)
-  ((ci-load rt-shard-plan "scripts/run-tests/shard-plan.rkt" 'print-starvation-tail-report) mplan))
-
-;; The runner's own `effective-mode` mapping (auto -> grouped for unit-fast,
-;; subprocess everywhere else); run-suite-once expects an already-effective mode.
+;; The runner's own `effective-mode` mapping: `auto` and `subprocess` are the
+;; only surviving modes and both execute one subprocess per test file, so
+;; run-suite-once always receives an effective mode.
 (define (qt-effective-mode requested suite-label)
-  (if (eq? requested 'auto)
-      (if (string=? suite-label "unit-fast") 'grouped 'subprocess)
-      requested))
+  (if (eq? requested 'auto) 'subprocess requested))
 
 (struct qt-ci-outcome (ran? exit-code results) #:transparent)
 
@@ -1602,8 +1523,7 @@
   (define spec (qt-ci-plan-spec plan))
   (define index (qt-ci-plan-shard-index plan))
   (define total (qt-ci-plan-shard-total plan))
-  (define refusal
-    (ci-load rt-gate-evidence "scripts/run-tests/gate-evidence.rkt" 'gate-evidence-refusal))
+  (define refusal (ci-load rt-gate-evidence "scripts/run-tests/reporting.rkt" 'gate-evidence-refusal))
   (define reason (refusal index total))
   (when reason
     (error 'full-plan "cannot record gate evidence: ~a" reason))
@@ -1677,7 +1597,7 @@
   ;; so that log can never look green (the post-run zero-test check stays as a
   ;; second line of defense).
   (define profile (qt-ci-spec-profile spec))
-  (define skip? (ci-load rt-profiles "scripts/run-tests/profiles.rkt" 'profile-skips-test?))
+  (define skip? (ci-load rt-profiles "scripts/run-tests/classify.rkt" 'profile-skips-test?))
   (define skipped
     (filter (lambda (f) (skip? profile (hash-ref (get-file-metadata f) 'requires '()))) files))
   (when (and (qt-ci-exec-options-refuse-all-skipped? options) (= (length skipped) (length files)))
@@ -1693,13 +1613,12 @@
   (define ledger-path (qt-ci-spec-ledger-path spec))
   (define ledger
     (and ledger-path
-         ((ci-load rt-ledger "scripts/run-tests/ledger.rkt" 'load-known-failure-ledger) ledger-path)))
+         ((ci-load rt-ledger "scripts/run-tests/reporting.rkt" 'load-known-failure-ledger)
+          ledger-path)))
   (define timeout-ms (and (qt-ci-spec-timeout spec) (* (qt-ci-spec-timeout spec) 1000)))
   (define repeat (qt-ci-spec-repeat spec))
   (define json-out (qt-ci-spec-json-out spec))
   (define shard (and (> total 1) (cons (qt-ci-plan-shard-index plan) total)))
-  (define requested-param
-    (ci-load rt-runner "scripts/run-tests/runner.rkt" 'current-requested-execution-mode))
   (define run-suite-once (ci-load rt-runner "scripts/run-tests/runner.rkt" 'run-suite-once))
   (when (and (qt-ci-presentation) (equal? (qt-ci-plan-shard-plan plan) "active") (= total 1))
     (printf ";; qt: --shard-plan active ignored — --shard-total=1 (unsharded)~n"))
@@ -1710,31 +1629,27 @@
   (define strict? (qt-ci-exec-options-strict? options))
   (define last-results (box '()))
   (define exit-code (box 0))
-  (parameterize ([requested-param (symbol->string requested)])
-    (for ([run-num (in-range 1 (add1 repeat))]
-          #:break (not (zero? (unbox exit-code))))
-      ;; Presentation hook: the compat CLI prints its `── Run n/N ──` header
-      ;; between repeats; qt prints nothing here.
-      ((qt-ci-exec-options-on-run-start options) run-num repeat)
-      (define-values (code results)
-        (run-suite-once files
-                        jobs
-                        timeout-ms
-                        strict?
-                        suite-label
-                        run-num
-                        repeat
-                        mode
-                        json-out
-                        ledger
-                        (qt-ci-spec-profile spec)
-                        #:shard shard
-                        #:phases (qt-ci-exec-options-phases options)
-                        #:scheduler (qt-ci-spec-scheduler spec)
-                        #:ordering (qt-ci-spec-ordering spec)
-                        #:duration-source (qt-ci-spec-durations spec)))
-      (set-box! last-results results)
-      (set-box! exit-code code)))
+  (for ([run-num (in-range 1 (add1 repeat))]
+        #:break (not (zero? (unbox exit-code))))
+    ;; Presentation hook: the compat CLI prints its `── Run n/N ──` header
+    ;; between repeats; qt prints nothing here.
+    ((qt-ci-exec-options-on-run-start options) run-num repeat)
+    (define-values (code results)
+      (run-suite-once files
+                      jobs
+                      timeout-ms
+                      strict?
+                      suite-label
+                      run-num
+                      repeat
+                      mode
+                      json-out
+                      ledger
+                      (qt-ci-spec-profile spec)
+                      #:shard shard
+                      #:phases (qt-ci-exec-options-phases options)))
+    (set-box! last-results results)
+    (set-box! exit-code code))
   (define results (unbox last-results))
   ;; Evidence first (the runner already wrote the document): under the qt
   ;; presentation add the selection marker, then validate the exact runner
@@ -1757,18 +1672,10 @@
     (qt-record-gate-evidence! plan files results jobs suite-label))
   (qt-ci-outcome #t (unbox exit-code) results))
 
-;; A single entry point: `report`/`measure` never run tests (ran? = #f); every
-;; other mode executes through the runner's `run-suite-once`.
+;; One entry point: every surviving mode executes through the runner's
+;; `run-suite-once` (the shard-plan report/measure sub-modes are deleted).
 (define (run-qt-ci-plan plan jobs #:options [options (qt-ci-default-options)])
-  (define shard-plan (qt-ci-plan-shard-plan plan))
-  (cond
-    [(equal? shard-plan "report")
-     (run-qt-ci-shard-report! plan)
-     (qt-ci-outcome #f 0 '())]
-    [(equal? shard-plan "measure")
-     (run-qt-ci-measure! plan)
-     (qt-ci-outcome #f 0 '())]
-    [else (run-qt-ci-tests plan jobs #:options options)]))
+  (run-qt-ci-tests plan jobs #:options options))
 
 ;; ============================================================
 ;; Explain (nothing executed) and the honest pass line
@@ -1778,21 +1685,115 @@
 ;; selection identity (suite / shard / explicit reproduction), the explicit
 ;; reproduction spelling, and the shard-plan mode. Plain `./qt full --explain`
 ;; never reaches this function, so its output stays byte-identical.
-(define (qt-ci-explain-lines plan)
+;; ============================================================
+;; CI lanes (`./qt --lane NAME`)
+;; ============================================================
+;; One table is the policy metadata CI reads instead of hard-coding suite,
+;; profile and timeout in YAML. A lane names an EXISTING runner suite (never a
+;; second selection scheme) plus the shard-plan/timeout policy the engine
+;; already implements. `shard-total` is a lane default: a workflow matrix that
+;; enumerates shards still owns the index/total it instantiates and may pass
+;; them explicitly. Unknown lanes fail closed and list the valid names.
+(struct qt-lane (name suite timeout shard-total shard-plan description) #:transparent)
+
+(define qt-lanes
+  (list
+   (qt-lane 'fast 'fast #f 1 #f "fast PR regression tier")
+   (qt-lane 'fast-shard 'fast #f 1 "active" "duration-aware fast tier (requires --shard-total > 1)")
+   (qt-lane 'platform 'platform #f 1 #f "curated platform-cross subset")
+   (qt-lane 'security 'security #f 1 #f "security suite")
+   (qt-lane 'workflows 'workflows 90 2 #f "workflow/contract suite (two shards)")
+   (qt-lane 'arch 'arch #f 1 #f "architecture suite")
+   (qt-lane 'tui 'tui 60 1 #f "TUI suite")
+   (qt-lane 'smoke 'smoke #f 1 #f "smoke suite")
+   (qt-lane 'release-smoke 'release-smoke 120 1 #f "release smoke suite")
+   (qt-lane 'unit-fast 'unit-fast #f 1 #f "unit-fast suite")
+   (qt-lane 'slow 'slow #f 1 #f "slow suite")
+   (qt-lane 'all 'all #f 1 #f "complete discovered suite")))
+
+;; Resolve a lane name to its policy entry. An unknown name is an error that
+;; NAMES every valid lane (fail closed, never a silent fallback to `fast`).
+(define (qt-lane-ref name)
+  (define wanted
+    (if (symbol? name)
+        name
+        (string->symbol name)))
+  (or (for/first ([lane (in-list qt-lanes)]
+                  #:when (eq? (qt-lane-name lane) wanted))
+        lane)
+      (error 'full-plan
+             "unknown --lane: ~a (valid: ~a)"
+             wanted
+             (string-join (map (lambda (l) (symbol->string (qt-lane-name l))) qt-lanes) ", "))))
+
+;; ============================================================
+;; Release candidate verification (`./qt release --candidate SHA`)
+;; ============================================================
+;; A release entry point that accepts a candidate must verify the EXACT
+;; candidate it was handed: a different HEAD, or a checkout with uncommitted
+;; changes, is refused before anything runs (release obligations stay
+;; unconditional). `sha` must be a commit id (hex), never a moving ref.
+(define (release-candidate-check root sha)
+  (define text
+    (and sha
+         (if (path? sha)
+             (path->string sha)
+             sha)))
+  (unless (and (string? text) (regexp-match? #px"^[0-9a-f]{7,40}$" text))
+    (error 'full-plan
+           "--candidate must be a commit SHA (7-40 lowercase hex characters), got: ~a"
+           (or text "<missing>")))
+  (unless (find-executable-path "git")
+    (error 'full-plan
+           "cannot verify --candidate ~a under ~a: git is not available (fail closed)"
+           text
+           (path->string root)))
+  (define-values (head-ok? head-text) (git-run root (list "rev-parse" "--verify" "--quiet" "HEAD")))
+  (unless head-ok?
+    (error 'full-plan
+           "cannot verify --candidate ~a under ~a: HEAD does not resolve (fail closed)"
+           text
+           (path->string root)))
+  (define head (string-trim head-text))
+  (unless (string-prefix? head text)
+    (error
+     'full-plan
+     "--candidate ~a does not match the checkout at ~a (HEAD is ~a); refusing to verify a different tree"
+     text
+     (path->string root)
+     head))
+  (define-values (status-ok? status-text)
+    (git-run root (list "status" "--porcelain" "--untracked-files=no")))
+  (unless status-ok?
+    (error 'full-plan
+           "cannot verify --candidate ~a under ~a: git status failed (fail closed)"
+           text
+           (path->string root)))
+  (define dirty (git-lines status-text))
+  (when (pair? dirty)
+    (error
+     'full-plan
+     "--candidate ~a names a dirty checkout at ~a (~a tracked change(s)); refusing to verify uncommitted bytes"
+     text
+     (path->string root)
+     (length dirty)))
+  ;; The verified identity is the resolved commit, never the caller's spelling.
+  head)
+
+(define (qt-ci-explain-lines plan #:command [command "./qt full"])
   (define spec (qt-ci-plan-spec plan))
   (define mode (qt-ci-plan-mode plan))
   (define suite (qt-ci-plan-suite plan))
   (define total (qt-ci-plan-shard-total plan))
   (define index (qt-ci-plan-shard-index plan))
   (define shard-plan (qt-ci-plan-shard-plan plan))
-  (define planned? (or (equal? shard-plan "report") (equal? shard-plan "measure")))
-  (define files
-    (if planned?
-        (sort (qt-ci-plan-rels plan) string<?)
-        (qt-ci-run-files plan)))
+  (define files (qt-ci-run-files plan))
   (append
    (list
-    (format "full: ~a under ~a" (qt-ci-selection-noun plan) (path->string (qt-ci-plan-root plan)))
+    (format "~a: ~a under ~a"
+            (if (equal? command "./qt full") "full" command)
+            (qt-ci-selection-noun plan)
+            (path->string (qt-ci-plan-root plan)))
     (format "label: ~a" (qt-ci-label plan))
     (format "selection: ~a files (selection only; nothing executed, nothing cleaned)" (length files))
     (format "coverage: ~a" (qt-ci-coverage-line plan))
@@ -1819,22 +1820,23 @@
        '())
    (list (full-timeout-policy-line files)
          (full-mutation-policy-line files)
-         (full-execution-support-line "./qt full"))
+         (full-execution-support-line command))
    files
    (list "")
-   (list "NOT VERIFIED by ./qt full:")
+   (list (format "NOT VERIFIED by ~a:" command))
    (for/list ([item (in-list full-obligations)])
      (format "  - ~a" item))
    (list "")
-   (list "NOT PROVIDED by ./qt full (counted by other gates):")
+   (list (format "NOT PROVIDED by ~a (counted by other gates):" command))
    (for/list ([item (in-list full-not-provided)])
      (format "  - ~a" item))))
 
 (define qt-ci-pass-pattern #rx"^full passed: [0-9]+ files, [0-9]+ tests \\([^)]+\\)$")
 
-(define (qt-ci-pass-line plan results)
+(define (qt-ci-pass-line plan results #:command [command "full"])
   (define tests (for/sum ([r (in-list results)]) (qt-result-total r)))
-  (format "full passed: ~a files, ~a tests (~a; ~a)"
+  (format "~a passed: ~a files, ~a tests (~a; ~a)"
+          command
           (length results)
           tests
           (qt-ci-label plan)
