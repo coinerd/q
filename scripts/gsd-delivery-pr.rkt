@@ -490,6 +490,25 @@
                            (write-string (git (list "show" (format "~a:~a" ref relative))) out)))
   target)
 
+;; Byte-exact materialization for files that are not text: the portable owned
+;; proof contains a Git bundle, and `git show` returns through the seam as a
+;; UTF-8 string, which replaces invalid bytes and changes the digest. A shell
+;; redirect of `git cat-file blob` writes the exact bytes; the repository path,
+;; the `<rev>:<path>` object name and the target are shell-quoted.
+(define (materialize-byte-exact! run repo ref relative root)
+  (define target (build-path root relative))
+  (make-directory* (path-only target))
+  (run "/bin/sh"
+       (list "-c"
+             (format "exec git -C ~a cat-file blob ~a > ~a"
+                     (shell-quote (if (path? repo)
+                                      (path->string repo)
+                                      repo))
+                     (shell-quote (format "~a:~a" ref relative))
+                     (shell-quote (path->string target))))
+       helper-command-timeout)
+  target)
+
 ;; Python digest(): sha256 over `git diff --binary base...head -- . <excludes>`.
 (define (content-digest git base head)
   (sha256-hex-of-text (git (append (list "diff" "--binary" (format "~a...~a" base head) "--" ".")
@@ -565,27 +584,28 @@
      (for ([path (in-list (list review-relative validation-relative policy-relative-path))])
        (materialize git ref path root))
      (define owned-payload
-       (and owned-authority
-            (let ()
-              ;; The portable bundle lives beside the trio in the same commit;
-              ;; the gate opens only these addressed files.
-              (for ([path (in-list (portable-owned-proof-paths owned-authority))])
-                (materialize git ref path root))
-              ;; The committed authority payload lets push CI (and the staged
-              ;; binding gate) validate the audit trio with the exact trusted
-              ;; authority the controller used.
-              (define bundle-root (build-path root (hash-ref owned-authority 'bundle)))
-              (make-directory* bundle-root)
-              (call-with-output-file (build-path bundle-root "authority.json")
-                                     #:exists 'truncate
-                                     (lambda (out)
-                                       (write-string (jsexpr->string owned-authority) out)))
-              (define payload (build-path root "owned-proof-authority.json"))
-              (call-with-output-file payload
-                                     #:exists 'truncate
-                                     (lambda (out)
-                                       (write-string (jsexpr->string owned-authority) out)))
-              payload)))
+       (and
+        owned-authority
+        (let ()
+          ;; The portable bundle lives beside the trio in the same commit;
+          ;; the gate opens only these addressed files.
+          (for ([path (in-list (portable-owned-proof-paths owned-authority))])
+            ;; A Git bundle is binary; materialize it byte-exactly or the
+            ;; gate's bundle-digest check refuses a corrupted copy.
+            (materialize-byte-exact! run (delivery-pr-context-repo ctx) ref path root))
+          ;; The committed authority payload lets push CI (and the staged
+          ;; binding gate) validate the audit trio with the exact trusted
+          ;; authority the controller used.
+          (define bundle-root (build-path root (hash-ref owned-authority 'bundle)))
+          (make-directory* bundle-root)
+          (call-with-output-file (build-path bundle-root "authority.json")
+                                 #:exists 'truncate
+                                 (lambda (out) (write-string (jsexpr->string owned-authority) out)))
+          (define payload (build-path root "owned-proof-authority.json"))
+          (call-with-output-file payload
+                                 #:exists 'truncate
+                                 (lambda (out) (write-string (jsexpr->string owned-authority) out)))
+          payload)))
      (define actual (content-digest git base ref))
      ;; KNOWN LIMITATION: the gate's evidence probe resolves commits with real
      ;; git from this temporary root, which has no object store, so a trio whose
@@ -596,22 +616,21 @@
      ;; needs a dedicated design (read-only git dir injection) rather than a
      ;; quick patch. Tracked as the one known-red delivery case.
      (define gate-args
-       (append (list (path->string wave-gate-script)
-                     (path->string (build-path root relative))
-                     "--content-digest"
-                     actual
-                     "--root"
-                     (path->string root)
-                     "--policy"
-                     (path->string (build-path root policy-relative-path)))
-               (if owned-payload
-                   (list "--owned-proof-authority"
-                         (path->string owned-payload)
-                         "--owned-source-repo"
-                         (path->string
-                          (simplify-path
-                           (path->complete-path (delivery-pr-context-repo ctx)))))
-                   '())))
+       (append
+        (list (path->string wave-gate-script)
+              (path->string (build-path root relative))
+              "--content-digest"
+              actual
+              "--root"
+              (path->string root)
+              "--policy"
+              (path->string (build-path root policy-relative-path)))
+        (if owned-payload
+            (list "--owned-proof-authority"
+                  (path->string owned-payload)
+                  "--owned-source-repo"
+                  (path->string (simplify-path (path->complete-path (delivery-pr-context-repo ctx)))))
+            '())))
      (run "racket" gate-args helper-command-timeout)
      (values evidence
              (read-binding-datum run (build-path root review-relative))
