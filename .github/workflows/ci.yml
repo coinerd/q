@@ -591,12 +591,11 @@ jobs:
 
 
       - name: Run test shard ${{ matrix.shard }}/${{ strategy.job-total }}
-        # W7 duration-aware sharding: `active` is evidence-gated. Flip repo
-        # variable FAST_SHARD_PLAN=active ONLY after the post-workflow
-        # shard-plan-report telemetry (.github/workflows/shard-plan-telemetry.yml)
-        # prints `activate` (predicted max-shard duration improves over
-        # round-robin with test inventory preserved). Default `off`
-        # keeps the round-robin behavior byte-identical.
+        # W7 duration-aware sharding: `active` stays evidence-gated and
+        # default-off. The report-only telemetry that used to justify flipping
+        # FAST_SHARD_PLAN was deleted with the experimental facilities (§11.3),
+        # so the switch is an explicit operator decision; `off` keeps the
+        # round-robin behavior byte-identical.
         env:
           FAST_SHARD_PLAN: ${{ vars.FAST_SHARD_PLAN || 'off' }}
           COMPILED_ROOT_FLAGS: ${{ steps.compiled-root.outputs.flags-file }}
@@ -1183,16 +1182,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # v1.00.26 W3: the shard-plan-report job moved OFF the PR critical path.
-  # The identical report-only job (same name, same artifact contract:
-  # shard-plan-report / shard-plan-report.log / retention 7d, same
-  # report content) now runs post-workflow in
-  # .github/workflows/shard-plan-telemetry.yml (workflow_run: CI
-  # completed + workflow_dispatch), checking out the triggering run's
-  # head SHA. DAG checkpoint: artifacts/ci-topology/v1.00.26-w3/dag-checkpoint.json
-  # (schema ci-topology/dag-checkpoint@1, label "topology checkpoint —
-  # not a cohort"). A failed report run fails that telemetry workflow
-  # loudly but can never block or fail this workflow.
+  # v1.00.26 W3 relocated the report-only shard-plan job off the PR critical
+  # path; §11.3 then DELETED that experiment together with the queue scheduler
+  # and the ordering knobs. The surviving shard-plan surface is
+  # `--shard-plan active` (the deterministic duration-aware plan the shards
+  # consume), and no telemetry workflow exists anymore.
 
   # ────────────────────────────────────────────────────────────
   # Gate 2c: Platform-cross verification
