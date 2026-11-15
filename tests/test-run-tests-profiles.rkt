@@ -90,9 +90,11 @@
   ;; own line inside a `run: |` block (preceded by `set -o pipefail`), so the
   ;; extractor keys on the runner invocation alone instead of a literal
   ;; `run:` prefix.
+  ;; §11.2: the security lane is a fixed policy lane, spelled `./qt --lane
+  ;; security`; the suite name now comes from scripts/testing/full-plan.rkt.
   (define candidates
     (for/list ([line (in-list (security-job-block*))]
-               #:when (string-contains? line "run-tests.rkt --suite security"))
+               #:when (string-contains? line "./qt --lane security"))
       line))
   (and (= (length candidates) 1) (car candidates)))
 
@@ -223,8 +225,8 @@
       (check-equal?
        (security-suite-run-line*)
        (string-append
-        "          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt"
-        " --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log")
+        "          STRICT_TEST_RUNNER=1 ./qt --lane security"
+        " --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log")
        "the security lane's single suite command changed; only a reviewed promote may touch it")
       ;; No ci.yml lane may set the deleted TEST_RUNNER_SCHEDULER lever. Comment
       ;; lines are excluded: the spec text still records the lever's history.

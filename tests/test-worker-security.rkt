@@ -1240,12 +1240,17 @@
 ;; The ci.yml window around a suite's runner invocation (first hit,
 ;; matching the canonical job for that suite).
 (define (ci-suite-window* suite)
+  ;; §11.2: fixed suites are spelled `--lane NAME` (the qt lane table owns the
+  ;; suite/timeout policy); operator-selectable suites keep `--suite NAME`.
+  ;; Either spelling names the same runner context.
   (define lines (file->lines ci-workflow-path*))
-  (define needle (string-append "--suite " suite))
+  (define needles
+    (list (string-append "--lane " suite) (string-append "--suite " suite)))
   (define idx
     (for/first ([ln (in-list lines)]
                 [i (in-naturals)]
-                #:when (string-contains? ln needle))
+                #:when (for/or ([needle (in-list needles)])
+                         (string-contains? ln needle)))
       i))
   (and idx
        (string-join (take (drop lines (max 0 (- idx 6)))
@@ -1348,15 +1353,18 @@
       (for ([w (in-list (list fast-window platform-window security-window))])
         (check-true (string-contains? w "STRICT_TEST_RUNNER=1")
                     "every tier must set STRICT_TEST_RUNNER=1")
-        (check-true (string-contains? w "racket scripts/run-tests.rkt")
-                    "every tier must invoke scripts/run-tests.rkt"))
-      (check-true (string-contains? fast-window "--suite fast") "fast lane block drifted")
-      (check-true (string-contains? platform-window "--suite platform") "platform lane block drifted")
+        ;; §11.2: the invoked entry point is the ./qt facade (directly, or
+        ;; behind the compiled-root launcher's `-- racket ./qt`), never the
+        ;; compat adapter.
+        (check-true (string-contains? w "./qt")
+                    "every tier must invoke the ./qt facade"))
+      (check-true (string-contains? fast-window "--lane fast") "fast lane block drifted")
+      (check-true (string-contains? platform-window "--lane platform") "platform lane block drifted")
       (check-true (string-contains? platform-window "raco make main.rkt")
                   "platform lane must keep its full-install raco make context")
       (check-false (string-contains? platform-window "PREPARED_ENV")
                    "platform lane must remain a cold full-install context")
-      (check-true (string-contains? security-window "--suite security") "security lane block drifted")
+      (check-true (string-contains? security-window "--lane security") "security lane block drifted")
       (check-false (string-contains? security-window "PREPARED_ENV")
                    "security lane must remain a cold full-install context")
       (check-true (string-contains? (file->string ci-workflow-path*) "PREPARED_ENV")
