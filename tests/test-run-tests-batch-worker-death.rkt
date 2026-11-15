@@ -78,7 +78,7 @@
                      (with-handlers ([exn? values])
                        (call-with-values
                         (lambda ()
-                          ;; Omit #:scheduler to exercise the default batch path.
+                          ;; The deterministic batch barrier is the only scheduler.
                           (run-suite-once selected 2 30000 #f "explicit" 1 1 'subprocess #f #f 'vps))
                         list)))))))
       ;; A worker is "active" while it is inside the runner's per-file

@@ -315,9 +315,8 @@
       (if s
           (hash-set with-profile 'runner_mode s)
           with-profile)))
-  ;; W0 fast-gate budget: actual per-file execution mode (schema-additive).
-  ;; Values: `grouped-in-process` (dynamic-require in the runner process,
-  ;; amortizing boot over `files_per_process` files) vs `subprocess`.
+  ;; Actual per-file execution mode (schema-additive). Every surviving mode
+  ;; runs one subprocess per file, so the value is `subprocess`.
   (if execution-mode
       (hash-set with-mode 'execution_mode (symbol->string execution-mode))
       with-mode))
