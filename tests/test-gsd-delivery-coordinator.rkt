@@ -488,15 +488,21 @@
                  "implementation-review"
                  (hasheq 'status "awaiting-review" 'reason "review artifact absent")))
                'awaiting-review))
-  (test-case "typed-stop reason preservation parses the delivery-pending stdout payload"
+  (test-case "an unknown/legacy action is a typed blocked stop, never a shell-out"
+    ;; Phase B final deletion: the Python controller is gone, so the only
+    ;; fallback for an action name nobody ported is a typed refusal naming the
+    ;; action. Nothing is published, no credential is used and no interpreter is
+    ;; spawned (the deleted module's delivery-pending parser is not
+    ;; resurrected either).
     (define stop
-      (parse-delivery-stop "{\"status\":\"delivery-pending\",\"reason\":\"CI pending: test (0)\"}"
-                           "implementation-ci"))
+      (run-native-binding-action "." (make-string 64 #\a) 0 "binding-ci" "binding-publish"))
     (check-eq? (delivery-effect-result-kind stop) 'blocked)
-    (check-true (string-contains? (hash-ref (delivery-effect-result-data stop) 'reason) "CI pending"))
-    (check-false (parse-delivery-stop "not json at all" "implementation-review"))
-    (check-false (parse-delivery-stop "{\"status\":\"reviewed\"}" "implementation-review"))
-    (check-false (parse-delivery-stop "" "implementation-review")))
+    (define data (delivery-effect-result-data stop))
+    (check-equal? (hash-ref data 'stage) "binding-ci")
+    (check-true (string-contains? (hash-ref data 'reason)
+                                  "delivery action binding-publish is not implemented"))
+    (check-true (string-contains? (hash-ref data 'reason) "nothing was published"))
+    (check-false (dynamic-require coordinator-module 'parse-delivery-stop (lambda () #f))))
   (test-case "implementation-review refuses missing owned evidence before review dispatch"
     (call-with-campaign 1
                         (lambda (dir rec)

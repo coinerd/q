@@ -49,7 +49,6 @@
          "../extensions/gsd/delivery-publication.rkt")
 
 (define-runtime-path publish-script "../scripts/gsd-delivery-publish.rkt")
-(define-runtime-path python-controller "../scripts/gsd-delivery.py")
 (define racket-exe
   (let ([found (find-executable-path "racket")])
     (if found
@@ -705,66 +704,36 @@
        (check-false (remote-tip w)))))
 
   ;; ----------------------------------------------------------------
-  ;; Differential parity against the Python action
+  ;; Recorded payload shape (the deleted action's exact key set)
   ;; ----------------------------------------------------------------
-  (test-case "differential parity with the Python action (same payload, same refusal)"
-    (define python (find-executable-path "python3"))
-    (if (not python)
-        (eprintf "WARNING: python3 is unavailable; the publish-head differential parity case was SKIPPED\n")
-        (let ()
-          (define python-payload (box #f))
-          (with-world
-           (lambda (w)
-             (define result
-               (parameterize ([current-environment-variables
-                               (fixture-env (world-root w)
-                                            (format "~a:/usr/bin:/bin"
-                                                    (path->string (path-only (find-executable-path "python3")))))])
-                 (run-subprocess (path->string python)
-                                 #:args (append (list (path->string python-controller))
-                                                (cli-args w))
-                                 #:directory (world-root w)
-                                 #:environment (current-environment-variables)
-                                 #:timeout 120
-                                 #:process-group? #t)))
-             (check-equal? (subprocess-result-exit-code result) 0
-                           (subprocess-result-stderr result))
-             (set-box! python-payload (string->jsexpr (subprocess-result-stdout result)))
-             (check-equal? (remote-tip w) (world-head w))))
-          (with-world
-           (lambda (w)
-             (define result
-               (parameterize ([current-environment-variables (fixture-env (world-root w))])
-                 (apply run-cli (world-root w) (cli-args w))))
-             (check-equal? (subprocess-result-exit-code result) 0
-                           (subprocess-result-stderr result))
-             (check-equal? (string->jsexpr (subprocess-result-stdout result))
-                           (unbox python-payload)
-                           "native and Python publish the same exact payload")))
-          ;; the same refusal reason (protected branch)
-          (with-world
-           (lambda (w)
-             (define args (set-flag-value (cli-args w) "--expected-branch" "main"))
-             (define py
-               (parameterize ([current-environment-variables
-                               (fixture-env (world-root w)
-                                            (format "~a:/usr/bin:/bin"
-                                                    (path->string (path-only python))))])
-                 (run-subprocess (path->string python)
-                                 #:args (append (list (path->string python-controller)) args)
-                                 #:directory (world-root w)
-                                 #:environment (current-environment-variables)
-                                 #:timeout 120
-                                 #:process-group? #t)))
-             (define native
-               (parameterize ([current-environment-variables (fixture-env (world-root w))])
-                 (apply run-cli (world-root w) args)))
-             (check-equal? (subprocess-result-exit-code py) 2)
-             (check-equal? (subprocess-result-exit-code native) 2)
-             (check-equal? (hash-ref (string->jsexpr (subprocess-result-stdout native)) 'status)
-                           (hash-ref (string->jsexpr (subprocess-result-stdout py)) 'status))
-             (check-equal? (hash-ref (string->jsexpr (subprocess-result-stdout native)) 'reason)
-                           (hash-ref (string->jsexpr (subprocess-result-stdout py)) 'reason)))))))
+  (test-case "the published payload keeps the recorded action key set"
+    ;; A live differential against the Python action is no longer possible (the
+    ;; Phase B final deletion removed it), so this case pins what that parity
+    ;; proved: the exact JSON payload the action produced (recorded at its final
+    ;; revision), the same shape from the CLI as from the library, and a
+    ;; byte-identical payload for an identical second run.
+    (with-world
+     (lambda (w)
+       (define branch (world-branch w))
+       (define head (world-head w))
+       (define first-run
+         (parameterize ([current-environment-variables (fixture-env (world-root w))])
+           (apply run-cli (world-root w) (cli-args w))))
+       (check-equal? (subprocess-result-exit-code first-run)
+                     0
+                     (subprocess-result-stderr first-run))
+       (define payload (string->jsexpr (subprocess-result-stdout first-run)))
+       (check-equal? payload (hasheq 'status "published" 'branch branch 'head head))
+       (check-equal? (sort (map symbol->string (hash-keys payload)) string<?)
+                     '("branch" "head" "status"))
+       ;; idempotent replay: still the recorded shape, and no second push
+       (define second-run
+         (parameterize ([current-environment-variables (fixture-env (world-root w))])
+           (apply run-cli (world-root w) (cli-args w))))
+       (check-equal? (subprocess-result-exit-code second-run) 0)
+       (check-equal? (hash-ref (string->jsexpr (subprocess-result-stdout second-run)) 'status)
+                     "already-published")
+       (check-equal? (remote-tip w) head))))
 
   ;; ----------------------------------------------------------------
   ;; Production publication owner is native and binds the exact evidence

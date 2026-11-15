@@ -53,8 +53,6 @@
 (define racket-executable (or (find-executable-path "racket") "racket"))
 (define racket-directory (path->string (path-only (path->complete-path racket-executable))))
 
-(define-runtime-path python-controller "../scripts/gsd-delivery.py")
-
 (define slug "coinerd/s10")
 (define plan-id (make-string 64 #\a))
 (define wave 1)
@@ -593,27 +591,10 @@
                 (lambda () (delete-directory/files root))))
 
 ;; ============================================================
-;; The Python controller, for differential parity (skipped without python3)
+;; The recorded pending reason (the Python controller's own exit-2 payload for
+;; this fixture, recorded at its final revision BEFORE the Phase B final
+;; deletion removed it). It is a constant so nothing has to shell python3.
 ;; ============================================================
-
-(define (python-status env campaign-root repo)
-  (define python (find-executable-path "python3"))
-  (and python
-       (let ([result (run-subprocess (path->string python)
-                                     #:args (list (path->string python-controller)
-                                                  "status"
-                                                  "--campaign-root"
-                                                  (path->string (path->complete-path campaign-root))
-                                                  "--repo"
-                                                  (path->string (path->complete-path repo))
-                                                  "--plan"
-                                                  plan-id
-                                                  "--wave"
-                                                  (number->string wave))
-                                     #:environment env
-                                     #:timeout 240
-                                     #:process-group? #t)])
-         (string->jsexpr (subprocess-result-stdout result)))))
 
 (define (delivered-proof merge-sha)
   (hasheq 'status "delivered" 'merge-sha merge-sha 'plan-id plan-id 'wave wave))
@@ -641,25 +622,19 @@
      #:python-shim? #t))
 
   ;; ============================================================
-  ;; (b) pending payload: the exact Python shape + reason
+  ;; (b) pending payload: the recorded exit-2 shape + reason
   ;; ============================================================
-  (test-case "pending readback keeps the Python payload shape and reason text"
+  (test-case "pending readback keeps the recorded exit-2 payload shape and reason text"
     (with-bare-root
      (lambda (root env marker)
        (define result (delivery-readback root plan-id wave))
        (check-equal? (sort (map symbol->string (hash-keys result)) string<?) '("reason" "status"))
        (check-equal? (hash-ref result 'status) "delivery-pending")
-       (check-equal? (hash-ref result 'reason) missing-journal-reason)
-       ;; Differential: the reason is byte-identical to the Python controller's
-       ;; own exit-2 payload for the SAME fixture (skipped without python3).
-       (define python (find-executable-path "python3"))
-       (if python
-           (let ([payload (python-status env root (build-path root "q"))])
-             (check-equal? (hash-ref payload 'status) "delivery-pending")
-             (check-equal? (hash-ref payload 'reason)
-                           (hash-ref result 'reason)
-                           "the native refusal must keep the Python reason text"))
-           (printf "skip: python3 unavailable; differential reason check skipped\n")))))
+       ;; The reason is the RECORDED one (recorded from the Python controller at
+       ;; its final revision, which the Phase B final deletion removed); it is
+       ;; pinned here rather than re-derived from a live oracle, so the native
+       ;; refusal must keep that exact text.
+       (check-equal? (hash-ref result 'reason) missing-journal-reason))))
 
   ;; ============================================================
   ;; (b) delivered payload: the exact Python shape, end to end
@@ -700,15 +675,12 @@
                                                   "publication-sha"
                                                   "status"
                                                   "wave"))
-                  ;; Differential: the Python controller proves the same delivery on the
-                  ;; same repository and returns the same object (skipped without python3).
-                  (define python (find-executable-path "python3"))
-                  (if python
-                      (let ([python-payload (python-status env root (build-path root "q"))])
-                        (check-equal? python-payload
-                                      expected
-                                      "native and Python status must return the same payload"))
-                      (printf "skip: python3 unavailable; differential delivered check skipped\n")))))
+                  ;; The payload is compared against the RECORDED expectation
+                  ;; above (recorded from the Python controller at its final
+                  ;; revision, before the Phase B final deletion removed it), so
+                  ;; the native status action still proves the same delivery
+                  ;; object without a live oracle.
+                  (void))))
 
   ;; ============================================================
   ;; (d) the injectable reader still overrides the native default

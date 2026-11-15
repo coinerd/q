@@ -896,9 +896,9 @@
                        (string-contains? line (expected-binding-branch plan)))
                      (format "~a must resolve the deterministic binding branch" stage)))))))
 
-;; (d) the Python dispatch survives ONLY for an unknown / legacy action name.
+;; (d) an unknown / legacy action name is a typed blocked stop, never a shell-out.
 (module+ test
-  (test-case "the Python fallback is reachable only for an unknown/legacy action name"
+  (test-case "an unknown/legacy action name is a typed blocked stop, never a shell-out"
     (with-ladder-case
      (list (list "*" "none.json" "[]"))
      (lambda (ctx)
@@ -920,8 +920,9 @@
          "binding-ci: no open pull request for branch ~a; open it for genuine independent review"
          branch))
        (check-false (spawned-python3? ctx) "a known binding action must never reach python3")
-       ;; Python's legacy `binding-publish` alias is not served by any native
-       ;; surface: the authenticated gsd-delivery.py controller still owns it.
+       ;; The legacy `binding-publish` alias is served by NO surface: since the
+       ;; Phase B final deletion there is no Python controller left to fall back
+       ;; to, so the dispatch refuses with a typed reason and publishes nothing.
        (define legacy
          (run-native-binding-action subject
                                     plan
@@ -933,6 +934,7 @@
                                     "--campaign-root"
                                     (path->string subject)))
        (check-eq? (delivery-effect-result-kind legacy) 'blocked)
-       (check-true (spawned-python3? ctx)
-                   (string-append "an unknown/legacy action name must still reach the "
-                                  "authenticated controller"))))))
+       (check-true (string-contains? (hash-ref (delivery-effect-result-data legacy) 'reason)
+                                     "is not implemented by the native controller"))
+       (check-false (spawned-python3? ctx)
+                    "an unknown/legacy action name is refused, never shelled out")))))
