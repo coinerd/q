@@ -29,12 +29,13 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/exit-truth"
           if [ "$OUTCOME" = failure ]; then EXPECTED=2; else EXPECTED=1; fi
-          printf '#lang racket/base\n(module+ test (require rackunit) (check-equal? 1 %s))\n' "$EXPECTED" > "$RUNNER_TEMP/exit-truth/canary.rkt"
+          mkdir -p ci-canary
+          printf '#lang racket/base\n(module+ test (require rackunit) (check-equal? 1 %s))\n' "$EXPECTED" > ci-canary/canary.rkt
       - name: Real runner piped through tee
         run: |
           set -euo pipefail
-          racket scripts/run-tests.rkt --sequential --mode subprocess \
-            --json-out result.json "$RUNNER_TEMP/exit-truth/canary.rkt" \
+          ./qt full --file ./ci-canary/canary.rkt --sequential --mode subprocess \
+            --json-out result.json \
             2>&1 | tee runner.log
       - name: Stamp and retain runner evidence
         if: always()

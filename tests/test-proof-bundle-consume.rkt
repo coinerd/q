@@ -833,7 +833,7 @@
       (check-true (string-contains? text "Record proof reuse"))
       ;; the suite keeps its explicit timeout; lint still runs on every nightly
       (check-true (string-contains? text "timeout-minutes: 15"))
-      (check-true (string-contains? text "racket scripts/run-tests.rkt --suite fast"))
+      (check-true (string-contains? text "./qt --lane fast"))
       (check-true (string-contains? text "racket scripts/lint-all.rkt"))
       ;; the BUG-0065 purge comment block stays intact
       (check-true (string-contains? text "runs on EVERY"))

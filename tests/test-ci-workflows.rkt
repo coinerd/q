@@ -54,8 +54,8 @@
 
 (define-test-suite
  execution-contract
- (test-case "runs the profile-aware run-tests.rkt runner"
-   (check-true (string-contains? wf "scripts/run-tests.rkt")
+ (test-case "runs the profile-aware qt runner"
+   (check-true (string-contains? wf "./qt")
                "must invoke the existing profile-aware runner"))
  (test-case "sharding is explicit (shard-index/shard-total matrix)"
    (check-true (and (string-contains? wf "shard-index") (string-contains? wf "shard-total"))

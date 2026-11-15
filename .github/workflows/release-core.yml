@@ -220,10 +220,8 @@ jobs:
           set -o pipefail
           cd /tmp/release/extracted/q
           echo "Running release-smoke suite (deterministic, artifact-focused)"
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
-            --suite release-smoke \
+          STRICT_TEST_RUNNER=1 ./qt --lane release-smoke \
             --jobs 4 \
-            --timeout 120 \
             2>&1 | tee smoke-output.log
 
       - name: Upload smoke log on failure

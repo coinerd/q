@@ -603,13 +603,14 @@
     (check-false (string-contains? section "elapsed_ms_basis: \"max shard")
                  "the aggregate document is produced by the verifier")
 
-    ;; the claim/argv binding is preserved verbatim (not repointed).
+    ;; the claim/argv binding is preserved, repointed to the qt entry point
+    ;; CI actually invokes (§11.2).
     (check-true
-     (string-contains? section "RUNNER_REV=\"$(git rev-parse \"$GITHUB_SHA\":scripts/run-tests.rkt)\""))
+     (string-contains? section "RUNNER_REV=\"$(git rev-parse \"$GITHUB_SHA\":qt)\""))
     (check-true
      (string-contains?
       section
-      (string-append "\"argv\": [\"racket\", \"scripts/run-tests.rkt\", \"--suite\", \"fast\", "
+      (string-append "\"argv\": [\"./qt\", \"--lane\", \"fast\", "
                      "\"--jobs\", \"4\", \"--shard-index\", \"<shard>\", \"--shard-total\", "
                      "\"<total>\", \"--json-out\", \"test-results.json\"]")))
 
