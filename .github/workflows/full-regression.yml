@@ -31,7 +31,7 @@ on:
         required: false
         default: "4"
       extra-args:
-        description: "Extra args for scripts/run-tests.rkt"
+        description: "Extra args for ./qt"
         required: false
         default: ""
 
@@ -82,7 +82,7 @@ jobs:
             LEDGER_ARGS=(--ledger .github/known-failures.json)
           fi
           # shellcheck disable=SC2086
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
+          STRICT_TEST_RUNNER=1 ./qt \
             --suite "$SUITE" \
             --jobs "$JOBS" \
             --shard-index ${{ matrix.shard }} --shard-total 6 \
@@ -144,8 +144,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p shard-results
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
-            --suite workflows --jobs 4 \
+          STRICT_TEST_RUNNER=1 ./qt --lane workflows --jobs 4 \
             --json-out shard-results/workflows.json \
             2>&1 | tee test-output.log
 
@@ -188,8 +187,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p shard-results
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
-            --suite platform --jobs 4 \
+          STRICT_TEST_RUNNER=1 ./qt --lane platform --jobs 4 \
             --json-out shard-results/platform.json \
             2>&1 | tee test-output.log
 

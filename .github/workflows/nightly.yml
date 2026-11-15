@@ -183,7 +183,7 @@ jobs:
         # failure, validator rejection — runs the suite. NEVER a silent
         # skip.
         if: steps.consume.outputs.bundle_ok != 'true'
-        run: racket scripts/run-tests.rkt --suite fast
+        run: ./qt --lane fast
         timeout-minutes: 15
 
       - name: Record proof reuse (suite skipped; zero tests run)

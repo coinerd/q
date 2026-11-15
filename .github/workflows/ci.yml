@@ -166,7 +166,7 @@ jobs:
       # by construction (invariants I4/I5). Enforcement flipped at v1.00.06
       # (the report-only inventory had to reach zero missing tags first).
       # The W0 known-divergence is RESOLVED: the former wrapper dispatch
-      # (`scripts/run-tests.rkt --lint-metadata`) is deleted so no CI-only
+      # (`scripts/run-tests.rkt --lint-metadata`) was deleted so no CI-only
       # discovery branch remains; the parity contract is pinned by
       # tests/ci/metadata-discovery-test.rkt + tests/metadata-discovery/fixture/.
       - name: metadata-inventory (artifact)
@@ -600,6 +600,9 @@ jobs:
           Q_CI_COMPILED_ROOT: ${{ env.COMPILED_ROOT }}
         run: |
           set -o pipefail
+          # The lane carries the suite/timeout policy
+          # (scripts/testing/full-plan.rkt `qt-lanes`); FAST_SHARD_PLAN only
+          # adds the duration-aware plan to the same lane.
           PLAN_ARGS=""
           if [ "$FAST_SHARD_PLAN" = "active" ]; then
             PLAN_ARGS="--shard-plan active"
@@ -617,8 +620,8 @@ jobs:
           STRICT_TEST_RUNNER=1 racket ci/prepared-environment/compiled-root.rkt launch \
             --flags-file "$COMPILED_ROOT_FLAGS" \
             --telemetry-file "$RUNNER_TEMP/compiled-root-map/shard-${{ matrix.shard }}.launch.json" \
-            -- racket scripts/run-tests.rkt \
-            --suite fast --jobs 4 \
+            -- racket ./qt \
+            --lane fast --jobs 4 \
             --shard-index ${{ matrix.shard }} --shard-total ${{ strategy.job-total }} \
             $PLAN_ARGS \
             --json-out test-results.json \
@@ -994,8 +997,8 @@ jobs:
           METADATA_SHA="sha256:$(sha256sum artifacts-run/metadata-inventory.json | cut -d' ' -f1)"
           COVERS_SHA="sha256:$(git grep -h '@covers' -- tests | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
           SELECTED_SHA="sha256:$(sha256sum artifacts-run/selected-paths.txt | cut -d' ' -f1)"
-          RUNNER_REV="$(git rev-parse "$GITHUB_SHA":scripts/run-tests.rkt)"
-          FLAGS_SHA="sha256:$(printf '%s' '--suite fast --jobs 4 --shard-index <shard> --shard-total <total> --json-out test-results.json' | sha256sum | cut -d' ' -f1)"
+          RUNNER_REV="$(git rev-parse "$GITHUB_SHA":qt)"
+          FLAGS_SHA="sha256:$(printf '%s' '--lane fast --jobs 4 --shard-index <shard> --shard-total <total> --json-out test-results.json' | sha256sum | cut -d' ' -f1)"
           LOCK_SHA="sha256:$(sha256sum ci/racket-package-lock.rktd | cut -d' ' -f1)"
           RACKET_BIN="$(readlink -f "$(command -v racket)")"
           RACKET_EXEC_SHA="sha256:$(sha256sum "$RACKET_BIN" | cut -d' ' -f1)"
@@ -1044,7 +1047,7 @@ jobs:
               "explanation_artifact_digest": "@@RESULT_SHA@@"
             },
             "command": {
-              "argv": ["racket", "scripts/run-tests.rkt", "--suite", "fast", "--jobs", "4", "--shard-index", "<shard>", "--shard-total", "<total>", "--json-out", "test-results.json"],
+              "argv": ["./qt", "--lane", "fast", "--jobs", "4", "--shard-index", "<shard>", "--shard-total", "<total>", "--json-out", "test-results.json"],
               "cwd_contract": "repo-root",
               "flags_digest": "@@FLAGS_SHA@@",
               "runner_revision_sha": "@@RUNNER_REV@@"
@@ -1106,7 +1109,7 @@ jobs:
               "metadata_manifest_digest": "sha256 over scripts/run-tests/classify.rkt --metadata-inventory-json",
               "covers_manifest_digest": "sha256 over sorted `git grep -h '@covers' -- tests` lines",
               "selected_manifest_digest": "sha256 over the executed selection: sorted union of .files[].path across all shard test-results.json",
-              "runner_revision_sha": "blob sha of scripts/run-tests.rkt at GITHUB_SHA",
+              "runner_revision_sha": "blob sha of qt at GITHUB_SHA (the invoked entry point)",
               "racket_executable_digest": "sha256 of the resolved racket executable bytes",
               "racket_installer_digest": "sha256 of .github/actions/setup-racket/action.yml (the pinned provisioning recipe)",
               "package_lock_digest": "sha256 of ci/racket-package-lock.rktd",
@@ -1213,8 +1216,7 @@ jobs:
       - name: Run platform-cross suite
         run: |
           set -o pipefail
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
-            --suite platform --jobs 4 \
+          STRICT_TEST_RUNNER=1 ./qt --lane platform --jobs 4 \
             --json-out test-results.json \
             2>&1 | tee test-output.log
 
@@ -1298,8 +1300,7 @@ jobs:
       - name: Run fast suite (Racket 8.11)
         run: |
           set -o pipefail
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
-            --suite fast --jobs 4 \
+          STRICT_TEST_RUNNER=1 ./qt --lane fast --jobs 4 \
             --json-out test-results.json \
             2>&1 | tee test-output.log
 
@@ -1370,7 +1371,7 @@ jobs:
       - name: Run security test suite (parallel)
         run: |
           set -o pipefail
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log
+          STRICT_TEST_RUNNER=1 ./qt --lane security --jobs 4 --json-out test-results.json 2>&1 | tee test-output.log
 
       - name: Test results summary
         if: always()
@@ -1572,9 +1573,8 @@ jobs:
       - name: Workflow integration suite shard ${{ matrix.shard }}/2
         run: |
           set -o pipefail
-          STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt \
-            --suite workflows --jobs 2 --timeout 90 \
-            --shard-index ${{ matrix.shard }} --shard-total 2 \
+          STRICT_TEST_RUNNER=1 ./qt --lane workflows --jobs 2 \
+            --shard-index ${{ matrix.shard }} \
             --json-out test-results.json \
             2>&1 | tee workflow-output.log
 
@@ -1757,22 +1757,22 @@ jobs:
       - name: Run fast suite with gate evidence
         run: |
           set -o pipefail
-          racket scripts/run-tests.rkt --suite fast --record-gate-evidence --json-out test-results-fast.json 2>&1 | tee gate-fast.log
+          ./qt --lane fast --record-gate-evidence --json-out test-results-fast.json 2>&1 | tee gate-fast.log
 
       - name: Run TUI suite with gate evidence
         run: |
           set -o pipefail
-          racket scripts/run-tests.rkt --suite tui --record-gate-evidence --json-out test-results-tui.json 2>&1 | tee gate-tui.log
+          ./qt --lane tui --record-gate-evidence --json-out test-results-tui.json 2>&1 | tee gate-tui.log
 
       - name: Run arch suite with gate evidence
         run: |
           set -o pipefail
-          racket scripts/run-tests.rkt --suite arch --record-gate-evidence --json-out test-results-arch.json 2>&1 | tee gate-arch.log
+          ./qt --lane arch --record-gate-evidence --json-out test-results-arch.json 2>&1 | tee gate-arch.log
 
       - name: Run workflows suite with gate evidence
         run: |
           set -o pipefail
-          racket scripts/run-tests.rkt --suite workflows --record-gate-evidence --json-out test-results-workflows.json 2>&1 | tee gate-workflows.log
+          ./qt --lane workflows --record-gate-evidence --json-out test-results-workflows.json 2>&1 | tee gate-workflows.log
 
       - name: Gate evidence summary
         if: always()
@@ -1806,7 +1806,7 @@ jobs:
       - name: Triple-gate (3x full suite)
         run: |
           set -o pipefail
-          racket scripts/run-tests.rkt --repeat 3 2>&1 | tee triple-gate.log
+          ./qt full --repeat 3 2>&1 | tee triple-gate.log
 
       - name: Triple-gate summary
         if: always()

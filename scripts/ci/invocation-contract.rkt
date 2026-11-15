@@ -84,8 +84,13 @@
 
 ;; ------------------------------------------------------------ shell line reading
 
+;; An invocation can be prefixed by shell variable assignments
+;; (`STRICT_TEST_RUNNER=1 racket …`), which is how every CI lane sets the
+;; strict mode; those declarations must be covered too, not skipped.
 (define (invocation-mention? s)
-  (regexp-match? #rx"(^|[;&|(]|\\$\\() *(racket|raco) " s))
+  (regexp-match?
+   #rx"(^|[;&|(]|\\$\\() *([A-Za-z_][A-Za-z0-9_]*=[^ ]+ +)*(racket|raco|[.]/qt) "
+   s))
 
 ;; Logical lines of a YAML script body: backslash-continuations joined
 ;; into one line, carrying the line number of the FIRST fragment so a
@@ -149,7 +154,8 @@
 ;; A token that ends the invocation and starts a different command,
 ;; redirect or substitution.
 (define (stop-token? t)
-  (or (member t '("|" "||" "&&" ";" "&")) (regexp-match? #rx"[<>]" t)))
+  (or (member t '("|" "||" "&&" ";" "&" "--"))
+      (regexp-match? #rx"[<>]" t)))
 
 (define (option-flag? t)
   (and (string? t) (regexp-match? #rx"^--" t) (not (string=? t "--"))))
@@ -174,17 +180,25 @@
     (define toks (shell-tokens raw))
     (for ([t (in-list toks)]
           [idx (in-naturals)]
-          #:when (or (string=? t "racket") (string=? t "raco")))
+          #:when (or (string=? t "racket") (string=? t "raco") (equal? t "./qt")))
       (define after (drop toks (add1 idx)))
+      ;; argv ends at the first stop token: a `--` separator or a new
+      ;; command must not leak the NEXT invocation's flags into this
+      ;; declaration (the compiled-root launcher's child argv is exactly that
+      ;; shape, and the child is validated as its own declaration).
       (define argv
-        (for/list ([a (in-list after)]
-                   #:unless (stop-token? a))
-          a))
+        (let loop ([xs after] [acc '()])
+          (cond
+            [(or (null? xs) (stop-token? (car xs))) (reverse acc)]
+            [else (loop (cdr xs) (cons (car xs) acc))])))
       (define flags (filter option-flag? argv))
       ;; Never bind `first`/`rest` locally: the reader uses them too.
       (define head-arg (and (pair? argv) (first argv)))
       (define (kind-and-target)
         (cond
+          ;; `./qt` is the repository's own testing facade: a script, whose
+          ;; flags are validated against the literal vocabulary of q/qt.
+          [(equal? t "./qt") (values "script" "./qt")]
           [(not head-arg) (values "not-a-script" #f)]
           [(regexp-match? #rx"^-e" head-arg) (values "not-a-script" #f)]
           [(script-target-token? head-arg) (values "script" head-arg)]

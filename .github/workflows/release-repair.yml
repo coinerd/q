@@ -297,7 +297,7 @@ jobs:
           tar --no-same-owner --no-same-permissions -xzf "/tmp/smoke/q-$VERSION.tar.gz" -C /tmp/smoke/extracted
           cd /tmp/smoke/extracted/q
           test "$(racket main.rkt --version)" = "q version $VERSION"
-          racket scripts/run-tests.rkt --suite release-smoke --profile local --mode subprocess --sequential
+          ./qt --lane release-smoke --profile local --mode subprocess --sequential
 
       - name: Rebuild approved bytes and upload without replacement
         env:
