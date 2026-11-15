@@ -602,27 +602,83 @@
 ;; W4 guards for F6 (API route contract) and F11 (approval contract)
 ;; ============================================================
 
-;; Each row is guarded by the thing W4 actually shipped: the offline python
-;; contract suites, which fail on the unfixed tree (red-first run retained at
-;; artifacts/wave-delivery-integrity/<campaign>-w4/raw/red-first-fixtures.txt)
-;; and pass only once the resolver route and the amended approval contract
-;; are in place.
-(define (run-python-suite rel)
-  (define python (or (find-executable-path "python3") (find-executable-path "python")))
-  (and python
-       (let-values ([(code _out _err) (run-capture (list python
-                                                         (path->string (build-path q-root rel))))])
-         (zero? code))))
+;; Phase B deleted the two offline Python contract suites that first guarded
+;; these rows; each row now names its native RackUnit owners:
+;;   F6  — the API READ layer (route construction, memoized reads, typed
+;;         refusals) plus the read ladder that resolves PRs through the real
+;;         `head={owner}:{branch}` filter;
+;;   F11 — the merge suite's approval cases (recorded operator authorization,
+;;         the non-author APPROVED review, and their typed refusals).
+;;
+;; The guard keeps the row's semantics: it must fail when an owner is missing OR
+;; when an owner silently loses what the row is made of. It therefore pins three
+;; SOURCE facts per owner — the file exists, it still declares at least the
+;; recorded number of `test-case` forms, and it still names the typed refusal
+;; vocabulary the row refuses by (a renamed refusal, or a dropped case that
+;; carried the token, fails here).
+;;
+;; Why source facts instead of a second execution: the owners are real-Git
+;; fixture suites (46 + 41 + 10 cases, ~7.5 min combined), and the fast gate runs
+;; them on every change already, so re-running them here would pay that wall
+;; clock twice for a witness the fast suite produces anyway. What the register
+;; alone can catch is the silent-omission regression — an owner deleted, or
+;; gutted down to a vacuous case — which is a source fact, so it is checked as
+;; one. The rehearsal (scripts/ci/inject-wave-defect.rkt) checks the same facts
+;; and additionally proves the check fires on mutated owner copies.
+(struct suite-owner (rel min-cases tokens) #:transparent)
+
+(define w4-owners
+  (hash "F6"
+        (list (suite-owner "tests/test-gsd-delivery-api-native.rkt"
+                           46
+                           '("pulls?state=all" "exn:fail:delivery-action"))
+              (suite-owner "tests/test-gsd-delivery-read-ladder.rkt"
+                           41
+                           '("head=coinerd:" "pulls?state=open" "resolve-existing-pr")))
+        "F11"
+        (list (suite-owner
+               "tests/test-gsd-delivery-merge.rkt"
+               10
+               '("merge-authorization refuses every under-specified direction"
+                 "reviewed-head-approval refuses a non-approved, anonymous or misbound review"
+                 "no-operator-authorization"
+                 "no-review-artifact"
+                 "head-binding-mismatch")))))
+
+;; Declared `test-case` forms in an owner's source: `raco fmt` puts each form at
+;; the start of its own line, so a line-level count is exact and needs no reader
+;; (the owners are `#lang` modules whose cases live in a `module+ test`
+;; submodule, which a plain `read` of the file cannot reach).
+(define (declared-case-count source)
+  (for/fold ([n 0]) ([line (in-list (string-split source "\n"))])
+    (if (string-prefix? (string-trim line) "(test-case")
+        (add1 n)
+        n)))
+
+(define (owner-witnessed? spec)
+  (define path (build-path q-root (suite-owner-rel spec)))
+  (define source (and (file-exists? path) (file->string path)))
+  (and source
+       (>= (declared-case-count source) (suite-owner-min-cases spec))
+       (for/and ([tok (in-list (suite-owner-tokens spec))])
+         (string-contains? source tok))))
+
+(define (w4-row-owners-witnessed? id)
+  (for/and ([spec (in-list (hash-ref w4-owners id))])
+    (owner-witnessed? spec)))
 
 (define (w4-f6-defect-refused?)
   ;; The defect: resolver routes built with the wrong head filter silently
-  ;; disable PR resolution. Refused when the API-contract fixtures pass.
-  (run-python-suite "tests/test-gsd-delivery-api-contract.py"))
+  ;; disable PR resolution. Refused while the native API / read-ladder owners
+  ;; still declare the routes, the `head={owner}:{branch}` filter and the typed
+  ;; API refusals at or above their recorded case counts.
+  (w4-row-owners-witnessed? "F6"))
 
 (define (w4-f11-defect-refused?)
-  ;; The defect: an unsatisfiable second-account approval gate. Refused when
-  ;; the approval-contract fixtures pass in both refusal directions.
-  (run-python-suite "tests/test-gsd-delivery-approval-contract.py"))
+  ;; The defect: an unsatisfiable second-account approval gate, or a merge that
+  ;; needs no recorded authorization. Refused while the merge suite still
+  ;; declares its approval cases and their typed refusals.
+  (w4-row-owners-witnessed? "F11"))
 
 (register-guard! "F6" (lambda (_repro) (if (w4-f6-defect-refused?) 'refused 'not-refused)))
 (register-guard! "F11" (lambda (_repro) (if (w4-f11-defect-refused?) 'refused 'not-refused)))

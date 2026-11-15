@@ -191,15 +191,20 @@
   (check-equal? report-head
                 (hash-ref committed 'rehearsal-head)
                 "the report names the same rehearsal head as the matrix")
-  ;; The suite guards are bound by the inputs digest: a vacuous replacement suite
-  ;; must change the recorded digests rather than leave the verdict byte-identical.
+  ;; The native owner suites are bound by the inputs digest: a vacuous
+  ;; replacement owner must change the recorded digests rather than leave the
+  ;; verdict byte-identical. Phase B deleted the two Python contract suites that
+  ;; used to be recorded here; the Racket owners that replaced them are now the
+  ;; F6/F11 witnesses, so they are the recorded inputs.
   (define input-paths
     (for/list ([p (in-list (hash-ref committed 'rehearsal-inputs))])
       (hash-ref p 'path)))
-  (check-true (and (member "tests/test-gsd-delivery-api-contract.py" input-paths) #t)
-              "the F6 suite guard is a recorded rehearsal input")
-  (check-true (and (member "tests/test-gsd-delivery-approval-contract.py" input-paths) #t)
-              "the F11 suite guard is a recorded rehearsal input")
+  (check-true (and (member "tests/test-gsd-delivery-api-native.rkt" input-paths) #t)
+              "the F6 API-layer owner suite is a recorded rehearsal input")
+  (check-true (and (member "tests/test-gsd-delivery-read-ladder.rkt" input-paths) #t)
+              "the F6 read-ladder owner suite is a recorded rehearsal input")
+  (check-true (and (member "tests/test-gsd-delivery-merge.rkt" input-paths) #t)
+              "the F11 approval owner suite is a recorded rehearsal input")
   ;; decided-verdict? is verdict-LINE based and refuses contradictory output, so a
   ;; guard printing both verdicts satisfies neither the row nor its clean control.
   (check-true (and (decided-verdict? 0 "digest-mismatch: x\n" "digest-mismatch" (list "digest-ok"))
