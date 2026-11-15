@@ -156,16 +156,19 @@ repos/coinerd/q/actions/variables/FAST_SHARD_PLAN -f value=off`), and the
 measurement caveats live in `docs/reports/test-regression-log.md` (W4 section,
 PR #9388).
 
-### Mutation pilot — bounded, survivor-driven strengthening (W5)
+### Mutation pilot — bounded, survivor-driven strengthening (W5) — REMOVED
 
-The bounded adequacy pilot (`scripts/run-tests/mutation-pilot.rkt`) runs only as
+The bounded adequacy pilot (`scripts/run-tests/mutation-pilot.rkt`) ran only as
 an opt-in weekly scheduled job or a manual dispatch input — never in PR gates —
-currently scoped to `runtime/memory/policy.rkt`. The first recorded run (run-5)
+scoped to `runtime/memory/policy.rkt`. The first recorded run (run-5)
 killed only 4 of 18 mutants; per the consolidation policy those survivors drove
 new boundary and boolean-polarity tests
 (`tests/memory/policy-boundary-test.rkt`), raising the kill rate to **16/18**,
 with the two remaining survivors documented as equivalent mutants (runs 6–8,
-including a clean-cache re-verification; PR #9389). Consolidation in any scope
+including a clean-cache re-verification; PR #9389). **The pilot and its weekly
+workflow job were deleted in the §11.3 testing-framework cleanup
+(2026-02-19); see `docs/TEST_CONVENTIONS.md` "Removed experiment facilities"
+for the removal rationale.** Consolidation in any scope
 remains blocked without the full evidence set required by
 `docs/operations/test-consolidation-policy.md`.
 

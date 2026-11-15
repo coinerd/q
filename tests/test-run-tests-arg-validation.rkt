@@ -24,10 +24,12 @@
     (set-box! runner-loaded? #t))
   (hash-ref! runner-cache sym (lambda () (dynamic-require runner-path sym))))
 
-;; Arguments after inventory?, in validate-args! order. Keep scheduler and
-;; ordering defaults aligned with parse-args so these tests exercise validation
-;; rather than stale procedure arity.
-(define default-new-args (list #f 'auto 'batch #f #f 'local #f #f #f #f #f #f #f #f #f #f 'fifo))
+;; Arguments after inventory?, in validate-args! order: mode json-out ledger
+;; profile lint-metadata? changed-base changed-head explain? impact-dry-run?
+;; prioritize failure-history generate-covers-manifest? shard-plan durations.
+;; Kept aligned with parse-args so these tests exercise validation rather than
+;; stale procedure arity.
+(define default-new-args (list 'auto #f #f 'local #f #f "HEAD" #f #f #f #f #f #f #f))
 
 ;; ---------------------------------------------------------------------------
 ;; Unit tests: validate-args!
@@ -130,37 +132,30 @@
                  (apply validate 4 #f 'not-a-number #t 'all '() 1 #f #f default-new-args)))))
 
 ;; ---------------------------------------------------------------------------
-;; W10: --shard-plan measure validation
+;; --shard-plan: `active` is the only surviving plan mode (§11.3)
 ;; ---------------------------------------------------------------------------
 
-;; default-new-args positions (0-indexed, after inventory?): 14 = --shard-plan,
-;; 3 = --json-out.
+;; default-new-args positions (0-indexed, after inventory?): 12 = --shard-plan,
+;; 1 = --json-out.
 (define (new-args-with-shard-plan v json-out)
-  (list-set (list-set default-new-args 14 v) 3 json-out))
+  (list-set (list-set default-new-args 12 v) 1 json-out))
 
-(test-case "validate-args!: --shard-plan measure requires --json-out"
-  (define validate (runner-ref 'validate-args!))
-  (check-exn
-   exn:fail?
-   (lambda ()
-     (with-handlers ([exn:fail? (lambda (e)
-                                  (check-not-false (regexp-match? #rx"measure requires --json-out"
-                                                                  (exn-message e)))
-                                  (raise e))])
-       (apply validate 4 #f #f #t 'all '() 1 #f #f (new-args-with-shard-plan "measure" #f)))))
-  (check-not-exn
-   (lambda ()
-     (apply validate 4 #f #f #t 'all '() 1 #f #f (new-args-with-shard-plan "measure" "snap.json")))))
-
-(test-case "validate-args!: --shard-plan measure is a valid mode; nonsense is rejected"
+(test-case "validate-args!: --shard-plan active is accepted"
   (define validate (runner-ref 'validate-args!))
   (check-not-exn
-   (lambda ()
-     (apply validate 4 #f #f #t 'all '() 1 #f #f (new-args-with-shard-plan "measure" "snap.json"))))
-  (check-exn
-   exn:fail?
-   (lambda ()
-     (apply validate 4 #f #f #t 'all '() 1 #f #f (new-args-with-shard-plan "sometimes" #f)))))
+   (lambda () (apply validate 4 #f #f #t 'all '() 1 #f #f (new-args-with-shard-plan "active" #f)))))
+
+(test-case "validate-args!: the deleted report/measure plan modes are rejected"
+  (define validate (runner-ref 'validate-args!))
+  (for ([v (in-list '("measure" "report" "sometimes"))])
+    (check-exn
+     exn:fail?
+     (lambda ()
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (check-not-false (regexp-match? #rx"unknown --shard-plan mode"
+                                                                    (exn-message e)))
+                                    (raise e))])
+         (apply validate 4 #f #f #t 'all '() 1 #f #f (new-args-with-shard-plan v #f)))))))
 
 ;; ---------------------------------------------------------------------------
 ;; known-suites list

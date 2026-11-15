@@ -7,8 +7,8 @@
 (require rackunit
          racket/file
          "../scripts/run-tests/runner.rkt"
-         "../scripts/run-tests/parse.rkt"
-         "../scripts/run-tests/profiles.rkt")
+         "../scripts/run-tests/reporting.rkt"
+         "../scripts/run-tests/classify.rkt")
 
 (define summary "2 success(es) 0 failure(s) 0 error(s) 2 test(s) run\n")
 (define (failed-in text)
@@ -30,17 +30,4 @@
     (define results (run-all-files (list 123) 1 1000))
     (check-equal? (length results) 1)
     (when (pair? results)
-      (check-not-equal? (test-file-result-exit-code (car results)) 0)))
-  (test-case "grouped worker without an exit is not successful"
-    (define p (make-temporary-file "runner-truth-~a.rkt"))
-    (dynamic-wind
-     (lambda ()
-       (display-to-file
-        "#lang racket\n(module+ test (displayln \"1 test passed\") (kill-thread (current-thread)))\n"
-        p
-        #:exists 'truncate))
-     (lambda ()
-       (check-not-equal?
-        (test-file-result-exit-code (run-single-file p #:mode 'grouped-in-process #:timeout 5000))
-        0))
-     (lambda () (delete-file p)))))
+      (check-not-equal? (test-file-result-exit-code (car results)) 0))))

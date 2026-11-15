@@ -3,8 +3,8 @@
 ;; @speed fast
 ;; @boundary unit
 (require rackunit
-         "../scripts/run-tests/profiles.rkt"
-         "../scripts/run-tests/parse.rkt")
+         "../scripts/run-tests/classify.rkt"
+         "../scripts/run-tests/reporting.rkt")
 (module+ test
   (define r (make-skipped-result "x" 'ci '(network)))
   (check-equal? (classify-test-result r) 'SKIPPED_BY_PROFILE)

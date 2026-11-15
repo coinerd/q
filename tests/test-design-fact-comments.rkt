@@ -28,8 +28,9 @@
 
 (define-test-suite
  design-fact-comment-tests
- (test-case "parse.rkt: W3 F1 regex bug design-fact comment"
-   (check-true (has-comment? (string-append root "scripts/run-tests/parse.rkt") "DESIGN FACT (W3 F1")
+ (test-case "reporting.rkt: W3 F1 regex bug design-fact comment"
+   (check-true (has-comment? (string-append root "scripts/run-tests/reporting.rkt")
+                             "DESIGN FACT (W3 F1")
                "FAILURE-END regex bug documented"))
  (test-case "config-paths.rkt: W6 global-config-dir consolidation comment"
    (check-true (has-comment? (string-append root "util/config-paths.rkt") "DESIGN FACT (W6")
@@ -86,8 +87,8 @@
 
 (define-test-suite
  design-fact-content-tests
- (test-case "parse.rkt: comment references #rx vs #px"
-   (check-true (has-comment? (string-append root "scripts/run-tests/parse.rkt") "#px")
+ (test-case "reporting.rkt: comment references #rx vs #px"
+   (check-true (has-comment? (string-append root "scripts/run-tests/reporting.rkt") "#px")
                "regex bug comment mentions #px fix"))
  (test-case "config-paths.rkt: comment references provider-factory consolidation"
    (check-true (has-comment? (string-append root "util/config-paths.rkt") "provider-factory")

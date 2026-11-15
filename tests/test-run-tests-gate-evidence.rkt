@@ -92,8 +92,9 @@
 ;; ---------------------------------------------------------------------------
 
 ;; validate-gate-evidence! and gate-evidence-refusal are not re-exported by
-;; the run-tests.rkt facade; require the module directly.
-(define gate-evidence-module "../scripts/run-tests/gate-evidence.rkt")
+;; the run-tests.rkt facade; require the module directly (gate evidence is
+;; folded into reporting.rkt, §11.3).
+(define gate-evidence-module "../scripts/run-tests/reporting.rkt")
 
 (define (gate-evidence-ref sym)
   (dynamic-require gate-evidence-module sym))

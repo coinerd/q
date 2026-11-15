@@ -32,7 +32,7 @@
        (define replacement (build-path tmp "fake-runner.rkt"))
        (display-to-file "#lang racket/base\n(void)\n" replacement)
        (define blob (run "hash-object" "-w" (path->string replacement)))
-       (run "update-index" "--cacheinfo" (string-append "100644," blob ",scripts/run-tests/cli.rkt"))
+       (run "update-index" "--cacheinfo" (string-append "100644," blob ",scripts/run-tests/runner.rkt"))
        (define tree (run "write-tree"))
        (define altered
          (run "-c"

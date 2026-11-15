@@ -211,15 +211,16 @@
                  (format "mechanism=none is a lie when the child ran mapped: ~s" tel))))
 
 ;; -----------------------------------------------------------------------
-;; Runner-side helper contract (scripts/run-tests/compiled-root-child.rkt):
-;; fail-closed prefix selection. Without a valid flags file every child
-;; invocation must stay byte-identical to the legacy path (#f prefix).
+;; Runner-side helper contract (the compiled-root child argv helpers, folded
+;; into scripts/run-tests/runner.rkt §11.3): fail-closed prefix selection.
+;; Without a valid flags file every child invocation must stay byte-identical
+;; to the legacy path (#f prefix).
 
 (module+ test
   (require racket/file
            racket/path
            racket/string
-           "../scripts/run-tests/compiled-root-child.rkt")
+           "../scripts/run-tests/runner.rkt")
 
   (define tmpu (make-temporary-file "qcr-inherit-u~a" 'directory))
   (define (with-env flags-path thunk)
@@ -301,7 +302,7 @@
            racket/string
            racket/system
            "../ci/prepared-environment/compiled-root.rkt"
-           "../scripts/run-tests/compiled-root-child.rkt")
+           "../scripts/run-tests/runner.rkt")
 
   (define fake-dir (make-temporary-file "qcr-inherit-fake~a" 'directory))
   (define fake-runner (build-path fake-dir "fake-runner.rkt"))

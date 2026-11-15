@@ -78,7 +78,7 @@
 (require racket/file
          racket/list
          racket/port
-         (only-in "../scripts/run-tests/cli.rkt" usage))
+         (only-in "../scripts/run-tests/runner.rkt" usage))
 
 (define tier-doc-conventions "docs/TEST_CONVENTIONS.md")
 (define tier-doc-plan "docs/TDD-TEST-STRATEGY-PLAN.md")

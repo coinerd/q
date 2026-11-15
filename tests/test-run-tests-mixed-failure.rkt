@@ -2,10 +2,10 @@
 ;; @speed fast
 ;; @suite testing
 ;; @boundary unit
-;; @covers scripts/run-tests/parse.rkt
+;; @covers scripts/run-tests/reporting.rkt
 
 (require rackunit
-         "../scripts/run-tests/parse.rkt")
+         "../scripts/run-tests/reporting.rkt")
 
 (module+ test
   (test-case "standalone failure cannot be hidden by later successful summaries"

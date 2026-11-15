@@ -362,11 +362,11 @@
 ;; run-tests.rkt has (main) at module level — can't import directly.
 ;; Test sub-modules instead.
 
-(test-case "RT1: parse.rkt sub-module exports test-file-result?"
-  (check-not-false (dynamic-require "../scripts/run-tests/parse.rkt" 'test-file-result?)))
+(test-case "RT1: reporting.rkt sub-module exports test-file-result?"
+  (check-not-false (dynamic-require "../scripts/run-tests/reporting.rkt" 'test-file-result?)))
 
-(test-case "RT2: parse.rkt sub-module exports test-file-result"
-  (check-not-false (dynamic-require "../scripts/run-tests/parse.rkt" 'test-file-result)))
+(test-case "RT2: reporting.rkt sub-module exports test-file-result"
+  (check-not-false (dynamic-require "../scripts/run-tests/reporting.rkt" 'test-file-result)))
 
 (test-case "RT3: classify.rkt sub-module exports base-dir"
   (check-not-false (dynamic-require "../scripts/run-tests/classify.rkt" 'base-dir)))
@@ -377,8 +377,8 @@
 (test-case "RT5: inventory.rkt sub-module exports print-inventory"
   (check-not-false (dynamic-require "../scripts/run-tests/inventory.rkt" 'print-inventory)))
 
-(test-case "RT6: gate-evidence.rkt sub-module exports record-gate-evidence!"
-  (check-not-false (dynamic-require "../scripts/run-tests/gate-evidence.rkt" 'record-gate-evidence!)))
+(test-case "RT6: reporting.rkt sub-module exports record-gate-evidence!"
+  (check-not-false (dynamic-require "../scripts/run-tests/reporting.rkt" 'record-gate-evidence!)))
 
-(test-case "RT7: run-tests cli.rkt sub-module is loadable"
-  (check-not-false (dynamic-require "../scripts/run-tests/cli.rkt" #f)))
+(test-case "RT7: runner.rkt (folded CLI grammar) sub-module is loadable"
+  (check-not-false (dynamic-require "../scripts/run-tests/runner.rkt" #f)))

@@ -15,9 +15,10 @@
 ;;   record at the bottom of this file.
 
 ;;   reported FAILED by the runner while "passing" standalone.
-;; Cause:  "parse-args accepts --ledger" destructured 14 values, but
-;;   scripts/run-tests/cli.rkt parse-args returns 15 since --lint-metadata
-;;   landed → "result arity mismatch; expected: 14, received: 15" ERROR.
+;; Cause:  "parse-args accepts --ledger" destructured a stale number of values
+;;   after the CLI grammar changed (parse-args is folded into runner.rkt and
+;;   §11.3 removed --scheduler/--ordering/--diagnose-overhead) → "result arity
+;;   mismatch" ERROR.
 ;; Fix:    (1) bind the 15th value (_lint-metadata?);
 ;;         (2) exit non-zero from module+ main when rackunit reports any
 ;;             failure/error, so standalone runs fail loudly;
@@ -119,9 +120,7 @@
                                       _repeat
                                       _record?
                                       _inventory?
-                                      _diagnose?
                                       _mode
-                                      _scheduler
                                       _json-out
                                       ledger
                                       _profile
@@ -134,8 +133,7 @@
                                       _failure-history
                                       _generate-covers-manifest?
                                       _shard-plan
-                                      _durations
-                                      _ordering)
+                                      _durations)
                         (parse-args (list "--ledger" (path->string ledger-copy))))
                       (check-equal? ledger (path->string ledger-copy)))
                     (lambda () (delete-file/safe ledger-copy))))
