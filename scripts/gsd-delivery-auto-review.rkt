@@ -108,6 +108,15 @@
          bind-owned-request
          reauthenticate-owned-request
          recover-rejected-artifact
+         ;; Pure prompt/gate-fact builders and the candidate publication seam.
+         ;; Exported so the owned-audit integration suite can pin the exact
+         ;; audit prompt and the controller-shaped strict-gate trio, and can
+         ;; prove the pre-push reauthentication guard, without re-deriving any
+         ;; of them (Python `_review_prompt`, `_owned_approval_gates`,
+         ;; `_publish_candidate`).
+         review-prompt
+         owned-approval-gates
+         publish-candidate!
          ;; The typed reviewer-infrastructure stop (Python `_ReviewInfra`), so a
          ;; regression can assert it instead of a broad `exn:fail?`.
          exn:fail:review-infra?)
@@ -1323,10 +1332,19 @@
         (for ([(relative source) (in-hash raw)])
           (define target (build-path worktree relative))
           (ensure! (regular-file? source) "unsafe raw proof source")
-          (let loop ([parent (path-only target)])
-            (unless (equal? parent (simplify-path worktree))
-              (ensure! (not (link-exists? parent)) "symlinked candidate proof directory")
-              (loop (path-only parent))))
+          ;; Walk every ancestor from the target's directory up to (and
+          ;; including) the candidate worktree, refusing a symlinked component
+          ;; exactly like the Python oracle's `for parent in target.parents`.
+          ;; The walk is over DIRECTORY paths: `path-only` is idempotent on a
+          ;; path that already ends in a separator, so stepping with it would
+          ;; never advance (the loop below is the same law, spelled so every
+          ;; iteration strictly loses one component).
+          (define worktree-dir (path->directory-path worktree))
+          (let loop ([parent (path->directory-path (path-only target))])
+            (ensure! (not (link-exists? parent)) "symlinked candidate proof directory")
+            (unless (equal? parent worktree-dir)
+              (define-values (next _name _dir?) (split-path parent))
+              (when next (loop next))))
           (make-directory* (path-only target))
           (ensure! (not (link-exists? target)) "candidate raw proof is a symlink")
           (define data (file->bytes source))
@@ -1722,7 +1740,11 @@
                          (format "the local candidate failed the unchanged strict gate: ~a"
                                  (exn-message error))))])
        (require-review-evidence-tail git expected-head candidate)
-       (validate-trio ctx candidate (hash-ref paths 'evidence) main)
+       (validate-trio ctx
+                      candidate
+                      (hash-ref paths 'evidence)
+                      main
+                      #:owned-authority authority)
        (void))
      (define tip-now
        (publish-candidate! ctx
@@ -1740,7 +1762,7 @@
                                                                 staging
                                                                 manual?)))))
      (require-review-evidence-tail git expected-head tip-now)
-     (validate-trio ctx tip-now (hash-ref paths 'evidence) main)
+     (validate-trio ctx tip-now (hash-ref paths 'evidence) main #:owned-authority authority)
      (hash 'status
            "reviewed"
            'plan-id

@@ -323,74 +323,17 @@
 ;; The unchanged strict gate over materialized committed blobs
 ;; ============================================================
 
-;; `git ls-tree` must report a plain regular file, then the blob is written to
-;; the materialized root (Python materialize()).
-(define (materialize git ref relative root)
-  (define listing (string-trim (git (list "ls-tree" ref "--" relative))))
-  (define match (regexp-match #px"^([^ ]+)" listing))
-  (unless (and match (equal? (cadr match) "100644"))
-    (refuse! (string-append "artifact is absent, executable, or a symlink: " relative)))
-  (define target (build-path root relative))
-  (make-directory* (path-only target))
-  (call-with-output-file target
-                         #:exists 'truncate
-                         (lambda (out)
-                           (display (git (list "show" (format "~a:~a" ref relative))) out)))
-  target)
+;; `materialize`, `content-digest`, `read-binding-datum` and `validate-trio`
+;; live in the read ladder (`gsd-delivery-pr.rkt`) and are imported above:
+;; Python keeps ONE `validate_trio`, and so does this port (a second copy here
+;; would silently diverge — the read ladder's copy is also the one that can
+;; authenticate a portable owned-proof bundle). `validate-trio` is re-exported
+;; below for the parity tests that pinned the status ladder's readback.
 
-;; Python digest(): sha256 over `git diff --binary base...head -- . <excludes>`.
-(define (content-digest git base head)
-  (sha256-hex-of-text (git (append (list "diff" "--binary" (format "~a...~a" base head) "--" ".")
-                                   exclude-pathspecs))))
+;; ============================================================
+;; status
+;; ============================================================
 
-;; One committed .rktd datum through the trusted reader (the module Python
-;; spawns). A helper failure keeps the seam's typed cause; only an unreadable
-;; datum becomes the documented malformed-datum refusal.
-(define (read-binding-datum run path)
-  (define text
-    (run "racket"
-         (list (path->string binding-data-script) "read" (path->string path))
-         helper-command-timeout))
-  (with-handlers ([exn:fail? (lambda (_error)
-                               (refuse! (string-append "malformed binding datum: "
-                                                       (path->string path))))])
-    (string->jsexpr text)))
-
-;; Materialize the schema-2 trio at `ref` and run the UNCHANGED strict gate on
-;; it; returns (values evidence review-datum trio-paths). Mirrors the read
-;; ladder's helper (unexported there) with the same artifact paths, the same
-;; digest and the same gate argv.
-(define (validate-trio ctx ref relative base)
-  (define git (delivery-pr-context-git ctx))
-  (define run (delivery-pr-context-run ctx))
-  (define root (make-temporary-file "q-delivery-status-~a" 'directory))
-  (dynamic-wind
-   void
-   (lambda ()
-     (define evidence (read-binding-datum run (materialize git ref relative root)))
-     (unless (and (hash? evidence) (equal? (hash-ref evidence 'schema-version #f) 2))
-       (refuse! "delivery requires a schema-2 hash trio"))
-     (define review-relative
-       (artifact-path (hash-ref evidence 'review-artifact #f) "gsd-wave-reviews"))
-     (define validation-relative
-       (artifact-path (hash-ref evidence 'validation-artifact #f) "gsd-wave-validation"))
-     (for ([path (in-list (list review-relative validation-relative policy-relative-path))])
-       (materialize git ref path root))
-     (define actual (content-digest git base ref))
-     (run "racket"
-          (list (path->string wave-gate-script)
-                (path->string (build-path root relative))
-                "--content-digest"
-                actual
-                "--root"
-                (path->string root)
-                "--policy"
-                (path->string (build-path root policy-relative-path)))
-          helper-command-timeout)
-     (values evidence
-             (read-binding-datum run (build-path root review-relative))
-             (list relative review-relative validation-relative)))
-   (lambda () (delete-directory/files root))))
 
 ;; ============================================================
 ;; status

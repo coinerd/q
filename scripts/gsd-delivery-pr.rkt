@@ -161,7 +161,12 @@
          ;; digest computation and datum materialization.
          content-digest
          materialize
-         read-binding-datum)
+         read-binding-datum
+         ;; The strict-gate trio validator: Python keeps ONE `validate_trio` and
+         ;; so does this port (the read ladder, the S12 review publication and
+         ;; the status readback all share it). Its `#:owned-authority` argument
+         ;; is the only way an owned-proof audit trio is authenticated.
+         validate-trio)
 
 ;; ============================================================
 ;; Constants (mirror scripts/gsd-delivery.py)
@@ -508,9 +513,40 @@
   (with-handlers ([exn:fail? (lambda (_error) (refuse! refusal))])
     (string->jsexpr text)))
 
+;; Every portable owned-proof file a strict-gate root must carry for an owned
+;; audit trio: the green manifest + raw log, the linked RED manifest + raw log
+;; (unless it is the baseline-probe relation, whose probe tree is addressed by
+;; `publication-files`) and every declared publication file.
+(define (portable-owned-proof-paths authority)
+  (unless (hash? authority)
+    (refuse! "malformed owned proof authority"))
+  (define bundle (hash-ref authority 'bundle))
+  (define red (hash-ref authority 'red #f))
+  (define refs
+    (append (list (hash-ref authority 'reference) (hash-ref authority 'log-reference))
+            (if (and (hash? red)
+                     (not (equal? (hash-ref red 'relation #f) "baseline-with-test-overlay-v1")))
+                (list (hash-ref red 'reference) (hash-ref red 'log-reference))
+                '())))
+  (define files
+    (append (for/list ([ref (in-list refs)])
+              (string-append bundle "/" (hash-ref ref 'path)))
+            (hash-ref authority 'publication-files '())))
+  (for ([relative (in-list files)])
+    (ensure! (and (not (absolute-path? (string->path relative)))
+                  (not (member ".." (string-split relative "/")))
+                  (string-prefix? relative (string-append bundle "/")))
+             "unsafe portable proof path"))
+  (remove-duplicates files string=?))
+
 ;; Materialize the schema-2 trio at `ref` and run the unchanged strict gate on
 ;; it; returns (values evidence review-datum trio-paths).
-(define (validate-trio ctx ref relative base)
+;; Python `validate_trio(repo, ref, relative, base, owned_proof_authority=None)`:
+;; an owned audit trio is validated against the SAME portable bundle it
+;; publishes, materialized from the committed blobs under the gate root, with
+;; the trusted authority payload supplied out of band (never selected from
+;; model output). Manual-compatibility trios pass no authority at all.
+(define (validate-trio ctx ref relative base #:owned-authority [owned-authority #f])
   (define git (delivery-pr-context-git ctx))
   (define run (delivery-pr-context-run ctx))
   (define root (make-temporary-file "q-delivery-validate-~a" 'directory))
@@ -526,16 +562,46 @@
        (artifact-path (hash-ref evidence 'validation-artifact #f) "gsd-wave-validation"))
      (for ([path (in-list (list review-relative validation-relative policy-relative-path))])
        (materialize git ref path root))
+     (define owned-payload
+       (and owned-authority
+            (let ()
+              ;; The portable bundle lives beside the trio in the same commit;
+              ;; the gate opens only these addressed files.
+              (for ([path (in-list (portable-owned-proof-paths owned-authority))])
+                (materialize git ref path root))
+              ;; The committed authority payload lets push CI (and the staged
+              ;; binding gate) validate the audit trio with the exact trusted
+              ;; authority the controller used.
+              (define bundle-root (build-path root (hash-ref owned-authority 'bundle)))
+              (make-directory* bundle-root)
+              (call-with-output-file (build-path bundle-root "authority.json")
+                                     #:exists 'truncate
+                                     (lambda (out)
+                                       (write-string (jsexpr->string owned-authority) out)))
+              (define payload (build-path root "owned-proof-authority.json"))
+              (call-with-output-file payload
+                                     #:exists 'truncate
+                                     (lambda (out)
+                                       (write-string (jsexpr->string owned-authority) out)))
+              payload)))
      (define actual (content-digest git base ref))
      (run "racket"
-          (list (path->string wave-gate-script)
-                (path->string (build-path root relative))
-                "--content-digest"
-                actual
-                "--root"
-                (path->string root)
-                "--policy"
-                (path->string (build-path root policy-relative-path)))
+          (append (list (path->string wave-gate-script)
+                        (path->string (build-path root relative))
+                        "--content-digest"
+                        actual
+                        "--root"
+                        (path->string root)
+                        "--policy"
+                        (path->string (build-path root policy-relative-path)))
+                  (if owned-payload
+                      (list "--owned-proof-authority"
+                            (path->string owned-payload)
+                            "--owned-source-repo"
+                            (path->string
+                             (simplify-path
+                              (path->complete-path (delivery-pr-context-repo ctx)))))
+                      '()))
           helper-command-timeout)
      (values evidence
              (read-binding-datum run (build-path root review-relative))

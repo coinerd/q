@@ -280,25 +280,33 @@
 ;; Every regular file of an audit binding's owned-proof bundle, keyed by its
 ;; repo-relative path (Python `_binding_bundle_files`). A staged bundle that
 ;; escapes its own directory is refused; nothing is ever written here.
+;; Never descend through a symlinked directory: `in-directory` would follow
+;; one (Python's `Path.rglob` does not), letting an escaping link enumerate —
+;; or even contribute — bytes outside the staged bundle. Every entry is probed
+;; with the no-follow predicate first, so a link is neither collected nor
+;; walked into.
+(define (bundle-files-under dir)
+  (append*
+   (for/list ([entry (in-list (sort (directory-list dir) path<?))])
+     (define path (build-path dir entry))
+     (cond
+       [(link-exists? path) '()]
+       [(directory-exists? path) (bundle-files-under path)]
+       [else (list path)]))))
+
 (define (staged-bundle-files output)
   (define parent (build-path (as-path output) "docs/reports/gsd-wave-validation"))
   (define proofs (build-path parent "owned-proofs"))
   (cond
     [(and (directory-exists? proofs) (not (link-exists? proofs)))
-     (for/fold ([files (hash)])
-               ([payload (in-list (sort (for/list ([p (in-directory proofs)])
-                                          p)
-                                        path<?))])
-       (cond
-         [(and (file-exists? payload) (not (link-exists? payload)))
-          (define relative (find-relative-path parent payload))
-          (when (or (absolute-path? relative) (member 'up (explode-path relative)))
-            (refuse! (string-append "unsafe staged owned-proof bundle path: "
-                                    (path->string payload))))
-          (hash-set files
-                    (path->string (build-path "docs" "reports" "gsd-wave-validation" relative))
-                    payload)]
-         [else files]))]
+     (for/fold ([files (hash)]) ([payload (in-list (bundle-files-under proofs))])
+       (define relative (find-relative-path parent payload))
+       (when (or (absolute-path? relative) (member 'up (explode-path relative)))
+         (refuse! (string-append "unsafe staged owned-proof bundle path: "
+                                 (path->string payload))))
+       (hash-set files
+                 (path->string (build-path "docs" "reports" "gsd-wave-validation" relative))
+                 payload))]
     [else (hash)]))
 
 ;; ============================================================

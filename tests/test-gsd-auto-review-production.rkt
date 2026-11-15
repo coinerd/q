@@ -4,8 +4,9 @@
 ;; @boundary integration
 ;; @timeout 1500
 ;; @covers extensions/gsd/delivery-coordinator.rkt
-;; Real default coordinator + Python controller + local Git remote. Only the
-;; independent model response is deterministic; no controller status is faked.
+;; Real default coordinator + real owned-Verify world + local Git remote. Only
+;; the independent model response is deterministic; no controller status is
+;; faked (the world is built by tests/helpers/owned-audit-fixture.rkt).
 ;; 1500 matches the sibling auto-review-loop fixture: both run full real
 ;; owned-Verify generations, which a loaded 4-CPU runner stretches past the
 ;; previous 900 s fixture budget (production deadlines are unchanged).
@@ -21,8 +22,8 @@
          "../extensions/gsd/delivery-coordinator.rkt"
          "../extensions/gsd/delivery-finalize.rkt"
          "../extensions/gsd/review-dispatch.rkt"
-         (only-in "helpers/auto-review-owned-fixture.rkt" precompile-delivery-controller-scripts!))
-(define-runtime-path fixture-python "helpers/production-owned-review-fixture.py")
+         (only-in "helpers/auto-review-owned-fixture.rkt" precompile-delivery-controller-scripts!)
+         (only-in "helpers/owned-audit-fixture.rkt" build-production-owned-review-world))
 (module+ test
   (test-case "default production coordinator invokes installed independent runner at exact head/generation and replays remote rejection"
     ;; Fixture setup precompile: the controller's racket subprocesses are
@@ -36,20 +37,15 @@
        (lambda ()
          (define manifest (make-campaign-manifest 1 "w0" '() '() (path->string temp)))
          (define plan (campaign-manifest-hash manifest))
-         (define setup
-           (run-subprocess "python3"
-                           #:args (list (path->string fixture-python)
-                                        (path->string temp)
-                                        plan
-                                        "0"
-                                        (number->string generation))
-                           #:timeout 180))
-         (check-equal? (subprocess-result-exit-code setup) 0 (subprocess-result-stderr setup))
-         (define world (string->jsexpr (subprocess-result-stdout setup)))
+         ;; Real declared owned-Verify world (native helper, no Python): the
+         ;; receipt's execution proof is genuinely produced, and the
+         ;; pre-existing fixture's simulated PRIOR generation history is kept.
+         (define world (build-production-owned-review-world temp plan 0 generation))
          (define readiness (hash-ref world 'readiness))
          (check-not-false (member (hash-ref readiness 'code)
-                                  '("missing-meaningful-red-proof" "legacy-red-ready"
-                                                                   "registered-probe-ready"))
+                                  '("missing-meaningful-red-proof"
+                                    "legacy-red-ready"
+                                    "registered-probe-ready"))
                           (format "underlying fixture readiness: ~s" readiness))
          (define root (string->path (hash-ref world 'root)))
          (check-true (directory-exists? (build-path root "q")))
