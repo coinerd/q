@@ -4,12 +4,12 @@
 ;; credential boundary.
 ;;
 ;; Phase B slice S10: the authenticated readback is NATIVE. delivery-readback
-;; calls the `status` proof ported in scripts/gsd-delivery-status.rkt instead of
-;; shelling `python3 scripts/gsd-delivery.py status …`; the arguments (repo,
-;; plan, wave, campaign root), the JSON payload and the typed-stop semantics are
-;; unchanged, so every consumer keeps its exact reason chain. The action is
-;; resolved LAZILY (see native-status-action): the native port reaches back into
-;; this module through the shared bounded-git seam
+;; calls the `status` proof ported in scripts/gsd-delivery-status.rkt (the
+;; Python controller it replaced is deleted); the arguments (repo, plan, wave,
+;; campaign root), the JSON payload and the typed-stop semantics are unchanged,
+;; so every consumer keeps its exact reason chain. The action is resolved
+;; LAZILY (see native-status-action): the native port reaches back into this
+;; module through the shared bounded-git seam
 ;; (scripts/gsd-delivery-git.rkt requires controller-environment from here), so a
 ;; static require would close a module cycle.
 ;;
@@ -338,7 +338,7 @@
      'next-steps
      (list "Open implementation PR from retained delivery branch"
            "Obtain independent review and required checks; protected squash merge"
-           (string-append "python3 scripts/gsd-delivery.py prepare --campaign-root <campaign-root> "
+           (string-append "racket scripts/gsd-delivery-merge.rkt prepare --campaign-root <campaign-root> "
                           "--repo <repo> --plan <plan-id> --wave <n> --pr <merged-PR> "
                           "--evidence <frozen trio source> --output <fresh directory>")
            "Review and validate the gate-red binding trio; protected binding PR"

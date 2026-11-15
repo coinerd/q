@@ -515,8 +515,8 @@
    ;; ledger is additionally written atomically via
    ;; call-with-atomic-output-file / make-parent-directory* (fs-write /
    ;; fs-rename / mkdir, invisible to the marker scanner).
-   ;; Phase B slice S10: readback is NATIVE (delivery-status!) instead of a
-   ;; `python3 scripts/gsd-delivery.py status` shell, and the native port is
+   ;; Phase B slice S10: readback is NATIVE (delivery-status!) instead of the
+   ;; deleted Python controller's `status` shell, and the native port is
    ;; resolved with `dynamic-require` at first use because the shared bounded-git
    ;; seam requires controller-environment from THIS module (a static require
    ;; would close a module cycle). The credential boundary (controller-environment
@@ -699,8 +699,9 @@
    ;; approval-bound publication intent/confirmation (atomic sibling records,
    ;; fail-closed loader), strict-descendant repair-tail generations,
    ;; publication-only replay, and the durable-spare-branches union. The only
-   ;; external effect is the trusted gsd-delivery.py publish-head action
-   ;; through the single controller-environment credential boundary.
+   ;; external effect is the trusted native publish-head action
+   ;; (scripts/gsd-delivery-publish.rkt) through the single
+   ;; controller-environment credential boundary.
    (make-entry "delivery-publication.rkt"
                'campaign-state
                '(fs-read dir-list sha256 git subprocess make-param path-ops)
