@@ -242,7 +242,11 @@
   (for ([entry (in-list release-suite-steps)])
     (define suite (car entry))
     (define step (cdr entry))
-    (check-regexp-match (pregexp (format "run-tests\\.rkt.*--suite ~a" suite)) step)
+    ;; §11.2: fixed suites are `./qt --lane NAME`; a repo-relative
+    ;; `scripts/run-tests.rkt --suite NAME` declaration stays valid too.
+    (check-regexp-match
+     (pregexp (format "(?:\\./qt|run-tests\\.rkt).*--(?:lane|suite) ~a" suite))
+     step)
     (check-true (string-contains? step "set -o pipefail")
                 (format "~a step must preserve the runner exit through tee" suite))
     (for ([forbidden (in-list (list "|| true" "[warn]" "continuing" "exit 0"))])
