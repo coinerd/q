@@ -35,9 +35,12 @@
 ;; case: an owned manifest authenticates the absolute execution paths it was
 ;; produced under, so a copy is either a different world or a tampered one.
 ;;
-;; Measured wall clock on a loaded 4-CPU host (concurrent unrelated test
-;; processes): ~5.5 minutes total, of which ~3.5 minutes is the five real owned
-;; Verify world builds.
+;; Measured wall clock (final full-file run, this 4-CPU host, with five
+;; unrelated long-running suite processes from other sessions competing): 538 s
+;; (~9 min) for all fourteen cases, of which ~4 min is the four real owned
+;; Verify world builds; the four pure-law cases take milliseconds. An earlier
+;; run of the same code took ~11 min. Per-case runs measured 12-90 s
+;; (`QAR_ONLY=<substring>`).
 
 (require rackunit
          json
