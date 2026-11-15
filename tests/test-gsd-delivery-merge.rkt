@@ -1480,7 +1480,7 @@
                                     (prepare-run world campaign root)))
                 "default branch protection is absent or weakened")
    ;; The attempt-bound receipt rule is asserted directly in the unit tests below
-   ;; (require-binding-receipt), and the declared/source output rule is asserted
+   ;; by require-binding-receipt, and the declared vs source output rule is asserted
    ;; against declared-outputs / active-declared-outputs, so the remaining
    ;; prepare refusals here are the ones that need the real staging pipeline.
    (prepare-job "prepare impure evidence record commit"

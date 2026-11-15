@@ -156,8 +156,8 @@
 (define (probe-key e)
   (list (hash-ref e 'id) (hash-ref e 'mode) (sort (hash-ref e 'paths) symbol<?) (hash-ref e 'anchor)))
 
-(define expected-edge-digest "a83ef10cfb56c5768184906cc2e873bf0249b52e")
-(define expected-exit-digest "0ab36b122d43b5d7f807c6b87582987c85d810c3")
+(define expected-edge-digest "3e027705850b3f0b971209c46ef35c2ba06f3ef4")
+(define expected-exit-digest "2aa60b1a6786d32b9f724df15b7206b0ce9ce125")
 (define expected-probe-digest "677d94168a63385d357f3e85f2ad78909cd329ff")
 
 (define (locator-parts locator)

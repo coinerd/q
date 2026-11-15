@@ -117,7 +117,7 @@
                   (to . run-prompt!))
           #hasheq((anchor
                    .
-                   "tui/tui-init.rkt:run-prompt! campaign-sess")
+                   "tui/tui-init.rkt:(run-prompt! (unbox agent-session-box) prompt)")
                   (from . tui/tui-init)
                   (id . tui-campaign)
                   (kind . direct)
@@ -497,7 +497,7 @@
                   (terminal . possibly-turn.completed/cleanup))
           #hasheq((anchor
                    .
-                   "runtime/session/session-lifecycle.rkt:Stop trace logger on normal completion")
+                   "runtime/session/session-lifecycle.rkt:(stop-trace-logger! tracer) ; Flush session diagnostics on normal completion.")
                   (classification . DEFERRED)
                   (cleanup . error-handler-runs+second-stop-may-fail)
                   (follow-up . "W3 #9245 locality assessment")
@@ -2006,7 +2006,7 @@
           #hasheq((id . dispatch-iteration)
                   (owner
                    .
-                   "runtime/session/session-lifecycle.rkt:(define (dispatch-iteration")
+                   "runtime/session/session-lifecycle.rkt:(define (dispatch-iteration sess")
                   (responsibilities . (orchestration eventing wiring)))
           #hasheq((id . run-iteration-loop/v2)
                   (owner
