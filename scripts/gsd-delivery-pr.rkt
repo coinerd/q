@@ -122,6 +122,7 @@
 ;;     pre-mutation check snapshot to a second action.
 
 (require json
+         "../util/shell-quote.rkt"
          racket/file
          racket/list
          racket/path
@@ -550,6 +551,7 @@
   (define git (delivery-pr-context-git ctx))
   (define run (delivery-pr-context-run ctx))
   (define root (make-temporary-file "q-delivery-validate-~a" 'directory))
+  (define repo (delivery-pr-context-repo ctx))
   (dynamic-wind
    void
    (lambda ()
@@ -585,24 +587,32 @@
                                        (write-string (jsexpr->string owned-authority) out)))
               payload)))
      (define actual (content-digest git base ref))
-     (run "racket"
-          (append (list (path->string wave-gate-script)
-                        (path->string (build-path root relative))
-                        "--content-digest"
-                        actual
-                        "--root"
-                        (path->string root)
-                        "--policy"
-                        (path->string (build-path root policy-relative-path)))
-                  (if owned-payload
-                      (list "--owned-proof-authority"
-                            (path->string owned-payload)
-                            "--owned-source-repo"
-                            (path->string
-                             (simplify-path
-                              (path->complete-path (delivery-pr-context-repo ctx)))))
-                      '()))
-          helper-command-timeout)
+     ;; KNOWN LIMITATION: the gate's evidence probe resolves commits with real
+     ;; git from this temporary root, which has no object store, so a trio whose
+     ;; evidence carries an implementation commit is refused here (the owned
+     ;; production repair path; manual-compatibility trios do not need it).
+     ;; The fix is to materialize into a detached worktree of the repo; that was
+     ;; tried and it changed the working tree the status proof inspects, so it
+     ;; needs a dedicated design (read-only git dir injection) rather than a
+     ;; quick patch. Tracked as the one known-red delivery case.
+     (define gate-args
+       (append (list (path->string wave-gate-script)
+                     (path->string (build-path root relative))
+                     "--content-digest"
+                     actual
+                     "--root"
+                     (path->string root)
+                     "--policy"
+                     (path->string (build-path root policy-relative-path)))
+               (if owned-payload
+                   (list "--owned-proof-authority"
+                         (path->string owned-payload)
+                         "--owned-source-repo"
+                         (path->string
+                          (simplify-path
+                           (path->complete-path (delivery-pr-context-repo ctx)))))
+                   '())))
+     (run "racket" gate-args helper-command-timeout)
      (values evidence
              (read-binding-datum run (build-path root review-relative))
              (list relative review-relative validation-relative)))

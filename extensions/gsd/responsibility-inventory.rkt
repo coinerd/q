@@ -603,7 +603,9 @@
    ;; delivery-journal; the caller persists the record.
    (make-entry "review-dispatch.rkt"
                'campaign-state
-               '(fs-write subprocess make-param path-ops)
+               ;; Phase B: the auto-review action is native, so the dispatcher no
+               ;; longer shells a Python controller (no `subprocess` effect).
+               '(fs-write make-param path-ops)
                '(current-gsd-auto-review-runner)
                '("json" "racket/file"
                         "racket/format"
