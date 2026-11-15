@@ -462,7 +462,7 @@ sandbox:
 - **A silent run is still `ZERO_PARSED`.** A file that exits 0 with no parsed
   tests is never a pass — strict mode (`STRICT_TEST_RUNNER=1`) fails the run.
 
-## Removed experiment facilities (2026-02-19, §11.3)
+## Removed experiment facilities (2026-11-15, §11.3)
 
 The testing-framework refactor (§11.3) deleted the experimental facilities the
 refactor itself introduced, so they are no longer part of the contract:
@@ -474,7 +474,7 @@ refactor itself introduced, so they are no longer part of the contract:
 | `--ordering fifo\|lpt` and the ordering JSON evidence | Deterministic input order is the only ordering; LPT produced no measurable CI win. |
 | `--diagnose-overhead`, the overhead/local-p90 collectors (`runner.rkt --check` / `--collect-local`) | Local SLO evidence is measured by the L1/L2 loop commands above and retained as CI artifacts; the in-tree collector duplicated that and existed to justify the grouped mode. |
 | `--shard-plan report` and `--shard-plan measure`, the starvation/tail checks, cohort-anchored plan regeneration | `--shard-plan active` (the duration-aware plan the CI lanes consume) survives; the reporting/measurement modes were research aids. |
-| `scripts/run-tests/mutation-pilot.rkt` (the bounded mutation-analysis pilot, W9) | **Removal decision (2026-02-19):** the pilot produced reviewed *informational* findings for one module (`runtime/memory/policy.rkt`) across eight retained runs under `artifacts/mutation-pilot/`, and its weekly workflow job is removed with it. It never gated a merge, its operator set was a hand-maintained table, and maintaining a repo-owned mutation engine is not justified by the evidence it produced. Mutation *thinking* stays: targeted micro-mutations are reviewed by hand and recorded in the affected test's header comment.
+| `scripts/run-tests/mutation-pilot.rkt` (the bounded mutation-analysis pilot, W9) | **Removal decision (2026-11-15):** the pilot produced reviewed *informational* findings for one module (`runtime/memory/policy.rkt`) across eight retained runs under `artifacts/mutation-pilot/`, and its weekly workflow job is removed with it. It never gated a merge, its operator set was a hand-maintained table, and maintaining a repo-owned mutation engine is not justified by the evidence it produced. Mutation *thinking* stays: targeted micro-mutations are reviewed by hand and recorded in the affected test's header comment.
 
 The surviving CLI rejects every removed flag (unknown option → exit 2), so an
 old command line fails loudly instead of being silently ignored.

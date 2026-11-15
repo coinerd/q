@@ -167,7 +167,7 @@ new boundary and boolean-polarity tests
 with the two remaining survivors documented as equivalent mutants (runs 6–8,
 including a clean-cache re-verification; PR #9389). **The pilot and its weekly
 workflow job were deleted in the §11.3 testing-framework cleanup
-(2026-02-19); see `docs/TEST_CONVENTIONS.md` "Removed experiment facilities"
+(2026-11-15); see `docs/TEST_CONVENTIONS.md` "Removed experiment facilities"
 for the removal rationale.** Consolidation in any scope
 remains blocked without the full evidence set required by
 `docs/operations/test-consolidation-policy.md`.
