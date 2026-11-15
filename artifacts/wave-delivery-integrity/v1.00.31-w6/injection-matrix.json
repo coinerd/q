@@ -127,7 +127,7 @@
   "row-count": 13,
   "sha256": "4ce067d627506b3b6894ab4bfe50dea09097f44c1f79c91d7cf754d6b1d02d18"
  },
- "rehearsal-head": "665dcfbdb26ca7532aa91191fb036eaeea92984c",
+ "rehearsal-head": "3a536fb93262336610ce34f1f89738b436d3c840",
  "rehearsal-inputs": [
   {
    "path": "scripts/ci/inject-wave-defect.rkt",
@@ -151,7 +151,7 @@
   },
   {
    "path": "tests/test-gsd-delivery-merge.rkt",
-   "sha256": "7a8e3aa58abc88dae6d12643f26eb1a7395ac57101929d2442473c8ec369b17d"
+   "sha256": "510eed015050ab9781691870b4c891f48f1a7bef1c9f6810796591731fbefd80"
   },
   {
    "path": "artifacts/wave-delivery-integrity/v1.00.31-w6/raw/extend-register-f12-f13.py",
@@ -170,7 +170,7 @@
    "sha256": "b1e6314872dc058fe5ea4576c2f894c76fe2d33ad88e0449633493d0ed6d0471"
   }
  ],
- "rehearsal-inputs-digest": "bc8a8e4389c3abe78ea73ae6d418640e2d6f0b167afb8d3aa85cbc9960c8e00d",
+ "rehearsal-inputs-digest": "6571bacec31f532591413256daac2360024bd5cb61f206b90f6aa90d919c5953",
  "rows": [
   {
    "exit-code": 0,

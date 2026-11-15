@@ -54,7 +54,7 @@
 (require json
          racket/path
          racket/string
-         "../extensions/gsd/delivery-handoff.rkt"
+         "gsd-credential-env.rkt"
          "../sandbox/subprocess.rkt")
 
 (provide runtime-caller-budget

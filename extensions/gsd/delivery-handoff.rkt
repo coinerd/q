@@ -38,7 +38,9 @@
          (only-in "delivery-receipt.rkt" delivery-receipt-blocker)
          ;; The credential boundary (sanitize-env) every delivery subprocess
          ;; still crosses, native actions included.
-         (only-in "../../sandbox/subprocess.rkt" sanitize-env))
+         (only-in "../../sandbox/subprocess.rkt" sanitize-env)
+         (rename-in "../../scripts/gsd-credential-env.rkt"
+                    [controller-environment gsd-controller-environment]))
 (provide verified-wave-merge-sha
          delivery-handoff-status
          delivery-readback
@@ -99,16 +101,12 @@
 ;; storage (gh auth login) is the required path; the controller's
 ;; auth-failure reason plus delivery-action-hint make that explicit
 ;; instead of silently degrading.
-(define CREDENTIAL-ENV-NAMES '("GH_TOKEN" "GITHUB_TOKEN"))
 
-(define (controller-environment)
-  (define incoming (current-environment-variables))
-  (define env (sanitize-env))
-  (for ([name (in-list CREDENTIAL-ENV-NAMES)])
-    (define value (environment-variables-ref incoming (string->bytes/utf-8 name)))
-    (when value
-      (environment-variables-set! env (string->bytes/utf-8 name) value)))
-  env)
+
+;; The credential boundary lives in scripts/gsd-credential-env.rkt so the
+;; scripts-level delivery seams do not depend on an extension module. Re-exported
+;; here so every existing caller keeps its API.
+(define controller-environment gsd-controller-environment)
 
 ;; Credential-shaped assignments never surface in operator-visible text.
 (define (redact-delivery-text text)
