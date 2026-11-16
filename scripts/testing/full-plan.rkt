@@ -48,11 +48,18 @@
 ;;     command (the change is REPORTED, never reverted).
 ;;
 ;; Scheduling:
-;;   - mutation-sensitive files (`mutating-file?`) run SERIALLY, one at a time,
-;;     in a first `run-quick` call before any parallel worker starts;
-;;   - every other file then runs in a second `run-quick` call with bounded
-;;     workers. Two honest calls, never the legacy runner, so each per-file
-;;     result stays attributable to exactly one file;
+;;   - ONE work-conserving dynamic queue (scripts/testing/scheduler.rkt, final
+;;     plan §2) schedules every file. Mutation owners (`mutating-file?` or a
+;;     declared `@mutates` other than none) take the `repository-exclusive`
+;;     resource and dispatch FIRST; while the lock is held, only files whose
+;;     declared `@isolation` is `temp-dir` or `sandboxed-home` co-run (they run
+;;     outside the checkout and cannot observe a managed-surface mutation);
+;;     every other file is eligible once the mutation set drains. This is
+;;     never slower than the former serial-then-parallel barrier and never
+;;     co-runs conflicting owners;
+;;   - two honest execution adapters remain (never the legacy runner): the
+;;     audited quick child per file, so each per-file result stays
+;;     attributable to exactly one file;
 ;;   - each file's wall-clock bound comes from its `@timeout` metadata, with
 ;;     `full-default-timeout` as the fallback.
 ;;
@@ -74,7 +81,8 @@
          racket/string
          racket/system
          "../run-tests/classify.rkt"
-         "quick-runner.rkt")
+         "quick-runner.rkt"
+         "scheduler.rkt")
 
 (provide full-label
          full-obligations
@@ -303,11 +311,15 @@
        (apply max (cons timeout (hash-values bounds))))))
 
 (define (full-mutation-policy-line files)
-  (define serial (filter mutating-file? files))
+  (define owners (filter repository-exclusive-file? files))
+  (define co-runs (filter co-runs-under-exclusive-file? files))
   (format
-   "mutation isolation: ~a mutating file(s) run serially (jobs 1) first, then ~a file(s) in the parallel batch"
-   (length serial)
-   (- (length files) (length serial))))
+   (string-append
+    "resource isolation: ~a mutation-owning file(s) hold repository-exclusive (dispatched first; "
+    "~a declared temp-dir/sandboxed-home file(s) co-run; ~a file(s) join after owners drain)")
+   (length owners)
+   (length co-runs)
+   (- (length files) (length owners))))
 
 ;; ============================================================
 ;; Lanes (`full` / `default` / `release`)
@@ -850,13 +862,14 @@
                    (release-obligation-lines (release-obligations)))
            '()))))
 
-;; The frozen plain-`./qt full` preamble (byte-identical to the pre-lane
-;; command); every other plan states its own selection.
+;; The frozen plain-`./qt full` preamble (frozen wording, updated for the
+;; single-queue dispatch); every other plan states its own selection.
 (define (plain-full-preamble jobs)
-  (format
-   "full: starting the complete available Racket suite (mutating files serially, then jobs ~a); ~a"
-   jobs
-   full-label))
+  (format (string-append
+           "full: starting the complete available Racket suite (work-conserving queue, jobs ~a; "
+           "mutation owners dispatch first); ~a")
+          jobs
+          full-label))
 
 (define (plan-selection-noun plan)
   (case (lane-plan-lane plan)
@@ -869,14 +882,15 @@
   (define changed (lane-plan-changed plan))
   (if (and (eq? (lane-plan-lane plan) 'full) (not changed))
       (plain-full-preamble jobs)
-      (format
-       "~a: starting the ~a selection of the ~a (~a files; mutating files serially, then jobs ~a); ~a"
-       (lane-name (lane-plan-lane plan))
-       (if changed "changed-file" "lane")
-       (plan-selection-noun plan)
-       (length (lane-plan-files plan))
-       jobs
-       (plan-label plan))))
+      (format (string-append
+               "~a: starting the ~a selection of the ~a (~a files; work-conserving queue, jobs ~a; "
+               "mutation owners dispatch first); ~a")
+              (lane-name (lane-plan-lane plan))
+              (if changed "changed-file" "lane")
+              (plan-selection-noun plan)
+              (length (lane-plan-files plan))
+              jobs
+              (plan-label plan))))
 
 ;; The single honest pass line per lane, and its pinned pattern: the honest
 ;; label is part of the contract, so it cannot be dropped from the output.
@@ -980,10 +994,13 @@
 ;; Raise (never return a partial pass) when selection is empty, when the
 ;; runner loses results/workers, or when an argument is out of contract.
 ;;
-;; One execution path for every lane and every `--changed` selection: mutation
-;; serialization, per-file timeouts, managed-surface detection and exact
-;; result multiplicity live here exactly once, so an evidence rule cannot drift
-;; between commands.
+;; One execution path for every lane and every `--changed` selection: ONE
+;; shared work-conserving queue (scripts/testing/scheduler.rkt) schedules
+;; every file — mutation owners take repository-exclusive and dispatch first,
+;; declared temp-dir/sandboxed-home isolation co-runs, the rest joins after
+;; the mutation set drains — while per-file timeouts, managed-surface
+;; detection and exact result multiplicity live here exactly once, so an
+;; evidence rule cannot drift between commands.
 (define (run-files base files jobs #:timeout [timeout full-default-timeout])
   (unless (and (exact-integer? jobs) (positive? jobs))
     (error 'run-full "jobs must be a positive integer, got ~s" jobs))
@@ -992,18 +1009,23 @@
   (when (null? files)
     (error 'run-files "refusing to run an empty selection (zero files is a failure, not a pass)"))
   (define bounds (full-timeouts files #:timeout timeout))
-  (define serial (filter mutating-file? files))
-  (define parallel (filter-not mutating-file? files))
   (define snapshot (managed-surface-snapshot base))
-  ;; Serial batch FIRST: no parallel worker exists yet when a mutation-sensitive
-  ;; file runs, so its filesystem/env/repo effects cannot race another file.
+  ;; Every audited owner runs in its own child (the quick adapter); the
+  ;; repository-exclusive resource and the co-run rule come from classify.rkt's
+  ;; resource classes — the same metadata the runner reads. Mutation owners
+  ;; sort first (priority 0), so the lock is acquired once at the start of the
+  ;; run instead of stalling the queue repeatedly mid-run.
   (define results
-    (append (if (null? serial)
-                '()
-                (run-quick serial 1 #:timeout timeout #:timeouts bounds))
-            (if (null? parallel)
-                '()
-                (run-quick parallel jobs #:timeout timeout #:timeouts bounds))))
+    (run-scheduled (for/list ([f (in-list files)]
+                              [i (in-naturals)])
+                     (sched-task f
+                                 (lambda (path file-timeout) (run-quick-file path file-timeout))
+                                 (hash-ref bounds f timeout)
+                                 (repository-exclusive-file? f)
+                                 (co-runs-under-exclusive-file? f)
+                                 (if (repository-exclusive-file? f) 0 1)
+                                 i))
+                   jobs))
   (full-run files results (managed-surface-violations snapshot base)))
 
 (define (run-full root jobs #:timeout [timeout full-default-timeout])

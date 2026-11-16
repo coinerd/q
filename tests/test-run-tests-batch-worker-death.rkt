@@ -35,7 +35,7 @@
               (custodian-managed-list cust parent)))
 
 (define suite
-  (test-suite "batch worker death"
+  (test-suite "scheduler worker death"
     (test-case "a lost selected file cannot produce a successful suite"
       (define dir (make-temporary-file "batch-worker-death-~a" 'directory))
       (define ready (build-path dir "ready"))
@@ -111,22 +111,19 @@
                           (for/list ([t (in-list (descendant-threads cust (current-custodian)))])
                             (continuation-mark-set->context (continuation-marks t)))))))
          (kill-thread (car (active-workers)))
+         ;; The shared work-conserving queue (final plan §2) dispatches any
+         ;; eligible later file once a worker frees up — so `later` MAY have
+         ;; started by now. What MUST hold is fail-closed termination: the
+         ;; lost worker terminates the whole run with an error (never a
+         ;; partial green), and the killed child never survives.
          (define outcome (sync/timeout 5 results))
          (unless outcome
-           (fail "batch coordinator did not terminate"))
-         (check-false (file-exists? later-started)
-                      "a later batch must not start after a worker is lost")
-         (unless (exn? outcome)
-           (define exit-code (car outcome))
-           (define rows (cadr outcome))
-           (define passing-row
-             (findf (lambda (r) (equal? (test-file-result-path r) (cadr selected))) rows))
-           (check-not-false passing-row "the actual passing selected file must be reported")
-           (when passing-row
-             (check-equal? (test-file-result-exit-code passing-row) 0))
-           (check-not-equal? exit-code
-                             0
-                             "losing the blocked selected file must fail the aggregate suite"))
+           (fail "coordinator did not terminate after a worker was lost"))
+         (check-true (exn? outcome)
+                     "losing a selected file must fail the suite, never a partial result")
+         (when (exn? outcome)
+           (check-regexp-match #rx"(worker terminated|missing worker results|missing result)"
+                               (exn-message outcome)))
          (write-text release "")
          (check-false (wait-until (lambda () (file-exists? late)) 2)
                       "worker death must not leave the child running"))

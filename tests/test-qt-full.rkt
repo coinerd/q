@@ -175,8 +175,9 @@
        (check-regexp-match #rx"timeouts: @timeout metadata when declared, else default 120s" text)
        (check-regexp-match #rx"declared 0 of 1 files" text)
        (check-regexp-match #rx"max 120s" text)
-       ;; Mutation isolation split is visible in the plan.
-       (check-regexp-match #rx"mutation isolation: 0 mutating file\\(s\\) run serially" text)
+       ;; Resource-isolation split is visible in the plan (single-queue
+       ;; dispatch: mutation owners first, co-run isolation, then the rest).
+       (check-regexp-match #rx"resource isolation: 0 mutation-owning file\\(s\\) hold repository-exclusive" text)
        (check-regexp-match #rx"execution support: " text)
        (check-regexp-match #rx"NOT VERIFIED by \\./qt full:" text)
        (for ([obligation
@@ -455,7 +456,7 @@
          (check-regexp-match #rx"selection only" out)
          (check-regexp-match #rx"full Racket suite only, not PR/CI verification" out)
          (check-regexp-match #rx"timeouts: " out)
-         (check-regexp-match #rx"mutation isolation: " out)
+         (check-regexp-match #rx"resource isolation: " out)
          (check-regexp-match #rx"NOT VERIFIED by \\./qt full:" out)
          (check-regexp-match #rx"NOT PROVIDED by \\./qt full" out)
          (check-false (regexp-match? #rx"full passed:" out) "explain must not execute")
