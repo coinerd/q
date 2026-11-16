@@ -2,6 +2,7 @@
 ;; @speed fast
 ;; @suite testing
 ;; @boundary integration
+;; @timeout 300
 
 ;; Contract for the completed `./qt` interface table (plan §3 / §11.1):
 ;;   - `quick --changed BASE..HEAD` is a conservative impact selection over the
