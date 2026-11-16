@@ -27,10 +27,17 @@ the plan without executing or cleaning anything.
 
 | Command | Selection | Pass line |
 |---|---|---|
+| `./qt` | same as `./qt default` (plan §3 interface table) | `default passed: ...` |
 | `./qt quick` | small audited, fingerprinted set | `quick passed: ...` |
 | `./qt full` | every discovered test file (complete available suite) | `full passed: ...` |
 | `./qt default` | fast/PR lane: `full` minus the excluded files below | `default passed: ...` |
 | `./qt release` | `full` plus the release obligation list | never a release pass line it cannot support |
+
+A bare `./qt` is the `default` lane, not a refusal: the zero-argument case runs
+the same mandatory-PR selection as `./qt default` and prints the same honest
+`default passed:` / `default failed` verdict. An unsupported option still fails
+closed before any selection, and `./qt --explain` prints the default plan
+without executing.
 
 None of these commands is PR/CI or candidate verification. The pass lines embed
 that disclosure, and `--explain` prints the `NOT VERIFIED` / `NOT PROVIDED`

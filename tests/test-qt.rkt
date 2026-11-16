@@ -76,14 +76,16 @@
     ;; Every entry is a spelling that MUST fail closed (the positive cases live
     ;; in tests/test-qt-interface.rkt, test-qt-full.rkt and test-qt-lanes.rkt):
     ;; an unadmitted quick file, --changed without a range, an unknown command,
-    ;; a non-SHA release candidate, an unsupported option, and a bare `./qt`
-    ;; with no command at all.
+    ;; a non-SHA release candidate, and an unsupported option. A bare `./qt` is
+    ;; NO LONGER in this list: plan §3 defines it as the `default` lane, and
+    ;; tests/test-qt-interface.rkt pins that contract (plan, pass line and the
+    ;; fail-before-selection case for an unsupported option).
     (for ([args '(#("quick" "tests/test-verifier-risk-threshold.rkt")
                   #("quick" "--changed")
                   #("bogus-command")
                   #("release" "--candidate" "HEAD")
                   #("full" "--bogus")
-                  #())])
+                  #("--bogus"))])
       (define-values (status out err) (apply invoke (vector->list args)))
       (check-not-equal? status 0)))
   (test-case "full explain from a tree without tests/ fails through qt:"
