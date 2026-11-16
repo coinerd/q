@@ -1,5 +1,13 @@
 # Prepared-Environment Pilot Report — v1.00.11 (W3)
 
+> **Status 2026-11-16: the macOS tuple is DISABLED (owner decision).** Its job
+> never received a runner — three consecutive attempts sat queued for ~15 min
+> with zero steps and an empty runner name, then were cancelled (the first two
+> also by this workflow's own `cancel-in-progress`). The macOS tuple was
+> therefore unproven, not green. The ubuntu 8.10 (`full`) and 8.11
+> (`producer-only`) rows still run, so every contract check below keeps its
+> owner; re-enabling is restoring the commented matrix entry.
+
 - **Wave:** W3 of `docs/planning/PLAN-v1.00.11-TDD-CI-INTEGRITY-BASELINES.md`
 - **Scope:** report-only pilot; **no consumer cutover** in this wave
 - **Decision authority for cutover:** this document (see *Decision* below)

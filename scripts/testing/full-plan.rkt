@@ -192,7 +192,10 @@
   (list
    "PR/CI verification of this commit (counted by the GitHub pipeline)"
    "Racket dependency, packaging, scribble-doc and release-readiness gates (counted by `racket scripts/release-preflight.rkt`)"
-   "the live benchmark suite and the CI latency-budget guard (benchmark.yml / pr-latency-guard.yml)"
+   (string-append "the live benchmark suite and the CI latency-budget guard "
+                  "(benchmark.yml / pr-latency-guard.yml; the latency guard's automatic "
+                  "trigger is disabled as of 2026-11-16 — it can only fail closed until "
+                  "a trusted collector is bound, and it is not a required check)")
    "`@requires` gating: every selected file runs, including live-provider, terminal and browser tests"
    (string-append "protection of repository files: a test that rewrites "
                   "info.rkt/README.md/CHANGELOG.md is DETECTED and fails the command, "

@@ -1,5 +1,14 @@
 # PR Latency Guard — v1.00.30 W1
 
+> **Status 2026-11-16: automatic trigger DISABLED (owner decision).** The
+> `workflow_run` trigger in `.github/workflows/pr-latency-guard.yml` is
+> commented out until a trusted collector supplies a provenance-bound input;
+> until then every finished PR CI run only produced a red run reading
+> "no provenance-bound input available (bootstrap-pending) — FAIL closed". The
+> guard is not a required status check. The evaluator, its fail-closed
+> contract, the job body and `tests/test-pr-latency-guard.rkt` are unchanged;
+> re-enabling is restoring the commented trigger block.
+
 Blocking pre-merge anti-regression check for CI latency. Implements the measurement
 contract from `.planning/PLAN-v1.00.30-PR-CI-RECOVERY.md` (Task 1/2): deterministic
 evaluation over provenance-bound input JSON, fail-closed on every unknown, stale,
