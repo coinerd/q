@@ -12,13 +12,29 @@
 # - The guard script itself always runs from the PR's BASE branch checkout
 #   (trusted code), never from the PR head, so a PR cannot approve itself.
 # - Fail-closed: any missing/stale/forged input yields a non-zero exit.
+#
+# DISABLED 2026-11-16 (owner decision — "disable the macOS pilot and
+# pr-latency-guard for now"). Why: the guard fail-closes by design until a
+# trusted collector is bound to the run, so every finished PR CI run produced a
+# red `pr-latency-guard` run (e.g. `e1afcfb3`, `7e152d3f`, `28df93f5`) with the
+# message "no provenance-bound input available (bootstrap-pending)". It is not
+# a required status check, and a guard that can only fail closed is noise, not
+# a gate. The automatic `workflow_run` trigger is therefore commented out; the
+# manual `workflow_dispatch` arm and the whole job body are unchanged, so
+# re-enabling is exactly: restore the commented trigger block below. The
+# fail-closed contract and its regression suite
+# (`tests/test-pr-latency-guard.rkt`) are NOT weakened — the guard script,
+# checks and tests are untouched.
 name: pr-latency-guard
 
 on:
+  # DISABLED 2026-11-16 — restore this block to re-enable the automatic gate
+  # once a trusted collector supplies a provenance-bound input document.
+  #
   # Measure after the CI workflow finished on a pull_request head.
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  # workflow_run:
+  #   workflows: ["CI"]
+  #   types: [completed]
   # Manual dispatch for bootstrap canaries (red + green) and refreezes.
   workflow_dispatch:
     inputs:
@@ -35,6 +51,8 @@ jobs:
     name: pr-latency-guard
     runs-on: ubuntu-latest
     # Only evaluate CI runs that were triggered by pull requests and succeeded.
+    # The `workflow_run` arm is dormant while that trigger is disabled above;
+    # it stays in the condition so re-enabling is a single commented block.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&

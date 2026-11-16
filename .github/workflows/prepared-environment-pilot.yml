@@ -12,6 +12,16 @@
 #
 # It never changes test selection or L4 semantics, and the 26 existing
 # setup-racket call sites in ci.yml keep running independently of it.
+#
+# DISABLED 2026-11-16 (owner decision — "disable the macOS pilot and
+# pr-latency-guard for now"): the macOS matrix row is commented out. Its job
+# never received a runner (three consecutive attempts sat queued for ~15 min
+# with zero steps and an empty runner name, then were cancelled; the first two
+# were also cancelled by this workflow's own `cancel-in-progress`), so the
+# macOS tuple was unproven, not red. The ubuntu 8.10 (full) and 8.11
+# (producer-only) rows still run, so every prepared-environment contract check
+# keeps its owner. Re-enable by restoring the commented matrix entry and the
+# INSTALLER_SHA_MACOS_8_10 value.
 name: prepared-environment-pilot
 
 on:
@@ -35,14 +45,16 @@ concurrency:
   cancel-in-progress: true
 
 # Tuple matrix: one producer per (OS, Racket version) tuple, plus consumers.
-# Racket 8.11 and macOS stay separate tuple pilots — no consumer cutover for
-# either in W3, and 8.11 waits for the W1 version-indexed lock entry.
+# Racket 8.11 stays a separate producer-only tuple pilot — no consumer cutover
+# in W3, and 8.11 waits for the W1 version-indexed lock entry. The macOS tuple
+# is DISABLED 2026-11-16 (see the header): no macOS runner was ever assigned.
 env:
   # Published SHA-256 of each official installer archive (mirror.racket-lang.org,
   # the redirect target of download.racket-lang.org). Keys and integrity
   # checks bind these exact values; bump together with the version pins.
   INSTALLER_SHA_LINUX_8_10: '497f0f518fa4c5f8529269580a6a79366f21315af26cf3ed1ae8b47e05ceac72'
   INSTALLER_SHA_LINUX_8_11: '12243f96ae2b19cda684d2c4ed7a8c773bd201d2e598fe23a18ef704e5c0d212'
+  # Retained for the disabled macOS tuple (restore with the matrix entry).
   INSTALLER_SHA_MACOS_8_10: '2df9e29a3d690a7f83d7f5735446d0913f17265bfe6e7bea3214f22f346cbce9'
 
 jobs:
@@ -63,10 +75,13 @@ jobs:
             # entry is green; consumers are not enabled for this tuple.
             installer-sha: '12243f96ae2b19cda684d2c4ed7a8c773bd201d2e598fe23a18ef704e5c0d212'
             role: producer-only
-          - os: macos
-            racket-version: '8.10'
-            installer-sha: '2df9e29a3d690a7f83d7f5735446d0913f17265bfe6e7bea3214f22f346cbce9'
-            role: full
+          # DISABLED 2026-11-16 — no macOS runner was ever assigned to this job
+          # (queued ~15 min, zero steps, empty runner name, then cancelled).
+          # Restore this entry to re-enable the macOS tuple.
+          # - os: macos
+          #   racket-version: '8.10'
+          #   installer-sha: '2df9e29a3d690a7f83d7f5735446d0913f17265bfe6e7bea3214f22f346cbce9'
+          #   role: full
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
