@@ -127,7 +127,13 @@ runs:
         RACKET_VERSION: ${{ inputs.racket-version }}
       run: |
         set -euo pipefail
-        start=$(python3 -c 'import time; print(int(time.time()*1000))')
+        # Epoch milliseconds with no interpreter from outside the toolchain:
+        # the job-local Racket runtime installed by step 1 is already on PATH
+        # (the manifest verify step below calls it directly). `current-milliseconds`
+        # is epoch ms, the same unit the report consumers already read, and it
+        # avoids `date +%s%3N`, which is GNU-only and would break macOS runners.
+        now_ms() { racket -e '(displayln (current-milliseconds))'; }
+        start=$(now_ms)
 
         addon_base="$HOME/.cache/q-racket-addon"
         rm -rf "$addon_base/$RACKET_VERSION"
@@ -151,7 +157,7 @@ runs:
           cp -a "$dir/." "$rel/"
         done < <(find "$ROOT/q-compiled" -mindepth 1 -maxdepth 5 -type d -name compiled -print0)
 
-        end=$(python3 -c 'import time; print(int(time.time()*1000))')
+        end=$(now_ms)
         echo "restore-ms=$((end - start))" >> "$GITHUB_OUTPUT"
 
     - name: Health check 1/4 - runtime version
