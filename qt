@@ -615,9 +615,10 @@
 ;; exactly these commands, so help can never advertise a spelling that fails
 ;; closed.
 (define (show-usage)
-  (displayln "Usage: ./qt COMMAND [OPTIONS]")
+  (displayln "Usage: ./qt [COMMAND] [OPTIONS]")
   (newline)
   (displayln "Commands:")
+  (displayln "  (none)                          Same as `default`: all mandatory PR checks")
   (displayln "  quick [FILE]                    Audited pure unit suite (one admitted file)")
   (displayln
    "  quick --changed BASE..HEAD      Changed-code impact reproduction over the audited owners")
@@ -648,10 +649,12 @@
   [(and command (or (equal? command "--help") (equal? command "-h") (equal? command "help")))
    (show-usage)]
   ;; A bare `./qt` plus flags is the lane surface: `./qt --lane fast ...` selects
-  ;; the CI lane, any other plain option belongs to the default PR lane. A bare
-  ;; `./qt` with NO arguments still fails closed (an accidental empty command must
-  ;; never start the PR-wide run).
-  [(null? args) (fail "missing command: use quick, full, default or release")]
+  ;; the CI lane, any other plain option belongs to the default PR lane. With NO
+  ;; arguments at all the §3 interface table is explicit: `./qt` runs the
+  ;; mandatory PR selection (`default`), exactly like `./qt default`. It is still
+  ;; a deliberate command — the plan is resolvable and stamped with the default
+  ;; lane label, and an unsupported option still fails before any selection.
+  [(null? args) (run-lane-command 'default '())]
   [(or (not command) (string-prefix? command "-"))
    (if (member "--lane" args)
        (run-lane-command 'full args)
