@@ -204,6 +204,15 @@
                                             ";; @requires network"
                                             "(require rackunit)"
                                             "(module+ test (check-true #t))")))
+     ;; A declared @requires the local profile cannot satisfy (provider-key):
+     ;; the union SELECTS it, the plan marks it unavailable-here, and the
+     ;; execution tests prove it never runs (the marker file never appears).
+     (put "tests/keys.rkt"
+          (join-lines '("#lang racket/base" ";; @speed fast"
+                                            ";; @requires provider-key"
+                                            "(call-with-output-file \"keys-ran\" void)"
+                                            "(require rackunit)"
+                                            "(module+ test (check-true #t))")))
      ;; A declared mutation that no name pattern would catch, and a declared
      ;; isolation value (`sandboxed-home`) outside the schema's canonical trio.
      (put "tests/mut.rkt"
@@ -247,26 +256,9 @@
      (thunk dir))
    (lambda () (delete-directory/files dir))))
 
-;; A small root with 21 declared-slow files plus one kept file: enough to pin
-;; the default lane's 20-name cap and its `(+ N more)` remainder.
-(define cap-root-excluded-count 21)
-
-(define (with-excluded-many-root thunk)
-  (define dir (make-temporary-file "qt-lanes-cap-~a" 'directory))
-  (dynamic-wind void
-                (lambda ()
-                  (make-directory (build-path dir "tests"))
-                  (define (put name marker)
-                    (write-file (build-path dir "tests" name)
-                                (join-lines (list "#lang racket/base"
-                                                  marker
-                                                  "(require rackunit)"
-                                                  "(module+ test (check-true #t))"))))
-                  (put "plain.rkt" ";; @speed fast")
-                  (for ([i (in-range cap-root-excluded-count)])
-                    (put (format "slow-~a.rkt" i) ";; @speed slow"))
-                  (thunk dir))
-                (lambda () (delete-directory/files dir))))
+;; A small root with one file per excluded `@requires` token is generated from
+;; the classifier's own vocabulary (see `with-requires-token-root` above); the
+;; old 21-slow-file cap fixture died with the fast/PR exclusion filter.
 
 (define (git-available?)
   (and (find-executable-path "git") #t))
@@ -319,152 +311,239 @@
                                          '())])
              (check-true (full-run-valid? run))
              (check-eq? verdict 'ok)
-             (check-regexp-match default-pass-pattern (default-pass-line run)))
+             (check-regexp-match default-pass-pattern
+                                 (default-pass-line run (length (lane-plan-unavailable plan)))))
            (displayln "SKIP lane-verdict recorded run: Linux /proc or setsid unavailable")))))
-  ;; --- default lane ------------------------------------------------------
-  (test-case "default lane excludes slow/network fixtures and keeps fast ones"
+  ;; --- lane table shape (final plan §6 E1) --------------------------------
+  (test-case "lane table shape: suite sets with a one-element compatibility accessor"
+    ;; A qt-lane carries a SUITE SET. Every pre-E1 lane keeps exactly one suite
+    ;; and `qt-lane-suite` (the compatibility accessor) returns that set — a
+    ;; ONE-ELEMENT list for each legacy lane — so existing callers keep working.
+    (for ([lane (in-list qt-lanes)])
+      (define name (qt-lane-name lane))
+      (define suites (qt-lane-suites lane))
+      (check-true (and (pair? suites) (andmap symbol? suites))
+                  (format "~a: suites is a non-empty list of symbols" name))
+      (check-equal? suites (remove-duplicates suites)
+                  (format "~a: suites are distinct" name))
+      (check-equal? (qt-lane-suite lane) suites
+                    (format "~a: the compat accessor returns the suite set" name))
+      (unless (eq? name 'required-offline)
+        (check-equal? (length suites) 1 (format "~a: legacy lanes stay single-suite" name))))
+    (check-equal? (qt-lane-suite (qt-lane-ref 'fast)) '(fast)
+                  "the single-suite accessor stays a one-element list")
+    (check-equal? (qt-lane-suite (qt-lane-ref 'workflows)) '(workflows)
+                  "the workflows lane keeps its single suite"))
+  (test-case "required-offline drift pin: the lane's suites are exactly the required CI test jobs' lanes"
+    ;; Final plan §6 E1: the mapping is derived from the lane table (never from
+    ;; parsing YAML), and a PINNING TEST asserts that the `required-offline`
+    ;; suite list equals the set of lanes named by the required CI test jobs —
+    ;; so claim-coverage drift fails in CI instead of shipping silently.
+    (define policy-path (build-path root "scripts" "required-pr-checks.policy"))
+    (define policy-contexts
+      (call-with-input-file policy-path read))
+    ;; Required contexts that do not run tests: aggregation and static gates.
+    (define non-producer-contexts
+      '("lint" "lint-quality" "release-dry-run" "workflows-aggregate" "test-aggregate"))
+    ;; The test producers this table maps to lanes (required-ci-producers).
+    (define producer-contexts
+      (append-map required-producer-contexts required-ci-producers))
+    (check-equal? (length policy-contexts) 13 "all 13 required contexts stay protected")
+    (check-equal? (length producer-contexts) 8)
+    ;; Every producer context the table names must be a REQUIRED context: a
+    ;; rename or removal of a required CI test job fails HERE.
+    (for ([ctx (in-list producer-contexts)])
+      (check-true (and (member ctx policy-contexts) #t)
+                  (format "mapped context ~a must exist in scripts/required-pr-checks.policy" ctx)))
+    ;; Every required context must be accounted for: a NEW or RENAMED required
+    ;; context must be classified here in the same commit (drift fails closed).
+    (for ([ctx (in-list policy-contexts)])
+      (check-true (and (or (member ctx non-producer-contexts)
+                           (member ctx producer-contexts))
+                       #t)
+                  (format "required context ~a is neither a known non-producer nor a mapped test producer" ctx)))
+    ;; The lane's suite list is EXACTLY the union of the producers' lanes'
+    ;; suites — in the final plan §6's own order.
+    (define producer-suites
+      (remove-duplicates
+       (append-map (lambda (producer)
+                     (qt-lane-suites (qt-lane-ref (required-producer-lane producer))))
+                   required-ci-producers)))
+    (check-equal? (qt-lane-suites (qt-lane-ref 'required-offline)) producer-suites)
+    (check-equal? (qt-lane-suites (qt-lane-ref 'required-offline)) required-offline-suites)
+    ;; Each member lane keeps its OWN timeout/shard policy (plan §6): CI's
+    ;; sharding and timeout policy for those lanes is untouched by E1.
+    (check-false (qt-lane-timeout (qt-lane-ref 'fast)))
+    (check-equal? (qt-lane-timeout (qt-lane-ref 'workflows)) 90)
+    (check-equal? (qt-lane-shard-total (qt-lane-ref 'workflows)) 2)
+    (check-equal? (qt-lane-timeout (qt-lane-ref 'tui)) 60))
+  ;; --- default lane (required-offline, final plan §6 E1) ------------------
+  (test-case "default lane is the required-offline union: mandatory slow/requires owners INCLUDED"
     (with-lane-root
      (lambda (dir)
        (define default-rels (lane-relative 'default dir))
        (define full-rels (lane-relative 'full dir))
-       (check-true (and (member "tests/a.rkt" default-rels) #t))
-       (check-true (and (member "tests/c.rkt" default-rels) #t))
-       (check-true (and (member "tests/slow.rkt" full-rels) #t) "full keeps every discovered file")
-       (check-false (member "tests/slow.rkt" default-rels) "@speed slow is not the PR lane")
-       (check-false (member "tests/net.rkt" default-rels) "@requires network is not the PR lane")
-       (check-false (member "tests/mut.rkt" default-rels)
-                    "a declared @mutates value is not the PR lane")
-       (check-false (member "tests/iso.rkt" default-rels)
-                    "a declared @isolation value (sandboxed-home) is not the PR lane")
-       ;; The exclusion is reasoned, not merely membership: the filter reads the
-       ;; repository's own metadata helpers.
-       (check-true
-        (and (memq 'slow
-                   (default-exclusion-reasons (path->string (build-path dir "tests" "slow.rkt"))))
-             #t))
-       (check-true
-        (and (memq 'requires
-                   (default-exclusion-reasons (path->string (build-path dir "tests" "net.rkt"))))
-             #t))
-       (check-true
-        (and (memq 'mutation
-                   (default-exclusion-reasons (path->string (build-path dir "tests" "mut.rkt"))))
-             #t)
-        "a declared mutation alone excludes a file")
-       (check-true
-        (and (memq 'sandbox
-                   (default-exclusion-reasons (path->string (build-path dir "tests" "iso.rkt"))))
-             #t)
-        "a declared isolation alone excludes a file")
-       ;; The predicates live in classify.rkt next to the other classifiers, so
-       ;; the excluded vocabulary is the metadata's, not a lane-local list.
-       (check-true (isolation-excluded? (path->string (build-path dir "tests" "iso.rkt"))))
-       (check-false (isolation-excluded? (path->string (build-path dir "tests" "a.rkt"))))
-       (check-true (declared-mutation? (path->string (build-path dir "tests" "mut.rkt"))))
-       (check-false (declared-mutation? (path->string (build-path dir "tests" "a.rkt"))))
-       (check-true (requires-excluded? (path->string (build-path dir "tests" "net.rkt"))))
-       (check-false (requires-excluded? (path->string (build-path dir "tests" "a.rkt"))))
-       (check-equal? (default-exclusion-reasons (path->string (build-path dir "tests" "a.rkt"))) '())
-       (check-equal? (sort default-rels string<?) '("tests/a.rkt" "tests/b.rkt" "tests/c.rkt"))
+       ;; The union of the required CI suites: every fast fixture joins, including
+       ;; the network/mutation/isolation ones a filter used to drop. Mandatory
+       ;; slow owners reach the lane THROUGH THEIR SUITE (the security lane runs
+       ;; slow security files); a file in NO required suite (tests/slow.rkt) is
+       ;; not the offline PR lane.
+       (check-equal? (sort default-rels string<?)
+                     '("tests/a.rkt" "tests/b.rkt"
+                                     "tests/c.rkt"
+                                     "tests/iso.rkt"
+                                     "tests/keys.rkt"
+                                     "tests/mut.rkt"
+                                     "tests/net.rkt"))
        (check-equal? (sort full-rels string<?)
                      '("tests/a.rkt" "tests/b.rkt"
                                      "tests/c.rkt"
                                      "tests/iso.rkt"
+                                     "tests/keys.rkt"
                                      "tests/mut.rkt"
                                      "tests/net.rkt"
-                                     "tests/slow.rkt")))))
+                                     "tests/slow.rkt"))
+       (check-false (member "tests/slow.rkt" default-rels)
+                    "a file in no required CI suite is not the offline PR lane")
+       ;; The classifier predicates still fire on the fixtures (the vocabulary
+       ;; is the metadata's) — the LANE just no longer excludes for them.
+       (check-true (requires-excluded? (path->string (build-path dir "tests" "net.rkt"))))
+       (check-true (declared-mutation? (path->string (build-path dir "tests" "mut.rkt"))))
+       (check-true (isolation-excluded? (path->string (build-path dir "tests" "iso.rkt"))))
+       ;; The plan partitions the union into executable evidence and the
+       ;; unavailable-here list: keys.rkt declares @requires provider-key, which
+       ;; the local profile policy declares unavailable. Listed, not executed.
+       (define plan (resolve-lane-plan 'default dir))
+       (check-equal? (length (lane-plan-files plan)) 6 "runnable members only")
+       (check-equal? (length (lane-plan-unavailable plan)) 1)
+       (define u (car (lane-plan-unavailable plan)))
+       (check-equal? (unavailable-here-file u) "tests/keys.rkt")
+       (check-equal? (unavailable-here-requirements u) '("provider-key"))
+       (for ([f (in-list (lane-plan-files plan))])
+         (check-false (string-suffix? "keys.rkt" f)
+                      "the unavailable-here member is not part of the executable evidence")))))
   (test-case "requires vocabulary is pinned independently of the filter"
     ;; A literal list: deleting a token from classify.rkt must fail HERE, not
     ;; merely shrink the generated fixture set below.
     (check-equal? requires-excluded-tokens '("network" "terminal" "browser" "provider-key")))
-  (test-case "default lane excludes every requirement token the classifier names"
+  (test-case "every classifier requires token joins the union; only the unsatisfiable one is unavailable"
     ;; Generated from `requires-excluded-tokens`, so each token in the
-    ;; repository vocabulary (including the live-tty one) gets a fixture
-    ;; and the list cannot drift from the classifier.
+    ;; repository vocabulary gets a fixture and the list cannot drift from the
+    ;; classifier. The union SELECTS every one of them; the plan marks a member
+    ;; unavailable-here exactly when this host cannot satisfy it.
     (with-requires-token-root
      (lambda (dir)
+       (define rels (lane-relative 'default dir))
+       (check-true (and (member "tests/plain.rkt" rels) #t))
+       (define plan (resolve-lane-plan 'default dir))
+       (define unavailable-rels (map unavailable-here-file (lane-plan-unavailable plan)))
        (for ([tok (in-list requires-excluded-tokens)])
+         (define rel (format "tests/req-~a.rkt" tok))
          (define f (path->string (build-path dir "tests" (format "req-~a.rkt" tok))))
-         (check-true (requires-excluded? f) (format "~a must be excluded" tok))
-         (check-true (and (memq 'requires (default-exclusion-reasons f)) #t)
-                     (format "~a must yield the requires reason" tok))
-         (check-false (member (format "tests/req-~a.rkt" tok) (lane-relative 'default dir))
-                      (format "~a must not reach the PR lane" tok)))
-       (check-equal? (lane-relative 'default dir) '("tests/plain.rkt")))))
-  (test-case "default filter description names exactly the predicates it applies"
-    ;; The printed claim must not be broader or narrower than the filter: the
-    ;; requirement tokens are the classifier's own vocabulary, not a copy.
-    (for ([needle (in-list (list "slow-file?"
-                                 "mutating-file?"
-                                 "other than none"
-                                 "sandboxed-home"
-                                 "network/terminal/browser/provider-key"))])
-      (check-true (string-contains? default-filter-description needle)
-                  (format "filter description must state ~a" needle))))
-  (test-case "default explain states the lane filter and the exclusion counts"
+         (check-true (requires-excluded? f)
+                     (format "the classifier still flags ~a" tok))
+         (check-true (and (member rel rels) #t)
+                     (format "~a joins the required-offline union" tok))
+         (if (host-capability-available? tok)
+             (check-false (member rel unavailable-rels)
+                          (format "~a runs here (never silently listed)" tok))
+             (check-true (and (member rel unavailable-rels) #t)
+                         (format "~a is unavailable-here (listed, never verified)" tok))))
+       (check-false (member "tests/plain.rkt" unavailable-rels)
+                    "a file with no declared @requires never blocks"))))
+  (test-case "default explain prints the claim -> lane -> suite mapping"
+    ;; Every required CI test job is named with the lane (and suite) it selects;
+    ;; the required-offline lane names its union.
     (with-lane-root
      (lambda (dir)
        (define lines (plan-explain-lines (resolve-lane-plan 'default dir)))
        (define text (join-lines lines))
-       (check-regexp-match #rx"default: fast/PR lane over the complete available Racket suite" text)
-       (check-true (string-contains? text default-filter-description))
-       (check-regexp-match #rx"lane excluded: 4 of 7 files" text)
        (check-regexp-match
-        #rx"\\(reasons overlap: slow 1, mutation 1, sandbox/isolation 1, requires 1\\)"
+        #rx"claim mapping for \\./qt default \\(required CI test job -> lane -> suite\\):"
         text)
-       ;; The excluded files are NAMED, not only counted, so a silently
-       ;; excluded file cannot hide behind a total.
+       (for ([producer (in-list required-ci-producers)])
+         (define needle
+           (format "~a -> lane ~a -> suite"
+                   (string-join (required-producer-contexts producer) ", ")
+                   (required-producer-lane producer)))
+         (check-true (string-contains? text needle)
+                     (format "the mapping must name ~a" needle)))
+       (check-true
+        (string-contains?
+         text
+         "required-offline (this command) -> union of those suites: fast, security, workflows, smoke, platform")
+        "the lane's own union line is part of the mapping"))))
+  (test-case "default explain states the selection, capabilities and unavailable-here"
+    (with-lane-root
+     (lambda (dir)
+       (define lines (plan-explain-lines (resolve-lane-plan 'default dir)))
+       (define text (join-lines lines))
+       (check-regexp-match
+        #rx"default: offline PR verification \\(required-offline lane\\) over the complete available Racket suite"
+        text)
+       (check-regexp-match
+        #rx"label: offline PR verification only; platform and GitHub-hosted claims remain with CI"
+        text)
+       (check-regexp-match #rx"lane selection: required-offline" text)
+       ;; selection = the executable evidence; the union count is stated separately
+       (check-regexp-match #rx"selection: 6 files" text)
+       (check-regexp-match #rx"union: 7 file\\(s\\)" text)
+       (for ([needle (in-list (list "terminal: available"
+                                    "browser: available"
+                                    "network: available"
+                                    "provider-key: NOT available locally"
+                                    "git: available"))])
+         (check-true (string-contains? text needle)
+                     (format "capabilities must state ~a" needle)))
+       (check-regexp-match #rx"unavailable-here: 1 required-offline member" text)
        (check-true (for/or ([line (in-list lines)])
-                     (string-prefix? line "  excluded file: tests/slow.rkt ("))
-                   "a slow file must be named")
-       (check-true (for/or ([line (in-list lines)])
-                     (string-prefix? line "  excluded file: tests/net.rkt (requires)"))
-                   "a requires file must be named with its reason")
-       (check-true (for/or ([line (in-list lines)])
-                     (string-prefix? line "  excluded file: tests/mut.rkt (mutation)"))
-                   "a declared-mutation file must be named with its reason")
-       (check-true (for/or ([line (in-list lines)])
-                     (string-prefix? line "  excluded file: tests/iso.rkt (sandbox)"))
-                   "a declared-isolation file must be named with its reason")
-       (check-regexp-match #rx"lane filter: " text)
+                     (string-prefix? line "  unavailable-here: tests/keys.rkt (@requires provider-key)"))
+                   "the unavailable-here member is NAMED with its unsatisfied requirement")
+       (check-regexp-match #rx"CI stays authoritative" text)
        (check-regexp-match #rx"NOT VERIFIED by \\./qt default:" text)
        (check-regexp-match #rx"NOT PROVIDED by \\./qt default" text)
        (check-equal? (plan-explain-lines (resolve-lane-plan 'default dir))
                      lines
                      "the default plan must be deterministic")
        (check-false (regexp-match? #rx"default passed:" text) "explain never executes")
+       (check-false (file-exists? (build-path dir "tests" "keys-ran"))
+                    "explain must not execute selected tests")
        (check-false (file-exists? (build-path dir "tests" "slow-ran"))
                     "explain must not execute selected tests"))))
-  (test-case "default explain names a capped list of excluded files"
-    (with-excluded-many-root
+  (test-case "unavailable-here members are listed for CI, never silently dropped"
+    ;; The pure partition and the capability model, pinned directly: the local
+    ;; profile policy cannot satisfy provider-key, an unknown token is never
+    ;; claimed, and the partition names the file with its requirements.
+    (with-lane-root
      (lambda (dir)
-       (define lines (plan-explain-lines (resolve-lane-plan 'default dir)))
-       (define named
-         (for/list ([line (in-list lines)]
-                    #:when (string-prefix? line "  excluded file: "))
-           line))
-       (define file-lines
-         (filter (lambda (line) (string-prefix? line "  excluded file: tests/")) named))
-       (check-equal? (length file-lines) 20 "the named list is capped at 20 files")
-       (check-true (for/or ([line (in-list named)])
-                     (string-prefix? line "  excluded file: ... (+ 1 more)"))
-                   "the remainder is reported as a count"))))
-  (test-case "default lane runs exactly its selection, minus the filtered files"
+       (define members (unavailable-here-members dir (lane-relative 'default dir)))
+       (check-equal? (map unavailable-here-file members) '("tests/keys.rkt"))
+       (check-equal? (unavailable-here-requirements (car members)) '("provider-key"))
+       (check-false (host-capability-available? "provider-key"))
+       (check-true (host-capability-available? "network"))
+       (check-true (host-capability-available? "terminal"))
+       (check-false (host-capability-available? "no-such-token")
+                    "an unknown token is never claimed (conservative, listed)"))))
+  (test-case "default runs exactly the runnable selection; unavailable-here never executes"
     (if (full-execution-supported?)
         (with-lane-root (lambda (dir)
                           (define plan (resolve-lane-plan 'default dir))
                           (define run (run-plan plan 2))
                           (check-true (full-run-valid? run))
                           (check-equal? (full-run-files run) (lane-plan-files plan))
-                          (check-equal? (length (full-run-results run)) 3)
+                          (check-equal? (length (full-run-results run)) 6)
                           (check-false (file-exists? (build-path dir "tests" "slow-ran"))
-                                       "the filtered slow file must not have been executed")
-                          (check-regexp-match default-pass-pattern (default-pass-line run))
-                          ;; Per-file timeouts survive the lane filter.
+                                       "a file in no required suite must not have been executed")
+                          (check-false (file-exists? (build-path dir "tests" "keys-ran"))
+                                       "the unavailable-here member must not have been executed")
+                          (check-regexp-match default-pass-pattern
+                                              (default-pass-line run
+                                                                 (length (lane-plan-unavailable plan))))
+                          ;; Per-file timeouts survive the union selection.
                           (check-equal? (hash-count (full-timeouts (lane-plan-files plan)))
                                         (length (lane-plan-files plan)))))
         (displayln "SKIP default lane execution: Linux /proc or setsid unavailable")))
-  (test-case "default lane CLI runs the filtered selection and labels the result"
+  (test-case "default CLI runs the runnable selection, labels the result, lists unavailable-here"
     (if (full-execution-supported?)
         (with-lane-root
          (lambda (dir)
@@ -499,6 +578,11 @@
                          "the executed lane must be exactly the selection explain printed")
            (check-false (regexp-match? #rx"full passed:" out)
                         "a lane never borrows another lane's pass line")
+           (check-regexp-match
+            #rx"unavailable-here: tests/keys\\.rkt \\(@requires provider-key; verified by CI, never by this command\\)"
+            out)
+           (check-false (file-exists? (build-path dir "tests" "keys-ran"))
+                        "the unavailable-here member never executes")
            (check-false (file-exists? (build-path dir "tests" "slow-ran")))))
         (displayln "SKIP default lane CLI: Linux /proc or setsid unavailable")))
   ;; --- closed stdout (verdict ordering) ----------------------------------
@@ -592,10 +676,10 @@
            (check-regexp-match #rx"qt: release unverified: [0-9]+ release obligation" err)
            (check-false (regexp-match? #rx"release passed:" text)
                         "an unverified obligation must never yield a release pass line")
-           ;; The suite really ran its complete selection (7 fixture files), so
+           ;; The suite really ran its complete selection (8 fixture files), so
            ;; the failure is the obligation, not a skipped suite.
            (check-regexp-match
-            #rx"release: starting the lane selection of the complete available Racket suite \\(release review\\) \\(7 files"
+            #rx"release: starting the lane selection of the complete available Racket suite \\(release review\\) \\(8 files"
             out)))
         (displayln "SKIP release CLI: Linux /proc or setsid unavailable")))
   ;; --- changed-file selection --------------------------------------------
@@ -639,7 +723,11 @@
                                            '("runtime/foo.rkt")
                                            #:base "fixture-base"))
                       (check-equal? (sort (change-report-included report) string<?)
-                                    '("tests/a.rkt" "tests/c.rkt"))
+                                    '("tests/a.rkt" "tests/c.rkt"
+                                                    "tests/iso.rkt"
+                                                    "tests/keys.rkt"
+                                                    "tests/mut.rkt"
+                                                    "tests/net.rkt"))
                       (define text (join-lines (change-report-lines report)))
                       (check-regexp-match #rx"changed: working-tree diff against fixture-base" text)
                       (check-regexp-match #rx"changed files: 1" text))))
@@ -706,7 +794,7 @@
            (check-equal? status 0 (string-append out err))
            (check-regexp-match #rx"changed: working-tree diff against HEAD" out)
            (check-regexp-match #rx"diff against HEAD" out)
-           (check-regexp-match #rx"lane filter: " out)
+           (check-regexp-match #rx"lane selection: required-offline" out)
            (check-regexp-match #rx"included: tests/a.rkt" out)
            (check-regexp-match #rx"included: tests/new.rkt \\(no @covers attribution; fail open\\)"
                                out)
@@ -748,7 +836,7 @@
                                #:when (string-prefix? line "default passed:"))
                      line))
                  (check-regexp-match default-pass-pattern (or run-pass-line ""))
-                 (check-regexp-match #rx"^default passed: 3 files, 3 tests" (or run-pass-line ""))
+                 (check-regexp-match #rx"^default passed: 6 files, 6 tests" (or run-pass-line ""))
                  (check-regexp-match #rx"default: starting the changed-file selection" run-out)
                  (check-false (file-exists? (build-path dir "tests" "slow-ran"))
                               "a lane-filtered file must not run under --changed either"))

@@ -44,6 +44,7 @@
          schema-boundary-values
          schema-mutates-values
          schema-isolation-values
+         schema-requires-values
          canonical-isolation
          deprecated-isolation-alias?
          validate-file
@@ -101,6 +102,10 @@
          normalize-test-path
          ;; File collection
          collect-test-files
+         ;; The suite dispatch itself (one registry; full-plan.rkt's
+         ;; `suite-select-rels` classifies an already-collected universe
+         ;; through it)
+         collect-classify-file-list
          ;; Managed repo surfaces (detection only; never rewritten)
          repo-surface-files
          ;; Bytecode cleanup

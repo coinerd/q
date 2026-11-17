@@ -16,14 +16,13 @@
 ;;
 ;; Lanes (one selection machinery, three selections):
 ;;   - `full`    — every discovered test file (unchanged behavior);
-;;   - `default` — the fast/PR lane: the SAME selection filtered by the
-;;                 repository's own test metadata classifiers and no other
-;;                 scheme. A file is excluded when ANY holds: `slow-file?`;
-;;                 `mutating-file?` or a declared `@mutates` other than
-;;                 `none`; a declared `@isolation` other than `none`
-;;                 (process/temp-dir/subprocess/process-tree/sandboxed-home/...);
-;;                 `@requires` containing network/terminal/browser/provider-key.
-;;                 No second annotation scheme, no hand-maintained file list;
+;;   - `default` — the required-offline PR lane (final plan §6 E1): the union
+;;                 of the suites the required CI test jobs select, named by
+;;                 the qt-lanes table's `required-offline` entry (no second
+;;                 registry, no YAML parsing). A member whose declared
+;;                 `@requires` this host cannot satisfy is `unavailable-here`:
+;;                 it is LISTED, never verified, and never blocks the offline
+;;                 verdict — CI stays authoritative for it;
 ;;   - `release` — `full` plus the release obligation list, printed whether or
 ;;                 not the suite passed, with a non-zero exit while any
 ;;                 obligation stays unverified. It never prints a pass line it
@@ -92,12 +91,18 @@
          full-lanes
          default-label
          release-label
-         default-filter-description
-         default-exclusion-reasons
-         default-excluded?
          lane-relative
          lane-selection
          lane-filter-lines
+         ;; Required-offline lane (final plan §6 E1): the union of the suites
+         ;; the required CI test jobs select, kept honest by a pinning test
+         (struct-out required-producer)
+         required-ci-producers
+         required-offline-suites
+         ;; Host capabilities + the `unavailable-here` obligation state
+         (struct-out unavailable-here)
+         host-capability-available?
+         unavailable-here-members
          ;; Pure lane decision, mapped to messages/exit codes by the CLI after
          ;; all output has been written
          lane-verdict
@@ -112,6 +117,8 @@
          (struct-out qt-lane)
          qt-lanes
          qt-lane-ref
+         ;; Single-suite compatibility accessor (returns the suite set)
+         qt-lane-suite
          ;; Release candidate verification (`./qt release --candidate SHA`)
          release-candidate-check
          ;; Resolved plan shared by `--explain` and execution
@@ -196,6 +203,14 @@
 ;; Counted obligations this command does NOT provide: they are counted (and
 ;; required) by other gates, so a green `./qt full` must never be read as a
 ;; green PR. Kept explicit so the gap is visible instead of implied.
+;;
+;; The one item whose honest wording differs per lane: `full` runs every
+;; selected file; `default` does not run (and cannot verify) members whose
+;; declared `@requires` this host cannot satisfy. The constant is shared so a
+;; wording drift cannot reintroduce a second source of truth.
+(define full-requires-obligation-text
+  "`@requires` gating: every selected file runs, including live-provider, terminal and browser tests")
+
 (define full-not-provided
   (list
    "PR/CI verification of this commit (counted by the GitHub pipeline)"
@@ -204,7 +219,7 @@
                   "(benchmark.yml / pr-latency-guard.yml; the latency guard's automatic "
                   "trigger is disabled as of 2026-11-16 — it can only fail closed until "
                   "a trusted collector is bound, and it is not a required check)")
-   "`@requires` gating: every selected file runs, including live-provider, terminal and browser tests"
+   full-requires-obligation-text
    (string-append "protection of repository files: a test that rewrites "
                   "info.rkt/README.md/CHANGELOG.md is DETECTED and fails the command, "
                   "but the bytes are not restored")
@@ -328,35 +343,64 @@
 (define full-lanes '(full default release))
 
 ;; Lane labels. Neither one may ever be read as PR/CI or candidate
-;; verification; the pass lines embed them verbatim.
-(define default-label "fast/PR lane only, not PR/CI verification")
+;; verification; the pass lines embed them verbatim. `default` establishes the
+;; OFFLINE PR claims completely and says exactly what stays with CI.
+(define default-label
+  "offline PR verification only; platform and GitHub-hosted claims remain with CI")
 (define release-label "release review only, not candidate verification")
 
-(define default-filter-description
-  (string-append
-   "lane filter: repository test metadata (@speed, @mutates, @isolation, @requires) excludes a file when ANY holds: "
-   "slow-file? (@speed slow/perf or a slow name/path pattern); "
-   "mutating-file? or @mutates other than none; "
-   "@isolation other than none (process, temp-dir, subprocess, process-tree, sandboxed-home, ...); "
-   "@requires containing "
-   (string-join requires-excluded-tokens "/")))
+;; ============================================================
+;; Host capabilities + the `unavailable-here` state (final plan §6 E1)
+;; ============================================================
 
-;; Exclusion reasons for the fast/PR lane, additive (a file can have several).
-;; Every reason is derived from an existing repository classifier or from the
-;; same metadata keys those classifiers read, so there is no second annotation
-;; scheme and no hand-maintained file list.
-(define (default-exclusion-reasons f)
-  (define meta (get-file-metadata f))
+;; The third obligation state between "verified" and "not provided": a
+;; required-offline member whose declared `@requires` THIS HOST cannot satisfy.
+;; It is listed, never counted as verified, and never blocks the offline
+;; verdict: a local pass cannot establish it and CI stays authoritative for it.
+;; Without this state the only options would be "default can never pass" or
+;; "silently drop required tests", and both are forbidden by the final plan.
+(struct unavailable-here (file requirements) #:transparent)
+
+;; One capability model, deliberately: the runner's own profile policy
+;; (`profile-unavailable-requirements` in classify.rkt), not a second registry.
+;; A `local` host (the profile every qt command runs under) declares live
+;; provider credentials unavailable; the rest of the classifier's `@requires`
+;; vocabulary executes under the local profile contract exactly like CI does
+;; (the required CI jobs run the same files with the same profile default), so
+;; no flaky host probing is invented here. An unknown token is never claimed
+;; (conservative: the member is listed unavailable, never silently run).
+(define (host-capability-available? token)
+  (define normalized (normalize-requirement token))
+  (cond
+    [(member normalized
+             (map normalize-requirement (profile-unavailable-requirements 'local)))
+     #f]
+    [(member normalized schema-requires-values)
+     (cond
+       [(equal? normalized "git") (and (find-executable-path "git") #t)]
+       ;; fs is implied by local execution; network/terminal/browser files run
+       ;; under the local profile contract (a real outage or missing helper
+       ;; fails the file honestly — it is never pre-declared unavailable).
+       [else #t])]
+    [else #f]))
+
+;; The declared `@requires` tokens of one file that this host cannot satisfy.
+;; `none` and an absent declaration never make a file unavailable.
+(define (unsatisfied-requirements f)
+  (filter (lambda (tok)
+            (and (not (equal? tok "none"))
+                 (not (host-capability-available? tok))))
+          (map normalize-requirement (hash-ref (get-file-metadata f) 'requires '()))))
+
+;; Partition root-relative lane members into executable evidence and the
+;; `unavailable-here` list. The unavailable members keep their root-relative
+;; identity (the same form the printed selection uses) so the explain output
+;; names exactly the files the run will not execute.
+(define (unavailable-here-members base rels)
   (filter values
-          (list (and (slow-file? f) 'slow) ; @speed slow/perf plus the slow name/path patterns
-                (and (or (mutating-file? f) (declared-mutation? f))
-                     'mutation) ; declared or heuristic mutation
-                (and (isolation-excluded? f)
-                     'sandbox) ; any @isolation other than none, incl. sandboxed-home
-                (and (requires-excluded? f) 'requires))))
-
-(define (default-excluded? f)
-  (pair? (default-exclusion-reasons f)))
+          (for/list ([rel (in-list rels)])
+            (define unsat (unsatisfied-requirements (root-relative-path-string base rel)))
+            (and (pair? unsat) (unavailable-here rel unsat)))))
 
 (define (root-relative-path base rel)
   (build-path base (string->path rel)))
@@ -367,17 +411,35 @@
   (path->string (root-relative-path base rel)))
 
 ;; Lane filter over an explicit root-relative list: the ONE place the default
-;; lane's exclusions are applied, so `full` and `default` share every other
-;; selection step. An empty lane is a failure, never an empty pass.
+;; lane's selection is computed, so `full` and `default` share every other
+;; selection step. `default` is the required-offline UNION of the suites the
+;; required CI test jobs select (final plan §6 E1): a file joins when ANY
+;; member suite selects it, through classify.rkt's own suite dispatch — no
+;; second annotation scheme, no hand-maintained list. The member lanes keep
+;; their own timeout/shard policies (see `qt-lanes`); this lane's union has
+;; its own entry there. An empty lane is a failure, never an empty pass.
+(define (suite-select-rels suite base rels)
+  ;; Metadata identity is the ABSOLUTE path (the form selection-relative's walk
+  ;; cached), so fixture roots resolve exactly the metadata the universe used.
+  (define abs->rel
+    (for/hash ([rel (in-list rels)])
+      (values (root-relative-path-string base rel) rel)))
+  (for/list ([abs (in-list (collect-classify-file-list suite (hash-keys abs->rel)))])
+    (hash-ref abs->rel abs)))
+
 (define (lane-filter lane base rels)
   (case lane
     [(full release) rels]
     [(default)
      (define kept
-       (filter-not (lambda (rel) (default-excluded? (root-relative-path-string base rel))) rels))
+       (sort (remove-duplicates
+              (append-map
+               (lambda (suite) (suite-select-rels suite base rels))
+               (qt-lane-suites (qt-lane-ref 'required-offline))))
+             string<?))
      (when (null? kept)
        (error 'full-plan
-              "default-lane selection is empty under ~a (zero files is a failure, not a pass)"
+              "required-offline selection is empty under ~a (zero files is a failure, not a pass)"
               (path->string base)))
      kept]
     [else (error 'full-plan "unknown lane: ~a" lane)]))
@@ -392,47 +454,40 @@
   (for/list ([rel (in-list (lane-relative lane root))])
     (path->string (simplify-path (root-relative-path base rel) #f))))
 
-;; Honest per-lane filter description for `--explain`: what the filter did,
-;; counted BY REASON (the reasons are additive, so the per-reason counts can
-;; exceed the excluded total), so the plan can never imply more or less than the
-;; filter actually excluded. `base` and `universe` come from the resolved plan
-;; itself, so the description cannot drift from the selection the plan will run.
-;; The default lane also NAMES the first few excluded files so a silently
-;; excluded file (for example an unanchored mid-body `@tag` scan) is visible.
-(define default-exclusion-name-cap 20)
-
+;; Honest per-lane description for `--explain`: what the filter did, counted
+;; BY SUITE, so the plan can never imply more or less than the selection
+;; actually is. `base` and `universe` come from the resolved plan itself, so
+;; the description cannot drift from the selection the plan will run.
+;; The default lane additionally prints the claim → lane → suite mapping and
+;; the detected capabilities (see `plan-explain-lines`).
 (define (lane-filter-lines lane base universe)
   (case lane
     [(full release) (list "lane filter: none (the complete available selection)")]
     [(default)
-     (define excluded
-       (filter values
-               (for/list ([rel (in-list universe)])
-                 (define reasons (default-exclusion-reasons (root-relative-path-string base rel)))
-                 (and (pair? reasons) (cons rel reasons)))))
-     (define (count-reason reason)
-       (count (lambda (entry) (and (memq reason (cdr entry)) #t)) excluded))
-     (define named (take excluded (min default-exclusion-name-cap (length excluded))))
-     (define more (- (length excluded) (length named)))
+     (define counts (required-offline-suite-counts base universe))
+     (define union-count (length (lane-filter 'default base universe)))
      (append
-      (list default-filter-description
-            (format (string-append
-                     "lane excluded: ~a of ~a files "
-                     "(reasons overlap: slow ~a, mutation ~a, sandbox/isolation ~a, requires ~a)")
-                    (length excluded)
-                    (length universe)
-                    (count-reason 'slow)
-                    (count-reason 'mutation)
-                    (count-reason 'sandbox)
-                    (count-reason 'requires)))
-      (for/list ([entry (in-list named)])
-        (format "  excluded file: ~a (~a)"
-                (car entry)
-                (string-join (map symbol->string (cdr entry)) ", ")))
-      (if (zero? more)
-          '()
-          (list (format "  excluded file: ... (+ ~a more)" more))))]
+      (list "lane selection: required-offline — the union of the suites the required CI test jobs select"
+            "  (slow mandatory owners are INCLUDED through their suite; a declared @requires this host"
+            "   cannot satisfy does not exclude a file — it becomes `unavailable-here` below)")
+      (for/list ([entry (in-list counts)])
+        (format "  suite ~a: ~a file(s)"
+                (car entry) (cdr entry)))
+      (list (format "  union: ~a file(s) (suites overlap, so the per-suite counts do not sum)"
+                    union-count)))]
     [else (error 'full-plan "unknown lane: ~a" lane)]))
+
+;; Per-producer suite sizes for the claim mapping. Classification goes through
+;; classify.rkt's own dispatch (`suite-select-rels`) over the same universe the
+;; selection used — no second suite registry, and the counts cannot drift from
+;; the selection.
+(define (required-offline-suite-counts base universe)
+  (for/list ([producer (in-list required-ci-producers)])
+    (define lane-name (required-producer-lane producer))
+    (cons lane-name
+          (length (remove-duplicates
+                   (append-map (lambda (suite) (suite-select-rels suite base universe))
+                               (qt-lane-suites (qt-lane-ref lane-name))))))))
 
 ;; ============================================================
 ;; Changed-file selection (`--changed [BASE]`)
@@ -729,7 +784,7 @@
 ;; Resolved plan (computed once; shared by `--explain` and execution)
 ;; ============================================================
 
-(struct lane-plan (lane root rels files universe changed) #:transparent)
+(struct lane-plan (lane root rels files universe changed unavailable) #:transparent)
 
 (define (lane-name lane)
   (case lane
@@ -767,6 +822,22 @@
     (if report
         (change-report-included report)
         lane-rels))
+  ;; `unavailable-here` (final plan §6 E1): required-offline members whose
+  ;; declared `@requires` this host cannot satisfy. They are listed, never
+  ;; executed, never verified, and never block the offline verdict — CI stays
+  ;; authoritative for them. Every other lane keeps the contract that every
+  ;; selected file runs.
+  (define unavailable
+    (if (eq? lane 'default)
+        (unavailable-here-members root* rels)
+        '()))
+  (define runnable-rels
+    (if (eq? lane 'default)
+        (filter (lambda (rel)
+                  (not (for/or ([u (in-list unavailable)])
+                         (string=? (unavailable-here-file u) rel))))
+                rels)
+        rels))
   (cond
     [(and report (null? rels))
      (error
@@ -780,14 +851,22 @@
      (error 'full-plan
             "lane selection is empty under ~a (zero files is a failure, not a pass)"
             (path->string root*))]
+    [(null? runnable-rels)
+     (error 'full-plan
+            (string-append
+             "required-offline selection under ~a has ~a member(s) and ALL are unavailable-here; "
+             "a run that can execute no required check is a failure, not a pass")
+            (path->string root*)
+            (length rels))]
     [else (void)])
   (lane-plan lane
              root*
              rels
-             (for/list ([rel (in-list rels)])
+             (for/list ([rel (in-list runnable-rels)])
                (path->string (simplify-path (root-relative-path root* rel) #f)))
              universe
-             report))
+             report
+             unavailable))
 
 (define (plan-label plan)
   (case (lane-plan-lane plan)
@@ -802,10 +881,13 @@
   (case (lane-plan-lane plan)
     [(default)
      (if changed
-         (format "default: changed-file selection of the fast/PR lane under ~a (diff against ~a)"
-                 root
-                 (change-report-base changed))
-         (format "default: fast/PR lane over the complete available Racket suite under ~a" root))]
+         (format
+          "default: changed-file selection of the offline PR verification lane under ~a (diff against ~a)"
+          root
+          (change-report-base changed))
+         (format
+          "default: offline PR verification (required-offline lane) over the complete available Racket suite under ~a"
+          root))]
     [(full)
      ;; `changed` is #f for plain `./qt full`; the header must never dereference
      ;; a report that was not requested. DEFENSIVE/untestable: plain full renders
@@ -822,6 +904,88 @@
     [else (error 'full-plan "unknown lane: ~a" (lane-plan-lane plan))]))
 
 ;; What a plan would run, in the order the command would run it, plus why.
+;; The default lane renders its own body (claim → lane → suite mapping,
+;; detected capabilities, and the `unavailable-here` list); `full` keeps the
+;; frozen body, and `release` extends it with the obligation list.
+(define (default-explain-lines plan command rels changed)
+  (define files (lane-plan-files plan))
+  (define unavailable (lane-plan-unavailable plan))
+  (append
+   (list (plan-header-line plan)
+         (format "label: ~a" (plan-label plan))
+         (format "selection: ~a files (selection only; nothing executed, nothing cleaned)"
+                 (length files)))
+   (lane-filter-lines 'default (lane-plan-root plan) (lane-plan-universe plan))
+   (default-claim-mapping-lines command)
+   (host-capability-lines command)
+   (if (null? unavailable)
+       (list "unavailable-here: none — every required-offline member is executable here")
+       (append
+        (list (format (string-append
+                       "unavailable-here: ~a required-offline member(s) this host cannot verify "
+                       "(LISTED below, never executed, never verified, never blocking; CI stays authoritative)")
+                      (length unavailable)))
+        (for/list ([u (in-list unavailable)])
+          (format "  unavailable-here: ~a (@requires ~a)"
+                  (unavailable-here-file u)
+                  (string-join (unavailable-here-requirements u) ", ")))))
+   (if changed
+       (change-report-lines changed)
+       '())
+   (list (full-timeout-policy-line files)
+         (full-mutation-policy-line files)
+         (full-execution-support-line command))
+   rels
+   (list "")
+   (list (format "NOT VERIFIED by ~a:" command))
+   (for/list ([item (in-list full-obligations)])
+     (format "  - ~a" item))
+   (list "")
+   (list (format "NOT PROVIDED by ~a (counted by other gates):" command))
+   ;; The @requires item is stated per lane: `default` lists unavailable-here
+   ;; members instead of running every selected file.
+   (for/list ([item (in-list full-not-provided)])
+     (format "  - ~a"
+             (if (equal? item full-requires-obligation-text)
+                 (string-append
+                  "`@requires` gating: executable members run; a member whose declared @requires this "
+                  "host cannot satisfy is unavailable-here (listed above; CI stays authoritative)")
+                 item)))))
+
+;; The claim → lane → suite mapping: which required CI test job each member
+;; lane satisfies. The suite → test mapping is the printed selection itself.
+(define (default-claim-mapping-lines command)
+  (append
+   (list (format "claim mapping for ~a (required CI test job -> lane -> suite):" command))
+   (for/list ([producer (in-list required-ci-producers)])
+     (define suites (qt-lane-suites (qt-lane-ref (required-producer-lane producer))))
+     (format "  ~a -> lane ~a -> suite~a ~a"
+             (string-join (required-producer-contexts producer) ", ")
+             (required-producer-lane producer)
+             (if (= (length suites) 1) "" "s")
+             (string-join (map symbol->string suites) ", ")))
+   (list (format "  required-offline (this command) -> union of those suites: ~a"
+                 (string-join (map symbol->string required-offline-suites) ", ")))))
+
+;; The detected capability table: ONE model, the runner's own local profile
+;; policy, extended with the cheap real probes (git). This is what the
+;; `unavailable-here` decisions above are derived from.
+(define (host-capability-lines command)
+  (append
+   (list (format "capabilities detected for ~a (one model: the runner's own local profile policy):" command))
+   (for/list ([tok (in-list schema-requires-values)])
+     (format "  ~a: ~a"
+             tok
+             (if (host-capability-available? tok)
+                 "available"
+                 "NOT available locally")))
+   (list (string-append
+          "  (provider-key follows the local profile policy, which declares live provider credentials "
+          "unavailable; a network/terminal/browser file that cannot really run FAILS honestly instead)")
+         (string-append
+          "  (external claims — platform lane and GitHub-hosted checks — are never established locally; "
+          "CI stays authoritative for them)"))))
+
 (define (plan-explain-lines plan)
   (define lane (lane-plan-lane plan))
   (define changed (lane-plan-changed plan))
@@ -831,36 +995,40 @@
   ;; Plain `./qt full --explain` is frozen byte-for-byte: it renders through the
   ;; same body as `full-explain-lines`, from the plan's own selection, so the
   ;; lane work cannot alter an existing command's plan output.
-  (if (and (eq? lane 'full) (not changed))
-      (full-explain-lines/selection (lane-plan-root plan)
-                                    (lane-plan-rels plan)
-                                    (lane-plan-files plan))
-      (append
-       (list (plan-header-line plan)
-             (format "label: ~a" (plan-label plan))
-             (format "selection: ~a files (selection only; nothing executed, nothing cleaned)"
-                     (length rels)))
-       (lane-filter-lines lane (lane-plan-root plan) (lane-plan-universe plan))
-       (if changed
-           (change-report-lines changed)
-           '())
-       (list (full-timeout-policy-line files)
-             (full-mutation-policy-line files)
-             (full-execution-support-line command))
-       rels
-       (list "")
-       (list (format "NOT VERIFIED by ~a:" command))
-       (for/list ([item (in-list full-obligations)])
-         (format "  - ~a" item))
-       (list "")
-       (list (format "NOT PROVIDED by ~a (counted by other gates):" command))
-       (for/list ([item (in-list full-not-provided)])
-         (format "  - ~a" item))
-       (if (eq? lane 'release)
-           (append (list "")
-                   (list "RELEASE OBLIGATIONS (unverified means a non-zero exit, never a pass line):")
-                   (release-obligation-lines (release-obligations)))
-           '()))))
+  (cond
+    [(and (eq? lane 'full) (not changed))
+     (full-explain-lines/selection (lane-plan-root plan)
+                                   (lane-plan-rels plan)
+                                   (lane-plan-files plan))]
+    [(eq? lane 'default)
+     (default-explain-lines plan command rels changed)]
+    [else
+     (append
+      (list (plan-header-line plan)
+            (format "label: ~a" (plan-label plan))
+            (format "selection: ~a files (selection only; nothing executed, nothing cleaned)"
+                    (length rels)))
+      (lane-filter-lines lane (lane-plan-root plan) (lane-plan-universe plan))
+      (if changed
+          (change-report-lines changed)
+          '())
+      (list (full-timeout-policy-line files)
+            (full-mutation-policy-line files)
+            (full-execution-support-line command))
+      rels
+      (list "")
+      (list (format "NOT VERIFIED by ~a:" command))
+      (for/list ([item (in-list full-obligations)])
+        (format "  - ~a" item))
+      (list "")
+      (list (format "NOT PROVIDED by ~a (counted by other gates):" command))
+      (for/list ([item (in-list full-not-provided)])
+        (format "  - ~a" item))
+      (if (eq? lane 'release)
+          (append (list "")
+                  (list "RELEASE OBLIGATIONS (unverified means a non-zero exit, never a pass line):")
+                  (release-obligation-lines (release-obligations)))
+          '()))]))
 
 ;; The frozen plain-`./qt full` preamble (frozen wording, updated for the
 ;; single-queue dispatch); every other plan states its own selection.
@@ -874,7 +1042,7 @@
 (define (plan-selection-noun plan)
   (case (lane-plan-lane plan)
     [(full) "complete available Racket suite"]
-    [(default) "fast/PR lane"]
+    [(default) "offline PR verification lane (required-offline)"]
     [(release) "complete available Racket suite (release review)"]
     [else (error 'full-plan "unknown lane: ~a" (lane-plan-lane plan))]))
 
@@ -894,14 +1062,27 @@
 
 ;; The single honest pass line per lane, and its pinned pattern: the honest
 ;; label is part of the contract, so it cannot be dropped from the output.
+;; `unavailable-here` members are never executed or verified; their COUNT is
+;; part of the pass line so the offline verdict cannot silently swallow them
+;; (the final plan §9 case: listed, not verified, not silently dropped).
 (define default-pass-pattern
-  #rx"^default passed: [0-9]+ files, [0-9]+ tests \\(fast/PR lane only, not PR/CI verification\\)$")
+  (regexp
+   (string-append
+    "^default passed: [0-9]+ files, [0-9]+ tests \\(offline PR verification; [0-9]+ unavailable-here "
+    "listed for CI; offline PR verification only; platform and GitHub-hosted claims remain with CI\\)$")))
 
-(define (default-pass-line run)
-  (format "default passed: ~a files, ~a tests (~a)"
-          (length (full-run-files run))
-          (apply + (map quick-result-total (full-run-results run)))
-          default-label))
+(define (default-pass-line run unavailable-count)
+  (unless (exact-nonnegative-integer? unavailable-count)
+    (error 'default-pass-line
+           "unavailable-count must be a non-negative integer, got: ~a"
+           unavailable-count))
+  (format
+   (string-append
+    "default passed: ~a files, ~a tests (offline PR verification; ~a unavailable-here listed for CI; ~a)")
+   (length (full-run-files run))
+   (apply + (map quick-result-total (full-run-results run)))
+   unavailable-count
+   default-label))
 
 (define release-pass-pattern
   #rx"^release passed: [0-9]+ files, [0-9]+ tests \\(release review only, not candidate verification\\)$")
@@ -1714,27 +1895,66 @@
 ;; CI lanes (`./qt --lane NAME`)
 ;; ============================================================
 ;; One table is the policy metadata CI reads instead of hard-coding suite,
-;; profile and timeout in YAML. A lane names an EXISTING runner suite (never a
+;; profile and timeout in YAML. A lane names EXISTING runner suites (never a
 ;; second selection scheme) plus the shard-plan/timeout policy the engine
 ;; already implements. `shard-total` is a lane default: a workflow matrix that
 ;; enumerates shards still owns the index/total it instantiates and may pass
 ;; them explicitly. Unknown lanes fail closed and list the valid names.
-(struct qt-lane (name suite timeout shard-total shard-plan description) #:transparent)
+;;
+;; Suite set (final plan §6 E1): a lane carries a LIST of suites. Every
+;; pre-E1 entry keeps exactly one suite, and `qt-lane-suite` stays as the
+;; single-suite compatibility accessor — it now returns the suite set, a
+;; ONE-ELEMENT list for every legacy lane. The CI surface still runs one
+;; suite per job; a multi-suite lane (only `required-offline` today) resolves
+;; through `./qt default` and is refused on the CI surface.
+(struct qt-lane (name suites timeout shard-total shard-plan description) #:transparent)
+
+;; Single-suite compatibility accessor: every legacy caller reads the suite
+;; set through it; for each pre-E1 lane that is a one-element list.
+(define (qt-lane-suite lane)
+  (qt-lane-suites lane))
+
+;; The required CI test producers and the qt-lane each one selects (final plan
+;; §6 E1). Contexts are the exact names in scripts/required-pr-checks.policy;
+;; the pinning test (tests/test-qt-lanes.rkt) asserts that this table tracks
+;; the policy file and that the `required-offline` lane's suite list is exactly
+;; the union of these lanes' suites, so drift fails in CI — without parsing
+;; YAML (the mapping lives in the lane table, not in a parsed workflow).
+(struct required-producer (contexts lane) #:transparent)
+
+(define required-ci-producers
+  (list
+   (required-producer (list "test (0)" "test (1)" "test (2)") 'fast)
+   (required-producer (list "security") 'security)
+   (required-producer (list "workflows (0)" "workflows (1)") 'workflows)
+   (required-producer (list "smoke (ubuntu-latest)") 'smoke)
+   (required-producer (list "test-platform") 'platform)))
+
+;; The required-offline suite list, in the final plan §6's own order. PINNED
+;; against `required-ci-producers` (the producers' lanes' suites) — change it
+;; only in the same commit that changes the required CI test jobs.
+(define required-offline-suites '(fast security workflows smoke platform))
 
 (define qt-lanes
   (list
-   (qt-lane 'fast 'fast #f 1 #f "fast PR regression tier")
-   (qt-lane 'fast-shard 'fast #f 1 "active" "duration-aware fast tier (requires --shard-total > 1)")
-   (qt-lane 'platform 'platform #f 1 #f "curated platform-cross subset")
-   (qt-lane 'security 'security #f 1 #f "security suite")
-   (qt-lane 'workflows 'workflows 90 2 #f "workflow/contract suite (two shards)")
-   (qt-lane 'arch 'arch #f 1 #f "architecture suite")
-   (qt-lane 'tui 'tui 60 1 #f "TUI suite")
-   (qt-lane 'smoke 'smoke #f 1 #f "smoke suite")
-   (qt-lane 'release-smoke 'release-smoke 120 1 #f "release smoke suite")
-   (qt-lane 'unit-fast 'unit-fast #f 1 #f "unit-fast suite")
-   (qt-lane 'slow 'slow #f 1 #f "slow suite")
-   (qt-lane 'all 'all #f 1 #f "complete discovered suite")))
+   (qt-lane 'fast (list 'fast) #f 1 #f "fast PR regression tier")
+   (qt-lane 'fast-shard (list 'fast) #f 1 "active" "duration-aware fast tier (requires --shard-total > 1)")
+   (qt-lane 'platform (list 'platform) #f 1 #f "curated platform-cross subset")
+   (qt-lane 'security (list 'security) #f 1 #f "security suite")
+   (qt-lane 'workflows (list 'workflows) 90 2 #f "workflow/contract suite (two shards)")
+   (qt-lane 'arch (list 'arch) #f 1 #f "architecture suite")
+   (qt-lane 'tui (list 'tui) 60 1 #f "TUI suite")
+   (qt-lane 'smoke (list 'smoke) #f 1 #f "smoke suite")
+   (qt-lane 'release-smoke (list 'release-smoke) 120 1 #f "release smoke suite")
+   (qt-lane 'unit-fast (list 'unit-fast) #f 1 #f "unit-fast suite")
+   (qt-lane 'slow (list 'slow) #f 1 #f "slow suite")
+   (qt-lane 'all (list 'all) #f 1 #f "complete discovered suite")
+   (qt-lane 'required-offline
+            required-offline-suites
+            #f
+            1
+            #f
+            "offline PR verification: union of the required CI test jobs' suites (resolves through ./qt default)")))
 
 ;; Resolve a lane name to its policy entry. An unknown name is an error that
 ;; NAMES every valid lane (fail closed, never a silent fallback to `fast`).
