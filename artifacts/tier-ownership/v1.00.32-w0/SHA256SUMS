@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 46b4afe2d55b4ba687b0f2273afec1f42d6a021a51ba2863e415fc988ff6b399  ownership-matrix.json
+=======
+c8f7e41c54cf406ce30a2e7bffe543f8006710c48881348de25903b74afee82f  ownership-matrix.json
+>>>>>>> f67d5e29 (chore(testing): regenerate the ownership matrix for the rewritten dependency-review owner (same-commit artifact rule))
