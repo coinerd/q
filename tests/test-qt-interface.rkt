@@ -165,7 +165,9 @@
                       (define-values (status out err) (invoke-in dir))
                       (check-equal? status 0 (string-append out err))
                       (check-regexp-match #rx"^default: " out)
-                      (check-regexp-match #rx"fast/PR lane only, not PR/CI verification" out)
+                      (check-regexp-match
+                       #rx"offline PR verification only; platform and GitHub-hosted claims remain with CI"
+                       out)
                       (check-regexp-match #rx"default passed: 1 files" out)
                       (check-equal? err ""))))
 

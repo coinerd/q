@@ -435,7 +435,17 @@
 ;; the shard index/total it instantiates); `--suite`/`--file` are refused with a
 ;; lane because the lane already names the selection.
 (define (run-ci-surface opts #:lane [lane #f] #:command [command #f])
-  (define lane-suite (and lane (qt-lane-suite lane)))
+  ;; A lane carries a SUITE SET (final plan §6 E1); every legacy lane keeps
+  ;; exactly one suite. The CI surface runs one suite per job, so a multi-suite
+  ;; lane (only `required-offline` today) is refused here with the command that
+  ;; resolves it — never silently reduced to its first suite.
+  (define lane-suites (and lane (qt-lane-suite lane)))
+  (when (and lane (> (length lane-suites) 1))
+    (fail
+     "--lane ~a is a suite union (~a); a CI job runs one suite — resolve it with ./qt default"
+     (qt-lane-name lane)
+     (string-join (map symbol->string lane-suites) ", ")))
+  (define lane-suite (and lane (car lane-suites)))
   (define lane-total (and lane (qt-lane-shard-total lane)))
   (define lane-shard-plan (and lane (qt-lane-shard-plan lane)))
   (define requested-total (cli-options-shard-total opts))
@@ -487,9 +497,10 @@
                 (string-join conflicts ", ")))
         (when lane
           (emit-line
-           (format "lane: ~a (suite ~a; timeout ~a; shard-plan ~a; ~a)"
+           (format "lane: ~a (suite~a ~a; timeout ~a; shard-plan ~a; ~a)"
                    (qt-lane-name lane)
-                   (qt-lane-suite lane)
+                   (if (= (length lane-suites) 1) "" "s")
+                   (string-join (map symbol->string lane-suites) ", ")
                    (or (cli-options-timeout opts) (qt-lane-timeout lane) "@timeout metadata")
                    shard-plan
                    (qt-lane-description lane))))
@@ -627,6 +638,14 @@
        ;; are exactly why a release pass line is not available.
        (for ([line (in-list (release-obligation-lines (release-obligations)))])
          (emit-line line)))
+     (when (and (eq? lane 'default) (pair? (lane-plan-unavailable plan)))
+       ;; The unavailable-here members ran nowhere: their count is also on the
+       ;; pass line, but the list itself belongs to the run output (CI stays
+       ;; authoritative for exactly these).
+       (for ([u (in-list (lane-plan-unavailable plan))])
+         (emit-line (format "unavailable-here: ~a (@requires ~a; verified by CI, never by this command)"
+                            (unavailable-here-file u)
+                            (string-join (unavailable-here-requirements u) ", ")))))
      (case verdict
        [(invalid) (fail "~a failed or produced missing/invalid results" name)]
        [(surface)
@@ -638,7 +657,7 @@
         (case lane
           [(release) (emit-line (release-pass-line run))]
           [(full) (emit-line (full-pass-line run))]
-          [else (emit-line (default-pass-line run))])])]))
+          [else (emit-line (default-pass-line run (length (lane-plan-unavailable plan))))])])]))
 
 ;; One usage table for the interface: every implemented command and option.
 ;; `./qt --help` (and `./qt help`) print it and exit 0; the error text names
@@ -653,7 +672,7 @@
   (displayln
    "  quick --changed BASE..HEAD      Changed-code impact reproduction over the audited owners")
   (displayln "  quick --audit                   Print the admission audit (admitted/review-required/rejected)")
-  (displayln "  default                         Required PR lane (fast/PR selection)")
+  (displayln "  default                         Complete offline PR verification (required-offline lane)")
   (displayln "  default --file FILE             Explicit reproduction, not a complete PR pass")
   (displayln "  full                            Complete available regression suite")
   (displayln "  full --file FILE                Explicit reproduction, not a full/PR pass")
@@ -667,7 +686,9 @@
   (displayln
    "                                  (valid: fast, fast-shard, platform, security, workflows,")
   (displayln
-   "                                   arch, tui, smoke, release-smoke, unit-fast, slow, all)")
+   "                                   arch, tui, smoke, release-smoke, unit-fast, slow, all,")
+  (displayln
+   "                                   required-offline — the suite union ./qt default resolves)")
   (displayln "  --changed [BASE|BASE..HEAD]     Impact selection (reproduction; never a PR claim)")
   (displayln "  --file FILE                     Explicit reproduction file (full/default only)")
   (displayln "  --candidate SHA                 Exact release candidate (release only)")
