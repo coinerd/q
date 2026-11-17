@@ -8,30 +8,14 @@
          "../scripts/testing/quick-runner.rkt")
 (define-runtime-path root "..")
 (module+ test
-  (test-case "audit rejects changed content and symlinks"
-    (define dir (make-temporary-file "qt-audit-~a" 'directory))
-    (dynamic-wind
-     void
-     (lambda ()
-       (make-directory (build-path dir "tests"))
-       (make-directory (build-path dir "util"))
-       (copy-file (build-path root "util/exn.rkt") (build-path dir "util/exn.rkt"))
-       (define entry (car audited))
-       (define target (build-path dir (car entry)))
-       (copy-file (build-path root (car entry)) target)
-       (check-true (audit-ok? dir entry))
-       (call-with-output-file target #:exists 'append (lambda (out) (display "; drift" out)))
-       (check-false (audit-ok? dir entry))
-       (delete-file target)
-       (define linked?
-         (with-handlers ([exn:fail:filesystem? (lambda (_) #f)])
-           (make-file-or-directory-link (build-path root (car entry)) target)
-           #t))
-       (if linked?
-           (check-false (audit-ok? dir entry))
-           (displayln "SKIP audit symlink: link creation unavailable")))
-     (lambda () (delete-directory/files dir))))
-  (test-case "early exit and forged summary cannot pass"
+  (test-case "the committed record gates every owner through audit-ok?"
+    ;; The executable contract under the generated admission record: every
+    ;; table owner is admitted against the shipped tree. The old
+    ;; changed-content/symlink mechanics live in tests/test-testing-audit.rkt
+    ;; (stale record, structure drift, symlink refusal, denylist hits).
+    (check-true (andmap (lambda (owner) (audit-ok? root owner))
+                        (admitted-owners))))
+    (test-case "early exit and forged summary cannot pass"
     (if (and (eq? (system-type 'os*) 'linux)
              (directory-exists? "/proc/self")
              (find-executable-path "setsid"))

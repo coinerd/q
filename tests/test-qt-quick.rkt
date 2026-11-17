@@ -57,7 +57,10 @@
     (if (quick-supported?)
         (let-values ([(status text) (run "quick" "--jobs" "2")])
           (check-equal? status 0 text)
-          (check-regexp-match #rx"quick passed: 4 files" text)
+          ;; §3 expansion: the reviewed owner table grew from 4 to 28 owners
+          ;; (capability-denylist-scanned, generated admission record); the pin
+          ;; moves with that stated contract change.
+          (check-regexp-match #rx"quick passed: 28 files" text)
           (check-regexp-match #rx"not PR/full verification" text))
         (displayln "SKIP quick suite: Linux /proc or setsid unavailable")))
   (test-case "campaign decisions execute and count six test cases"

@@ -141,12 +141,21 @@
          (when late-ms-box
            (set-box! late-ms-box (exact-round (- (current-inexact-milliseconds) start-ms))))))
 
-     ;; Eligibility: exclusive owners need a free lock; co-run tasks (declared
-     ;; temp-dir/sandboxed-home isolation) are always eligible; every other
-     ;; task waits until the exclusive set has drained.
+     ;; Eligibility: exclusive owners need a free lock; every other task waits
+     ;; until the exclusive set has drained — EXCEPT co-run tasks (declared
+     ;; temp-dir/sandboxed-home isolation), which may co-run while the lock is
+     ;; held, bounded to HALF of the non-owner headroom. Measured on CI (final
+     ;; plan §2 acceptance "no slower than the barrier"): on 2-worker lanes an
+     ;; unbounded co-run oversubscribes the CPU and stretched owner+reader
+     ;; durations by 25-45% (security lane 272s -> 400s); the cap restores
+     ;; barrier semantics at jobs=2 and keeps partial work recovery at jobs>=4.
+     (define co-run-cap (quotient (sub1 max-workers) 2))
+     (define co-runs-running 0)
      (define (eligible? t)
        (cond
          [(sched-task-exclusive? t) (not (unbox exclusive-running?))]
+         [(and (sched-task-co-runs? t) (positive? exclusive-outstanding))
+          (< co-runs-running co-run-cap)]
          [(sched-task-co-runs? t) #t]
          [else (zero? exclusive-outstanding)]))
 
@@ -174,13 +183,18 @@
                                                            (sched-task-timeout t)))))))
        (hash-set! running (sched-task-id t) worker)
        (when (sched-task-exclusive? t)
-         (set-box! exclusive-running? #t)))
+         (set-box! exclusive-running? #t))
+       (when (sched-task-co-runs? t)
+         (set! co-runs-running (add1 co-runs-running))))
 
      (define (task-done! id)
        (hash-remove! running id)
-       (when (sched-task-exclusive? (hash-ref task-by-id id))
+       (define t (hash-ref task-by-id id))
+       (when (sched-task-exclusive? t)
          (set! exclusive-outstanding (sub1 exclusive-outstanding))
-         (set-box! exclusive-running? #f)))
+         (set-box! exclusive-running? #f))
+       (when (sched-task-co-runs? t)
+         (set! co-runs-running (sub1 co-runs-running))))
 
      ;; Wait for the next event: a completion or an unexpected worker death.
      ;; The dead-evt may win a race against the completion put, so completions
