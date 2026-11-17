@@ -121,6 +121,8 @@
          qt-lane-suite
          ;; Release candidate verification (`./qt release --candidate SHA`)
          release-candidate-check
+         candidate-relevant-untracked?
+         porcelain-z-untracked
          ;; Resolved plan shared by `--explain` and execution
          (struct-out lane-plan)
          resolve-lane-plan
@@ -2009,6 +2011,44 @@
 ;; candidate it was handed: a different HEAD, or a checkout with uncommitted
 ;; changes, is refused before anything runs (release obligations stay
 ;; unconditional). `sha` must be a commit id (hex), never a moving ref.
+;; Relevant untracked files for the candidate dirty-state check (final plan
+;; §6 E2): the verification must read exactly the candidate's bytes, so an
+;; untracked file is relevant when the release verification would read it —
+;; a selected test input, one of the managed surfaces (info.rkt,
+;; README.md, CHANGELOG.md), or anything under artifacts/ or tests/. The
+;; release selection is tests-rooted (.rkt discovery under tests/), so every
+;; selected test input is under tests/ and the explicit prefix rule covers
+;; it together with the non-.rkt test inputs. Unrelated scratch files and
+;; logs elsewhere in the tree do NOT block the candidate check.
+(define candidate-managed-untracked-files
+  '("info.rkt" "README.md" "CHANGELOG.md"))
+
+(define (candidate-relevant-untracked? rel)
+  (or (and (member rel candidate-managed-untracked-files) #t)
+      (for/or ([prefix (in-list '("tests/" "artifacts/"))])
+        (string-prefix? rel prefix))))
+
+;; Paths of the untracked ("??") entries of a `git status --porcelain=v1 -z`
+;; output. -z gives raw NUL-separated paths, so no path is ever quoted or
+;; mangled; rename/copy entries carry a second NUL-separated field (the
+;; original path) which the parser skips defensively.
+(define (porcelain-z-untracked text)
+  (let loop ([fields (string-split text "\x0")] [rename-source? #f] [paths '()])
+    (cond
+      [(null? fields) (reverse paths)]
+      [(string=? (car fields) "") (loop (cdr fields) rename-source? paths)]
+      [rename-source? (loop (cdr fields) #f paths)]
+      [else
+       (define field (car fields))
+       (cond
+         [(< (string-length field) 4) (loop (cdr fields) #f paths)]
+         [(or (string-prefix? (substring field 0 2) "R")
+              (string-prefix? (substring field 0 2) "C"))
+          (loop (cdr fields) #t paths)]
+         [(string=? (substring field 0 2) "??")
+          (loop (cdr fields) #f (cons (substring field 3) paths))]
+         [else (loop (cdr fields) #f paths)])])))
+
 (define (release-candidate-check root sha)
   (define text
     (and sha
@@ -2053,6 +2093,30 @@
      text
      (path->string root)
      (length dirty)))
+  ;; Relevant UNTRACKED files block too: a new test input, a managed-surface
+  ;; edit or a new artifacts/tests file would change what the verification
+  ;; reads without being part of the candidate commit. Everything else stays
+  ;; out of scope (scratch and logs elsewhere do not block).
+  (define-values (untracked-ok? untracked-text)
+    (git-run root (list "status" "--porcelain=v1" "-z" "--untracked-files=all")))
+  (unless untracked-ok?
+    (error 'full-plan
+           "cannot verify --candidate ~a under ~a: git status failed (fail closed)"
+           text
+           (path->string root)))
+  (define relevant-untracked
+    (filter candidate-relevant-untracked? (porcelain-z-untracked untracked-text)))
+  (when (pair? relevant-untracked)
+    (error
+     'full-plan
+     (string-append
+      "--candidate ~a names a checkout at ~a with ~a relevant untracked file(s) the verification would "
+      "read (tests/**, artifacts/**, info.rkt, README.md, CHANGELOG.md or a selected test input): ~a; "
+      "refusing to verify a tree that is not the candidate's bytes")
+     text
+     (path->string root)
+     (length relevant-untracked)
+     (string-join relevant-untracked ", ")))
   ;; The verified identity is the resolved commit, never the caller's spelling.
   head)
 
