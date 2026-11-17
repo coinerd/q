@@ -275,7 +275,11 @@
        (file-exists? (build-path project-root ".github" "workflows" "shard-plan-telemetry.yml"))
        "the relocated report workflow is deleted (§11.3)"))
     (test-case "test-aggregate is the ci.yml workflow tail"
-      (check-equal? (job-needs "test-aggregate") '("test" "test-platform" "fast-env"))
+      ;; Final plan §5 (rev 3): the required aggregate depends ONLY on its own
+      ;; producers. The direct fast-env edge existed solely to order the
+      ;; trusted-trial prepared-aggregate restore candidate, and that trial
+      ;; path left the job in the same change (rev 3: safe if and only if).
+      (check-equal? (job-needs "test-aggregate") '("test" "test-platform"))
       (for ([job (in-list (top-jobs))])
         (check-false (member 'test-aggregate (job-needs job))
                      (format "~a must not depend on the new workflow tail" job))))

@@ -1553,18 +1553,20 @@
               "producer emit-identity must hash the shipped artifact bytes")
   (check-false (string-contains? ci "--stage \"$RUNNER_TEMP/prepared-env-prepared-env-fast\"")
                "producer binding must not hash the live stage (smoke 41192722012 divergence)")
-  ;; Shards and the aggregate attestation hash the pristine delivered
-  ;; download — never the installed store (which accumulates runtime state).
+  ;; Shards hash the pristine delivered download — never the installed store
+  ;; (which accumulates runtime state). Final plan §5 (rev 3) removed the
+  ;; aggregate's attestation copy from ci.yml together with the fast-env
+  ;; needs edge, so one measurement site remains: the fast-env producer.
   (check-equal?
    (length (regexp-match* #rx"--addon-store \"\\$RUNNER_TEMP/prepared-env-download/addon-store\"" ci))
-   2
-   "shard identity + aggregate attestation must hash the pristine delivered download")
+   1
+   "the producer identity must hash the pristine delivered download (the aggregate's copy left with §5)")
   (check-false (string-contains? ci "--addon-store \"${PLTADDONDIR")
                "installed-store identity measurement must not survive (smoke 41192722012 divergence)")
   ;; The digest recipe is unchanged — same strength, new measurement point.
   (check-equal? (length (regexp-match* #rx"trial-addon-relative-r2" ci))
-                3
-                "the r2 recipe revision must be used by all three emit sites")
+                2
+                "the r2 recipe revision must be used by both surviving emit sites")
   ;; The pack ships hidden files (include-hidden-files: true): the default
   ;; silently pruned them, which is exactly the smoke-run divergence, and
   ;; the producer↔consumer digest equality is the permanent completeness
