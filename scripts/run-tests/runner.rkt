@@ -3,11 +3,12 @@
 ;; run-tests/runner.rkt — Test execution orchestration for run-tests.rkt
 ;;
 ;; Owns the runner machinery: subprocess execution of individual test files,
-;; the deterministic fixed-batch scheduler, suite-level orchestration
-;; (run-single-file, run-all-files, run-suite-once), the command-line entry
-;; point (main) with its direct-invocation guard, and the CLI grammar
-;; (parse-args / validate-args! / usage, folded in from the former cli.rkt).
-;; Extracted from run-tests.rkt (v0.99.43 W0c).
+;; the shared work-conserving scheduler cutover (scripts/testing/scheduler.rkt,
+;; final plan §2 — the fixed-batch barrier `run-all-files/batch` is deleted),
+;; suite-level orchestration (run-single-file, run-all-files, run-suite-once),
+;; the command-line entry point (main) with its direct-invocation guard, and
+;; the CLI grammar (parse-args / validate-args! / usage, folded in from the
+;; former cli.rkt). Extracted from run-tests.rkt (v0.99.43 W0c).
 ;; STABILITY: internal — the public surface is re-exported by run-tests.rkt.
 
 (require racket/string
@@ -23,6 +24,7 @@
          json
          (only-in racket/format ~r)
          (only-in racket/date date->string current-date date-display-format)
+         (only-in "../testing/scheduler.rkt" sched-task run-scheduled)
          (only-in "classify.rkt"
                   base-dir
                   known-profiles
@@ -30,6 +32,9 @@
                   collect-test-files
                   get-file-metadata
                   mutating-file?
+                  declared-mutation?
+                  repository-exclusive-file?
+                  co-runs-under-exclusive-file?
                   repo-surface-files
                   clean-stale-bytecode!
                   file-has-rackunit-tests?
@@ -276,6 +281,11 @@
       p
       (simplify-path (build-path base-dir p))))
 
+;; Resource classes for the shared scheduler (final plan §2, rev 3) live in
+;; classify.rkt next to the metadata they read: `repository-exclusive-file?`
+;; (mutation owners) and `co-runs-under-exclusive-file?` (declared
+;; temp-dir/sandboxed-home isolation). One derivation, two consumers.
+
 (define (file-timeout-ms test-path timeout)
   (let ([meta-timeout (hash-ref (get-file-metadata test-path) 'timeout #f)])
     (if meta-timeout
@@ -355,13 +365,8 @@
 (define (run-single-file test-path #:timeout [timeout #f])
   (run-single-file/subprocess test-path #:timeout timeout))
 
-(define (split-list lst n)
-  (cond
-    [(null? lst) '()]
-    [else (cons (take lst (min n (length lst))) (split-list (drop lst (min n (length lst))) n))]))
-
 ;; Scheduler ownership prevents a dead coordinator or worker from leaving
-;; registered subprocess groups running after the partition ends.
+;; registered subprocess groups running after the run ends.
 (define (call-with-scheduler-ownership thunk)
   (define cust (make-custodian))
   (define owner (current-thread))
@@ -389,62 +394,59 @@
   (unless (null? unmatched)
     (error 'run-all-files "missing worker results for ~a" unmatched)))
 
+;; The ONE scheduling path: the shared work-conserving queue
+;; (scripts/testing/scheduler.rkt). Mutation owners get `repository-exclusive`
+;; and dispatch first (priority 0); declared temp-dir/sandboxed-home isolation
+;; co-runs while the lock is held; everything else is eligible once the
+;; mutation set drains. `#:first-batch-ms-box` receives the single-queue
+;; dispatch latency (run start → first completion) — the redefined, kept
+;; `first_batch_ms` telemetry field (final plan §2, rev 3).
 (define (run-all-files files jobs timeout #:first-batch-ms-box [first-batch-ms-box #f])
   (define results
     (call-with-scheduler-ownership
-     (lambda () (run-all-files/batch files jobs timeout #:first-batch-ms-box first-batch-ms-box))))
-  ;; Every scheduled occurrence must have exactly one result. A worker that
-  ;; dies without publishing must never make the remaining files look green.
-  (validate-result-multiset! files results)
-  results)
-
-;; The ONE surviving scheduler: the deterministic fixed-batch barrier.
-(define (run-all-files/batch files jobs timeout #:first-batch-ms-box [first-batch-ms-box #f])
-  (define batch-t0 (current-inexact-milliseconds))
-  (define results (box '()))
-  (define results-lock (make-semaphore 1))
-  (define (add-result! r)
-    (call-with-semaphore results-lock (lambda () (set-box! results (cons r (unbox results))))))
-  (define batch-size jobs)
-  (define batches (split-list files batch-size))
-  (for ([batch (in-list batches)]
-        [batch-idx (in-naturals)])
-    (define previous-count (length (unbox results)))
-    (define batch-threads
-      (for/list ([f (in-list batch)])
-        (thread
-         (lambda ()
-           (define result
+     (lambda ()
+       (run-scheduled
+        (for/list ([f (in-list files)]
+                   [i (in-naturals)])
+          (sched-task
+           (format "~a" f)
+           ;; The adapter returns a result for every ordinary failure
+           ;; (subprocess exit, timeout, child error, an out-of-contract
+           ;; path) — the deleted batch barrier's per-file handler, kept
+           ;; verbatim. A raise that escapes is unexpected worker
+           ;; termination and the scheduler fails the run (fail closed).
+           ;; The raw `f` stays the result identity (the scheduler's task id
+           ;; is an internal string); run-single-file resolves it.
+           (lambda (_id file-timeout-ms)
              (with-handlers
                  ([exn:fail?
                    (lambda (e)
                      (test-file-result f 1 #"" (string->bytes/utf-8 (exn-message e)) 0 0 0 0))])
-               (run-single-file f #:timeout (or timeout 120000))))
-           (define exit-code (test-file-result-exit-code result))
-           (cond
-             [(eq? (classify-test-result result) 'SKIPPED_BY_PROFILE) (display "S")]
-             [(= exit-code 0) (display ".")]
-             [(= exit-code 2) (display "T")]
-             [else (display "F")])
-           (flush-output)
-           (add-result! result)))))
-    (for-each thread-wait batch-threads)
-    ;; Do not start another batch if one of these workers failed to publish.
-    (define current-results (unbox results))
-    (validate-result-multiset! batch
-                               (take current-results (- (length current-results) previous-count)))
-    (when (and first-batch-ms-box (= batch-idx 0))
-      (set-box! first-batch-ms-box (exact-round (- (current-inexact-milliseconds) batch-t0)))))
-  (newline)
-  (define file-order
-    (for/hash ([f (in-list files)]
-               [i (in-naturals)])
-      (values f i)))
-  (sort (unbox results) < #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
-
-;; The single deterministic batch scheduler. The queue scheduler, its
-;; scheduler telemetry, the TEST_RUNNER_SCHEDULER lever and --scheduler are
-;; deleted (§11.3): this file now has exactly one execution strategy.
+               ;; Per-file progress marker, kept from the deleted batch
+               ;; barrier: S skipped / . pass / T timeout / F fail.
+               (define result (run-single-file f #:timeout file-timeout-ms))
+               (define exit-code (test-file-result-exit-code result))
+               (cond
+                 [(eq? (classify-test-result result) 'SKIPPED_BY_PROFILE) (display "S")]
+                 [(= exit-code 0) (display ".")]
+                 [(= exit-code 2) (display "T")]
+                 [else (display "F")])
+               (flush-output)
+               result))
+           ;; `timeout` arrives in milliseconds from run-suite-once and is
+           ;; passed through opaquely to the adapter, exactly like the batch
+           ;; barrier passed it to run-single-file.
+           (or timeout 120000)
+           (repository-exclusive-file? f)
+           (co-runs-under-exclusive-file? f)
+           (if (repository-exclusive-file? f) 0 1)
+           i))
+        jobs
+        #:late-ms-box first-batch-ms-box))))
+  ;; Every scheduled occurrence must have exactly one result. A worker that
+  ;; dies without publishing must never make the remaining files look green.
+  (validate-result-multiset! files results)
+  results)
 
 ;; W1 action 3: prepared-environment CI evidence, passed through an explicit
 ;; environment/input contract (the CI workflow exports these after the
@@ -550,12 +552,13 @@
   (define t0 (current-inexact-milliseconds))
   (define exec-start-ms (hash-ref phases 'execution_start_ms #f))
   (define selection-end-ms (hash-ref phases 'selection_end_ms #f))
-  ;; Separate first-batch boxes per partition so the serial and parallel
-  ;; calls can never overwrite each other. The legacy `first_batch_ms` field
-  ;; keeps the first partition that ran; each partition also gets an
-  ;; unambiguous field (serial_first_batch_ms / parallel_first_batch_ms).
+  ;; Single-queue dispatch-latency telemetry (final plan §2, rev 3 "Keep (do
+  ;; not silently drop)"): first_batch_ms is run start → first completion for
+  ;; the ONE shared queue; the legacy serial/parallel pair collapses to the
+  ;; same value plus a constant 0. The keys stay in the schema for output
+  ;; compatibility; nothing in scripts/ci/* or the claim schema reads them.
   (define serial-first-batch-ms-box (box #f))
-  (define parallel-first-batch-ms-box (box #f))
+  (define parallel-first-batch-ms-box (box 0))
   (define-values (skipped-files runnable-files)
     (partition (lambda (f)
                  (profile-skips-test? profile (hash-ref (get-file-metadata f) 'requires '())))
@@ -568,45 +571,42 @@
             profile
             (length skipped-files)
             (if (= (length skipped-files) 1) "" "s")))
-  ;; Deterministic input order is the ONE surviving ordering: results are
-  ;; sorted back into suite-file order below, and the serial/parallel
-  ;; partition never moves a file across itself.
-  (define-values (serial-files parallel-files)
-    (if (> jobs 1)
-        (values (filter mutating-file? runnable-files)
-                (filter (lambda (f) (not (mutating-file? f))) runnable-files))
-        (values '() runnable-files)))
-  (when (pair? serial-files)
-    (printf ";; run-tests: serializing ~a mutation-sensitive file~a before parallel batches~n"
-            (length serial-files)
-            (if (= (length serial-files) 1) "" "s")))
-  ;; One guard around every execution path (sequential, serial and parallel):
-  ;; a test that rewrites a managed surface fails the suite instead of being
+  ;; ONE scheduling call through the shared work-conserving queue: mutation
+  ;; owners take repository-exclusive and dispatch first; declared
+  ;; temp-dir/sandboxed-home isolation co-runs while the lock is held;
+  ;; everything else is eligible once the mutation set drains. Results are
+  ;; sorted back into suite-file order below — never a fixed serial/parallel
+  ;; partition barrier.
+  (define mutation-owners (filter repository-exclusive-file? runnable-files))
+  (when (pair? mutation-owners)
+    (printf
+     (string-append ";; run-tests: ~a mutation-owning file~a hold repository-exclusive "
+                    "(dispatched first; only declared temp-dir/sandboxed-home isolation co-runs)~n")
+     (length mutation-owners)
+     (if (= (length mutation-owners) 1) "" "s")))
+  ;; One guard around the single execution path (sequential and queued): a
+  ;; test that rewrites a managed surface fails the suite instead of being
   ;; silently reverted.
-  (define serial-results-box (box '()))
-  (define parallel-results-box (box '()))
+  (define results-box (box '()))
   (define surface-violations
     (call-with-surface-guard base-dir
                              (lambda ()
-                               (set-box! serial-results-box
-                                         (if (pair? serial-files)
-                                             (run-all-files serial-files 1 timeout-ms)
-                                             '()))
-                               (set-box! parallel-results-box
-                                         (if (pair? parallel-files)
-                                             (run-all-files parallel-files jobs timeout-ms)
-                                             '())))))
-  (define serial-results (unbox serial-results-box))
-  (define parallel-results (unbox parallel-results-box))
+                               (set-box! results-box
+                                         (run-all-files runnable-files
+                                                        jobs
+                                                        timeout-ms
+                                                        #:first-batch-ms-box
+                                                        serial-first-batch-ms-box)))))
+  (define queue-results (unbox results-box))
   (define file-order
     (for/hash ([f (in-list suite-files)]
                [i (in-naturals)])
       (values f i)))
   (define results
-    (sort (append skipped-results serial-results parallel-results)
+    (sort (append skipped-results queue-results)
           <
           #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
-  ;; The suite boundary must also account for skipped and partitioned files.
+  ;; The suite boundary must also account for skipped files.
   (validate-result-multiset! suite-files results)
   (define total-elapsed (exact-round (- (current-inexact-milliseconds) t0)))
   (define exec-end-ms (current-inexact-milliseconds))
@@ -632,37 +632,35 @@
                             #:elapsed-ms total-elapsed
                             #:runner-version runner-version)
   (when json-out
-    (write-json-results!
-     json-out
-     results
-     #:suite (string->symbol suite-label)
-     #:mode mode
-     #:elapsed-ms total-elapsed
-     #:ledger ledger
-     #:profile profile
-     #:shard shard
-     #:runner-version runner-version
-     #:extra (let ([m (make-hasheq)])
-               (hash-set! m 'runner_start_ms (exact-round runner-start-ms))
-               (hash-set! m 'execution_end_ms (exact-round exec-end-ms))
-               (when exec-start-ms
-                 (hash-set! m 'execution_start_ms (exact-round exec-start-ms)))
-               (when selection-end-ms
-                 (hash-set! m 'selection_end_ms (exact-round selection-end-ms)))
-               (when (unbox serial-first-batch-ms-box)
-                 (hash-set! m 'serial_first_batch_ms (unbox serial-first-batch-ms-box)))
-               (when (unbox parallel-first-batch-ms-box)
-                 (hash-set! m 'parallel_first_batch_ms (unbox parallel-first-batch-ms-box)))
-               (when (or (unbox serial-first-batch-ms-box) (unbox parallel-first-batch-ms-box))
-                 ;; Legacy field: first partition that actually ran.
-                 (hash-set! m
-                            'first_batch_ms
-                            (if (unbox serial-first-batch-ms-box)
-                                (unbox serial-first-batch-ms-box)
-                                (unbox parallel-first-batch-ms-box))))
-               (hash-set! m 'prepared_environment (prepared-environment-state))
-               m)
-     #:actual-modes actual-mode-hash))
+    (write-json-results! json-out
+                         results
+                         #:suite (string->symbol suite-label)
+                         #:mode mode
+                         #:elapsed-ms total-elapsed
+                         #:ledger ledger
+                         #:profile profile
+                         #:shard shard
+                         #:runner-version runner-version
+                         #:extra
+                         (let ([m (make-hasheq)])
+                           (hash-set! m 'runner_start_ms (exact-round runner-start-ms))
+                           (hash-set! m 'execution_end_ms (exact-round exec-end-ms))
+                           (when exec-start-ms
+                             (hash-set! m 'execution_start_ms (exact-round exec-start-ms)))
+                           (when selection-end-ms
+                             (hash-set! m 'selection_end_ms (exact-round selection-end-ms)))
+                           ;; Single-queue dispatch latency (run start → first completion).
+                           ;; The serial/parallel pair is kept for schema compatibility:
+                           ;; serial carries the queue's latency, parallel is the constant 0.
+                           (when (unbox serial-first-batch-ms-box)
+                             (hash-set! m 'serial_first_batch_ms (unbox serial-first-batch-ms-box)))
+                           (hash-set! m 'parallel_first_batch_ms (unbox parallel-first-batch-ms-box))
+                           (when (unbox serial-first-batch-ms-box)
+                             ;; Legacy field: now the one queue's dispatch latency.
+                             (hash-set! m 'first_batch_ms (unbox serial-first-batch-ms-box)))
+                           (hash-set! m 'prepared_environment (prepared-environment-state))
+                           m)
+                         #:actual-modes actual-mode-hash))
   (when ledger
     (print-ledger-summary ledger results))
   (save-failure-logs results #:profile profile #:mode mode)

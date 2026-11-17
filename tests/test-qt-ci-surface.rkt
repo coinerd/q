@@ -2,6 +2,7 @@
 ;; @speed fast
 ;; @suite testing
 ;; @boundary integration
+;; @timeout 300
 
 ;; Contract for the Phase D CI surface of `./qt full`:
 ;;   - `--json-out PATH` writes the SAME schema scripts/run-tests/reporting.rkt

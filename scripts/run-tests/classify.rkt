@@ -75,6 +75,9 @@
          ;; Fast/PR lane exclusion classifiers (same metadata, no second scheme)
          declared-mutation?
          isolation-excluded?
+         ;; Shared-scheduler resource classes (final plan §2, rev 3)
+         repository-exclusive-file?
+         co-runs-under-exclusive-file?
          requires-excluded-tokens
          requires-excluded?
          security-file?
@@ -1186,11 +1189,11 @@
     ;; @isolation subprocess because each member spawns inner
     ;; `racket scripts/run-tests.rkt` subprocesses that clean stale
     ;; compiled/ dirs repo-wide, write /tmp failure logs, and create temp
-    ;; ledger files. Running several members in the parallel batch lets the
-    ;; inner invocations race on that shared state (intermittent
-    ;; test-run-tests-ledger failures under --jobs 12). Serializing the
-    ;; family — treating subprocess isolation as mutating — runs them in
-    ;; the serial batch before any parallel workers start.
+    ;; ledger files. Running several members concurrently lets the inner
+    ;; invocations race on that shared state (intermittent
+    ;; test-run-tests-ledger failures under --jobs 12). Treating subprocess
+    ;; isolation as mutating gives the family the repository-exclusive
+    ;; resource — dispatched first, one at a time (final plan §2).
     [(equal? meta-isolation "subprocess") #t]
     [else
      (let ([base (file-name-from-path f)])
@@ -1218,6 +1221,29 @@
 (define (isolation-excluded? f)
   (define isolation (hash-ref (get-file-metadata f) 'isolation #f))
   (and (string? isolation) (not (equal? isolation "none")) #t))
+
+;; ── Shared-scheduler resource classes (final plan §2, rev 3) ──────────
+;;
+;; The ONE derivation of `repository-exclusive` for every execution path
+;; (run-tests/runner.rkt and full-plan.rkt's run-files): a file owns the
+;; repository-exclusive resource when `mutating-file?` reports it OR it
+;; declares `@mutates` other than none. Unknown or ambiguous mutation
+;; requirements acquire the lock (conservative default — mutating-file?'s
+;; name patterns cover the unknown cases, declared-mutation? the explicit
+;; ones).
+(define (repository-exclusive-file? f)
+  (with-handlers ([exn:fail? (lambda (_) #t)]) ; unknown/ambiguous → acquire the lock
+    (or (mutating-file? f) (declared-mutation? f))))
+
+;; The only files that may co-run while a repository-exclusive owner holds
+;; the lock: declared `temp-dir`/`sandboxed-home` isolation runs outside the
+;; checkout and cannot observe a managed-surface mutation (mutation excludes
+;; observation — the before/after surface guard cannot attribute a mutation
+;; to a file). Every other non-owner is eligible only once the mutation set
+;; drains.
+(define (co-runs-under-exclusive-file? f)
+  (with-handlers ([exn:fail? (lambda (_) #f)]) ; unknown/ambiguous → never co-run
+    (and (member (hash-ref (get-file-metadata f) 'isolation #f) '("temp-dir" "sandboxed-home")) #t)))
 
 ;; Declared requirements that make a file unsafe for the fast/PR lane: it needs
 ;; a live network, an interactive terminal, a browser or a real provider key.

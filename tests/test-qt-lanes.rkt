@@ -763,7 +763,9 @@
        (check-equal?
         (plan-preamble plan 4)
         (format
-         "full: starting the complete available Racket suite (mutating files serially, then jobs ~a); ~a"
+         (string-append
+          "full: starting the complete available Racket suite (work-conserving queue, jobs ~a; "
+          "mutation owners dispatch first); ~a")
          4
          full-label))
        (check-equal? (plan-label plan) full-label))))

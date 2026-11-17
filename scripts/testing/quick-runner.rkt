@@ -17,9 +17,11 @@
 (require racket/async-channel
          racket/runtime-path
          "../../sandbox/subprocess.rkt"
-         (only-in "../../sandbox/limits.rkt" exec-limits))
+         (only-in "../../sandbox/limits.rkt" exec-limits)
+         "scheduler.rkt")
 
 (provide run-quick
+         run-quick-file
          quick-result-valid?
          (struct-out quick-result))
 
@@ -44,6 +46,16 @@
 
 ;; Fail once, up front, instead of producing N identical per-file failures on a
 ;; host that cannot own process groups.
+;; Per-file execution adapter for the shared scheduler (final plan §2): ONE
+;; audited child with its own evidence file, exactly what run-quick uses per
+;; task. full-plan.rkt's run-files builds scheduler tasks around this adapter;
+;; the repository-exclusive decision belongs to the CALLER (classify.rkt's
+;; resource classes), never to this trusted-evidence executor.
+(define (run-quick-file path timeout)
+  (with-handlers ([exn:break? raise]
+                  [exn? (lambda (e) (quick-result path 1 #f #f "" (exn-message e) 'no-evidence))])
+    (run-one path timeout)))
+
 (define (require-owned-process-groups!)
   (unless (and (eq? (system-type 'os*) 'linux)
                (directory-exists? "/proc/self")
@@ -196,62 +208,30 @@
                   (custodian-shutdown-all cust)
                   (kill-thread watcher))))
 
-(define (collect-results done workers files)
-  (let loop ([acc '()]
-             [dead '()])
-    (define live (remove* dead workers eq?))
-    (cond
-      [(= (length acc) (length files)) (reverse acc)]
-      [(null? live)
-       ;; Nothing can still publish: drain whatever the channel holds and stop.
-       ;; The caller reports any shortfall.
-       (let drain ()
-         (define v (async-channel-try-get done))
-         (when v
-           (set! acc (cons v acc))
-           (drain)))
-       (if (= (length acc) (length files))
-           (reverse acc)
-           acc)]
-      [else
-       (define tagged
-         (apply sync
-                (handle-evt done (lambda (v) (cons 'done v)))
-                (for/list ([worker (in-list live)])
-                  (handle-evt (thread-dead-evt worker) (lambda (_) (cons 'dead worker))))))
-       (if (eq? (car tagged) 'done)
-           (set! acc (cons (cdr tagged) acc))
-           (set! dead (cons (cdr tagged) dead)))
-       (loop acc dead)])))
-
+;; Scheduling is the ONE shared dynamic queue (scripts/testing/scheduler.rkt,
+;; final plan §2): this adapter owns only per-file execution — a fresh Racket
+;; child per audited file with its own evidence file — and the audited owners
+;; are pure, so no task takes the repository-exclusive lock. `run-quick/owned`
+;; runs inside the caller's custodian (owned process groups, cancellation,
+;; worker cleanup), which the scheduler's worker threads inherit.
 (define (run-quick/owned files jobs per-file-timeouts #:timeout [timeout 120])
-  (define work (make-async-channel))
-  (define done (make-async-channel))
-  (define count (min jobs (length files)))
-  (for ([f files])
-    (async-channel-put work f))
-  (for ([i (in-range count)])
-    (async-channel-put work #f))
-  (define workers
-    (for/list ([i (in-range count)])
-      (thread
-       (lambda ()
-         (let loop ()
-           (define f (async-channel-get work))
-           (when f
-             (async-channel-put
-              done
-              (with-handlers ([exn:break? raise]
-                              [exn? (lambda (e)
-                                      (quick-result f 1 #f #f "" (exn-message e) 'no-evidence))])
-                (run-one f (hash-ref per-file-timeouts f timeout))))
-             (loop)))))))
-  (define results (collect-results done workers files))
-  (for-each thread-wait workers)
-  (when (< (length results) (length files))
-    (error 'run-quick
-           "workers terminated with ~a result(s) missing (~a of ~a inputs reported)"
-           (- (length files) (length results))
-           (length results)
-           (length files)))
-  results)
+  (define tasks
+    (for/list ([f (in-list files)]
+               [i (in-naturals)])
+      (sched-task
+       f
+       (lambda (id file-timeout)
+         ;; A raise other than exn:break dies without publishing and the
+         ;; scheduler fails the run (unexpected worker termination);
+         ;; run-one already synthesizes no-evidence results for ordinary
+         ;; child failures, so this handler is belt-and-braces.
+         (with-handlers ([exn:break? raise]
+                         [exn? (lambda (e)
+                                 (quick-result id 1 #f #f "" (exn-message e) 'no-evidence))])
+           (run-one id file-timeout)))
+       (hash-ref per-file-timeouts f timeout)
+       #f
+       #f
+       0
+       i)))
+  (run-scheduled tasks jobs))
