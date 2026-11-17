@@ -781,142 +781,73 @@ jobs:
   # the suite on ANY consume failure — never a silent skip (§11.3).
   # ────────────────────────────────────────────────────────────
   test-aggregate:
-    needs: [test, test-platform, fast-env]
-    # v1.00.32 W2: the DIRECT fast-env producer edge (the prepared-aggregate
-    # candidate restores the same-run producer's artifact HERE — the ordering
-    # is declared, not transitive). The if preserves the pre-trial semantics
-    # exactly: the job runs when test AND test-platform succeeded; fast-env's
-    # own result (success, failure or a rollback-switch skip) must never
-    # change whether this required gate runs on an ordinary PR — the trial
-    # gate below re-checks needs.fast-env.result == 'success' before any
-    # prepared restore.
-    if: ${{ !cancelled() && needs.test.result == 'success' && needs.test-platform.result == 'success' }}
+    needs: [test, test-platform]
+    # Final plan §5 (rev 3): the required aggregate is a MINIMAL TERMINAL
+    # VERIFIER. It depends ONLY on its own producers (test, test-platform);
+    # the trusted-trial prepared-aggregate restore candidate and its direct
+    # fast-env ordering edge LEFT this job (the trial measurement path stays
+    # outside the required aggregate; the shard-side trial terms in the test
+    # job are unchanged). The job runs `if: !cancelled()` and explicitly
+    # inspects every dependency below, so a failed, cancelled or SKIPPED
+    # producer can never silently skip this gate: GitHub may cancel the whole
+    # workflow (the absent required success then stays unsatisfied under
+    # branch protection), but whenever the job executes at all it reaches an
+    # explicit success/failure conclusion. Execution is stdlib-only over the
+    # downloaded shard artifacts: the verifier chain
+    # (verify-result-truth.rkt -> verify-shard-results.rkt -> reporting.rkt ->
+    # classify.rkt, whose header deliberately avoids racket/json) loads from
+    # THIS checkout — no package install, no raco setup, no q compilation.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "All test shards and platform checks passed."
+      # Upstream-failure correction (final plan §5 "Critical correction"):
+      # the aggregate must not be skipped merely because a producer failed.
+      # needs.<dep>.result is 'success', 'failure', 'cancelled' or 'skipped';
+      # anything but success fails the gate (a skipped producer is red, not
+      # absent-evidence-green).
+      - name: Gate on the required producers (fail closed on skipped too)
+        run: |
+          set -euo pipefail
+          for dep in test test-platform; do
+            result="${{ needs[dep].result }}"
+            if [ "$result" != "success" ]; then
+              echo "::error::required producer ${dep} did not succeed (result: ${result}); the aggregate can never be green"
+              exit 1
+            fi
+          done
+          echo "required producers: test and test-platform both succeeded"
 
       - uses: actions/checkout@v7
-      # v1.00.32 W2 (trusted trial ONLY): the prepared-aggregate candidate.
-      # Ordinary push/PR/dispatch runs resolve this gate to 'off' and the
-      # aggregate keeps its cold full setup — the candidate is never enabled
-      # in normal CI and there is no promotion here. Ordering is guaranteed
-      # by the job's DIRECT needs edge to fast-env (needs: [test,
-      # test-platform, fast-env]): the same-run producer is complete before
-      # any test-aggregate step runs, so the guarded restore below cannot
-      # race it, and the gate additionally re-checks
-      # needs.fast-env.result == 'success' so a failed/skipped producer
-      # keeps the aggregate cold instead of classifying a fallback as a
-      # prepared treatment. The restore's W6 identity verify and the
-      # always-on BUG-0065 purge live inside setup-racket and are unchanged;
-      # the proof bundle below still passes through the same result-truth
-      # verifier exactly as before.
-      - name: Resolve the trusted-trial prepared-aggregate restore gate
-        id: trial-aggregate-env
-        if: vars.RACKET_PREPARED_ARTIFACT != 'off'
+      # Minimal pinned Racket runtime (final plan §5): ONLY the steps the
+      # verifier needs — the exact version pin plus the deterministic user
+      # package store — copied verbatim from .github/actions/setup-racket.
+      # Deliberately NOT the composite action: that would drag the
+      # prepared-environment restore machinery, the compiled-root resolution
+      # and the workspace bytecode purge into the required aggregate path,
+      # which §5 removes. No q linking, no raco setup, no compiled-root.
+      - name: Configure Racket user package store
+        id: racket-store
         shell: bash
-        env:
-          TRIAL_TREATMENT: ${{ inputs.trial-treatment }}
-          TRIAL_ID: ${{ inputs.trial-id }}
-          TRIAL_ATTEMPT: ${{ inputs.trial-attempt }}
-          SOURCE_SHA: ${{ inputs.source-sha }}
-          HEAD_SHA: ${{ github.sha }}
-          HEAD_REF: ${{ github.ref }}
-          REF_PROTECTED: ${{ github.ref_protected }}
-          EVENT_NAME: ${{ github.event_name }}
-          FAST_ENV_RESULT: ${{ needs.fast-env.result }}
         run: |
           set -euo pipefail
-          restore=off
-          if [ "$TRIAL_TREATMENT" = "B" ] || [ "$TRIAL_TREATMENT" = "C" ]; then
-            # The REUSABLE execution path re-validates the full trusted
-            # identity itself — it never trusts the caller's gate, because
-            # any workflow_call caller can pass arbitrary inputs. Required
-            # here, inside ci.yml: the actual event is a manual dispatch,
-            # the actual ref is the PROTECTED main branch, the requested
-            # source is the checked-out dispatch HEAD, the attempt is a
-            # positive integer, and the same-run producer actually
-            # succeeded (a failed or skipped producer keeps the aggregate
-            # cold — the cold fallback is never classified as a prepared
-            # treatment).
-            if [ "$EVENT_NAME" = "workflow_dispatch" ] \
-               && [ "$REF_PROTECTED" = "true" ] \
-               && [ "$HEAD_REF" = "refs/heads/main" ] \
-               && [ "$SOURCE_SHA" = "$HEAD_SHA" ] \
-               && [ -n "$TRIAL_ID" ] \
-               && [ "$FAST_ENV_RESULT" = "success" ] \
-               && case "$TRIAL_ATTEMPT" in ''|*[!0-9]*|0) false ;; *) true ;; esac; then
-              restore=auto
-            fi
-          fi
-          echo "prepared-env=$restore" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/setup-racket
-        id: agg-setup
+          addon_base="$HOME/.cache/q-racket-addon"
+          addon_path="$addon_base/${{ github.event.inputs.racket-version || '8.10' }}"
+          echo "PLTADDONDIR=$addon_base" >> "$GITHUB_ENV"
+          echo "addon_path=$addon_path" >> "$GITHUB_OUTPUT"
+      - name: Restore locked Racket user package store
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
         with:
-          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
-          # v1.00.32 W2: 'auto' ONLY through the trusted-trial gate above;
-          # every non-trial run passes 'off' (the input's own default), so
-          # the aggregate's ordinary execution path is unchanged.
-          prepared-environment: ${{ steps.trial-aggregate-env.outputs.prepared-env || 'off' }}
-          prepared-artifact-name: prepared-env-fast
-          prepared-installer-sha256: ${{ env.INSTALLER_SHA_LINUX_8_10 }}
-
-      # v1.00.32 W2 (trial evidence): attest the aggregate's ACTUAL restore
-      # outcome from the setup action's observed outputs. The trial's B/C
-      # evidence is only a prepared-aggregate measurement when this
-      # attestation says the restore was manifest- AND identity-verified; a
-      # cold fallback keeps the aggregate cold and is recorded as exactly
-      # that (the adapter refuses such B/C trials fail-closed). All values
-      # reach the script through env indirection.
-      - name: Attest the actual aggregate restore outcome (trial evidence)
-        if: always() && inputs.trial-id != ''
-        shell: bash
-        env:
-          AGG_REQUESTED: ${{ steps.trial-aggregate-env.outputs.prepared-env || 'off' }}
-          AGG_RESULT: ${{ steps.agg-setup.outputs.prepared-env-result || 'unknown' }}
-          AGG_STATE: ${{ steps.agg-setup.outputs.prepared-env-state || 'unknown' }}
-          AGG_IDENTITY_RESULT: ${{ steps.agg-setup.outputs.prepared-env-identity-result || 'unknown' }}
-          AGG_RESTORE_MS: ${{ steps.agg-setup.outputs.prepared-env-restore-ms }}
-          AGG_COMPILED_ROOT: ${{ steps.agg-setup.outputs.prepared-env-root }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-          HEAD_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          mkdir -p aggregate-restore
-          if [ "$AGG_RESULT" = success ]; then
-            # W1a (open-gap-closure): the attested identity binds the
-            # DELIVERED bytes (pristine prepared-env-download store), not
-            # the installed copy; the installation outcome itself is
-            # attested separately through AGG_RESULT/AGG_STATE below.
-            racket scripts/ci/ci-recovery-trial.rkt emit-identity \
-              --addon-store "$RUNNER_TEMP/prepared-env-download/addon-store" \
-              --out aggregate-restore/identity.json \
-              --lock-file ci/racket-package-lock.rktd --racket-version '8.10' \
-              --os "${{ runner.os }}" --os-image "${ImageOS:-unknown}:${ImageVersion:-unknown}" \
-              --arch 'x64' --recipe-revision 'trial-addon-relative-r2' \
-              --policy-fingerprint 'addon-store-v2|pltaddon-explicit|no-workspace-bytecode'
-            racket scripts/ci/ci-recovery-trial.rkt stamp-producer-manifest \
-              --shard 0 --out aggregate-restore/producer.json \
-              --prepared-download "$RUNNER_TEMP/prepared-env-download" \
-              --compiled-root "$AGG_COMPILED_ROOT"
-          fi
-          # Serializer preserves unknown strings and embeds OBSERVED bytes only.
-          racket scripts/ci/ci-recovery-trial.rkt attest-aggregate \
-            --out aggregate-restore/prepared-aggregate-restore.json \
-            --identity aggregate-restore/identity.json --stamp aggregate-restore/producer.json
-
-      - name: Upload the aggregate restore attestation (trial evidence)
-        if: always() && inputs.trial-id != ''
-        uses: actions/upload-artifact@v7
+          path: ${{ steps.racket-store.outputs.addon_path }}
+          key: >-
+            racket-addon-v2-${{ runner.os }}-x64-cs-full-${{ github.event.inputs.racket-version || '8.10' }}-
+            ${{ hashFiles('info.rkt', 'ci/racket-package-lock.rktd') }}
+      - name: Install Racket (pinned)
+        uses: Bogdanp/setup-racket@2466913449df77df2bad149d1f2fc4e1ea4795dd
         with:
-          name: prepared-aggregate-restore-${{ github.run_id }}
-          path: aggregate-restore/
-          retention-days: 30
-          if-no-files-found: ignore
-
-      # The fast shards upload their run-summary JSON as
-      # test-results-fast-<shard> (one file per artifact, so no
-      # merge-multiple: artifacts land in per-artifact subdirectories).
+          architecture: 'x64'
+          distribution: 'full'
+          variant: 'CS'
+          version: ${{ github.event.inputs.racket-version || '8.10' }}
       - name: Download fast-suite shard results
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:

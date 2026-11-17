@@ -267,46 +267,56 @@
     (check-true (string-contains? ci-yml "Stamp shard run SHA (shard-side attestation)")
                 "the fast suite must stamp the run SHA shard-side before upload")
 
-    ;; -- milestone-#898 W2: the prepared-aggregate candidate (trusted trial only) --
-    ;; The experiment wires a trial-only prepared-environment restore into
-    ;; test-aggregate. The truth verifier is UNCHANGED: the bundle producer
-    ;; still mints the green claim, verify-result-truth still gates it with
-    ;; the same SHA/shard bindings, and the producer-before-verifier ordering
-    ;; survives. The trial gate step must sit BEFORE the producer (it only
-    ;; resolves setup inputs; it never touches result truth).
-    (test-case "wiring: the trial-only aggregate restore never weakens the truth verifier"
+    ;; -- final plan §5 (rev 3): the trial path LEFT the aggregate --
+    ;; milestone-#898 W2 wired a trial-only prepared-environment restore into
+    ;; test-aggregate behind a direct fast-env ordering edge; §5 removes both
+    ;; from the required aggregate in the same change. The truth contract is
+    ;; unchanged: the bundle producer still mints the green claim,
+    ;; verify-result-truth still gates it with the same SHA/shard bindings,
+    ;; and the producer-before-verifier ordering survives. The aggregate must
+    ;; also evaluate even when a producer failed or was skipped (fail closed
+    ;; on non-success), which the old upstream-success `if` could skip.
+    (test-case "wiring: the aggregate is a minimal terminal verifier (trial path removed)"
       (define ci-yml (file->string (build-path repo-root ".github" "workflows" "ci.yml")))
-      ;; the aggregate's needs stay exactly the pinned pair (no promotion, no
-      ;; new DAG edge on the required path)
+      ;; the aggregate's needs stay exactly the pinned pair — and the direct
+      ;; fast-env edge is gone with the trial candidate
       (check-true (string-contains? ci-yml "needs: [test, test-platform]")
                   "test-aggregate keeps its pinned needs pair")
-      ;; the trusted-trial gate resolves a setup input, gated on treatments B/C
-      ;; and the same identity bindings as the wrapper
-      (check-true (string-contains? ci-yml
-                                    "Resolve the trusted-trial prepared-aggregate restore gate")
-                  "the prepared-aggregate candidate has an explicit, named trial gate")
-      (define gate-at
-        (car (car (regexp-match-positions
-                   #rx"Resolve the trusted-trial prepared-aggregate restore gate"
-                   ci-yml))))
-      (for ([needle (in-list '("\"$TRIAL_TREATMENT\" = \"B\""
-                               "\"$TRIAL_TREATMENT\" = \"C\""
-                               "\"$SOURCE_SHA\" = \"$HEAD_SHA\""
-                               "\"$HEAD_REF\" = \"refs/heads/main\""))])
-        (check-true (string-contains? ci-yml needle) (format "the aggregate gate binds ~a" needle)))
-      ;; the restore is trial-only: ordinary runs keep the aggregate cold
-      (check-true
+      (check-false (string-contains? ci-yml "needs: [test, test-platform, fast-env]")
+                   "the fast-env ordering edge left with the trial path (§5)")
+      ;; the trial machinery no longer exists in the required aggregate
+      (check-false (string-contains? ci-yml
+                                     "Resolve the trusted-trial prepared-aggregate restore gate")
+                   "the prepared-aggregate candidate is removed (§5)")
+      (check-false
        (string-contains?
         ci-yml
         "prepared-environment: ${{ steps.trial-aggregate-env.outputs.prepared-env || 'off' }}")
-       "the aggregate's prepared restore defaults to off for every ordinary run")
-      ;; ordering: gate < bundle producer < truth verifier
+       "no prepared restore reaches the required aggregate")
+      ;; the aggregate evaluates even after an upstream failure/skip, and
+      ;; gates on success explicitly (a skipped producer is red)
+      (check-true (string-contains? ci-yml "Gate on the required producers")
+                  "the aggregate explicitly inspects its dependencies")
+      ;; §9 correctness case: a producer that was SKIPPED (not just failed)
+      ;; must also produce a red aggregate. The job runs !cancelled() and the
+      ;; gate refuses every non-success needs result, skipped included.
+      (define aggregate-lines
+        (let* ([lines (string-split ci-yml "\n")]
+               [start (index-of lines "  test-aggregate:")])
+          (take (drop lines start) 20)))
+      (check-true (and (member "    if: ${{ !cancelled() }}" aggregate-lines) #t)
+                  "the aggregate evaluates even after an upstream failure or skip")
+      (check-true (and (member "    needs: [test, test-platform]" aggregate-lines) #t)
+                  "the pinned needs pair precedes the dependency gate")
+      (define gate-at
+        (car (car (regexp-match-positions #rx"Gate on the required producers" ci-yml))))
+      ;; ordering: dependency gate < bundle producer < truth verifier
       (define producer-at
         (car (car (regexp-match-positions #rx"Produce fast-suite proof bundle" ci-yml))))
       (define verifier-at
         (car (car (regexp-match-positions #rx"scripts/ci/verify-result-truth[.]rkt" ci-yml))))
       (check-true (< gate-at producer-at)
-                  "the trial gate only resolves setup inputs before the producer")
+                  "the producer gate precedes the bundle producer")
       (check-true (< producer-at verifier-at) "the bundle producer still precedes the truth verifier")
       ;; the verifier invocation itself is unchanged
       (check-true (string-contains? ci-yml "--aggregate \"$SUMMARY\"")

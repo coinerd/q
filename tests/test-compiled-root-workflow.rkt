@@ -946,9 +946,13 @@
                benchmark-text
                "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100"))
   (check-true (string-contains? benchmark-text "--paginate --slurp")))
-(test-case "trial identity recipe is shared by producer and two installed consumers"
-  (check-equal? (length (regexp-match* #rx"trial-addon-relative-r2" ci-text)) 3)
-  (check-equal? (length (regexp-match* #rx"--addon-store" ci-text)) 2))
+(test-case "trial identity recipe is shared by producer and installed shard consumers"
+  ;; Final plan §5 (rev 3): the required test-aggregate LEFT the trial path
+  ;; (needs fast-env and the aggregate restore candidate were removed in the
+  ;; same change), so the recipe appears once for the producer recipe and
+  ;; once for the shard consumer — no third aggregate copy.
+  (check-equal? (length (regexp-match* #rx"trial-addon-relative-r2" ci-text)) 2)
+  (check-equal? (length (regexp-match* #rx"--addon-store" ci-text)) 1))
 
 ;; ---------------------------------------- compiled-root exclusivity: narrowed
 
@@ -1161,22 +1165,25 @@
 ;; caller passing arbitrary inputs cannot activate a trial from an
 ;; unprotected ref.
 (define ci-w2-text (file->string ci-yml))
-(check-true (>= (length (regexp-match* #rx"github\\.ref_protected" ci-w2-text)) 3)
-            "fast-env, PREPARED_ENV and COMPILED_ROOT trial terms all require a protected ref")
+(check-true (>= (length (regexp-match* #rx"github\\.ref_protected" ci-w2-text)) 2)
+            "fast-env and the PREPARED_ENV/COMPILED_ROOT shard trial terms require a protected ref; the aggregate's copy left with §5")
 (check-true (string-contains? ci-w2-text "--addon-store")
             "each shard captures its OWN measured identity side file")
 (check-true (string-contains? ci-w2-text "shard-${{ matrix.shard }}.identity.json")
             "the measured identity is captured per shard into the uploaded map artifact")
-(check-true (string-contains? ci-w2-text "Attest the actual aggregate restore outcome")
-            "test-aggregate attests its actual restore from observed setup outputs")
-(check-true (string-contains? ci-w2-text "prepared-aggregate-restore-${{ github.run_id }}")
-            "the aggregate attestation travels as its own artifact")
-(check-true (string-contains? ci-w2-text "ci-recovery-trial.rkt attest-aggregate")
-            "the attestation carries the run-level schema")
-(check-true
- (string-contains? ci-w2-text
-                   "AGG_RESULT: ${{ steps.agg-setup.outputs.prepared-env-result || 'unknown' }}")
- "the attestation records the OBSERVED restore result, unknown when absent")
+;; Final plan §5 (rev 3): the aggregate is a minimal terminal verifier. The
+;; trial measurement path LEFT the required job — no aggregate restore
+;; attestation exists in ci.yml any more; the shard-side trial terms above
+;; are the surviving experiment surface.
+(check-false (string-contains? ci-w2-text "Attest the actual aggregate restore outcome")
+             "the aggregate no longer attests a prepared restore (§5 removed the trial path)")
+(check-false (string-contains? ci-w2-text "prepared-aggregate-restore-${{ github.run_id }}")
+             "no aggregate attestation artifact travels from the required aggregate")
+(check-false (string-contains? ci-w2-text "ci-recovery-trial.rkt attest-aggregate")
+             "the aggregate runs only the result-truth verifiers, not the trial adapter")
+(check-false
+ (string-contains? ci-w2-text "steps.agg-setup")
+ "the aggregate does not consume prepared-environment setup outputs")
 
 (module+ test
   (test-case "the wrapper declares no trigger except workflow_dispatch"
