@@ -808,13 +808,20 @@ jobs:
       - name: Gate on the required producers (fail closed on skipped too)
         run: |
           set -euo pipefail
-          for dep in test test-platform; do
-            result="${{ needs[dep].result }}"
-            if [ "$result" != "success" ]; then
-              echo "::error::required producer ${dep} did not succeed (result: ${result}); the aggregate can never be green"
-              exit 1
-            fi
-          done
+          # Literal needs access only: GitHub validates named-values statically,
+          # so a dynamic `needs[dep]` (shell loop variable inside an expression)
+          # is an unrecognized named-value and fails the whole workflow at
+          # startup, before any job exists.
+          test_result="${{ needs.test.result }}"
+          platform_result="${{ needs.test-platform.result }}"
+          if [ "$test_result" != "success" ]; then
+            echo "::error::required producer test did not succeed (result: $test_result); the aggregate can never be green"
+            exit 1
+          fi
+          if [ "$platform_result" != "success" ]; then
+            echo "::error::required producer test-platform did not succeed (result: $platform_result); the aggregate can never be green"
+            exit 1
+          fi
           echo "required producers: test and test-platform both succeeded"
 
       - uses: actions/checkout@v7
