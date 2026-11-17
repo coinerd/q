@@ -118,15 +118,14 @@
   (hash
    "tests/test-vdom-html-render.rkt"
    (list
-    (list "dynamic-require"
-          "tui/char-width.rkt"
-          "stdlib-only grapheme-span probe with a safe fallback; the dynamically required module"
-          " (racket/string) is part of the reviewed distribution, no repo code is loaded dynamically")
+    (list
+     "dynamic-require"
+     "tui/char-width.rkt"
+     "stdlib-only grapheme-span probe with a safe fallback; racket/string is in the reviewed distribution, no repo code loads dynamically")
     (list
      "subprocess"
      "tui/clipboard.rkt"
-     "clipboard OSC52 helper present in the closure but not on the render-decision paths this test executes;"
-     " the subprocess capability is owned by the production clipboard module reviewed separately")
+     "clipboard helper not on the render-decision paths this test executes; subprocess capability is owned by the production module")
     (list
      "system"
      "tui/render/message-layout.rkt"
@@ -154,8 +153,7 @@
     (list
      "subprocess"
      "tests/test-gsd-delivery-verifier-decision.rkt"
-     "the identifier binds a define-runtime-path constant to ../sandbox/subprocess.rkt for closure authentication;"
-     " no subprocess is ever spawned by the decision functions under test"))))
+     "binds a define-runtime-path constant for closure authentication; no subprocess is spawned by the decision functions under test"))))
 
 (define (reviewed-hit? owner capability hit-file)
   (and capability
@@ -260,23 +258,35 @@
 ;; capability.
 (define (module-symbols-and-requires source)
   (define text (file->string source))
-  (define body
-    (let loop ([t text])
-      (define m (regexp-match-positions #rx"^[ \t]*(?:#lang[^\n]*\n|#reader[^\n]*\n|#![^\n]*)\n?" t))
-      (if m
-          (loop (substring t (cdar m)))
-          t)))
-  (define port (open-input-string body))
+  ;; Strip reader directives from the FILE HEAD only: blank and comment
+  ;; lines may precede them, and a file may carry a shebang AND a #lang
+  ;; line. Stop at the first line that is neither blank, comment, nor
+  ;; directive. Later #lang lines are data inside string literals
+  ;; (generated fixture sources), and stripping those corrupts the stream.
+  ;; Dropped blank/comment lines are irrelevant to the reader.
+  (define directive-line? (lambda (line) (regexp-match? #px"^[ \t]*(#lang|#reader|#!)" line)))
+  (define skippable-line?
+    (lambda (line)
+      (or (zero? (string-length (string-trim line))) (string-prefix? (string-trim line) ";"))))
+  (define (head-strip ls)
+    (cond
+      [(null? ls) ls]
+      [(directive-line? (car ls)) (head-strip (cdr ls))]
+      [(skippable-line? (car ls)) (head-strip (cdr ls))]
+      [else ls]))
+  (define port (open-input-string (string-join (head-strip (string-split text "\n")) "\n")))
   ;; Pure datum walk: collects symbols and require specs from ONE datum
-  ;; without touching the shared port (a dotted pair used to recurse with the
-  ;; reader continuation and corrupt the stream).
+  ;; without touching the shared port (a dotted pair used to recurse with
+  ;; the reader continuation and corrupt the stream).
   (define (walk d syms requires depth)
     (cond
       [(> depth 400) (values syms requires)]
-      ;; Quoted DATA is not code: a `'system` message-kind atom is not a
-      ;; capability. The (require …) check above still runs first, and the
-      ;; head symbol of `(dynamic-require …)` is flagged before any descent.
-      [(and (pair? d) (memq (car d) '(quote quasiquote syntax quasisyntax))) (values syms requires)]
+      ;; Quoted DATA is not code: a quoted 'system message-kind atom is not
+      ;; a capability. The (require ...) check above still runs first, and
+      ;; the head symbol of a dynamic-require form is flagged on descent.
+      [(and (pair? d)
+            (memq (car d) (list (quote quote) (quote quasiquote) (quote syntax) (quote quasisyntax))))
+       (values syms requires)]
       [(and (pair? d) (list? (cdr d)) (eq? (car d) 'require))
        (define specs
          (for/list ([spec (in-list (cdr d))]
@@ -289,7 +299,7 @@
        (define-values (s1 r1) (walk (car d) syms requires (add1 depth)))
        (walk (cdr d) s1 r1 (add1 depth))]
       [(pair? d)
-       ;; Proper lists iterate FLAT so a long `(provide …)` cannot exhaust
+       ;; Proper lists iterate FLAT so a long provide form cannot exhaust
        ;; any budget (same shape discipline as changed-selection.rkt).
        (for/fold ([s syms]
                   [r requires])
@@ -309,15 +319,14 @@
          (walk v s1 r1 (add1 depth)))]
       [(symbol? d) (values (cons d syms) requires)]
       [else (values syms requires)]))
-  (let read-loop ([syms '()]
-                  [requires '()])
+  (let read-loop ([syms (list)]
+                  [requires (list)])
     (define d (read port))
     (cond
       [(eof-object? d) (values (reverse syms) (reverse requires))]
       [else
        (define-values (s r) (walk d syms requires 0))
        (read-loop s r)])))
-
 ;; One scan result: (values hit? capability line) — line numbers are the
 ;; best-effort match position; the record stores the capability + the file
 ;; where the hit occurred.
