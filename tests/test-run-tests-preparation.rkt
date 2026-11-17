@@ -44,8 +44,9 @@
   ;; bad.rkt is reachable by extract-requires (the require spec sits inside
   ;; quoted DATA, which the extractor walks) but is compiled by nothing —
   ;; the mechanical mirror of the real copy-input fixtures.
-  (w "tests/test-main.rkt"
-     "#lang racket/base\n(require \"../app/helper.rkt\")\n(define quoted-specs '(require \"../app/dep/bad.rkt\"))\n(displayln 'noop)\n")
+  (w
+   "tests/test-main.rkt"
+   "#lang racket/base\n(require \"../app/helper.rkt\")\n(define quoted-specs '(require \"../app/dep/bad.rkt\"))\n(displayln 'noop)\n")
   root)
 
 ;; ── the mismatch re-check from prepare-files!, as a testable seam ───────
@@ -54,14 +55,13 @@
 ;; preparation and the first dispatch" — the abort must name the path)
 
 (define (mismatched-paths root before)
-  (filter
-   string?
-   (for/list ([entry (in-list before)])
-     (define rel (car entry))
-     (define after
-       (with-handlers ([exn:fail? (lambda (_) #f)])
-         (call-with-input-file (build-path root rel) sha1)))
-     (and (not (equal? after (cdr entry))) rel))))
+  (filter string?
+          (for/list ([entry (in-list before)])
+            (define rel (car entry))
+            (define after
+              (with-handlers ([exn:fail? (lambda (_) #f)])
+                (call-with-input-file (build-path root rel) sha1)))
+            (and (not (equal? after (cdr entry))) rel))))
 
 (module+ test
   (define (prepare-for-test! root files #:exclusions [exclusions #f])
@@ -79,7 +79,8 @@
     (check-true (string? id1))
     ;; change one file's content → different identity
     (display-to-file "#lang racket/base\n(provide helper)\n(define (helper) 42)\n"
-                     (build-path root "app/helper.rkt") #:exists 'replace)
+                     (build-path root "app/helper.rkt")
+                     #:exists 'replace)
     (define id3 (preparation-identity-hash root paths))
     (check-not-equal? id1 id3 "content change must change the identity")
     ;; path-set change also changes the identity
@@ -93,8 +94,7 @@
     ;; must fail preparation, never fall back to source mode
     (define result (prepare-for-test! root (list "app/dep/bad.rkt")))
     (check-equal? (preparation-result-outcome result) 'failed)
-    (check-true (string-contains? (or (preparation-result-reason result) "")
-                                  "raco make failed"))
+    (check-true (string-contains? (or (preparation-result-reason result) "") "raco make failed"))
     (delete-directory/files root))
 
   (test-case "listed fixture is skipped from make targets and preparation succeeds"
@@ -102,7 +102,8 @@
     ;; selecting main AND the fixture directly: the exclusion drops the
     ;; fixture from the make argv (it would otherwise be compiled and fail)
     (define result
-      (prepare-for-test! root (list "tests/test-main.rkt" "app/dep/bad.rkt")
+      (prepare-for-test! root
+                         (list "tests/test-main.rkt" "app/dep/bad.rkt")
                          #:exclusions (list "app/dep/bad.rkt")))
     (check-equal? (preparation-result-outcome result) 'prepared)
     (check-equal? (preparation-result-excluded-count result) 1)
@@ -120,11 +121,12 @@
     (define before
       (for/list ([rel (in-list paths)])
         (cons rel (call-with-input-file (build-path root rel) sha1))))
-    (check-equal? (mismatched-paths root before) '()
-                  "sanity: identical tree reports no mismatch")
+    (check-equal? (mismatched-paths root before) '() "sanity: identical tree reports no mismatch")
     (display-to-file "#lang racket/base\n(provide helper)\n(define (helper) 7)\n"
-                     (build-path root "app/helper.rkt") #:exists 'replace)
-    (check-equal? (mismatched-paths root before) (list "app/helper.rkt")
+                     (build-path root "app/helper.rkt")
+                     #:exists 'replace)
+    (check-equal? (mismatched-paths root before)
+                  (list "app/helper.rkt")
                   "the mutated path must be named")
     ;; a vanished file is a mismatch too, not a crash
     (delete-file (build-path root "tests/test-main.rkt"))
@@ -136,88 +138,109 @@
   (test-case "Q_SKIP_PREPARATION skips everything (source-only legacy behavior)"
     (define root (make-fixture-tree!))
     (define saved (getenv "Q_SKIP_PREPARATION"))
-    (dynamic-wind
-        (lambda () (putenv "Q_SKIP_PREPARATION" "1"))
-        (lambda ()
-          (define result (prepare-for-test! root (list "tests/test-main.rkt")))
-          (check-equal? (preparation-result-outcome result) 'skipped)
-          (check-equal? (preparation-result-target-count result) 0)
-          (check-false (preparation-result-identity-prefix result))
-          ;; an UNLISTED failing target does NOT fail a skipped run
-          (define result2 (prepare-for-test! root (list "app/dep/bad.rkt")))
-          (check-equal? (preparation-result-outcome result2) 'skipped))
-        (lambda ()
-          (if saved
-              (putenv "Q_SKIP_PREPARATION" saved)
-              (putenv "Q_SKIP_PREPARATION" ""))
-          (delete-directory/files root))))
+    (dynamic-wind (lambda () (putenv "Q_SKIP_PREPARATION" "1"))
+                  (lambda ()
+                    (define result (prepare-for-test! root (list "tests/test-main.rkt")))
+                    (check-equal? (preparation-result-outcome result) 'skipped)
+                    (check-equal? (preparation-result-target-count result) 0)
+                    (check-false (preparation-result-identity-prefix result))
+                    ;; an UNLISTED failing target does NOT fail a skipped run
+                    (define result2 (prepare-for-test! root (list "app/dep/bad.rkt")))
+                    (check-equal? (preparation-result-outcome result2) 'skipped))
+                  (lambda ()
+                    (if saved
+                        (putenv "Q_SKIP_PREPARATION" saved)
+                        (putenv "Q_SKIP_PREPARATION" ""))
+                    (delete-directory/files root))))
 
   (test-case "closures below the substantial-work threshold stay source-only"
     (define root (make-fixture-tree!))
     (define result (prepare-files! root (list "tests/test-main.rkt")))
     (check-equal? (preparation-result-outcome result) 'skipped)
-    (check-true (string-contains? (or (preparation-result-reason result) "")
-                                  "threshold"))
+    (check-true (string-contains? (or (preparation-result-reason result) "") "threshold"))
     (delete-directory/files root)))
 
-  (test-case "telemetry: prepared_environment merges preparation fields"
-    (define prep
-      (preparation-result 'prepared 1234 7 9 2 "abc123def456" #f '()))
-    (define state (prepared-environment-state #:preparation prep))
-    (check-equal? (hash-ref state 'preparation_outcome) "prepared")
-    (check-equal? (hash-ref state 'preparation_elapsed_ms) 1234)
-    (check-equal? (hash-ref state 'preparation_target_count) 7)
-    (check-equal? (hash-ref state 'preparation_closure_count) 9)
-    (check-equal? (hash-ref state 'preparation_excluded_count) 2)
-    (check-equal? (hash-ref state 'preparation_identity_prefix) "abc123def456")
-    ;; the W1 CI vocabulary is untouched by preparation telemetry
-    (check-equal? (hash-ref state 'result) "unavailable")
-    ;; the no-prep call keeps its W1 shape (keyword-compatible for old callers)
-    (check-false (hash-has-key? (prepared-environment-state) 'preparation_outcome))
-    ;; the merged block validates against the run-summary schema
-    (define (summary-js pe)
-      (hasheq 'run_summary
-              (hasheq 'runner_version "test"
-                      'suite "testing"
-                      'profile "local"
-                      'execution_mode "subprocess"
-                      'file_count 0
-                      'pass 0
-                      'fail 0
-                      'timeout 0
-                      'skip 0
-                      'wall_clock_seconds 0.0
-                      'shard 'null
-                      'metadata_completeness
-                      (hasheq 'explicit 0 'heuristic 0 'missing 0))
-              'files
-              '()
-              'extra
-              (hasheq 'prepared_environment pe)))
-    (check-equal? (validate-run-summary-json (summary-js state)) '())
-    (check-true
-     (ormap (lambda (p) (regexp-match? "preparation_outcome: expected" p))
-            (validate-run-summary-json
-             (summary-js (hash-set state 'preparation_outcome "invented"))))))
+(test-case "telemetry: prepared_environment merges preparation fields"
+  ;; CI exports the W1 prepared-env vocabulary (Q_PREPARED_ENV_STATE=restored);
+  ;; this case pins the no-ambient-env shape, so blank the ambient variables.
+  ;; prepared-environment-state treats any non-restored/rebuilt value as
+  ;; "unavailable", so an empty string is the exact unset-equivalent here.
+  (define saved-w1-vars
+    (for/list ([v (in-list '("Q_PREPARED_ENV_STATE" "Q_PREPARED_ENV_RESULT"
+                                                    "Q_PREPARED_ENV_RESTORE_MS"
+                                                    "Q_PREPARED_ENV_FALLBACK_MS"))])
+      (cons v (getenv v))))
+  (for ([entry (in-list saved-w1-vars)])
+    (putenv (car entry) ""))
+  (define prep (preparation-result 'prepared 1234 7 9 2 "abc123def456" #f '()))
+  (define state (prepared-environment-state #:preparation prep))
+  (check-equal? (hash-ref state 'preparation_outcome) "prepared")
+  (check-equal? (hash-ref state 'preparation_elapsed_ms) 1234)
+  (check-equal? (hash-ref state 'preparation_target_count) 7)
+  (check-equal? (hash-ref state 'preparation_closure_count) 9)
+  (check-equal? (hash-ref state 'preparation_excluded_count) 2)
+  (check-equal? (hash-ref state 'preparation_identity_prefix) "abc123def456")
+  ;; the W1 CI vocabulary is untouched by preparation telemetry
+  (check-equal? (hash-ref state 'result) "unavailable")
+  ;; the no-prep call keeps its W1 shape (keyword-compatible for old callers)
+  (check-false (hash-has-key? (prepared-environment-state) 'preparation_outcome))
+  ;; the merged block validates against the run-summary schema
+  (define (summary-js pe)
+    (hasheq 'run_summary
+            (hasheq 'runner_version
+                    "test"
+                    'suite
+                    "testing"
+                    'profile
+                    "local"
+                    'execution_mode
+                    "subprocess"
+                    'file_count
+                    0
+                    'pass
+                    0
+                    'fail
+                    0
+                    'timeout
+                    0
+                    'skip
+                    0
+                    'wall_clock_seconds
+                    0.0
+                    'shard
+                    'null
+                    'metadata_completeness
+                    (hasheq 'explicit 0 'heuristic 0 'missing 0))
+            'files
+            '()
+            'extra
+            (hasheq 'prepared_environment pe)))
+  (check-equal? (validate-run-summary-json (summary-js state)) '())
+  (check-true (ormap (lambda (p) (regexp-match? "preparation_outcome: expected" p))
+                     (validate-run-summary-json
+                      (summary-js (hash-set state 'preparation_outcome "invented")))))
+  ;; restore the ambient W1 vocabulary for anything that reads it later
+  (for ([entry (in-list saved-w1-vars)])
+    (putenv (car entry) (or (cdr entry) ""))))
 
-  (test-case "prepare-exclusions.rktd: non-empty; every path exists and is a negative-compilation fixture"
-    (define exclusions (load-prepare-exclusions))
-    (check-true (pair? exclusions) "the exclusions list must never be empty")
-    (for ([entry (in-list exclusions)])
-      (define rel (car entry))
-      (define reason (cdr entry))
-      (check-true (non-empty-string? reason)
-                  (format "exclusion ~a must carry a reason" rel))
-      (define path (build-path repo-root rel))
-      (check-true (file-exists? path) (format "listed path must exist: ~a" rel))
-      ;; negative-compilation check: `raco make` must FAIL on it in place.
-      ;; The fixtures fail fast (<1s each) — the designed failure is the
-      ;; missing sibling helper, and failing compiles write no .zo files.
-      (define out (open-output-string))
-      (define err (open-output-string))
-      (define-values (sp stdin pid stderr ctrl)
-        (apply values (process*/ports out #f err (find-executable-path "raco") "make" path)))
-      (close-output-port stdin)
-      (ctrl 'wait)
-      (check-not-equal? (ctrl 'exit-code) 0
-                        (format "listed fixture must fail compilation in place: ~a" rel))))
+(test-case "prepare-exclusions.rktd: non-empty; every path exists and is a negative-compilation fixture"
+  (define exclusions (load-prepare-exclusions))
+  (check-true (pair? exclusions) "the exclusions list must never be empty")
+  (for ([entry (in-list exclusions)])
+    (define rel (car entry))
+    (define reason (cdr entry))
+    (check-true (non-empty-string? reason) (format "exclusion ~a must carry a reason" rel))
+    (define path (build-path repo-root rel))
+    (check-true (file-exists? path) (format "listed path must exist: ~a" rel))
+    ;; negative-compilation check: `raco make` must FAIL on it in place.
+    ;; The fixtures fail fast (<1s each) — the designed failure is the
+    ;; missing sibling helper, and failing compiles write no .zo files.
+    (define out (open-output-string))
+    (define err (open-output-string))
+    (define-values (sp stdin pid stderr ctrl)
+      (apply values (process*/ports out #f err (find-executable-path "raco") "make" path)))
+    (close-output-port stdin)
+    (ctrl 'wait)
+    (check-not-equal? (ctrl 'exit-code)
+                      0
+                      (format "listed fixture must fail compilation in place: ~a" rel))))

@@ -48,8 +48,12 @@
           (when (and (eq? (car s) 'define-runtime-path)
                      (= (length s) 3)
                      (string? (caddr s))
-                     (string-suffix? (caddr s) ".rkt"))
-            (dependency (caddr s)))
+                     (or (string-suffix? (caddr s) ".rkt") (string-suffix? (caddr s) ".rktd")))
+            ;; Runtime data files (.rktd) authenticate with the closure:
+            ;; preparation's exclusions input travels with the runner.
+            (if (string-suffix? (caddr s) ".rktd")
+                (visit (build-path (path-only full) (caddr s)))
+                (dependency (caddr s))))
           (for-each walk s)))
       (walk (syntax->datum stx))))
   (visit (build-path installed "scripts/run-tests.rkt"))

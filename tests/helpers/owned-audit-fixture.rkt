@@ -52,8 +52,8 @@
          "../../scripts/gsd-binding-data.rkt"
          "../../sandbox/subprocess.rkt")
 
-(provide ;; fixture-local owned home / trusted proof root
-         initialize-owned-home!
+;; fixture-local owned home / trusted proof root
+(provide initialize-owned-home!
          owned-home
          owned-proof-root
          with-owned-proof-root
@@ -260,13 +260,15 @@
 (define raco-executable (find-executable-path "raco"))
 
 (define (subprocess-failed? result)
-  (or (subprocess-result-timed-out? result)
-      (not (zero? (subprocess-result-exit-code result)))))
+  (or (subprocess-result-timed-out? result) (not (zero? (subprocess-result-exit-code result)))))
 
 (define (git* dir . args)
-  (define argv (append (if dir (list "-C" (path->string dir)) '()) args))
-  (define result
-    (run-subprocess (path->string git-executable) #:args argv #:timeout 120))
+  (define argv
+    (append (if dir
+                (list "-C" (path->string dir))
+                '())
+            args))
+  (define result (run-subprocess (path->string git-executable) #:args argv #:timeout 120))
   (when (subprocess-failed? result)
     (error 'fixture-git "git ~s failed: ~a" argv (subprocess-result-stderr result)))
   result)
@@ -280,8 +282,7 @@
   (subprocess-result-stdout (apply git* dir args)))
 
 (define (run-command! executable dir args what)
-  (define result
-    (run-subprocess (path->string executable) #:args args #:directory dir #:timeout 180))
+  (define result (run-subprocess (path->string executable) #:args args #:directory dir #:timeout 180))
   (when (subprocess-failed? result)
     (error 'fixture
            "~a failed (~a): ~a"
@@ -315,27 +316,26 @@
 ;; One `.rktd` datum through the trusted writer (never string-built syntax).
 (define (write-datum! datum path)
   (define payload (make-temporary-file "q-owned-datum-~a.json"))
-  (dynamic-wind
-   void
-   (lambda ()
-     (put-json! payload datum)
-     (define result
-       (run-subprocess (path->string racket-executable)
-                       #:args (list (path->string binding-data-script)
-                                    "write-datum"
-                                    (path->string payload)
-                                    (path->string path))
-                       #:timeout 120))
-     (when (subprocess-failed? result)
-       (error 'fixture "write-datum failed: ~a" (subprocess-result-stderr result)))
-     path)
-   (lambda () (when (file-exists? payload) (delete-file payload)))))
+  (dynamic-wind void
+                (lambda ()
+                  (put-json! payload datum)
+                  (define result
+                    (run-subprocess (path->string racket-executable)
+                                    #:args (list (path->string binding-data-script)
+                                                 "write-datum"
+                                                 (path->string payload)
+                                                 (path->string path))
+                                    #:timeout 120))
+                  (when (subprocess-failed? result)
+                    (error 'fixture "write-datum failed: ~a" (subprocess-result-stderr result)))
+                  path)
+                (lambda ()
+                  (when (file-exists? payload)
+                    (delete-file payload)))))
 
 (define (run-gate! evidence args)
   (run-subprocess (path->string racket-executable)
-                  #:args (append (list (path->string wave-gate-script)
-                                       (path->string evidence))
-                                 args)
+                  #:args (append (list (path->string wave-gate-script) (path->string evidence)) args)
                   #:timeout 300))
 
 ;; ============================================================
@@ -343,18 +343,16 @@
 ;; ============================================================
 
 (define (build-campaign! base
-                        plan
-                        wave-index
-                        #:branch [branch wave-branch]
-                        #:heading [heading "# Fixture plan"]
-                        #:wave-override [wave-override #f]
-                        #:snapshot? [snapshot? #t])
+                         plan
+                         wave-index
+                         #:branch [branch wave-branch]
+                         #:heading [heading "# Fixture plan"]
+                         #:wave-override [wave-override #f]
+                         #:snapshot? [snapshot? #t])
   (define root (build-path base "campaign"))
   (define planning (build-path root ".planning"))
   (define plan-text
-    (format "~a\n\nSingle wave: waves/W~a-fixture.md owns the delivery.\n"
-            heading
-            wave-index))
+    (format "~a\n\nSingle wave: waves/W~a-fixture.md owns the delivery.\n" heading wave-index))
   (define wave-text
     (or wave-override
         (format (string-append "# W~a: Fixture wave\n\nBranch: `~a`; GitHub issue "
@@ -363,7 +361,12 @@
                                "- File: `docs/reports/gsd-wave-evidence/v9.9.9-w~a.rktd`\n"
                                "- File: `docs/reports/gsd-wave-reviews/v9.9.9-w~a.rktd`\n"
                                "- File: `docs/reports/gsd-wave-validation/v9.9.9-w~a.rktd`\n")
-                wave-index branch slug wave-index wave-index wave-index)))
+                wave-index
+                branch
+                slug
+                wave-index
+                wave-index
+                wave-index)))
   (put-text! (build-path planning "PLAN.md") plan-text)
   (put-text! (build-path planning (format "waves/W~a-fixture.md" wave-index)) wave-text)
   (when snapshot?
@@ -403,7 +406,9 @@
   (define subject (hash-ref world 'subject))
   (git! #f "clone" "-q" "--branch" "main" (path->string origin) (path->string subject))
   (git! subject "remote" "set-url" "origin" (format "https://github.com/~a.git" slug))
-  (git! subject "config" (format "url.~a.insteadOf" (path->string origin))
+  (git! subject
+        "config"
+        (format "url.~a.insteadOf" (path->string origin))
         (format "https://github.com/~a.git" slug))
   (git! subject "config" "user.email" "fixture@example.com")
   (git! subject "config" "user.name" "fixture")
@@ -421,8 +426,7 @@
 ;; The installed runner's dependency closure is read from the repository that
 ;; owns this helper (the same tree the runner under test lives in).
 (define (install-installed-runner! repo)
-  (define installed-root
-    (simplify-path (build-path (path-only this-helper) 'up 'up)))
+  (define installed-root (simplify-path (build-path (path-only this-helper) 'up 'up)))
   (define seen (make-hash))
   (define (install relative)
     (define source (simplify-path (path->complete-path (build-path installed-root relative))))
@@ -433,11 +437,14 @@
         (error 'fixture "installed runner dependency escapes the install tree: ~a" relative))
       (define text (file->string source))
       (put-text! (build-path repo in-tree) text)
-      (for ([dependency (in-list (regexp-match* #rx"\"([^\"\n]+[.]rkt)\"" text #:match-select cadr))])
-        ;; A quoted string can spell an ABSOLUTE `.rkt` path (e.g. an
+      (for ([dependency
+             (in-list (regexp-match* #rx"\"([^\"\n]+[.]rkt[d]?)\"" text #:match-select cadr))])
+        ;; A quoted string can spell an ABSOLUTE `.rkt`/`.rktd` path (e.g. an
         ;; unrelated literal in a format string). Python joined it and only
         ;; installed it when the join was a real file — an absolute literal is
         ;; never one of this tree's dependencies, so it is skipped here too.
+        ;; `.rktd` runtime data files (preparation's exclusions input) travel
+        ;; with the installed runner closure exactly like `.rkt` modules.
         (define candidate
           (and (not (absolute-path? (string->path dependency)))
                (simplify-path (build-path (path-only source) dependency))))
@@ -453,19 +460,15 @@
 ;; own plan identity; two worlds never share an owned-proof store subdirectory.
 (define (fresh-plan-id seed)
   (bytes->hex-string
-   (sha256-bytes (string->bytes/utf-8 (format "~a-~a-~a" seed
-                                              (current-inexact-milliseconds)
-                                              (random))))))
+   (sha256-bytes (string->bytes/utf-8
+                  (format "~a-~a-~a" seed (current-inexact-milliseconds) (random))))))
 
 (define (ownership-record plan wave-index)
   (make-campaign-record
    plan
    (make-campaign-manifest 1 "fixture" '() '() "constraints")
-   (list (make-campaign-wave wave-index
-                             "fixture"
-                             'awaiting-delivery
-                             1
-                             (campaign-attempt "attempt-5" 2 0)))
+   (list
+    (make-campaign-wave wave-index "fixture" 'awaiting-delivery 1 (campaign-attempt "attempt-5" 2 0)))
    #f
    2
    'test
@@ -497,7 +500,10 @@
 ;; focused stage at the committed pre-fix head, retained with its exact source
 ;; identity, job facts and raw log. Returns the retained red reference (#f when
 ;; the job was not a genuine assertion failure).
-(define (register-owned-red! campaign-root plan wave-index cwd
+(define (register-owned-red! campaign-root
+                             plan
+                             wave-index
+                             cwd
                              [focused-command "racket scripts/run-tests.rkt tests/w1-fixture.rkt"])
   (define record (ownership-record plan wave-index))
   (define context (committed-context cwd))
@@ -550,11 +556,7 @@
   (owned-review-authority campaign-root plan wave-index staging))
 
 (define (journal-path campaign-root plan wave-index)
-  (build-path campaign-root
-              ".planning"
-              "campaigns"
-              plan
-              (format "coordinator-w~a.json" wave-index)))
+  (build-path campaign-root ".planning" "campaigns" plan (format "coordinator-w~a.json" wave-index)))
 
 ;; One complete owned world: buggy committed implementation + failing focused
 ;; test at head1 (RED), the frozen Verify chain executed at head1 (green proof
@@ -562,11 +564,11 @@
 ;; (green). The wave worktree lives at `<campaign>/q`, exactly like a real
 ;; campaign checkout.
 (define (build-owned-world base
-                          #:plan [plan #f]
-                          #:wave [wave-index 1]
-                          #:branch [branch wave-branch]
-                          #:chain [chain owned-chain]
-                          #:with-red? [with-red? #t])
+                           #:plan [plan #f]
+                           #:wave [wave-index 1]
+                           #:branch [branch wave-branch]
+                           #:chain [chain owned-chain]
+                           #:with-red? [with-red? #t])
   (define plan-id (or plan (fresh-plan-id (format "~a" base))))
   (define world (build-git-world! base))
   (define work (hash-ref world 'work))
@@ -592,20 +594,21 @@
   (git! work "push" "-q" (path->string origin) (format "impl:refs/heads/~a" branch))
   (define subject (clone-subject! world))
   (define campaign
-    (build-campaign! base
-                     plan-id
-                     wave-index
-                     #:branch branch
-                     #:heading (format "# Fixture plan\n\n## Waves\n\n- [Inbox] W~a: fixture → waves/W~a-fixture.md"
-                                       wave-index
-                                       wave-index)
-                     #:wave-override (format (string-append "# W~a: fixture\n\nBranch: `~a`; GitHub issue "
-                                                            "[#9686](https://github.com/~a/issues/9686), "
-                                                            "milestone #895.\n\n## Verify\n~a\n")
-                                             wave-index
-                                             branch
-                                             slug
-                                             chain)))
+    (build-campaign!
+     base
+     plan-id
+     wave-index
+     #:branch branch
+     #:heading (format "# Fixture plan\n\n## Waves\n\n- [Inbox] W~a: fixture → waves/W~a-fixture.md"
+                       wave-index
+                       wave-index)
+     #:wave-override (format (string-append "# W~a: fixture\n\nBranch: `~a`; GitHub issue "
+                                            "[#9686](https://github.com/~a/issues/9686), "
+                                            "milestone #895.\n\n## Verify\n~a\n")
+                             wave-index
+                             branch
+                             slug
+                             chain)))
   (git! subject "fetch" "-q" "origin" (format "refs/heads/~a" branch))
   (git! subject "worktree" "add" "-b" branch (path->string (build-path campaign "q")) head1)
   (define q (build-path campaign "q"))
@@ -618,29 +621,44 @@
   (define head2 (git! q "rev-parse" "HEAD"))
   (git! q "push" "-q" (path->string origin) (format "~a:refs/heads/~a" branch branch))
   (produce-owned-green! campaign plan-id wave-index q)
-  (hash 'label (path->string base)
-        'base base
-        'world world
-        'origin origin
-        'work work
-        'subject subject
-        'campaign campaign
-        'q q
-        'plan plan-id
-        'wave wave-index
-        'branch branch
-        'chain chain
-        'c0 (hash-ref world 'c0)
-        'head1 head1
-        'head2 head2
-        'with-red? with-red?
-        'store (build-path (current-owned-proof-root) plan-id)
-        'staging (build-path campaign
-                             ".planning"
-                             "campaigns"
-                             plan-id
-                             (format "review-w~a-g0" wave-index))
-        'journal (journal-path campaign plan-id wave-index)))
+  (hash 'label
+        (path->string base)
+        'base
+        base
+        'world
+        world
+        'origin
+        origin
+        'work
+        work
+        'subject
+        subject
+        'campaign
+        campaign
+        'q
+        q
+        'plan
+        plan-id
+        'wave
+        wave-index
+        'branch
+        branch
+        'chain
+        chain
+        'c0
+        (hash-ref world 'c0)
+        'head1
+        head1
+        'head2
+        head2
+        'with-red?
+        with-red?
+        'store
+        (build-path (current-owned-proof-root) plan-id)
+        'staging
+        (build-path campaign ".planning" "campaigns" plan-id (format "review-w~a-g0" wave-index))
+        'journal
+        (journal-path campaign plan-id wave-index)))
 
 ;; ============================================================
 ;; Production coordinator fixture
@@ -668,31 +686,29 @@
   (put-text! (build-path subject "tests/w1-fixture.rkt") regression-suite)
   (put-text! (build-path subject "scripts/lint-all.rkt") fixture-lint)
   (put-text! (build-path subject ".gitignore") "compiled/\n")
-  (raco-fmt-in! subject
-                "src/gsd-fixture-widget.rkt"
-                "tests/w1-fixture.rkt"
-                "scripts/lint-all.rkt")
+  (raco-fmt-in! subject "src/gsd-fixture-widget.rkt" "tests/w1-fixture.rkt" "scripts/lint-all.rkt")
   (git! subject "add" ".")
   (git! subject "commit" "-q" "-m" "fixture: real acceptance gates")
   (git! subject "push" "-q" "origin" branch)
   (define root
-    (build-campaign! base
-                     plan
-                     wave-index
-                     #:branch branch
-                     #:heading (format "# Fixture plan\n\n## Waves\n\n- [Inbox] W~a: fixture → waves/W~a-fixture.md"
-                                       wave-index
-                                       wave-index)
-                     #:wave-override (format (string-append "# W~a: fixture\n\nBranch: `~a`; GitHub issue "
-                                                            "[#9686](https://github.com/~a/issues/9686), "
-                                                            "milestone #895.\n\n## Verify\n~a\n")
-                                             wave-index
-                                             branch
-                                             slug
-                                             production-chain)
-                     ;; The wave checkout IS the subject clone; the frozen
-                     ;; snapshot is recreated by the real producer below.
-                     #:snapshot? #f))
+    (build-campaign!
+     base
+     plan
+     wave-index
+     #:branch branch
+     #:heading (format "# Fixture plan\n\n## Waves\n\n- [Inbox] W~a: fixture → waves/W~a-fixture.md"
+                       wave-index
+                       wave-index)
+     #:wave-override (format (string-append "# W~a: fixture\n\nBranch: `~a`; GitHub issue "
+                                            "[#9686](https://github.com/~a/issues/9686), "
+                                            "milestone #895.\n\n## Verify\n~a\n")
+                             wave-index
+                             branch
+                             slug
+                             production-chain)
+     ;; The wave checkout IS the subject clone; the frozen
+     ;; snapshot is recreated by the real producer below.
+     #:snapshot? #f))
   (make-file-or-directory-link subject (build-path root "q"))
   (define verify
     (run-subprocess (path->string racket-executable)
@@ -714,15 +730,16 @@
     (with-handlers ([exn:fail?
                      (lambda (error)
                        (define status (git* subject "status" "--short" "--branch"))
-                       (error 'fixture
-                              (string-append "owned Verify did not persist a valid receipt at ~a: ~a~n"
-                                             "producer exit=~a~nstdout:~n~a~nstderr:~n~a~ngit status:~n~a")
-                              journal-file
-                              (exn-message error)
-                              (subprocess-result-exit-code verify)
-                              (subprocess-result-stdout verify)
-                              (subprocess-result-stderr verify)
-                              (subprocess-result-stdout status)))])
+                       (error
+                        'fixture
+                        (string-append "owned Verify did not persist a valid receipt at ~a: ~a~n"
+                                       "producer exit=~a~nstdout:~n~a~nstderr:~n~a~ngit status:~n~a")
+                        journal-file
+                        (exn-message error)
+                        (subprocess-result-exit-code verify)
+                        (subprocess-result-stdout verify)
+                        (subprocess-result-stderr verify)
+                        (subprocess-result-stdout status)))])
       (read-json-file journal-file)))
   (define receipt (hash-ref journal 'receipt #f))
   (unless (hash? receipt)
@@ -732,11 +749,16 @@
   (define prior (journal-fixture plan wave-index (hash-ref receipt 'head) generation branch))
   (when (hash-has-key? prior 'receipt-history)
     (put-json! journal-file (hash-set journal 'receipt-history (hash-ref prior 'receipt-history))))
-  (hash 'root root
-        'repo subject
-        'receipt receipt
-        'readiness (evidence-readiness root plan wave-index)
-        'branch branch))
+  (hash 'root
+        root
+        'repo
+        subject
+        'receipt
+        receipt
+        'readiness
+        (evidence-readiness root plan wave-index)
+        'branch
+        branch))
 
 ;; The same journal shape the coordinator writes, with `history` simulated
 ;; prior generations (the durable receipt history the review dispatch replays).
@@ -799,8 +821,9 @@
   (define args (vector->list (current-command-line-arguments)))
   (unless (and (= 5 (length args)) (equal? (car args) "production-world"))
     (error 'fixture "usage: production-world <base> <plan> <wave> <generation>"))
-  (write-json (production-world->json (build-production-owned-review-world (second args)
-                                                                        (third args)
-                                                                        (string->number (fourth args))
-                                                                        (string->number (fifth args)))))
+  (write-json (production-world->json (build-production-owned-review-world
+                                       (second args)
+                                       (third args)
+                                       (string->number (fourth args))
+                                       (string->number (fifth args)))))
   (newline))
