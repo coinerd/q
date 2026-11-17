@@ -53,6 +53,7 @@
 (struct cli-options
         (jobs explain?
               changed?
+              audit?
               positional
               json-out
               suite
@@ -80,6 +81,8 @@
                      'explain?
                      #f
                      'changed?
+                     #f
+                     'audit?
                      #f
                      'positional
                      '()
@@ -158,6 +161,11 @@
        (when (hash-ref opts 'changed?)
          (fail "duplicate --changed"))
        (hash-set! opts 'changed? #t)
+       (loop (cdr rest))]
+      [(equal? (car rest) "--audit")
+       (when (hash-ref opts 'audit? #f)
+         (fail "duplicate --audit"))
+       (hash-set! opts 'audit? #t)
        (loop (cdr rest))]
       [(equal? (car rest) "--jobs")
        (hash-set! opts 'jobs (parse-positive-int (cdr rest) "--jobs"))
@@ -248,6 +256,7 @@
   (cli-options (hash-ref opts 'jobs)
                (hash-ref opts 'explain?)
                (hash-ref opts 'changed?)
+               (hash-ref opts 'audit?)
                (reverse (hash-ref opts 'positional))
                (hash-ref opts 'json-out)
                (hash-ref opts 'suite)
@@ -291,7 +300,7 @@
 ;; is a failure (zero files is never a pass).
 (define (quick-changed-report text)
   (define-values (base head) (parse-changed-range text))
-  (define owners (map car audited))
+  (define owners (admitted-owners))
   (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
     (define-values (changed label outside)
       (if head
@@ -305,15 +314,15 @@
 (define (quick-changed-entries report)
   (define included (change-report-included report))
   (define entries
-    (for/list ([entry (in-list audited)]
-               #:when (member (car entry) included))
+    (for/list ([entry (in-list (admitted-owners))]
+               #:when (member entry included))
       entry))
   (when (null? entries)
     (fail (string-append
            "changed selection is empty: the diff against ~a affects none of the ~a audited quick "
            "owners (an unattributed owner would have been INCLUDED, fail open)")
           (change-report-base report)
-          (length audited)))
+          (length (admitted-owners))))
   entries)
 
 ;; `quick` reads only its own plain options: a CI-surface flag must never look
@@ -323,6 +332,7 @@
   (define jobs (cli-options-jobs opts))
   (define explain? (cli-options-explain? opts))
   (define changed? (cli-options-changed? opts))
+  (define audit? (cli-options-audit? opts))
   (define positional (cli-options-positional opts))
   (when (pair? (cli-options-ci-flags opts))
     (fail "quick does not accept CI-surface option ~a (only ./qt full / ./qt --lane NAME do)"
@@ -331,13 +341,19 @@
     (fail "quick accepts at most one file or one --changed BASE..HEAD"))
   (when (and changed? (not (= (length positional) 1)))
     (fail "quick --changed requires BASE..HEAD (an explicit range; nothing is selected silently)"))
+  (when (and audit? (or changed? (pair? positional) explain?))
+    (fail "--audit takes no other options: it prints the admission report"))
+  (when audit?
+    (for ([line (in-list (audit-report-lines root))])
+      (emit-line line))
+    (exit 0))
   (define report (and changed? (quick-changed-report (car positional))))
   (define selected
     (and (not changed?)
          (pair? positional)
          (let* ([p (simplify-path (path->complete-path (car positional) root))]
-                [entry (for/first ([entry audited]
-                                   #:when (equal? p (simplify-path (build-path root (car entry)))))
+                [entry (for/first ([entry (in-list (admitted-owners))]
+                                   #:when (equal? p (simplify-path (build-path root entry))))
                          entry)])
            (unless entry
              (fail "file is not admitted to quick: ~a" (car positional)))
@@ -346,10 +362,18 @@
     (cond
       [report (quick-changed-entries report)]
       [selected (list selected)]
-      [else audited]))
-  (for ([entry entries])
-    (unless (audit-ok? root entry)
-      (fail "audit drift or symlink: ~a" (car entry))))
+      [else (admitted-owners)]))
+  ;; Fail closed on ANY non-admitted state (stale record, structure drift,
+  ;; denylist hit, unknown owner) with the reason — never a silent pass.
+  (define audit-states
+    (for/list ([entry (in-list entries)])
+      (owner-admission-state root entry)))
+  (for ([s (in-list audit-states)]
+        #:unless (eq? (admission-state-status s) 'admitted))
+    (fail "quick refuses ~a: ~a (~a)"
+          (admission-state-owner s)
+          (admission-state-status s)
+          (admission-state-reason s)))
   (cond
     [explain?
      (cond
@@ -360,17 +384,23 @@
           (printf "~a\n" line))]
        [else (printf "quick: audited selection only\n")])
      (for ([entry entries])
-       (printf "  ~a\n" (car entry)))]
+       (printf "  ~a\n" entry))]
     [else
      (define files
        (for/list ([entry entries])
-         (path->string (simplify-path (build-path root (car entry))))))
+         (path->string (simplify-path (build-path root entry)))))
      (define results
        (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
          (run-quick files jobs)))
-     (for ([entry entries])
-       (unless (audit-ok? root entry)
-         (fail "audit drift or symlink: ~a" (car entry))))
+     ;; Re-check admission AFTER the run: a source change during the run must
+     ;; not be silently accepted (the record is the executed identity).
+     (for ([s (in-list audit-states)]
+           #:unless (and (eq? (admission-state-status s) 'admitted)
+                         (audit-ok? root (admission-state-owner s))))
+       (fail "quick refuses ~a post-run: ~a (~a)"
+             (admission-state-owner s)
+             (admission-state-status s)
+             (admission-state-reason s)))
      (for ([r results]
            #:unless (quick-result-valid? r))
        (eprintf "FAILED: ~a (exit ~a, ~a failures, ~a tests)\n~a\n~a\nReproduce: ./qt quick ~a\n"
@@ -622,6 +652,7 @@
   (displayln "  quick [FILE]                    Audited pure unit suite (one admitted file)")
   (displayln
    "  quick --changed BASE..HEAD      Changed-code impact reproduction over the audited owners")
+  (displayln "  quick --audit                   Print the admission audit (admitted/review-required/rejected)")
   (displayln "  default                         Required PR lane (fast/PR selection)")
   (displayln "  default --file FILE             Explicit reproduction, not a complete PR pass")
   (displayln "  full                            Complete available regression suite")

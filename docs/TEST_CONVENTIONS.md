@@ -28,7 +28,7 @@ the plan without executing or cleaning anything.
 | Command | Selection | Pass line |
 |---|---|---|
 | `./qt` | same as `./qt default` (plan §3 interface table) | `default passed: ...` |
-| `./qt quick` | small audited, fingerprinted set | `quick passed: ...` |
+| `./qt quick` | reviewed pure-unit owner table with a generated admission record (capability-denylist scan over each owner and its reviewed closure; `./qt quick --audit` reports admitted/review-required/rejected) | `quick passed: ...` |
 | `./qt full` | every discovered test file (complete available suite) | `full passed: ...` |
 | `./qt default` | fast/PR lane: `full` minus the excluded files below | `default passed: ...` |
 | `./qt release` | `full` plus the release obligation list | never a release pass line it cannot support |
@@ -456,8 +456,12 @@ sandbox:
 - **Source-only loading** for repository and fixture paths: `.zo` artifacts
   never replace reviewed sources (installed collections may use compiled
   files).
-- **Manual dependency closure per admitted file.** Admission is a reviewed
-  list, and changing an import requires re-review and re-fingerprinting.
+- **Reviewed owner table plus a generated admission record** (final plan §3,
+  rev 3): the owner table is the human review surface; the record carries each
+  owner's transitive closure, its per-file hashes and the capability-denylist
+  scan verdict. Ordinary content changes re-admit via `refresh` (a committed
+  diff); a stale record, a closure-structure change, or a denylist hit is
+  review-required and `quick` refuses to run the owner.
 
 ### Runner execution: one strategy
 
