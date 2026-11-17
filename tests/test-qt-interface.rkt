@@ -408,6 +408,26 @@
     (check-not-equal? status 0)
     (check-regexp-match #rx"default does not accept --candidate" err))
 
+  (test-case "--evidence is release-only and bound to --candidate"
+    ;; Another lane refuses the flag outright.
+    (define-values (status-1 out-1 err-1) (invoke "default" "--evidence" "/tmp/evidence"))
+    (check-not-equal? status-1 0)
+    (check-regexp-match #rx"default does not accept --evidence" err-1)
+    ;; Without a candidate there is nothing to bind the evidence to.
+    (define-values (status-2 out-2 err-2) (invoke "release" "--evidence" "/tmp/evidence"))
+    (check-not-equal? status-2 0)
+    (check-regexp-match #rx"--evidence requires --candidate SHA" err-2)
+    ;; quick refuses it too (its own command path).
+    (define-values (status-3 out-3 err-3) (invoke "quick" "--evidence" "/tmp/evidence"))
+    (check-not-equal? status-3 0)
+    (check-regexp-match #rx"quick does not accept --evidence" err-3)
+    ;; The release explain states the evidence contract and the obligation
+    ;; states (plan only: nothing executed).
+    (define-values (status-4 out-4 err-4) (invoke "release" "--explain"))
+    (check-equal? status-4 0)
+    (check-regexp-match #rx"RELEASE OBLIGATION ci-verification \\[UNAVAILABLE\\]" out-4)
+    (check-regexp-match #rx"evidence contract: --evidence <proof-bundle\\|artifact-dir>" out-4))
+
   ;; ---------------------------------------------------------------- --lane
   (test-case "an unknown --lane fails closed and lists the valid lanes"
     (define-values (status out err) (invoke "--lane" "no-such-lane" "--explain"))

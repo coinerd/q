@@ -71,6 +71,7 @@
               files
               lane
               candidate
+              evidence
               ci-flags)
   #:transparent)
 
@@ -117,6 +118,8 @@
                      'lane
                      #f
                      'candidate
+                     #f
+                     'evidence
                      #f
                      'ci-flags
                      '())))
@@ -245,6 +248,10 @@
        (mark! "--candidate")
        (hash-set! opts 'candidate (required! (cdr rest) "--candidate"))
        (loop (cddr rest))]
+      [(equal? (car rest) "--evidence")
+       (mark! "--evidence")
+       (hash-set! opts 'evidence (required! (cdr rest) "--evidence"))
+       (loop (cddr rest))]
       [(equal? (car rest) "--file")
        (ci! "--file")
        (hash-set! opts 'files (cons (required! (cdr rest) "--file") (hash-ref opts 'files)))
@@ -274,6 +281,7 @@
                (reverse (hash-ref opts 'files))
                (hash-ref opts 'lane)
                (hash-ref opts 'candidate)
+               (hash-ref opts 'evidence)
                (hash-ref opts 'ci-flags)))
 
 ;; `BASE..HEAD` (a commit range) or a single base ref (working-tree diff).
@@ -337,6 +345,8 @@
   (when (pair? (cli-options-ci-flags opts))
     (fail "quick does not accept CI-surface option ~a (only ./qt full / ./qt --lane NAME do)"
           (car (cli-options-ci-flags opts))))
+  (when (cli-options-evidence opts)
+    (fail "quick does not accept --evidence (only ./qt release --candidate SHA --evidence PATH)"))
   (when (> (length positional) 1)
     (fail "quick accepts at most one file or one --changed BASE..HEAD"))
   (when (and changed? (not (= (length positional) 1)))
@@ -538,11 +548,20 @@
   (define ci-flags (cli-options-ci-flags opts))
   (define lane-name (cli-options-lane opts))
   (define candidate (cli-options-candidate opts))
+  (define evidence (cli-options-evidence opts))
   ;; `--candidate` belongs to `release` ONLY and is verified before anything is
   ;; selected, printed or executed: a different HEAD or a dirty checkout is
   ;; refused. The release obligations stay unconditional.
   (when (and candidate (not (eq? lane 'release)))
     (fail "~a does not accept --candidate (only ./qt release --candidate SHA)" name))
+  ;; `--evidence` is release-only and bound to `--candidate`: the evidence
+  ;; names a local proof bundle or artifact directory whose results must
+  ;; carry the exact candidate SHA. Without a candidate there is nothing to
+  ;; bind to, so the flag fails closed.
+  (when (and evidence (not (eq? lane 'release)))
+    (fail "~a does not accept --evidence (only ./qt release --candidate SHA --evidence PATH)" name))
+  (when (and evidence (not candidate))
+    (fail "--evidence requires --candidate SHA (evidence is bound to the exact candidate)"))
   (when (and lane-name (not (eq? lane 'full)))
     (fail "~a does not accept --lane (use ./qt --lane NAME or ./qt full --lane NAME)" name))
   (when (and lane-name (cli-options-suite opts))
@@ -586,11 +605,12 @@
           (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
             (and lane-name (qt-lane-ref lane-name))))
         (run-ci-surface opts #:lane lane-entry #:command (if lane-name "./qt --lane" "./qt full"))])]
-    [else (run-plain-lane-command lane name opts positional jobs explain? changed?)]))
+    [else (run-plain-lane-command lane name opts positional jobs explain? changed? evidence)]))
 
 ;; Plain lanes (`full` with no CI-surface flag, `default`, `release`): behaviour
 ;; and guarantees are unchanged.
-(define (run-plain-lane-command lane name opts positional jobs explain? changed?)
+(define (run-plain-lane-command lane name opts positional jobs explain? changed? evidence)
+  (define candidate (cli-options-candidate opts))
   (when (and changed? (eq? lane 'release))
     (fail "release does not accept --changed (a release covers the complete suite)"))
   (when (and changed? (> (length positional) 1))
@@ -621,9 +641,21 @@
        (with-handlers ([exn:fail? (lambda (e) (fail "~a" (exn-message e)))])
          (run-plan plan jobs)))
      (define violations (full-run-surface-violations run))
+     ;; Evidence is read OFFLINE (local files only), before the obligations
+     ;; are computed. Content problems never abort the command: they make the
+     ;; affected obligations unavailable, exactly like missing evidence.
+     (define evidence-report
+       (if (and (eq? lane 'release) evidence)
+           (load-release-evidence candidate evidence)
+           (release-evidence 'unavailable "no --evidence input given" 0)))
+     (define obligations
+       (release-apply-run
+        (release-obligations-with-evidence evidence-report)
+        (full-run-valid? run)
+        violations))
      (define blocking
        (if (eq? lane 'release)
-           (release-blocking (release-obligations))
+           (release-blocking obligations)
            '()))
      (define verdict (lane-verdict lane (full-run-valid? run) violations blocking))
      (emit-line (plan-preamble plan jobs))
@@ -634,9 +666,10 @@
      (for ([line (in-list (full-surface-violation-lines run))])
        (emit-line line #:port (current-error-port)))
      (when (eq? lane 'release)
-       ;; Printed whether or not the suite passed: these unverified obligations
-       ;; are exactly why a release pass line is not available.
-       (for ([line (in-list (release-obligation-lines (release-obligations)))])
+       ;; The evidence verdict first, then every obligation with its state:
+       ;; these lines are why a release pass line is or is not available.
+       (emit-line (release-evidence-line evidence-report))
+       (for ([line (in-list (release-obligation-lines obligations))])
          (emit-line line)))
      (when (and (eq? lane 'default) (pair? (lane-plan-unavailable plan)))
        ;; The unavailable-here members ran nowhere: their count is also on the
@@ -692,6 +725,7 @@
   (displayln "  --changed [BASE|BASE..HEAD]     Impact selection (reproduction; never a PR claim)")
   (displayln "  --file FILE                     Explicit reproduction file (full/default only)")
   (displayln "  --candidate SHA                 Exact release candidate (release only)")
+  (displayln "  --evidence PATH                 Offline CI evidence bound to the candidate (release only)")
   (newline)
   (displayln "Reproduce one test: ./qt full --file tests/test-foo.rkt")
   (displayln "Run a CI lane:      ./qt --lane fast --json-out results.json")
