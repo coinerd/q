@@ -159,6 +159,19 @@
     (check-true (> (car (hash-ref table "co-run")) (cdr (hash-ref table "owner")))
                 "with one worker the owner dispatches before the co-run task"))
 
+  (test-case "the co-run cap restores barrier semantics at jobs=2"
+    (define rec (make-recorder))
+    ;; Measured on CI: an unbounded co-run oversubscribes 2-worker lanes
+    ;; (security lane 272s -> 400s). With jobs=2 the cap is 0: while an owner
+    ;; holds the lock, NO co-run task starts — barrier semantics, never
+    ;; slower than the barrier (§2 acceptance).
+    (define owner (struct-copy sched-task (task "owner" 0.25 rec) [exclusive? #t] [priority 0] [order 0]))
+    (define co-run (struct-copy sched-task (task "co-run" 0.05 rec) [co-runs? #t] [priority 1] [order 1]))
+    (run-scheduled (list co-run owner) 2)
+    (define table (rec 'table))
+    (check-true (> (car (hash-ref table "co-run")) (cdr (hash-ref table "owner")))
+                "at jobs=2 no co-run may start while the owner holds the lock"))
+
   (test-case "worker death without a result fails the whole run (fail closed)"
     (define dying
       (sched-task "dying" (lambda (_id _timeout) (error 'exec "simulated crash")) 30 #f #f 0 0))
