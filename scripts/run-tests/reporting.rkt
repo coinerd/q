@@ -407,7 +407,8 @@
                              #:shard [shard #f]
                              #:runner-version [runner-version "unknown"]
                              #:extra [extra #f]
-                             #:actual-modes [actual-modes #f])
+                             #:actual-modes [actual-modes #f]
+                             #:verdict [verdict #f])
   (define passed-files (count passed-result? results))
   (define failed-files (count failed-result? results))
   (define timeout-files (count timeout-result? results))
@@ -433,7 +434,7 @@
             'profile
             (symbol->string profile)
             'verdict
-            (symbol->string (compute-verdict results))
+            (symbol->string (or verdict (compute-verdict results)))
             'elapsed_ms
             elapsed-ms
             'summary
@@ -631,7 +632,31 @@
                (unless (or (eq? v (json-null)) (number-field? v))
                  (problem (format "extra.prepared_environment.~a: expected number or null, got ~s"
                                   f
-                                  v)))))]))))
+                                  v)))))
+           ;; Wave C per-run preparation telemetry (schema-additive; every key
+           ;; optional — old artifacts and env-only blocks remain valid).
+           (when (hash-has-key? pe 'preparation_outcome)
+             (define outcome (hash-ref pe 'preparation_outcome))
+             (unless (member outcome '("prepared" "skipped" "failed"))
+               (problem
+                (format
+                 "extra.prepared_environment.preparation_outcome: expected prepared/skipped/failed, got ~s"
+                 outcome))))
+           (for ([f '(preparation_elapsed_ms
+                      preparation_target_count
+                      preparation_closure_count
+                      preparation_excluded_count)])
+             (when (hash-has-key? pe f)
+               (define v (hash-ref pe f))
+               (unless (number-field? v)
+                 (problem (format "extra.prepared_environment.~a: expected number, got ~s" f v)))))
+           (when (hash-has-key? pe 'preparation_identity_prefix)
+             (define v (hash-ref pe 'preparation_identity_prefix))
+             (unless (or (eq? v (json-null)) (string-field? v))
+               (problem
+                (format
+                 "extra.prepared_environment.preparation_identity_prefix: expected string or null, got ~s"
+                 v))))]))))
   (reverse problems))
 
 (define (print-ledger-summary ledger results)

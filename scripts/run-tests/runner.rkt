@@ -25,6 +25,17 @@
          (only-in racket/format ~r)
          (only-in racket/date date->string current-date date-display-format)
          (only-in "../testing/scheduler.rkt" sched-task run-scheduled)
+         (only-in "../testing/preparation.rkt"
+                  prepare-files!
+                  preparation-result?
+                  preparation-result-outcome
+                  preparation-result-elapsed-ms
+                  preparation-result-target-count
+                  preparation-result-closure-count
+                  preparation-result-excluded-count
+                  preparation-result-identity-prefix
+                  preparation-result-reason
+                  preparation-failure-lines)
          (only-in "classify.rkt"
                   base-dir
                   known-profiles
@@ -453,7 +464,14 @@
 ;; guarded restore; see .github/actions/setup-racket/action.yml + ci.yml).
 ;; Local runs never invent `restored` — the default is `unavailable` with
 ;; 'null restore/fallback timings.
-(define (prepared-environment-state)
+;;
+;; Wave C (final plan §4 rev 3): when `prep` (a preparation-result) is given,
+;; the per-run preparation telemetry is merged into the same block:
+;; preparation_outcome prepared/skipped/failed, elapsed ms, target/closure/
+;; excluded counts, and a 12-hex identity prefix. The CI `result` vocabulary
+;; (restored/rebuilt/unavailable) is untouched — it stays the prepared-
+;; environment contract; the per-run preparation is a separate, additive axis.
+(define (prepared-environment-state #:preparation [prep #f])
   (define raw-result (getenv "Q_PREPARED_ENV_STATE"))
   ;; Backward-compatible alias for any older CI call site that exported
   ;; the same normalized vocabulary under the pre-W1 name.
@@ -469,16 +487,32 @@
     (if (and v (regexp-match? #px"^[0-9]+$" v))
         (string->number v)
         'null))
-  (hasheq 'result
-          result
-          'restore_ms
-          ;; Known whenever the guarded restore step ran (success or
-          ;; failure); 'null when the prepared path was not in play.
-          (env-ms "Q_PREPARED_ENV_RESTORE_MS")
-          'fallback_ms
-          (if (string=? result "rebuilt")
-              (env-ms "Q_PREPARED_ENV_FALLBACK_MS")
-              'null)))
+  (define base
+    (hasheq 'result
+            result
+            'restore_ms
+            ;; Known whenever the guarded restore step ran (success or
+            ;; failure); 'null when the prepared path was not in play.
+            (env-ms "Q_PREPARED_ENV_RESTORE_MS")
+            'fallback_ms
+            (if (string=? result "rebuilt")
+                (env-ms "Q_PREPARED_ENV_FALLBACK_MS")
+                'null)))
+  (if (preparation-result? prep)
+      (hash-set* base
+                 'preparation_outcome
+                 (symbol->string (preparation-result-outcome prep))
+                 'preparation_elapsed_ms
+                 (preparation-result-elapsed-ms prep)
+                 'preparation_target_count
+                 (preparation-result-target-count prep)
+                 'preparation_closure_count
+                 (preparation-result-closure-count prep)
+                 'preparation_excluded_count
+                 (preparation-result-excluded-count prep)
+                 'preparation_identity_prefix
+                 (or (preparation-result-identity-prefix prep) 'null))
+      base))
 
 ;; `auto` and `subprocess` are the only surviving modes and both execute one
 ;; subprocess per test file: the grouped/in-process executor is deleted, so no
@@ -571,6 +605,72 @@
             profile
             (length skipped-files)
             (if (= (length skipped-files) 1) "" "s")))
+  ;; ── Build-once preparation (final plan §4, rev 3 decision B3/C) ──────
+  ;; One raco make over the selected files' static closure before any worker
+  ;; dispatches, guarded by a per-run content identity (hash → make → re-hash;
+  ;; any mismatch aborts before execution). `./qt quick` never enters
+  ;; run-suite-once (quick-runner runs the shared queue directly), so quick
+  ;; keeps its source-only path untouched (§4.4). Q_SKIP_PREPARATION=1 is the
+  ;; explicit escape hatch (the measurement pairs use it). A preparation
+  ;; failure fails the run closed: no file results, no partial verdict.
+  (define prep
+    (prepare-files! base-dir runnable-files))
+  (when (pair? runnable-files)
+    (case (preparation-result-outcome prep)
+      [(prepared)
+       (printf
+        (string-append ";; run-tests: preparation ok — targets=~a closure=~a excluded=~a "
+                       "identity=~a (~a ms)~n")
+        (preparation-result-target-count prep)
+        (preparation-result-closure-count prep)
+        (preparation-result-excluded-count prep)
+        (preparation-result-identity-prefix prep)
+        (preparation-result-elapsed-ms prep))]
+      [(skipped)
+       (printf ";; run-tests: preparation skipped — ~a~n"
+               (or (preparation-result-reason prep) "Q_SKIP_PREPARATION=1"))]
+      [else (void)]))
+  (cond
+    [(eq? (preparation-result-outcome prep) 'failed)
+     ;; Fail closed BEFORE any test executes: no file results, no partial
+     ;; verdict. The run-summary verdict is 'fail (never the vacuous
+     ;; zero-result 'pass) and the exit code is non-zero.
+     (define reason (or (preparation-result-reason prep) "unknown preparation failure"))
+     (eprintf ";; run-tests: PREPARATION FAILED — run aborted, no test executed~n")
+     (for ([line (in-list (string-split reason "\n"))])
+       (eprintf ";;   ~a~n" line))
+     (for ([line (in-list (preparation-failure-lines prep))])
+       (eprintf ";;   ~a~n" line))
+     (define prep-elapsed (exact-round (- (current-inexact-milliseconds) t0)))
+     (displayln "═══════════════════════════════════════════════════════════")
+     (displayln "  VERDICT:   ❌ FAIL (preparation failed — no test executed)")
+     (displayln "═══════════════════════════════════════════════════════════")
+     (print-run-summary-record
+      '()
+      #:suite suite-label
+      #:profile profile
+      #:shard shard
+      #:mode mode
+      #:elapsed-ms prep-elapsed
+      #:runner-version (detect-runner-version))
+     (when json-out
+       (write-json-results! json-out
+                            '()
+                            #:suite (string->symbol suite-label)
+                            #:mode mode
+                            #:elapsed-ms prep-elapsed
+                            #:ledger ledger
+                            #:profile profile
+                            #:shard shard
+                            #:runner-version (detect-runner-version)
+                            #:extra
+                            (let ([m (make-hasheq)])
+                              (hash-set! m 'prepared_environment
+                                         (prepared-environment-state #:preparation prep))
+                              m)
+                            #:verdict 'fail))
+     (values 1 '())]
+    [else
   ;; ONE scheduling call through the shared work-conserving queue: mutation
   ;; owners take repository-exclusive and dispatch first; declared
   ;; temp-dir/sandboxed-home isolation co-runs while the lock is held;
@@ -658,7 +758,8 @@
                            (when (unbox serial-first-batch-ms-box)
                              ;; Legacy field: now the one queue's dispatch latency.
                              (hash-set! m 'first_batch_ms (unbox serial-first-batch-ms-box)))
-                           (hash-set! m 'prepared_environment (prepared-environment-state))
+                           (hash-set! m 'prepared_environment
+                                      (prepared-environment-state #:preparation prep))
                            m)
                          #:actual-modes actual-mode-hash))
   (when ledger
@@ -701,7 +802,7 @@
                           "(the runner never restores user files)")))
   (when (and (zero? exit-code) (> repeat-total 1))
     (printf ";; Run ~a/~a: PASS~n" repeat-num repeat-total))
-  (values exit-code results))
+  (values exit-code results)]))
 
 (define (extract-shard-args! args)
   ;; Extract --shard-index and --shard-total from args, returning

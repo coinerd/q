@@ -68,9 +68,11 @@
         (build-path repo (find-relative-path (simplify-path installed-root) (simplify-path source))))
       (make-directory* (path-only target))
       (copy-file source target #t)
-      (for ([dependency (in-list (regexp-match* #px"\"([^\"\n]+[.]rkt)\""
+      (for ([dependency (in-list (regexp-match* #px"\"([^\"\n]+[.]rkt[d]?)\""
                                                 (file->string source)
                                                 #:match-select cadr))])
+        ;; .rktd runtime data files travel with the closure too (preparation's
+        ;; exclusions input); absolute literals are never tree dependencies.
         (when (relative-path? dependency)
           (define next (simplify-path (build-path (path-only source) dependency)))
           (when (file-exists? next)

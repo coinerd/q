@@ -421,8 +421,12 @@
             (when (and (eq? (car s) 'define-runtime-path)
                        (= 3 (length s))
                        (string? (caddr s))
-                       (string-suffix? (caddr s) ".rkt"))
-              (dependency (caddr s)))
+                       (or (string-suffix? (caddr s) ".rkt") (string-suffix? (caddr s) ".rktd")))
+              ;; Runtime data files (.rktd) are copied too: preparation's
+              ;; exclusions input travels with the installed runner closure.
+              (if (string-suffix? (caddr s) ".rktd")
+                  (visit (path->string (build-path (path-only full) (caddr s))))
+                  (dependency (caddr s))))
             (for-each walk s)))
         (walk (syntax->datum stx)))))
   (sort (hash-keys seen) string<?))
