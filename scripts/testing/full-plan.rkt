@@ -185,20 +185,38 @@
 ;; `@timeout` metadata. Mirrors the quick runner's own `#:timeout` default.
 (define full-default-timeout 120)
 
+;; The named obligation claim texts, shared verbatim by the `full` honesty
+;; list and the release candidate obligations (final plan §6 E2): one string
+;; per claim, so a wording drift cannot create a second source of truth. The
+;; platform line stays in the `full` honesty list (a local Linux pass still
+;; does not prove macOS behavior), but it is NOT a release candidate
+;; obligation: the local release command claims no platform coverage — CI's
+;; `test-platform` required context stays its owner, unchanged.
+(define governance-parity-obligation-text
+  (string-append "governance-controller suite parity: the Racket finalizer port"
+                 " (tests/test-wave-finalizer-{model,adapter,controller,native}.rkt) runs here,"
+                 " pinned to goldens captured from the original Python governance-controller suite"
+                 " (scripts/github/wave-finalizer.py + test_wave_finalizer.py, since deleted);"
+                 " no live oracle is left to diff against, so this command is the authoritative"
+                 " parity run"))
+(define platform-obligation-text
+  "macOS/platform lane (platform-specific behavior of this Linux host)")
+(define github-branch-protection-text
+  "GitHub branch protection and required status checks")
+(define release-provenance-obligation-text
+  "release provenance and exact-candidate verification (run `racket scripts/release-preflight.rkt`)")
+(define ci-verification-obligation-text
+  "PR/CI verification of this commit (counted by the GitHub pipeline)")
+
 ;; What a local pass of this selection cannot prove. Printed verbatim by
 ;; `--explain` so the absence of these checks is never mistaken for
 ;; verification.
 (define full-obligations
   (list
-   (string-append "governance-controller suite parity: the Racket finalizer port"
-                  " (tests/test-wave-finalizer-{model,adapter,controller,native}.rkt) runs here,"
-                  " pinned to goldens captured from the original Python governance-controller suite"
-                  " (scripts/github/wave-finalizer.py + test_wave_finalizer.py, since deleted);"
-                  " no live oracle is left to diff against, so this command is the authoritative"
-                  " parity run")
-   "macOS/platform lane (platform-specific behavior of this Linux host)"
-   "GitHub branch protection and required status checks"
-   "release provenance and exact-candidate verification (run `racket scripts/release-preflight.rkt`)"))
+   governance-parity-obligation-text
+   platform-obligation-text
+   github-branch-protection-text
+   release-provenance-obligation-text))
 
 ;; Counted obligations this command does NOT provide: they are counted (and
 ;; required) by other gates, so a green `./qt full` must never be read as a
@@ -213,7 +231,7 @@
 
 (define full-not-provided
   (list
-   "PR/CI verification of this commit (counted by the GitHub pipeline)"
+   ci-verification-obligation-text
    "Racket dependency, packaging, scribble-doc and release-readiness gates (counted by `racket scripts/release-preflight.rkt`)"
    (string-append "the live benchmark suite and the CI latency-budget guard "
                   "(benchmark.yml / pr-latency-guard.yml; the latency guard's automatic "
@@ -749,18 +767,31 @@
 ;; Release obligations
 ;; ============================================================
 
-;; One obligation and whether THIS command verified it. `./qt release` cannot
-;; verify any of them today, so the list is the honest gap: every entry is
-;; printed and the command exits non-zero while one stays unverified.
-(struct release-obligation (id text verified?) #:transparent)
+;; One candidate-stage obligation: a stable slug (the claim's identity —
+;; adding, removing or verifying one entry never renumbers the others, final
+;; plan §6 E2 rev 3), the claim text, and whether THIS command verified it.
+(struct release-obligation (slug text verified?) #:transparent)
+
+;; The candidate obligation table: stable slugs over the shared claim texts.
+;;   - governance-parity runs locally (the finalizer owners are part of the
+;;     release selection);
+;;   - ci-verification, branch-protection and release-provenance are satisfied
+;;     only by explicit evidence bound to the exact candidate SHA (--evidence,
+;;     final plan §6 E2) — never inferred from a green suite run and never
+;;     fetched from the network (the release path stays offline).
+;; The macOS/platform claim is NOT a candidate obligation (CI's test-platform
+;; required context is unchanged; the local release command claims no platform
+;; coverage) — it remains in the `full` honesty list above.
+(define release-candidate-obligations
+  (list
+   (list 'governance-parity governance-parity-obligation-text)
+   (list 'ci-verification ci-verification-obligation-text)
+   (list 'branch-protection github-branch-protection-text)
+   (list 'release-provenance release-provenance-obligation-text)))
 
 (define (release-obligations)
-  (append (for/list ([text (in-list full-obligations)]
-                     [i (in-naturals 1)])
-            (release-obligation (string->symbol (format "not-verified-~a" i)) text #f))
-          (for/list ([text (in-list full-not-provided)]
-                     [i (in-naturals 1)])
-            (release-obligation (string->symbol (format "not-provided-~a" i)) text #f))))
+  (for/list ([entry (in-list release-candidate-obligations)])
+    (release-obligation (car entry) (cadr entry) #f)))
 
 ;; Every obligation still unverified. A non-empty result blocks the release
 ;; pass line; an empty one is the only path to a release pass.
@@ -770,7 +801,7 @@
 (define (release-obligation-lines obligations)
   (for/list ([o (in-list obligations)])
     (format "RELEASE OBLIGATION ~a [~a] ~a"
-            (release-obligation-id o)
+            (release-obligation-slug o)
             (if (release-obligation-verified? o) "verified" "NOT VERIFIED")
             (release-obligation-text o))))
 
@@ -778,7 +809,7 @@
   (format
    "release unverified: ~a release obligation(s) not verified by this command (~a); a release requires a verified candidate"
    (length blocking)
-   (string-join (map (lambda (o) (format "~a" (release-obligation-id o))) blocking) ", ")))
+   (string-join (map (lambda (o) (format "~a" (release-obligation-slug o))) blocking) ", ")))
 
 ;; ============================================================
 ;; Resolved plan (computed once; shared by `--explain` and execution)

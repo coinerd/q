@@ -296,6 +296,13 @@
     ;; obligation filters away and cannot block the pass line either.
     (check-eq? (lane-verdict 'release #t '() (release-blocking (list (release-obligation 'x "x" #t))))
                'ok)
+    (check-equal? (map release-obligation-slug (release-obligations))
+               '(governance-parity ci-verification branch-protection release-provenance)
+               "obligation ids are STABLE SLUGS, not positional not-verified-N/not-provided-N")
+    (check-eq?
+     (for/sum ([o (in-list (release-obligations))] #:when (string-contains? (release-obligation-text o) "macOS")) 1)
+     0
+     "the macOS/platform claim is not a candidate obligation (CI test-platform is unchanged)")
     (check-eq? (lane-verdict 'release #t '() (release-blocking (release-obligations)))
                'unverified
                "the real obligation list blocks every release pass"))
@@ -640,14 +647,19 @@
                   obligations
                   "no release obligation is verified by the suite run alone")
     (define text (join-lines (release-obligation-lines obligations)))
-    (check-regexp-match #rx"RELEASE OBLIGATION not-verified-1 \\[NOT VERIFIED\\]" text)
-    (check-regexp-match #rx"RELEASE OBLIGATION not-provided-1 \\[NOT VERIFIED\\]" text)
+    ;; STABLE SLUGS (stated contract change, final plan §6 E2): the ids name
+    ;; the claim, so removing or verifying one obligation never renumbers the
+    ;; others. The positional not-verified-N / not-provided-N ids are gone.
+    (check-regexp-match #rx"RELEASE OBLIGATION governance-parity \\[NOT VERIFIED\\]" text)
+    (check-regexp-match #rx"RELEASE OBLIGATION ci-verification \\[NOT VERIFIED\\]" text)
+    (check-regexp-match #rx"RELEASE OBLIGATION branch-protection \\[NOT VERIFIED\\]" text)
+    (check-regexp-match #rx"RELEASE OBLIGATION release-provenance \\[NOT VERIFIED\\]" text)
     (check-regexp-match #rx"Python governance-controller suite" text)
     ;; A fully verified fixture list blocks nothing; one unverified entry blocks.
     (check-equal? (release-blocking (list (release-obligation 'fixture-a "fixture check A" #t))) '())
     (define mixed
       (list (release-obligation 'fixture-a "A" #t) (release-obligation 'fixture-b "B" #f)))
-    (check-equal? (map release-obligation-id (release-blocking mixed)) '(fixture-b))
+    (check-equal? (map release-obligation-slug (release-blocking mixed)) '(fixture-b))
     (check-regexp-match #rx"^release unverified: 1 release obligation"
                         (release-unverified-message (release-blocking mixed))))
   (test-case "release explain lists the obligations next to the plan"
@@ -666,10 +678,10 @@
              (invoke-command 300 dir (find-executable-path "racket") qt "release" "--jobs" "2"))
            (define text (string-append out err))
            (check-not-equal? status 0)
-           (check-regexp-match #rx"RELEASE OBLIGATION not-verified-1 \\[NOT VERIFIED\\]" text)
+           (check-regexp-match #rx"RELEASE OBLIGATION governance-parity \\[NOT VERIFIED\\]" text)
            ;; The FULL obligation list must be present, not just its first entry:
            ;; a preamble-only (or truncated) run cannot satisfy these.
-           (check-regexp-match #rx"RELEASE OBLIGATION not-provided-6 \\[NOT VERIFIED\\]" text)
+           (check-regexp-match #rx"RELEASE OBLIGATION release-provenance \\[NOT VERIFIED\\]" text)
            (check-equal? (length (regexp-match* #rx"RELEASE OBLIGATION " text))
                          (length (release-obligations))
                          "every obligation is printed on its own line")
