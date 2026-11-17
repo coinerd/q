@@ -375,6 +375,13 @@
       (define abs (build-path root rel))
       (unless (file-exists? abs)
         (error 'quick-audit "closure member does not exist: ~a" rel))
+      ;; The reviewed closure is bound file-by-file: a symlink anywhere in it
+      ;; escapes the review boundary and is refused (the old fingerprint
+      ;; audit's link-free contract, kept verbatim).
+      (when (or (link-exists? abs)
+                (let ([p (simplify-path (path->complete-path abs) #f)])
+                  (ormap link-exists? (explode-path p))))
+        (error 'quick-audit "closure member is a symlink: ~a" rel))
       (define-values (targets status) (extract-requires* root abs))
       (unless (eq? status 'ok)
         (error 'quick-audit "closure member does not parse: ~a" rel))

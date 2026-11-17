@@ -2,44 +2,30 @@
 ;; @speed fast
 ;; @suite testing
 ;; @boundary integration
+;; Superseded fingerprint-mechanics cases (binding, drift, symlinks) moved to
+;; tests/test-testing-audit.rkt with the generated admission record; this file
+;; keeps the production-record integrity pin.
 (require rackunit
+         file/sha1
+         racket/file
          racket/runtime-path
          "../scripts/testing/quick-audit.rkt")
 (define-runtime-path root "..")
+(define-runtime-path production-record "../tests/.quick-admission.rktd")
 (module+ test
-  (test-case "review binds dependencies and rejects missing or linked paths"
-    (define dir (make-temporary-file "qt-deps-~a" 'directory))
-    (dynamic-wind
-     void
-     (lambda ()
-       (make-directory (build-path dir "tests"))
-       (make-directory (build-path dir "util"))
-       (define entry (car audited))
-       (define test-path (build-path dir (car entry)))
-       (define dep-path (build-path dir "util/exn.rkt"))
-       (copy-file (build-path root (car entry)) test-path)
-       (check-false (audit-ok? dir entry) "missing dependency")
-       (copy-file (build-path root "util/exn.rkt") dep-path)
-       (check-true (audit-ok? dir entry))
-       (call-with-output-file dep-path #:exists 'append (lambda (out) (display "\n; drift\n" out)))
-       (check-false (audit-ok? dir entry) "changed dependency")
-       (delete-file dep-path)
-       (define file-linked?
-         (with-handlers ([exn:fail:filesystem? (lambda (_) #f)])
-           (make-file-or-directory-link (build-path root "util/exn.rkt") dep-path)
-           #t))
-       (if file-linked?
-           (begin
-             (check-false (audit-ok? dir entry) "linked dependency")
-             (delete-file dep-path))
-           (displayln "SKIP linked dependency: link creation unavailable"))
-       (delete-directory (build-path dir "util"))
-       (define dir-linked?
-         (with-handlers ([exn:fail:filesystem? (lambda (_) #f)])
-           (make-file-or-directory-link (build-path root "util") (build-path dir "util"))
-           #t))
-       (if dir-linked?
-           (check-false (audit-ok? dir entry) "linked parent directory")
-           (displayln "SKIP linked parent: link creation unavailable"))
-       (check-false (audit-ok? dir (cons "../escape.rkt" (cdr entry))) "unreviewed escape"))
-     (lambda () (delete-directory/files dir)))))
+  (test-case "the committed record binds every owner's dependency closure"
+    (check-true (file-exists? production-record))
+    (define record (call-with-input-file production-record read))
+    (define owners (cdr (assoc 'owners record)))
+    (check-equal? (length owners) (length (admitted-owners)))
+    ;; The recorded closure is exactly what live discovery produces, and the
+    ;; recorded hashes match the shipped bytes (the reviewed identity).
+    (for ([entry (in-list owners)])
+      (define owner-rel (car entry))
+      (define data (cdr entry))
+      (check-equal? (cdr (assoc 'closure data)) (closure-of root owner-rel)
+                    (format "~a closure drift" owner-rel))
+      (for ([pair (in-list (cdr (assoc 'hashes data)))])
+        (check-equal? (cdr pair)
+                      (call-with-input-file (build-path root (car pair)) sha1)
+                      (format "~a hash drift: ~a" owner-rel (car pair)))))))
