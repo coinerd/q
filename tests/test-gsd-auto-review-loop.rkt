@@ -1,5 +1,5 @@
 #lang racket/base
-;; @speed fast
+;; @speed slow
 ;; @suite extensions
 ;; @boundary integration
 ;; @timeout 1500
