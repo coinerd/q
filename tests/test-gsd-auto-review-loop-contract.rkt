@@ -469,8 +469,9 @@
                (session-runner request)))
            (check-equal? (hash-ref verdict 'kind)
                          "request-changes"
-                         (format "verdict kind: expected request-changes, got ~s"
-                                 (hash-ref verdict 'kind)))
+                         (format "verdict kind: expected request-changes, got ~s; verdict=~s"
+                                 (hash-ref verdict 'kind)
+                                 verdict))
            (check-regexp-match #px"^q-session:"
                                (hash-ref verdict 'reviewer "")
                                (format "verdict reviewer prefix: expected q-session:, got ~s"
