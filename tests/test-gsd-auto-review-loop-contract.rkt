@@ -85,15 +85,17 @@
          (only-in "../util/message/message.rkt" make-message)
          (only-in "../util/content/content-parts.rkt" make-text-part)
          (only-in "../util/loop-result.rkt" make-loop-result)
+         (only-in "../runtime/provider/provider-factory.rkt" build-mock-provider)
          "helpers/b1-auto-review-loop-contract-fixture.rkt")
 
 (module+ test
   ;; The three cases own independent real Git worlds, campaign roots and
-  ;; durable journal identities. The controller round trips are subprocess-
-  ;; bound (not CPU-bound), so they are started together and joined by their
-  ;; own test-case. Every check still executes in its original case; a case
-  ;; failure is re-raised inside the matching test-case, keeping rackunit's
-  ;; exit-truth per guarantee instead of hiding it in a background thread.
+  ;; durable journal identities. The Verify and refusal cases are subprocess-
+  ;; bound (not CPU-bound) and stay concurrent, joined by their own test-case;
+  ;; the load-sensitive rejection case is serialized ahead of both. Every check
+  ;; still executes in its original case; a case failure is re-raised inside
+  ;; the matching test-case, keeping rackunit's exit-truth per guarantee
+  ;; instead of hiding it in a background thread.
   (define case-slots (make-hash))
   (define red-case-finished (make-semaphore))
   (define (start-case! name thunk #:wait [before void])
@@ -353,7 +355,11 @@
                         'completed
                         (hasheq 'usage
                                 (hasheq 'prompt_tokens 3 'completion_tokens 4 'total_tokens 7))))
-    (define real-reviewer (make-auto-review-runner root plan #:session-run session-run))
+    (define real-reviewer
+      (make-auto-review-runner root
+                               plan
+                               #:provider-builder (lambda (_) (build-mock-provider))
+                               #:session-run session-run))
     (define go-request
       (make-campaign-request root (hash-ref world 'rec) void void #:auto-review-runner real-reviewer))
     (check-eq? (campaign-request-auto-review-runner go-request) real-reviewer)
@@ -377,27 +383,115 @@
        ;; controller/finalize/Git boundary in this one case.
        (define-values (sessions session-runner) (build-go-review-session world))
        (define calls (box 0))
+       (define observed-request-identity (box "<no request observed>"))
+       (define request-identity-fields
+         '(head branch
+                attempt-id
+                attempt-fence
+                generation
+                review-mode
+                kind
+                fresh-session-required
+                non-author-review-required
+                staging))
+       (define (identity-type-tag value)
+         (cond
+           [(string? value) 'string]
+           [(symbol? value) 'symbol]
+           [(exact-integer? value) 'exact-integer]
+           [(boolean? value) 'boolean]
+           [(path? value) 'path]
+           [(hash? value) 'hash]
+           [(list? value) 'list]
+           [else (or (object-name value) 'other)]))
+       (define (request-identity request)
+         (if (not (hash? request))
+             (format "<non-hash request: ~s>" request)
+             (string-join (for/list ([field (in-list request-identity-fields)])
+                            (if (hash-has-key? request field)
+                                (let ([value (hash-ref request field)])
+                                  (format "~a:~a=~s" field (identity-type-tag value) value))
+                                (format "~a=<missing>" field)))
+                          " ")))
        (define (wired-runner request)
-         (set-box! calls (add1 (unbox calls)))
-         ;; Exact wiring: the typed request carries the durable receipt
-         ;; identity and the dispatch generation, verbatim.
-         (check-equal? (hash-ref request 'head) head)
-         (check-equal? (hash-ref request 'branch) b1-wave-branch)
-         (check-equal? (hash-ref request 'attempt-id) "attempt-5")
-         (check-equal? (hash-ref request 'attempt-fence) 2)
-         (check-equal? (hash-ref request 'generation) 1)
-         (check-true (hash-ref request 'fresh-session-required))
-         (check-true (hash-ref request 'non-author-review-required))
-         (check-equal? (hash-ref request 'kind) "implementation-review")
-         (check-equal? (hash-ref request 'staging) (review-dispatch-staging-path root plan 0 1))
-         (check-true (non-empty-string? (hash-ref request 'prompt)))
-         (check-regexp-match (regexp (regexp-quote head)) (hash-ref request 'prompt))
-         (define verdict (session-runner request))
-         (check-equal? (hash-ref verdict 'kind) "request-changes")
-         (check-regexp-match #px"^q-session:" (hash-ref verdict 'reviewer ""))
-         verdict)
+         (with-handlers ([exn:test:check? (lambda (e)
+                                            (error 'wired-runner
+                                                   "RackUnit check failed: ~a; request identity=~a"
+                                                   (format "~s" (exn:test:check-stack e))
+                                                   (request-identity request)))])
+           (set-box! calls (add1 (unbox calls)))
+           (set-box! observed-request-identity (request-identity request))
+           ;; Exact wiring: the typed request carries the durable receipt
+           ;; identity and the dispatch generation, verbatim.
+           (check-equal? (hash-ref request 'head)
+                         head
+                         (format "request head: expected ~s, got ~s" head (hash-ref request 'head)))
+           (check-equal?
+            (hash-ref request 'branch)
+            b1-wave-branch
+            (format "request branch: expected ~s, got ~s" b1-wave-branch (hash-ref request 'branch)))
+           (check-equal? (hash-ref request 'attempt-id)
+                         "attempt-5"
+                         (format "request attempt-id: expected attempt-5, got ~s"
+                                 (hash-ref request 'attempt-id)))
+           (check-equal? (hash-ref request 'attempt-fence)
+                         2
+                         (format "request attempt-fence: expected 2, got ~s"
+                                 (hash-ref request 'attempt-fence)))
+           (check-equal? (hash-ref request 'generation)
+                         1
+                         (format "request generation: expected 1, got ~s"
+                                 (hash-ref request 'generation)))
+           (check-true (hash-ref request 'fresh-session-required)
+                       (format "request fresh-session-required: expected #t, got ~s"
+                               (hash-ref request 'fresh-session-required)))
+           (check-true (hash-ref request 'non-author-review-required)
+                       (format "request non-author-review-required: expected #t, got ~s"
+                               (hash-ref request 'non-author-review-required)))
+           (check-equal? (hash-ref request 'kind)
+                         "implementation-review"
+                         (format "request kind: expected implementation-review, got ~s"
+                                 (hash-ref request 'kind)))
+           (check-equal? (hash-ref request 'staging)
+                         (review-dispatch-staging-path root plan 0 1)
+                         (format "request staging: expected ~s, got ~s"
+                                 (review-dispatch-staging-path root plan 0 1)
+                                 (hash-ref request 'staging)))
+           (check-true (non-empty-string? (hash-ref request 'prompt))
+                       (format "request prompt non-empty: expected a non-empty string, got ~s"
+                               (hash-ref request 'prompt)))
+           (check-regexp-match
+            (regexp (regexp-quote head))
+            (hash-ref request 'prompt)
+            (format "request prompt contains head ~s: got ~s" head (hash-ref request 'prompt)))
+           (define verdict
+             (with-handlers ([exn:fail? (lambda (e)
+                                          (error 'wired-runner
+                                                 "session-runner raised ~a: ~s; request identity=~a"
+                                                 (object-name e)
+                                                 (exn-message e)
+                                                 (request-identity request)))])
+               (session-runner request)))
+           (check-equal? (hash-ref verdict 'kind)
+                         "request-changes"
+                         (format "verdict kind: expected request-changes, got ~s; verdict=~s"
+                                 (hash-ref verdict 'kind)
+                                 verdict))
+           (check-regexp-match #px"^q-session:"
+                               (hash-ref verdict 'reviewer "")
+                               (format "verdict reviewer prefix: expected q-session:, got ~s"
+                                       (hash-ref verdict 'reviewer "")))
+           verdict))
        (define result (dispatch world wired-runner b1-manual-controller-seam))
-       (check-equal? (unbox sessions) 1 "exactly one fresh reviewer session must open")
+       (check-equal?
+        (unbox sessions)
+        1
+        (format
+         "exactly one fresh reviewer session must open: reviewer calls=~s, dispatch kind=~s, data=~s, request identity=~a"
+         (unbox calls)
+         (delivery-effect-result-kind result)
+         (delivery-effect-result-data result)
+         (unbox observed-request-identity)))
        ;; -- the typed rejection outcome, bound to the pinned identity.
        (check-eq? (delivery-effect-result-kind result)
                   'review-rejected
@@ -494,19 +588,22 @@
 
   ;; Warm the immutable Git template once before any case thread copies it.
   (b1-warm-review-template!)
+  ;; CI load mitigation: the /go rejection case is serialized. Its real
+  ;; reviewer session and controller finalize are the load-sensitive path,
+  ;; so it starts and finishes before the other two cases are started.
+  (start-case! 'rejection case-rejection-and-replay!)
+  (test-case "/go request opens one fresh review, rejects and journals at the real Git boundary"
+    (finish-case! 'rejection))
+
+  ;; The remaining two cases own independent Git worlds and stay concurrent;
+  ;; the refusal still waits on the Verify probes to finish before it starts.
   (start-case!
    'red-verification
    (lambda ()
      (dynamic-wind void case-red-verification! (lambda () (semaphore-post red-case-finished)))))
-  (start-case! 'rejection case-rejection-and-replay!)
-  ;; Start the refusal only after the Verify probes finish: it is a single
-  ;; controller phase and must not contend with the real rejection finalize.
   (start-case! 'refusal
                case-prohibited-publication!
                #:wait (lambda () (semaphore-wait red-case-finished)))
-
-  (test-case "/go request opens one fresh review, rejects and journals at the real Git boundary"
-    (finish-case! 'rejection))
   (test-case "one genuine owned Verify-command execution keeps honest success/failure/timeout exit-truth"
     (finish-case! 'red-verification))
   (test-case "production owned-mode dispatch refuses without an authenticated owned proof"
