@@ -409,68 +409,73 @@
                                 (format "~a=<missing>" field)))
                           " ")))
        (define (wired-runner request)
-         (set-box! calls (add1 (unbox calls)))
-         (set-box! observed-request-identity (request-identity request))
-         ;; Exact wiring: the typed request carries the durable receipt
-         ;; identity and the dispatch generation, verbatim.
-         (check-equal? (hash-ref request 'head)
-                       head
-                       (format "request head: expected ~s, got ~s" head (hash-ref request 'head)))
-         (check-equal?
-          (hash-ref request 'branch)
-          b1-wave-branch
-          (format "request branch: expected ~s, got ~s" b1-wave-branch (hash-ref request 'branch)))
-         (check-equal? (hash-ref request 'attempt-id)
-                       "attempt-5"
-                       (format "request attempt-id: expected attempt-5, got ~s"
-                               (hash-ref request 'attempt-id)))
-         (check-equal? (hash-ref request 'attempt-fence)
-                       2
-                       (format "request attempt-fence: expected 2, got ~s"
-                               (hash-ref request 'attempt-fence)))
-         (check-equal? (hash-ref request 'generation)
-                       1
-                       (format "request generation: expected 1, got ~s"
-                               (hash-ref request 'generation)))
-         (check-true (hash-ref request 'fresh-session-required)
-                     (format "request fresh-session-required: expected #t, got ~s"
-                             (hash-ref request 'fresh-session-required)))
-         (check-true (hash-ref request 'non-author-review-required)
-                     (format "request non-author-review-required: expected #t, got ~s"
-                             (hash-ref request 'non-author-review-required)))
-         (check-equal? (hash-ref request 'kind)
-                       "implementation-review"
-                       (format "request kind: expected implementation-review, got ~s"
-                               (hash-ref request 'kind)))
-         (check-equal? (hash-ref request 'staging)
-                       (review-dispatch-staging-path root plan 0 1)
-                       (format "request staging: expected ~s, got ~s"
-                               (review-dispatch-staging-path root plan 0 1)
-                               (hash-ref request 'staging)))
-         (check-true (non-empty-string? (hash-ref request 'prompt))
-                     (format "request prompt non-empty: expected a non-empty string, got ~s"
-                             (hash-ref request 'prompt)))
-         (check-regexp-match
-          (regexp (regexp-quote head))
-          (hash-ref request 'prompt)
-          (format "request prompt contains head ~s: got ~s" head (hash-ref request 'prompt)))
-         (define verdict
-           (with-handlers ([exn:fail? (lambda (e)
-                                        (error 'wired-runner
-                                               "session-runner raised ~a: ~s; request identity=~a"
-                                               (object-name e)
-                                               (exn-message e)
-                                               (request-identity request)))])
-             (session-runner request)))
-         (check-equal? (hash-ref verdict 'kind)
-                       "request-changes"
-                       (format "verdict kind: expected request-changes, got ~s"
-                               (hash-ref verdict 'kind)))
-         (check-regexp-match #px"^q-session:"
-                             (hash-ref verdict 'reviewer "")
-                             (format "verdict reviewer prefix: expected q-session:, got ~s"
-                                     (hash-ref verdict 'reviewer "")))
-         verdict)
+         (with-handlers ([exn:test:check? (lambda (e)
+                                            (error 'wired-runner
+                                                   "RackUnit check failed: ~a; request identity=~a"
+                                                   (format "~s" (exn:test:check-stack e))
+                                                   (request-identity request)))])
+           (set-box! calls (add1 (unbox calls)))
+           (set-box! observed-request-identity (request-identity request))
+           ;; Exact wiring: the typed request carries the durable receipt
+           ;; identity and the dispatch generation, verbatim.
+           (check-equal? (hash-ref request 'head)
+                         head
+                         (format "request head: expected ~s, got ~s" head (hash-ref request 'head)))
+           (check-equal?
+            (hash-ref request 'branch)
+            b1-wave-branch
+            (format "request branch: expected ~s, got ~s" b1-wave-branch (hash-ref request 'branch)))
+           (check-equal? (hash-ref request 'attempt-id)
+                         "attempt-5"
+                         (format "request attempt-id: expected attempt-5, got ~s"
+                                 (hash-ref request 'attempt-id)))
+           (check-equal? (hash-ref request 'attempt-fence)
+                         2
+                         (format "request attempt-fence: expected 2, got ~s"
+                                 (hash-ref request 'attempt-fence)))
+           (check-equal? (hash-ref request 'generation)
+                         1
+                         (format "request generation: expected 1, got ~s"
+                                 (hash-ref request 'generation)))
+           (check-true (hash-ref request 'fresh-session-required)
+                       (format "request fresh-session-required: expected #t, got ~s"
+                               (hash-ref request 'fresh-session-required)))
+           (check-true (hash-ref request 'non-author-review-required)
+                       (format "request non-author-review-required: expected #t, got ~s"
+                               (hash-ref request 'non-author-review-required)))
+           (check-equal? (hash-ref request 'kind)
+                         "implementation-review"
+                         (format "request kind: expected implementation-review, got ~s"
+                                 (hash-ref request 'kind)))
+           (check-equal? (hash-ref request 'staging)
+                         (review-dispatch-staging-path root plan 0 1)
+                         (format "request staging: expected ~s, got ~s"
+                                 (review-dispatch-staging-path root plan 0 1)
+                                 (hash-ref request 'staging)))
+           (check-true (non-empty-string? (hash-ref request 'prompt))
+                       (format "request prompt non-empty: expected a non-empty string, got ~s"
+                               (hash-ref request 'prompt)))
+           (check-regexp-match
+            (regexp (regexp-quote head))
+            (hash-ref request 'prompt)
+            (format "request prompt contains head ~s: got ~s" head (hash-ref request 'prompt)))
+           (define verdict
+             (with-handlers ([exn:fail? (lambda (e)
+                                          (error 'wired-runner
+                                                 "session-runner raised ~a: ~s; request identity=~a"
+                                                 (object-name e)
+                                                 (exn-message e)
+                                                 (request-identity request)))])
+               (session-runner request)))
+           (check-equal? (hash-ref verdict 'kind)
+                         "request-changes"
+                         (format "verdict kind: expected request-changes, got ~s"
+                                 (hash-ref verdict 'kind)))
+           (check-regexp-match #px"^q-session:"
+                               (hash-ref verdict 'reviewer "")
+                               (format "verdict reviewer prefix: expected q-session:, got ~s"
+                                       (hash-ref verdict 'reviewer "")))
+           verdict))
        (define result (dispatch world wired-runner b1-manual-controller-seam))
        (check-equal?
         (unbox sessions)
