@@ -27,6 +27,18 @@
    ],
    "suite": "other"
   },
+  "tests/helpers/b1-auto-review-loop-contract-fixture.rkt": {
+   "occurrences": [
+    {
+     "class": "F",
+     "disposition": "not-a-test-sleep",
+     "line": 485,
+     "reason": "sleep lives inside the generated VERIFY PROBE PROGRAM source (string constant) used to prove a genuine timeout and exit 124; the q test process never sleeps",
+     "text": "(sleep 60))"
+    }
+   ],
+   "suite": "other"
+  },
   "tests/helpers/b2-review-contract-fixture.rkt": {
    "occurrences": [
     {
