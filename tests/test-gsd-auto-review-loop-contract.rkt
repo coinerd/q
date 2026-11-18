@@ -397,7 +397,14 @@
          (check-regexp-match #px"^q-session:" (hash-ref verdict 'reviewer ""))
          verdict)
        (define result (dispatch world wired-runner b1-manual-controller-seam))
-       (check-equal? (unbox sessions) 1 "exactly one fresh reviewer session must open")
+       (check-equal?
+        (unbox sessions)
+        1
+        (format
+         "exactly one fresh reviewer session must open: reviewer calls=~s, dispatch kind=~s, data=~s"
+         (unbox calls)
+         (delivery-effect-result-kind result)
+         (delivery-effect-result-data result)))
        ;; -- the typed rejection outcome, bound to the pinned identity.
        (check-eq? (delivery-effect-result-kind result)
                   'review-rejected
