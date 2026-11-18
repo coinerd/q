@@ -350,6 +350,51 @@
                       (lambda () (release-candidate-check dir (git-line dir "rev-parse" "HEAD~1"))))))
         (displayln "SKIP release candidate: git unavailable")))
 
+  (test-case "candidate untracked scope: verification inputs block, scratch does not"
+    (if git-exe
+        (with-git-fixture
+         (lambda (dir)
+           (define head (git-line dir "rev-parse" "HEAD"))
+           ;; The pure scope predicate (final plan §6 E2 wording).
+           (check-true (candidate-relevant-untracked? "info.rkt"))
+           (check-true (candidate-relevant-untracked? "README.md"))
+           (check-true (candidate-relevant-untracked? "CHANGELOG.md"))
+           (check-true (candidate-relevant-untracked? "tests/new-owner.rkt"))
+           (check-true (candidate-relevant-untracked? "tests/data/fixture.rktd"))
+           (check-true (candidate-relevant-untracked? "artifacts/evidence/run.json"))
+           (check-false (candidate-relevant-untracked? "scratch/notes.txt"))
+           (check-false (candidate-relevant-untracked? "logs/run.log"))
+           (check-false (candidate-relevant-untracked? "tmp.rkt"))
+           ;; The porcelain -z parser reads untracked paths exactly. The NUL
+           ;; separator is built at runtime so the test never depends on how
+           ;; a NUL byte travels through source escapping.
+           (define nul (string (integer->char 0)))
+           (check-equal?
+            (porcelain-z-untracked (string-append "?? tests/new.rkt" nul "?? scratch/log.txt" nul))
+            '("tests/new.rkt" "scratch/log.txt"))
+           (check-equal? (porcelain-z-untracked "") '())
+           (check-equal?
+            (porcelain-z-untracked (string-append "R  new-name" nul "old-name" nul "?? tests/x.rkt" nul))
+            '("tests/x.rkt"))
+           ;; End to end: scratch untracked files do NOT block the candidate.
+           (make-directory (build-path dir "scratch"))
+           (write-file (build-path dir "scratch" "notes.txt") "unrelated\n")
+           (write-file (build-path dir "builder.log") "noise\n")
+           (check-equal? (release-candidate-check dir head) head)
+           ;; ... while every verification input DOES block.
+           (write-file (build-path dir "tests" "new-owner.rkt") "#lang racket/base\n")
+           (check-exn #rx"relevant untracked file\\(s\\)"
+                      (lambda () (release-candidate-check dir head)))
+           (delete-file (build-path dir "tests" "new-owner.rkt"))
+           (write-file (build-path dir "README.md") "# q\nuntracked managed surface\n")
+           (check-exn #rx"relevant untracked file\\(s\\)"
+                      (lambda () (release-candidate-check dir head)))
+           (delete-file (build-path dir "README.md"))
+           (make-directory (build-path dir "artifacts"))
+           (write-file (build-path dir "artifacts" "run.json") "{}\n")
+           (check-exn #rx"artifacts/run.json" (lambda () (release-candidate-check dir head)))))
+        (displayln "SKIP candidate untracked scope: git unavailable")))
+
   (test-case "release obligations are still reported for a verified candidate"
     ;; The release lane never prints a pass line it cannot support: with the
     ;; candidate verified, the obligation list is still printed and the exit is
@@ -362,6 +407,26 @@
     (define-values (status out err) (invoke "default" "--candidate" "abc1234"))
     (check-not-equal? status 0)
     (check-regexp-match #rx"default does not accept --candidate" err))
+
+  (test-case "--evidence is release-only and bound to --candidate"
+    ;; Another lane refuses the flag outright.
+    (define-values (status-1 out-1 err-1) (invoke "default" "--evidence" "/tmp/evidence"))
+    (check-not-equal? status-1 0)
+    (check-regexp-match #rx"default does not accept --evidence" err-1)
+    ;; Without a candidate there is nothing to bind the evidence to.
+    (define-values (status-2 out-2 err-2) (invoke "release" "--evidence" "/tmp/evidence"))
+    (check-not-equal? status-2 0)
+    (check-regexp-match #rx"--evidence requires --candidate SHA" err-2)
+    ;; quick refuses it too (its own command path).
+    (define-values (status-3 out-3 err-3) (invoke "quick" "--evidence" "/tmp/evidence"))
+    (check-not-equal? status-3 0)
+    (check-regexp-match #rx"quick does not accept --evidence" err-3)
+    ;; The release explain states the evidence contract and the obligation
+    ;; states (plan only: nothing executed).
+    (define-values (status-4 out-4 err-4) (invoke "release" "--explain"))
+    (check-equal? status-4 0)
+    (check-regexp-match #rx"RELEASE OBLIGATION ci-verification \\[UNAVAILABLE\\]" out-4)
+    (check-regexp-match #rx"evidence contract: --evidence <proof-bundle\\|artifact-dir>" out-4))
 
   ;; ---------------------------------------------------------------- --lane
   (test-case "an unknown --lane fails closed and lists the valid lanes"

@@ -121,6 +121,8 @@
          qt-lane-suite
          ;; Release candidate verification (`./qt release --candidate SHA`)
          release-candidate-check
+         candidate-relevant-untracked?
+         porcelain-z-untracked
          ;; Resolved plan shared by `--explain` and execution
          (struct-out lane-plan)
          resolve-lane-plan
@@ -136,6 +138,11 @@
          ;; Release obligations
          (struct-out release-obligation)
          release-obligations
+         (struct-out release-evidence)
+         load-release-evidence
+         release-obligations-with-evidence
+         release-apply-run
+         release-evidence-line
          release-blocking
          release-obligation-lines
          release-unverified-message
@@ -185,20 +192,38 @@
 ;; `@timeout` metadata. Mirrors the quick runner's own `#:timeout` default.
 (define full-default-timeout 120)
 
+;; The named obligation claim texts, shared verbatim by the `full` honesty
+;; list and the release candidate obligations (final plan §6 E2): one string
+;; per claim, so a wording drift cannot create a second source of truth. The
+;; platform line stays in the `full` honesty list (a local Linux pass still
+;; does not prove macOS behavior), but it is NOT a release candidate
+;; obligation: the local release command claims no platform coverage — CI's
+;; `test-platform` required context stays its owner, unchanged.
+(define governance-parity-obligation-text
+  (string-append "governance-controller suite parity: the Racket finalizer port"
+                 " (tests/test-wave-finalizer-{model,adapter,controller,native}.rkt) runs here,"
+                 " pinned to goldens captured from the original Python governance-controller suite"
+                 " (scripts/github/wave-finalizer.py + test_wave_finalizer.py, since deleted);"
+                 " no live oracle is left to diff against, so this command is the authoritative"
+                 " parity run"))
+(define platform-obligation-text
+  "macOS/platform lane (platform-specific behavior of this Linux host)")
+(define github-branch-protection-text
+  "GitHub branch protection and required status checks")
+(define release-provenance-obligation-text
+  "release provenance and exact-candidate verification (run `racket scripts/release-preflight.rkt`)")
+(define ci-verification-obligation-text
+  "PR/CI verification of this commit (counted by the GitHub pipeline)")
+
 ;; What a local pass of this selection cannot prove. Printed verbatim by
 ;; `--explain` so the absence of these checks is never mistaken for
 ;; verification.
 (define full-obligations
   (list
-   (string-append "governance-controller suite parity: the Racket finalizer port"
-                  " (tests/test-wave-finalizer-{model,adapter,controller,native}.rkt) runs here,"
-                  " pinned to goldens captured from the original Python governance-controller suite"
-                  " (scripts/github/wave-finalizer.py + test_wave_finalizer.py, since deleted);"
-                  " no live oracle is left to diff against, so this command is the authoritative"
-                  " parity run")
-   "macOS/platform lane (platform-specific behavior of this Linux host)"
-   "GitHub branch protection and required status checks"
-   "release provenance and exact-candidate verification (run `racket scripts/release-preflight.rkt`)"))
+   governance-parity-obligation-text
+   platform-obligation-text
+   github-branch-protection-text
+   release-provenance-obligation-text))
 
 ;; Counted obligations this command does NOT provide: they are counted (and
 ;; required) by other gates, so a green `./qt full` must never be read as a
@@ -213,7 +238,7 @@
 
 (define full-not-provided
   (list
-   "PR/CI verification of this commit (counted by the GitHub pipeline)"
+   ci-verification-obligation-text
    "Racket dependency, packaging, scribble-doc and release-readiness gates (counted by `racket scripts/release-preflight.rkt`)"
    (string-append "the live benchmark suite and the CI latency-budget guard "
                   "(benchmark.yml / pr-latency-guard.yml; the latency guard's automatic "
@@ -749,36 +774,276 @@
 ;; Release obligations
 ;; ============================================================
 
-;; One obligation and whether THIS command verified it. `./qt release` cannot
-;; verify any of them today, so the list is the honest gap: every entry is
-;; printed and the command exits non-zero while one stays unverified.
-(struct release-obligation (id text verified?) #:transparent)
+;; One candidate-stage obligation (final plan §6 E2 rev 3): a stable slug
+;; (the claim's identity — adding, removing or verifying one entry never
+;; renumbers the others), the claim text, the ONLY input that can verify it,
+;; and the current state. verifier:
+;;   'local       — the release lane's own suite run on the exact candidate;
+;;   'ci-results  — clean, SHA-bound CI result documents from --evidence;
+;;   'attestation — an explicit branch-protection / release-provenance
+;;                  attestation bound to the candidate SHA. No attestation
+;;                  input format exists yet, so these obligations are
+;;                  unavailable in every run today: listed, blocking, never
+;;                  inferred from CI results.
+;; state: 'verified | 'failed | 'unavailable — 'failed and 'unavailable both
+;; block; only 'verified counts as satisfied (fail closed).
+(struct release-obligation (slug text verifier state) #:transparent)
+
+;; The candidate obligation table: stable slugs over the shared claim texts,
+;; each naming its verifier. The macOS/platform claim is NOT a candidate
+;; obligation (CI's test-platform required context is unchanged; the local
+;; release command claims no platform coverage) — it remains in the `full`
+;; honesty list above.
+(define release-candidate-obligations
+  (list
+   (list 'governance-parity governance-parity-obligation-text 'local)
+   (list 'ci-verification ci-verification-obligation-text 'ci-results)
+   (list 'branch-protection github-branch-protection-text 'attestation)
+   (list 'release-provenance release-provenance-obligation-text 'attestation)))
 
 (define (release-obligations)
-  (append (for/list ([text (in-list full-obligations)]
-                     [i (in-naturals 1)])
-            (release-obligation (string->symbol (format "not-verified-~a" i)) text #f))
-          (for/list ([text (in-list full-not-provided)]
-                     [i (in-naturals 1)])
-            (release-obligation (string->symbol (format "not-provided-~a" i)) text #f))))
+  ;; The fail-closed default: every obligation unavailable, exactly what a
+  ;; run without --evidence and without a verified suite run has established.
+  (release-obligations-with-evidence
+   (release-evidence 'unavailable "no --evidence input given" 0)))
+
+;; ============================================================
+;; Release evidence (`--evidence <proof-bundle|artifact-dir>`)
+;; ============================================================
+
+;; What an OFFLINE read of the release evidence established (final plan §6
+;; E2). state:
+;;   'clean       — every result document is bound to the exact candidate SHA
+;;                  and clean;
+;;   'failed      — bound to the candidate SHA, but the results are red;
+;;   'unavailable — no evidence, unreadable, malformed, or bound to a
+;;                  different SHA: the affected obligations are UNAVAILABLE,
+;;                  never inferred and never silently satisfied.
+;; documents counts the result documents the read examined.
+(struct release-evidence (state reason documents) #:transparent)
+
+(define (release-evidence-unavailable reason)
+  (release-evidence 'unavailable reason 0))
+
+;; Result document paths of an artifact directory, found recursively under
+;; the same `test-results.json` naming the CI shard verifier consumes.
+(define (release-evidence-document-paths dir)
+  (let walk ([dir dir])
+    (append*
+     (for/list ([p (in-list (directory-list dir #:build? #t))])
+       (cond
+         [(directory-exists? p) (walk p)]
+         [(regexp-match? #rx"(^|/)test-results[.]json$" (path->string p)) (list p)]
+         [else '()])))))
+
+;; `json` is loaded ON DEMAND exactly like the changed-selection machinery:
+;; plain `./qt full --explain`, `./qt default` and `./qt release` keep their
+;; dependency-free plan path.
+(define (release-evidence-read-json path)
+  (define read-json (dynamic-require 'json 'read-json))
+  (with-handlers ([exn:fail? (lambda (_) 'parse-error)])
+    (read-json (open-input-string (file->string path)))))
+
+;; An artifact directory is clean only when EVERY document is bound to the
+;; exact candidate SHA and clean; any malformed or wrong-SHA document poisons
+;; the whole input (fail closed — a partial truth is not a truth). Bound but
+;; red documents are honest 'failed evidence.
+(define (release-evidence-from-artifact-dir candidate dir)
+  (define docs (release-evidence-document-paths dir))
+  (cond
+    [(null? docs)
+     (release-evidence-unavailable
+      (format "no test-results.json documents under ~a" (path->string dir)))]
+    [else
+     (define bound-clean 0)
+     (define bound-red 0)
+     (define problem #f)
+     (define (problem! message)
+       (unless problem (set! problem message)))
+     (for ([doc (in-list docs)])
+       (define raw (release-evidence-read-json doc))
+       (cond
+         [(eq? raw 'parse-error)
+          (problem! (format "~a: not readable JSON" (path->string doc)))]
+         [(not (hash? raw))
+          (problem! (format "~a: document is not a JSON object" (path->string doc)))]
+         [else
+          (define summary (hash-ref raw 'run_summary #f))
+          (define sha (and (hash? summary) (hash-ref summary 'run_sha #f)))
+          (define fail (and (hash? summary) (hash-ref summary 'fail #f)))
+          (define timeout (and (hash? summary) (hash-ref summary 'timeout #f)))
+          (cond
+            [(not (hash? summary))
+             (problem!
+              (format "~a: no run_summary object (producer envelope required)" (path->string doc)))]
+            [(not (string? sha))
+             (problem!
+              (format "~a: run_summary.run_sha missing (unattested)" (path->string doc)))]
+            [(not (string=? sha candidate))
+             (problem!
+              (string-append
+               (format "~a: run_summary.run_sha is ~a but the candidate is ~a"
+                       (path->string doc)
+                       sha
+                       candidate)
+               " (wrong-SHA evidence)"))]
+            [(not (and (exact-nonnegative-integer? fail) (exact-nonnegative-integer? timeout)))
+             (problem!
+              (format "~a: run_summary.fail/timeout are not result counts" (path->string doc)))]
+            [(or (> fail 0) (> timeout 0))
+             (set! bound-red (add1 bound-red))]
+            [else (set! bound-clean (add1 bound-clean))])]))
+     (cond
+       [problem (release-evidence 'unavailable problem (length docs))]
+       [(> bound-red 0)
+        (release-evidence
+         'failed
+         (format "~a result document(s) bound to the candidate, ~a red (failures/timeouts)"
+                 (+ bound-clean bound-red)
+                 bound-red)
+         (+ bound-clean bound-red))]
+       [else
+        (release-evidence
+         'clean
+         (format "~a result document(s) bound to the candidate, all clean" bound-clean)
+         bound-clean)])]))
+
+;; A proof bundle is read as BINDING-ONLY evidence: schema identity + subject
+;; commit binding + the machine-readable result summary. This is deliberately
+;; NOT the full q.proof-bundle/1 consumer validation (integrity digests,
+;; producer identity, retention) — bundle-validator.rkt owns that contract
+;; and qt does not claim it: a bundle can satisfy exactly the same obligations
+;; an artifact directory can, never more. Full consumer validation stays with
+;; the bundle consumers.
+(define release-proof-bundle-schema "q.proof-bundle/1")
+
+(define (release-evidence-from-proof-bundle candidate path)
+  (define raw (release-evidence-read-json path))
+  (cond
+    [(eq? raw 'parse-error)
+     (release-evidence-unavailable (format "~a: not readable JSON" (path->string path)))]
+    [(not (hash? raw))
+     (release-evidence-unavailable (format "~a: bundle is not a JSON object" (path->string path)))]
+    [(not (string? (hash-ref raw 'schema #f)))
+     (release-evidence-unavailable (format "~a: no schema field" (path->string path)))]
+    [(not (string=? (hash-ref raw 'schema) release-proof-bundle-schema))
+     (release-evidence-unavailable
+      (format "~a: schema is ~s, not ~a" (path->string path) (hash-ref raw 'schema)
+              release-proof-bundle-schema))]
+    [else
+     (define subject (hash-ref raw 'subject #f))
+     (define sha (and (hash? subject) (hash-ref subject 'commit_sha #f)))
+     (define result (hash-ref raw 'result #f))
+     (define status (and (hash? result) (hash-ref result 'status #f)))
+     (define failed (and (hash? result) (hash-ref result 'tests_failed #f)))
+     (define timeouts (and (hash? result) (hash-ref result 'timeouts #f)))
+     (cond
+       [(not (string? sha))
+        (release-evidence-unavailable
+         (format "~a: subject.commit_sha missing (unattested)" (path->string path)))]
+       [(not (string=? sha candidate))
+        (release-evidence-unavailable
+         (string-append
+          (format "~a: bound to ~a but the candidate is ~a" (path->string path) sha)
+          " (wrong-SHA evidence)"))]
+       [(not (and (string? status)
+                  (exact-nonnegative-integer? failed)
+                  (exact-nonnegative-integer? timeouts)))
+        (release-evidence-unavailable
+         (format "~a: result summary incomplete (status/tests_failed/timeouts)" (path->string path)))]
+       [(or (not (string=? status "pass")) (> failed 0) (> timeouts 0))
+        (release-evidence
+         'failed
+         (format "proof bundle bound to the candidate reports status ~a (~a failed, ~a timeouts)"
+                 status failed timeouts)
+         1)]
+       [else
+        (release-evidence
+         'clean
+         (format "proof bundle bound to the candidate, result clean (~a tests passed)"
+                 (hash-ref result 'tests_passed 0))
+         1)])]))
+
+;; Load release evidence OFFLINE from a local proof-bundle file or an
+;; artifact directory. Content problems NEVER raise: they are 'unavailable
+;; with the reason, so the candidate verdict stays honest instead of
+;; crashing, and a missing file is never mistaken for absence of a claim.
+(define (load-release-evidence candidate evidence-path)
+  (define path
+    (if (path? evidence-path)
+        evidence-path
+        (string->path evidence-path)))
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (release-evidence-unavailable
+                      (format "evidence load failed: ~a" (exn-message e))))])
+    (cond
+      [(directory-exists? path)
+       (release-evidence-from-artifact-dir candidate path)]
+      [(file-exists? path)
+       (release-evidence-from-proof-bundle candidate path)]
+      [else
+       (release-evidence-unavailable
+        (format "evidence path does not exist: ~a" (path->string path)))])))
+
+;; Evidence-derived obligation states: ci-results obligations follow the
+;; evidence read; attestation obligations have no input format yet and stay
+;; unavailable; local obligations start unavailable until the run applies.
+(define (release-obligations-with-evidence evidence)
+  (for/list ([entry (in-list release-candidate-obligations)])
+    (define verifier (caddr entry))
+    (define state
+      (case verifier
+        [(ci-results)
+         (case (release-evidence-state evidence)
+           [(clean) 'verified]
+           [(failed) 'failed]
+           [else 'unavailable])]
+        [else 'unavailable]))
+    (release-obligation (car entry) (cadr entry) verifier state)))
+
+;; The local verifier (governance-parity) is satisfied by the release lane's
+;; own suite run: valid per-file evidence and no managed-surface violation.
+(define (release-apply-run obligations valid? surface-violations)
+  (for/list ([o (in-list obligations)])
+    (if (and (eq? (release-obligation-verifier o) 'local)
+             valid?
+             (null? surface-violations))
+        (struct-copy release-obligation o [state 'verified])
+        o)))
+
+;; One honest line about what the evidence read established.
+(define (release-evidence-line report)
+  (case (release-evidence-state report)
+    [(clean) (format "release evidence: ~a" (release-evidence-reason report))]
+    [(failed) (format "release evidence: ~a" (release-evidence-reason report))]
+    [else (format "release evidence: unavailable (~a)" (release-evidence-reason report))]))
 
 ;; Every obligation still unverified. A non-empty result blocks the release
 ;; pass line; an empty one is the only path to a release pass.
 (define (release-blocking obligations)
-  (filter-not release-obligation-verified? obligations))
+  (filter (lambda (o) (not (eq? (release-obligation-state o) 'verified))) obligations))
+
+;; State labels use the plan's fail-closed vocabulary: only "verified"
+;; counts as satisfied, and FAILED/UNAVAILABLE are visually distinct from it.
+(define (release-obligation-state-label o)
+  (case (release-obligation-state o)
+    [(verified) "verified"]
+    [(failed) "FAILED"]
+    [else "UNAVAILABLE"]))
 
 (define (release-obligation-lines obligations)
   (for/list ([o (in-list obligations)])
     (format "RELEASE OBLIGATION ~a [~a] ~a"
-            (release-obligation-id o)
-            (if (release-obligation-verified? o) "verified" "NOT VERIFIED")
+            (release-obligation-slug o)
+            (release-obligation-state-label o)
             (release-obligation-text o))))
 
 (define (release-unverified-message blocking)
   (format
    "release unverified: ~a release obligation(s) not verified by this command (~a); a release requires a verified candidate"
    (length blocking)
-   (string-join (map (lambda (o) (format "~a" (release-obligation-id o))) blocking) ", ")))
+   (string-join (map (lambda (o) (format "~a" (release-obligation-slug o))) blocking) ", ")))
 
 ;; ============================================================
 ;; Resolved plan (computed once; shared by `--explain` and execution)
@@ -1026,8 +1291,14 @@
         (format "  - ~a" item))
       (if (eq? lane 'release)
           (append (list "")
-                  (list "RELEASE OBLIGATIONS (unverified means a non-zero exit, never a pass line):")
-                  (release-obligation-lines (release-obligations)))
+                  (list "RELEASE OBLIGATIONS (any state but verified means a non-zero exit, never a pass line):")
+                  (release-obligation-lines (release-obligations))
+                  (list
+                   (string-append
+                    "  evidence contract: --evidence <proof-bundle|artifact-dir> is the only offline input; it must be "
+                    "bound to the exact candidate SHA; absent, malformed or wrong-SHA evidence is unavailable, "
+                    "never inferred. branch-protection and release-provenance have no attestation input yet: "
+                    "they stay unavailable and block")))
           '()))]))
 
 ;; The frozen plain-`./qt full` preamble (frozen wording, updated for the
@@ -1978,6 +2249,44 @@
 ;; candidate it was handed: a different HEAD, or a checkout with uncommitted
 ;; changes, is refused before anything runs (release obligations stay
 ;; unconditional). `sha` must be a commit id (hex), never a moving ref.
+;; Relevant untracked files for the candidate dirty-state check (final plan
+;; §6 E2): the verification must read exactly the candidate's bytes, so an
+;; untracked file is relevant when the release verification would read it —
+;; a selected test input, one of the managed surfaces (info.rkt,
+;; README.md, CHANGELOG.md), or anything under artifacts/ or tests/. The
+;; release selection is tests-rooted (.rkt discovery under tests/), so every
+;; selected test input is under tests/ and the explicit prefix rule covers
+;; it together with the non-.rkt test inputs. Unrelated scratch files and
+;; logs elsewhere in the tree do NOT block the candidate check.
+(define candidate-managed-untracked-files
+  '("info.rkt" "README.md" "CHANGELOG.md"))
+
+(define (candidate-relevant-untracked? rel)
+  (or (and (member rel candidate-managed-untracked-files) #t)
+      (for/or ([prefix (in-list '("tests/" "artifacts/"))])
+        (string-prefix? rel prefix))))
+
+;; Paths of the untracked ("??") entries of a `git status --porcelain=v1 -z`
+;; output. -z gives raw NUL-separated paths, so no path is ever quoted or
+;; mangled; rename/copy entries carry a second NUL-separated field (the
+;; original path) which the parser skips defensively.
+(define (porcelain-z-untracked text)
+  (let loop ([fields (string-split text "\x0")] [rename-source? #f] [paths '()])
+    (cond
+      [(null? fields) (reverse paths)]
+      [(string=? (car fields) "") (loop (cdr fields) rename-source? paths)]
+      [rename-source? (loop (cdr fields) #f paths)]
+      [else
+       (define field (car fields))
+       (cond
+         [(< (string-length field) 4) (loop (cdr fields) #f paths)]
+         [(or (string-prefix? (substring field 0 2) "R")
+              (string-prefix? (substring field 0 2) "C"))
+          (loop (cdr fields) #t paths)]
+         [(string=? (substring field 0 2) "??")
+          (loop (cdr fields) #f (cons (substring field 3) paths))]
+         [else (loop (cdr fields) #f paths)])])))
+
 (define (release-candidate-check root sha)
   (define text
     (and sha
@@ -2022,6 +2331,30 @@
      text
      (path->string root)
      (length dirty)))
+  ;; Relevant UNTRACKED files block too: a new test input, a managed-surface
+  ;; edit or a new artifacts/tests file would change what the verification
+  ;; reads without being part of the candidate commit. Everything else stays
+  ;; out of scope (scratch and logs elsewhere do not block).
+  (define-values (untracked-ok? untracked-text)
+    (git-run root (list "status" "--porcelain=v1" "-z" "--untracked-files=all")))
+  (unless untracked-ok?
+    (error 'full-plan
+           "cannot verify --candidate ~a under ~a: git status failed (fail closed)"
+           text
+           (path->string root)))
+  (define relevant-untracked
+    (filter candidate-relevant-untracked? (porcelain-z-untracked untracked-text)))
+  (when (pair? relevant-untracked)
+    (error
+     'full-plan
+     (string-append
+      "--candidate ~a names a checkout at ~a with ~a relevant untracked file(s) the verification would "
+      "read (tests/**, artifacts/**, info.rkt, README.md, CHANGELOG.md or a selected test input): ~a; "
+      "refusing to verify a tree that is not the candidate's bytes")
+     text
+     (path->string root)
+     (length relevant-untracked)
+     (string-join relevant-untracked ", ")))
   ;; The verified identity is the resolved commit, never the caller's spelling.
   head)
 

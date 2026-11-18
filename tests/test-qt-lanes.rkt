@@ -282,20 +282,28 @@
                  (format "~a: a changed managed surface is red" lane))
       ;; A caller that passes obligations to a non-release lane fails closed.
       (unless (eq? lane 'release)
-        (check-eq? (lane-verdict lane #t '() (list (release-obligation 'x "x" #f)))
+        (check-eq? (lane-verdict lane #t '() (list (release-obligation 'x "x" 'local 'unavailable)))
                    'invalid
                    (format "~a: obligations on a non-release lane" lane)))
-      (check-eq? (lane-verdict lane #t '("README.md") (list (release-obligation 'x "x" #f)))
+      (check-eq? (lane-verdict lane #t '("README.md") (list (release-obligation 'x "x" 'local 'unavailable)))
                  'surface
                  (format "~a: a changed surface outranks an obligation" lane)))
     ;; The release lane is the only lane with obligations: an unverified
     ;; obligation is red, an empty blocking list is the only path to a pass.
-    (check-eq? (lane-verdict 'release #t '() (list (release-obligation 'x "x" #f))) 'unverified)
+    (check-eq? (lane-verdict 'release #t '() (list (release-obligation 'x "x" 'local 'unavailable))) 'unverified)
     (check-eq? (lane-verdict 'release #t '() '()) 'ok "release with empty blocking is ok")
     ;; `blocking` is the already-filtered unverified list, so a verified
     ;; obligation filters away and cannot block the pass line either.
-    (check-eq? (lane-verdict 'release #t '() (release-blocking (list (release-obligation 'x "x" #t))))
+    (check-eq? (lane-verdict 'release #t '() (release-blocking (list (release-obligation 'x "x" 'local 'verified))))
                'ok)
+    (check-equal? (map release-obligation-slug (release-obligations))
+                  '(governance-parity ci-verification branch-protection release-provenance)
+                  "obligation ids are STABLE SLUGS, not positional not-verified-N/not-provided-N")
+    (check-eq?
+     (for/sum ([o (in-list (release-obligations))] #:when (string-contains? (release-obligation-text o) "macOS"))
+       1)
+     0
+     "the macOS/platform claim is not a candidate obligation (CI test-platform is unchanged)")
     (check-eq? (lane-verdict 'release #t '() (release-blocking (release-obligations)))
                'unverified
                "the real obligation list blocks every release pass"))
@@ -640,21 +648,32 @@
                   obligations
                   "no release obligation is verified by the suite run alone")
     (define text (join-lines (release-obligation-lines obligations)))
-    (check-regexp-match #rx"RELEASE OBLIGATION not-verified-1 \\[NOT VERIFIED\\]" text)
-    (check-regexp-match #rx"RELEASE OBLIGATION not-provided-1 \\[NOT VERIFIED\\]" text)
+    ;; STABLE SLUGS + state vocabulary (stated contract change, final plan §6
+    ;; E2): the ids name the claim, and only "verified" counts as satisfied.
+    (check-regexp-match #rx"RELEASE OBLIGATION governance-parity \\[UNAVAILABLE\\]" text)
+    (check-regexp-match #rx"RELEASE OBLIGATION ci-verification \\[UNAVAILABLE\\]" text)
+    (check-regexp-match #rx"RELEASE OBLIGATION branch-protection \\[UNAVAILABLE\\]" text)
+    (check-regexp-match #rx"RELEASE OBLIGATION release-provenance \\[UNAVAILABLE\\]" text)
+    (check-false (regexp-match? #rx"macOS" text)
+                 "the macOS/platform claim is not a candidate obligation")
     (check-regexp-match #rx"Python governance-controller suite" text)
-    ;; A fully verified fixture list blocks nothing; one unverified entry blocks.
-    (check-equal? (release-blocking (list (release-obligation 'fixture-a "fixture check A" #t))) '())
+    ;; A fully verified fixture list blocks nothing; FAILED and UNAVAILABLE
+    ;; both block — only VERIFIED does not (fail closed).
+    (check-equal?
+     (release-blocking (list (release-obligation 'fixture-a "fixture check A" 'local 'verified)))
+     '())
     (define mixed
-      (list (release-obligation 'fixture-a "A" #t) (release-obligation 'fixture-b "B" #f)))
-    (check-equal? (map release-obligation-id (release-blocking mixed)) '(fixture-b))
-    (check-regexp-match #rx"^release unverified: 1 release obligation"
+      (list (release-obligation 'fixture-a "A" 'local 'verified)
+            (release-obligation 'fixture-b "B" 'evidence 'unavailable)
+            (release-obligation 'fixture-c "C" 'ci-results 'failed)))
+    (check-equal? (map release-obligation-slug (release-blocking mixed)) '(fixture-b fixture-c))
+    (check-regexp-match #rx"^release unverified: 2 release obligation"
                         (release-unverified-message (release-blocking mixed))))
   (test-case "release explain lists the obligations next to the plan"
     (with-lane-root (lambda (dir)
                       (define text (join-lines (plan-explain-lines (resolve-lane-plan 'release dir))))
                       (check-regexp-match #rx"RELEASE OBLIGATIONS " text)
-                      (check-regexp-match #rx"\\[NOT VERIFIED\\]" text)
+                      (check-regexp-match #rx"\\[UNAVAILABLE\\]" text)
                       (check-regexp-match #rx"NOT VERIFIED by \\./qt release:" text)
                       (check-regexp-match #rx"lane filter: none" text)
                       (check-regexp-match #rx"complete available Racket suite" text))))
@@ -666,10 +685,13 @@
              (invoke-command 300 dir (find-executable-path "racket") qt "release" "--jobs" "2"))
            (define text (string-append out err))
            (check-not-equal? status 0)
-           (check-regexp-match #rx"RELEASE OBLIGATION not-verified-1 \\[NOT VERIFIED\\]" text)
+           (check-regexp-match #rx"RELEASE OBLIGATION governance-parity \\[verified\\]" text)
            ;; The FULL obligation list must be present, not just its first entry:
            ;; a preamble-only (or truncated) run cannot satisfy these.
-           (check-regexp-match #rx"RELEASE OBLIGATION not-provided-6 \\[NOT VERIFIED\\]" text)
+           (check-regexp-match #rx"RELEASE OBLIGATION release-provenance \\[UNAVAILABLE\\]" text)
+           ;; The evidence verdict line precedes the obligations; without
+           ;; --evidence the CI results are unavailable, never inferred.
+           (check-regexp-match #rx"release evidence: unavailable \\(no --evidence input given\\)" text)
            (check-equal? (length (regexp-match* #rx"RELEASE OBLIGATION " text))
                          (length (release-obligations))
                          "every obligation is printed on its own line")
@@ -682,6 +704,119 @@
             #rx"release: starting the lane selection of the complete available Racket suite \\(release review\\) \\(8 files"
             out)))
         (displayln "SKIP release CLI: Linux /proc or setsid unavailable")))
+  ;; --- release evidence (--evidence, final plan §6 E2) --------------------
+  (define (write-evidence-doc dir rel json-text)
+    (make-parent-directory* (build-path dir rel))
+    (write-file (build-path dir rel) json-text))
+  (define (results-doc sha pass fail)
+    (format "{\"run_summary\":{\"run_sha\":\"~a\",\"file_count\":2,\"pass\":~a,\"fail\":~a,\"timeout\":0,\"skip\":0}}"
+            sha pass fail))
+  (define candidate-sha "0123456789abcdef0123456789abcdef01234567")
+  (test-case "release evidence: artifact directory binding and cleanliness"
+    (define dir (make-temporary-file "qt-lanes-evidence-~a" 'directory))
+    (dynamic-wind
+     void
+     (lambda ()
+       ;; Absent and empty inputs are unavailable, never inferred.
+       (check-eq? (release-evidence-state (load-release-evidence candidate-sha (build-path dir "missing")))
+                  'unavailable)
+       (check-eq? (release-evidence-state (load-release-evidence candidate-sha dir)) 'unavailable)
+       ;; A clean, SHA-bound document verifies.
+       (write-evidence-doc dir "shard-0/test-results.json" (results-doc candidate-sha 2 0))
+       (define clean (load-release-evidence candidate-sha dir))
+       (check-eq? (release-evidence-state clean) 'clean)
+       (check-equal? (release-evidence-documents clean) 1)
+       ;; A second clean document keeps the verdict clean.
+       (write-evidence-doc dir "shard-1/test-results.json" (results-doc candidate-sha 1 0))
+       (check-eq? (release-evidence-state (load-release-evidence candidate-sha dir)) 'clean)
+       ;; Bound but red: honest FAILED evidence.
+       (write-evidence-doc dir "shard-2/test-results.json" (results-doc candidate-sha 0 1))
+       (define failed (load-release-evidence candidate-sha dir))
+       (check-eq? (release-evidence-state failed) 'failed)
+       ;; Wrong SHA, missing attestation, malformed JSON: unavailable.
+       (write-evidence-doc dir "shard-3/test-results.json"
+                           (results-doc "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" 1 0))
+       (check-eq? (release-evidence-state (load-release-evidence candidate-sha dir)) 'unavailable)
+       (delete-file (build-path dir "shard-3" "test-results.json"))
+       (write-evidence-doc dir "shard-3/test-results.json" "{\"broken\":true}")
+       (check-eq? (release-evidence-state (load-release-evidence candidate-sha dir)) 'unavailable)
+       (delete-file (build-path dir "shard-3" "test-results.json"))
+       (write-file (build-path dir "shard-3" "test-results.json") "not json at all")
+       (check-eq? (release-evidence-state (load-release-evidence candidate-sha dir)) 'unavailable))
+     (lambda () (delete-directory/files dir))))
+  (test-case "release evidence: proof bundle binding is read fail-closed"
+    (define dir (make-temporary-file "qt-lanes-bundle-~a" 'directory))
+    (dynamic-wind
+     void
+     (lambda ()
+       (define bundle (build-path dir "bundle.json"))
+       ;; A clean bundle bound to the candidate verifies.
+       (write-file
+        bundle
+        (format
+         (string-append
+          "{\"schema\":\"q.proof-bundle/1\",\"subject\":{\"commit_sha\":\"~a\"},"
+          "\"result\":{\"status\":\"pass\",\"tests_passed\":5,\"tests_failed\":0,\"timeouts\":0}}")
+         candidate-sha))
+       (define clean (load-release-evidence candidate-sha bundle))
+       (check-eq? (release-evidence-state clean) 'clean)
+       (check-equal? (release-evidence-documents clean) 1)
+       ;; Bound but red.
+       (write-file
+        bundle
+        (format
+         (string-append
+          "{\"schema\":\"q.proof-bundle/1\",\"subject\":{\"commit_sha\":\"~a\"},"
+          "\"result\":{\"status\":\"pass\",\"tests_passed\":4,\"tests_failed\":1,\"timeouts\":0}}")
+         candidate-sha))
+       (check-eq? (release-evidence-state (load-release-evidence candidate-sha bundle)) 'failed)
+       ;; Wrong SHA: unavailable, never inferred.
+       (write-file
+        bundle
+        (string-append
+         "{\"schema\":\"q.proof-bundle/1\",\"subject\":{\"commit_sha\":"
+         "\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},"
+         "\"result\":{\"status\":\"pass\",\"tests_passed\":5,\"tests_failed\":0,\"timeouts\":0}}"))
+       (check-eq? (release-evidence-state (load-release-evidence candidate-sha bundle)) 'unavailable)
+       ;; Unknown schema and non-JSON content: malformed, unavailable.
+       (write-file bundle "{\"schema\":\"something-else\"}")
+       (check-eq? (release-evidence-state (load-release-evidence candidate-sha bundle)) 'unavailable)
+       (write-file bundle "[[[")
+       (check-eq? (release-evidence-state (load-release-evidence candidate-sha bundle)) 'unavailable))
+     (lambda () (delete-directory/files dir))))
+  (test-case "release evidence: obligation states follow the evidence, never inference"
+    ;; No evidence: everything unavailable; only the local verifier can move.
+    (define none (release-obligations-with-evidence (release-evidence 'unavailable "nothing" 0)))
+    (check-true (and (for/and ([o (in-list none)]) (eq? (release-obligation-state o) 'unavailable)) #t))
+    ;; Clean evidence verifies ONLY the ci-results obligation; the attestation
+    ;; obligations stay unavailable (no input format yet) and keep blocking.
+    (define verified
+      (release-obligations-with-evidence (release-evidence 'clean "clean" 3)))
+    (check-equal?
+     (for/list ([o (in-list verified)]) (list (release-obligation-slug o) (release-obligation-state o)))
+     '((governance-parity unavailable)
+       (ci-verification verified)
+       (branch-protection unavailable)
+       (release-provenance unavailable)))
+    (check-equal? (map release-obligation-slug (release-blocking verified))
+                  '(governance-parity branch-protection release-provenance))
+    ;; Failed evidence is honest failure, not absence.
+    (define failed
+      (release-obligations-with-evidence (release-evidence 'failed "red" 2)))
+    (define ci
+      (for/first ([o (in-list failed)] #:when (eq? (release-obligation-slug o) 'ci-verification)) o))
+    (check-eq? (release-obligation-state ci) 'failed)
+    ;; The local verifier is applied by the run: valid + clean surfaces only.
+    (define applied (release-apply-run verified #t '()))
+    (check-eq? (release-obligation-state (car applied)) 'verified)
+    (define not-applied (release-apply-run verified #f '()))
+    (check-eq? (release-obligation-state (car not-applied)) 'unavailable)
+    (define touched (release-apply-run verified #t '("info.rkt")))
+    (check-eq? (release-obligation-state (car touched)) 'unavailable)
+    ;; The evidence line states the verdict in the fail-closed vocabulary.
+    (check-regexp-match #rx"^release evidence: unavailable"
+                        (release-evidence-line (release-evidence 'unavailable "nothing" 0)))
+    (check-regexp-match #rx"^release evidence: " (release-evidence-line (release-evidence 'clean "clean" 1))))
   ;; --- changed-file selection --------------------------------------------
   (test-case "changed selection includes affected and unattributable files, excludes unrelated"
     (with-lane-root (lambda (dir)
