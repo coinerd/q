@@ -20,7 +20,8 @@
          racket/list
          racket/runtime-path
          racket/string
-         "../scripts/testing/full-plan.rkt")
+         "../scripts/testing/full-plan.rkt"
+         (only-in "../scripts/testing/quick-audit.rkt" admitted-owners))
 
 (define-runtime-path doc-path "../docs/testing.md")
 (define-runtime-path qt-path "../qt")
@@ -31,6 +32,7 @@
 (define-runtime-path preparation-path "../scripts/testing/preparation.rkt")
 (define-runtime-path runner-path "../scripts/run-tests/runner.rkt")
 (define-runtime-path admission-record "../tests/.quick-admission.rktd")
+(define-runtime-path changed-selection-path "../scripts/testing/changed-selection.rkt")
 
 (define doc (file->string doc-path))
 ;; Collapsed view for claims the doc wraps across lines.
@@ -221,3 +223,44 @@
     (check-true (string-contains? runner-text "targets="))
     (check-true (string-contains? runner-text "identity="))
     (check-true (string-contains? flat "hash → make → re-hash"))))
+
+;; Phase D (testing acceleration, #9936): pins for the everyday four-command
+;; loop, its measured-cost honesty, the no-owner gap path, and the admission
+;; expansion status. Same contract as above: a doc claim that drifts from the
+;; code is a red test; the doc moves in the same commit as its contract.
+(module+ test
+  (test-case "the everyday four-command loop and its measured costs are documented"
+    (check-true (string-contains? flat "The documented day is four commands"))
+    (for ([tok '("`./qt quick <file>`" "`./qt quick --changed BASE..HEAD`"
+                                       "`./qt full --file <file>`"
+                                       "`./qt default --file <file>`"
+                                       "`./qt default`")])
+      (check-true (string-contains? doc tok) (format "the everyday loop names ~a" tok)))
+    (check-true (string-contains? qt-text "default does not accept CI-surface option"))
+    (check-true (string-contains? flat "20 samples"))
+    (check-true (string-contains? flat "5 samples"))
+    (check-equal? (length (regexp-match* #rx"[*][*]missed" doc))
+                  2
+                  "both loop-target misses are recorded, not hidden"))
+
+  (test-case "the no-owner gap path matches the implemented escalation behavior"
+    (check-true (string-contains? flat "never answers a gap with a zero-test green"))
+    (define cs-text (file->string changed-selection-path))
+    (check-true (string-contains? cs-text "no @covers mapping reaches this changed module"))
+    (check-true (string-contains? flat "no @covers mapping reaches this changed module"))
+    (check-true (string-contains? cs-text "fallback-suites"))
+    (check-true (string-contains? flat "fallback_suites"))
+    (check-true (string-contains? qt-text "changed selection is empty"))
+    (check-true (string-contains? flat "changed selection is empty")))
+
+  (test-case "the admission expansion status names the real B1-B3 contract owners"
+    (check-true (string-contains? flat "no admission expansion happened"))
+    (for ([f (in-list '("tests/test-gsd-auto-review-loop-contract.rkt"
+                        "tests/test-gsd-auto-review-production-contract.rkt"
+                        "tests/test-gsd-generated-metadata-correction-contract.rkt"))])
+      (check-true (file-exists? (build-path root f)) (format "~a exists" f))
+      (check-true (string-contains? flat f) (format "the doc names ~a" f)))
+    (for ([f (in-list '("tests/test-gsd-auto-review-loop-contract.rkt"
+                        "tests/test-gsd-auto-review-production-contract.rkt"
+                        "tests/test-gsd-generated-metadata-correction-contract.rkt"))])
+      (check-false (member f (admitted-owners)) (format "~a stays unadmitted" f)))))
