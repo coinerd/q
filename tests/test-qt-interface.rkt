@@ -1,5 +1,5 @@
 #lang racket
-;; @speed fast
+;; @speed slow
 ;; @suite testing
 ;; @boundary integration
 ;; @timeout 300
@@ -161,15 +161,16 @@
                   (lambda () (delete-directory/files dir #:must-exist? #f))))
 
   (test-case "bare ./qt runs the default lane and prints its pass line"
-    (with-bare-root (lambda (dir)
-                      (define-values (status out err) (invoke-in dir))
-                      (check-equal? status 0 (string-append out err))
-                      (check-regexp-match #rx"^default: " out)
-                      (check-regexp-match
-                       #rx"offline PR verification only; platform and GitHub-hosted claims remain with CI"
-                       out)
-                      (check-regexp-match #rx"default passed: 1 files" out)
-                      (check-equal? err ""))))
+    (with-bare-root
+     (lambda (dir)
+       (define-values (status out err) (invoke-in dir))
+       (check-equal? status 0 (string-append out err))
+       (check-regexp-match #rx"^default: " out)
+       (check-regexp-match
+        #rx"offline PR verification only; platform and GitHub-hosted claims remain with CI"
+        out)
+       (check-regexp-match #rx"default passed: 1 files" out)
+       (check-equal? err ""))))
 
   (test-case "bare ./qt --explain prints the default plan and executes nothing"
     (with-bare-root (lambda (dir)
@@ -373,9 +374,9 @@
             (porcelain-z-untracked (string-append "?? tests/new.rkt" nul "?? scratch/log.txt" nul))
             '("tests/new.rkt" "scratch/log.txt"))
            (check-equal? (porcelain-z-untracked "") '())
-           (check-equal?
-            (porcelain-z-untracked (string-append "R  new-name" nul "old-name" nul "?? tests/x.rkt" nul))
-            '("tests/x.rkt"))
+           (check-equal? (porcelain-z-untracked
+                          (string-append "R  new-name" nul "old-name" nul "?? tests/x.rkt" nul))
+                         '("tests/x.rkt"))
            ;; End to end: scratch untracked files do NOT block the candidate.
            (make-directory (build-path dir "scratch"))
            (write-file (build-path dir "scratch" "notes.txt") "unrelated\n")
