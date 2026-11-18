@@ -23,14 +23,16 @@ that implement it.
 
 `./qt` is the single local test entry point. Every command states what a pass
 does and does not prove, and every command has an `--explain` mode that prints
-the plan without executing or cleaning anything.
+the plan without executing or cleaning anything. The canonical command
+reference (commands, exit behavior, admission audit, preparation) is
+[`testing.md`](testing.md); this section records the conventions.
 
 | Command | Selection | Pass line |
 |---|---|---|
 | `./qt` | same as `./qt default` (plan §3 interface table) | `default passed: ...` |
 | `./qt quick` | reviewed pure-unit owner table with a generated admission record (capability-denylist scan over each owner and its reviewed closure; `./qt quick --audit` reports admitted/review-required/rejected) | `quick passed: ...` |
 | `./qt full` | every discovered test file (complete available suite) | `full passed: ...` |
-| `./qt default` | fast/PR lane: `full` minus the excluded files below | `default passed: ...` |
+| `./qt default` | offline PR verification: the required-offline lane — the union of the suites the required CI test jobs select (see [Default-lane selection](#default-lane-selection-required-offline) below) | `default passed: ...` |
 | `./qt release` | `full` plus the release obligation list | never a release pass line it cannot support |
 
 A bare `./qt` is the `default` lane, not a refusal: the zero-argument case runs
@@ -43,43 +45,28 @@ None of these commands is PR/CI or candidate verification. The pass lines embed
 that disclosure, and `--explain` prints the `NOT VERIFIED` / `NOT PROVIDED`
 lists so the gap stays visible.
 
-### Default-lane predicate set
+### Default-lane selection (required-offline)
 
-The lane filter is derived from repository metadata (`@speed`, `@mutates`,
-`@isolation`, `@requires`) through the classifiers in
-`scripts/run-tests/classify.rkt`. There is no hand-maintained file list. A file
-is excluded from the default lane when ANY of these holds:
+Since the required-offline lane landed (final plan §6 E1), `./qt default`
+selects the UNION of the suites the required CI test jobs select — `fast`,
+`security`, `workflows`, `smoke`, `platform` — through the classifiers in
+`scripts/run-tests/classify.rkt` (the same suite dispatch the CI producers
+use). There is no hand-maintained file list, and no predicate-based exclusion:
+slow mandatory owners are INCLUDED through their suite, and a file whose
+declared `@requires` this host cannot satisfy is not dropped — it is reported
+`unavailable-here` (listed, never verified, never blocking; CI stays
+authoritative for exactly those members).
 
-- `slow-file?` — `@speed slow`/`perf`, or a slow name/path pattern;
-- `mutating-file?`, or a declared `@mutates` value other than `none`;
-- a declared `@isolation` value other than `none` — the predicate is
-  vocabulary-agnostic, so any declared value other than `none` excludes; for
-  example `process`, `temp-dir`, `subprocess` and `sandboxed-home`;
-- `@requires` containing `network`, `terminal`, `browser` or `provider-key`.
+`./qt default --explain` prints the claim → lane → suite mapping (required CI
+test job → lane → suite), the detected host capabilities, the per-suite
+counts, the union selection, and the `unavailable-here` list — selection only,
+nothing executed — so the printed claim cannot drift from the selection.
 
-`./qt default --explain` prints the same predicate set plus exclusion counts by
-reason and the names of the excluded files (first 20, then `(+ N more)`), so the
-printed claim cannot drift from the filter and a silently excluded file is
-visible.
-
-#### `./qt default` is not `--suite fast`
-
-The two selections are related but **not equivalent**, and `./qt default` must
-never be treated as a PR-gate equivalent:
-
-- `--suite fast` applies `slow-file?` **and `tui-file?`**. It therefore also
-excludes every file matched by `tui-file?` — anything under `tests/tui/`,
-`interfaces/tui.rkt`, a basename starting with `test-tui-`, or a file tagged
-`@suite tui`.
-- `./qt default` applies `slow-file?`, the mutation/isolation classifiers and
-the `@requires` vocabulary above, but **not `tui-file?`** — TUI tests that are
-otherwise fast/PR-safe are **included** in the default lane.
-
-So for TUI files the default lane includes what `--suite fast` drops, while for
-other files it can exclude mutation/isolation/`@requires` files that
-`--suite fast` still runs: the two are different selections. Use `--suite fast`
-for the broad PR regression tier and `./qt default` only as the local fast/PR
-feedback lane. Neither is PR/CI verification.
+`./qt default` is still not `--suite fast`: the union adds the `security`,
+`workflows`, `smoke` and `platform` suites (and their slow owners) on top of
+`fast`, while `--suite fast` additionally drops `tui-file?` matches that the
+union keeps through its member suites. Neither selection is PR/CI
+verification — only a green required-context set on CI is.
 
 ### `--changed [BASE]` semantics (`full` / `default`)
 
@@ -95,11 +82,17 @@ feedback lane. Neither is PR/CI verification.
 
 ### Release obligation contract
 
-`./qt release` runs `full` and prints every release obligation as
-`[NOT VERIFIED]` or `[VERIFIED]`, whether or not the suite passed. The command
-exits non-zero while any obligation is unverified and never prints
-`release passed:` until all of them are verified. A green suite is not a
-release; the obligation list is the contract.
+`./qt release --candidate SHA` verifies the exact candidate (a wrong or dirty
+checkout is refused), runs `full`, and prints every candidate obligation with
+a stable slug and state — `governance-parity` (verified by the local suite
+run), `ci-verification` (verified only by `--evidence`), `branch-protection`
+and `release-provenance` (attestation) with `verified`/`failed`/`unavailable`.
+`--evidence <proof-bundle|artifact-dir>` is the only offline CI evidence
+input, bound to the exact candidate SHA; absent, malformed or wrong-SHA
+evidence is `unavailable`, never inferred. The command exits non-zero while
+any obligation is unverified and never prints `release passed:` until all of
+them are verified. A green suite is not a release; the obligation list is the
+contract.
 
 ## Tier semantics
 
@@ -128,8 +121,12 @@ files) — an escalated run is a broad run by design, never a smaller one.
 
 ## Local feedback loop
 
-The normal developer workflow (rollout stage 2C) is a three-level feedback
-ladder. The L1/L2 command is the selector from the W4 change-impact work
+The `./qt` impact story is `./qt quick --changed BASE..HEAD` over the audited
+owners (canonical reference: [`testing.md`](testing.md)). The ladder below
+documents the legacy runner CLI (`scripts/run-tests.rkt`), which survives as
+a compatibility adapter for the consumers listed there. The normal developer
+workflow (rollout stage 2C) is a three-level feedback ladder. The L1/L2
+command is the selector from the W4 change-impact work
 (`--changed-base`/`--changed-head`); run it locally whenever you want the
 impact-selected set for your change.
 
