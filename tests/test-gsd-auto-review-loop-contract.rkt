@@ -85,6 +85,7 @@
          (only-in "../util/message/message.rkt" make-message)
          (only-in "../util/content/content-parts.rkt" make-text-part)
          (only-in "../util/loop-result.rkt" make-loop-result)
+         (only-in "../runtime/provider/provider-factory.rkt" build-mock-provider)
          "helpers/b1-auto-review-loop-contract-fixture.rkt")
 
 (module+ test
@@ -354,7 +355,11 @@
                         'completed
                         (hasheq 'usage
                                 (hasheq 'prompt_tokens 3 'completion_tokens 4 'total_tokens 7))))
-    (define real-reviewer (make-auto-review-runner root plan #:session-run session-run))
+    (define real-reviewer
+      (make-auto-review-runner root
+                               plan
+                               #:provider-builder (lambda (_) (build-mock-provider))
+                               #:session-run session-run))
     (define go-request
       (make-campaign-request root (hash-ref world 'rec) void void #:auto-review-runner real-reviewer))
     (check-eq? (campaign-request-auto-review-runner go-request) real-reviewer)
