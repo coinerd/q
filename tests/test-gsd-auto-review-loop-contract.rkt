@@ -377,8 +377,39 @@
        ;; controller/finalize/Git boundary in this one case.
        (define-values (sessions session-runner) (build-go-review-session world))
        (define calls (box 0))
+       (define observed-request-identity (box "<no request observed>"))
+       (define request-identity-fields
+         '(head branch
+                attempt-id
+                attempt-fence
+                generation
+                review-mode
+                kind
+                fresh-session-required
+                non-author-review-required
+                staging))
+       (define (identity-type-tag value)
+         (cond
+           [(string? value) 'string]
+           [(symbol? value) 'symbol]
+           [(exact-integer? value) 'exact-integer]
+           [(boolean? value) 'boolean]
+           [(path? value) 'path]
+           [(hash? value) 'hash]
+           [(list? value) 'list]
+           [else (or (object-name value) 'other)]))
+       (define (request-identity request)
+         (if (not (hash? request))
+             (format "<non-hash request: ~s>" request)
+             (string-join (for/list ([field (in-list request-identity-fields)])
+                            (if (hash-has-key? request field)
+                                (let ([value (hash-ref request field)])
+                                  (format "~a:~a=~s" field (identity-type-tag value) value))
+                                (format "~a=<missing>" field)))
+                          " ")))
        (define (wired-runner request)
          (set-box! calls (add1 (unbox calls)))
+         (set-box! observed-request-identity (request-identity request))
          ;; Exact wiring: the typed request carries the durable receipt
          ;; identity and the dispatch generation, verbatim.
          (check-equal? (hash-ref request 'head) head)
@@ -392,7 +423,14 @@
          (check-equal? (hash-ref request 'staging) (review-dispatch-staging-path root plan 0 1))
          (check-true (non-empty-string? (hash-ref request 'prompt)))
          (check-regexp-match (regexp (regexp-quote head)) (hash-ref request 'prompt))
-         (define verdict (session-runner request))
+         (define verdict
+           (with-handlers ([exn:fail? (lambda (e)
+                                        (error 'wired-runner
+                                               "session-runner raised ~a: ~s; request identity=~a"
+                                               (object-name e)
+                                               (exn-message e)
+                                               (request-identity request)))])
+             (session-runner request)))
          (check-equal? (hash-ref verdict 'kind) "request-changes")
          (check-regexp-match #px"^q-session:" (hash-ref verdict 'reviewer ""))
          verdict)
@@ -401,10 +439,11 @@
         (unbox sessions)
         1
         (format
-         "exactly one fresh reviewer session must open: reviewer calls=~s, dispatch kind=~s, data=~s"
+         "exactly one fresh reviewer session must open: reviewer calls=~s, dispatch kind=~s, data=~s, request identity=~a"
          (unbox calls)
          (delivery-effect-result-kind result)
-         (delivery-effect-result-data result)))
+         (delivery-effect-result-data result)
+         (unbox observed-request-identity)))
        ;; -- the typed rejection outcome, bound to the pinned identity.
        (check-eq? (delivery-effect-result-kind result)
                   'review-rejected
