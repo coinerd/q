@@ -89,11 +89,12 @@
 
 (module+ test
   ;; The three cases own independent real Git worlds, campaign roots and
-  ;; durable journal identities. The controller round trips are subprocess-
-  ;; bound (not CPU-bound), so they are started together and joined by their
-  ;; own test-case. Every check still executes in its original case; a case
-  ;; failure is re-raised inside the matching test-case, keeping rackunit's
-  ;; exit-truth per guarantee instead of hiding it in a background thread.
+  ;; durable journal identities. The Verify and refusal cases are subprocess-
+  ;; bound (not CPU-bound) and stay concurrent, joined by their own test-case;
+  ;; the load-sensitive rejection case is serialized ahead of both. Every check
+  ;; still executes in its original case; a case failure is re-raised inside
+  ;; the matching test-case, keeping rackunit's exit-truth per guarantee
+  ;; instead of hiding it in a background thread.
   (define case-slots (make-hash))
   (define red-case-finished (make-semaphore))
   (define (start-case! name thunk #:wait [before void])
@@ -540,19 +541,22 @@
 
   ;; Warm the immutable Git template once before any case thread copies it.
   (b1-warm-review-template!)
+  ;; CI load mitigation: the /go rejection case is serialized. Its real
+  ;; reviewer session and controller finalize are the load-sensitive path,
+  ;; so it starts and finishes before the other two cases are started.
+  (start-case! 'rejection case-rejection-and-replay!)
+  (test-case "/go request opens one fresh review, rejects and journals at the real Git boundary"
+    (finish-case! 'rejection))
+
+  ;; The remaining two cases own independent Git worlds and stay concurrent;
+  ;; the refusal still waits on the Verify probes to finish before it starts.
   (start-case!
    'red-verification
    (lambda ()
      (dynamic-wind void case-red-verification! (lambda () (semaphore-post red-case-finished)))))
-  (start-case! 'rejection case-rejection-and-replay!)
-  ;; Start the refusal only after the Verify probes finish: it is a single
-  ;; controller phase and must not contend with the real rejection finalize.
   (start-case! 'refusal
                case-prohibited-publication!
                #:wait (lambda () (semaphore-wait red-case-finished)))
-
-  (test-case "/go request opens one fresh review, rejects and journals at the real Git boundary"
-    (finish-case! 'rejection))
   (test-case "one genuine owned Verify-command execution keeps honest success/failure/timeout exit-truth"
     (finish-case! 'red-verification))
   (test-case "production owned-mode dispatch refuses without an authenticated owned proof"
