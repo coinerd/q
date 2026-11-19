@@ -25,11 +25,12 @@ name: CI
 # already-activated fast-gate test shards. Each consumer keeps the
 # guarded restore inside setup-racket (manifest verify + W6 identity
 # manifest compare; ANY identity mismatch = loud, counted cold fallback).
-# Distinct environments stay separate: macOS platform lanes, the Racket
-# 8.11 cross-version lane, the STRICT security queue and lint-quality
-# (which must stay parallel to fast-env per the W2 checkpoint) remain on
-# the full per-job path — see
+# Distinct environments stay separate: macOS platform lanes, the STRICT
+# security queue and lint-quality (which must stay parallel to fast-env per
+# the W2 checkpoint) remain on the full per-job path — see
 # artifacts/proof-graph/v1.00.29-w6/consumers.json for the full matrix.
+# (W1 #9949: the Racket 8.11 cross-version lane left ci.yml entirely —
+# weekly/manual compatibility now lives in full-regression.yml.)
 # Rollback (§11.6, one command per consumer): set the consumer's
 # repository variable (RACKET_PREPARED_SMOKE, RACKET_PREPARED_WORKFLOWS,
 # RACKET_PREPARED_RELEASE_DRY_RUN, RACKET_PREPARED_GSD_GOVERNANCE,
@@ -342,7 +343,7 @@ jobs:
       # the global emergency switch wins BEFORE the lane switch is even
       # consulted; the lane additionally requires RACKET_COMPILED_ROOT
       # explicitly 'on', a SAME-RUN successful producer, and no version
-      # override. Windows/macOS/cross-version/release lanes never opt in.
+      # override. Windows/macOS/release lanes never opt in.
       # v1.00.32 W2: a trusted treatment-C trial activates the same lane
       # through the identity-bound trial term (second disjunct; it also
       # requires the PROTECTED main ref). Treatments A/B keep the compiled
@@ -1201,82 +1202,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # ────────────────────────────────────────────────────────────
-  # Gate 2d: Racket 8.11 cross-version check (main push only)
-  #
-  # W0 KNOWN-RED (frozen state, see docs/reports/metadata-before-state-v1.00.11.json):
-  #   CI run 32532206128 — this job sets racket-version: '8.11' (below), but
-  #   ci/racket-package-lock.rktd pins a single-runtime lock to Racket 8.10 and
-  #   ci/verify-racket-package-lock.rkt therefore REJECTS the 8.11 runtime, so
-  #   this required gate is red on main. The characterization is pinned by
-  #   tests/ci/verify-lock-selection-test.rkt (8.10 accepted / 8.11 known-red
-  #   rejected / 8.12 rejected). W0 makes NO job config, lock, or lint change;
-  #   the fix lands in W1. This comment block is the only ci.yml change in W0.
-  # ────────────────────────────────────────────────────────────
-  test-cross-version:
-    if: github.event_name == 'push'
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Cache Racket packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/racket
-          key: racket-pkgs-cross-811-${{ hashFiles('**/info.rkt') }}
-          restore-keys: racket-pkgs-cross-811-
-      - uses: ./.github/actions/setup-racket
-        with:
-          racket-version: '8.11'
-
-      - name: Clear stale bytecode
-        run: find . -name compiled -type d -not -path './tests/metadata-discovery/fixture/*' -exec rm -rf {} + 2>/dev/null || true
-
-      - name: Compile gate
-        run: raco make main.rkt
-
-      - name: Run fast suite (Racket 8.11)
-        run: |
-          set -o pipefail
-          STRICT_TEST_RUNNER=1 ./qt --lane fast --jobs 4 \
-            --json-out test-results.json \
-            2>&1 | tee test-output.log
-
-      - name: Test results summary
-        if: always()
-        run: |
-          {
-            echo "## Test results — cross-version (Racket 8.11)"
-            if [ -f test-results.json ] && command -v jq >/dev/null 2>&1; then
-              jq -r '"- Files: \(.run_summary.file_count)  pass=\(.run_summary.pass) fail=\(.run_summary.fail) timeout=\(.run_summary.timeout) skip=\(.run_summary.skip)",
-                     "- Wall clock: \(.run_summary.wall_clock_seconds)s  mode=\(.run_summary.execution_mode)  profile=\(.run_summary.profile)  shard=\(.run_summary.shard)",
-                     "- Metadata completeness: explicit=\(.run_summary.metadata_completeness.explicit)/\(.run_summary.file_count) heuristic=\(.run_summary.metadata_completeness.heuristic) missing=\(.run_summary.metadata_completeness.missing)",
-                     "",
-                     "### Slowest 10 files",
-                     (.files | sort_by(-.duration_seconds)[:10][] | "- \(.duration_seconds)s \(.path)")' \
-                test-results.json || true
-            else
-              grep -m1 'RUN-SUMMARY' test-output.log | sed 's/^RUN-SUMMARY /- /' || echo "- (no summary record)"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload cross-version test log
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-cross-version-811
-          path: test-output.log
-          retention-days: 7
-
-      - name: Upload test results JSON
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-results-cross-version-811
-          path: test-results.json
-          if-no-files-found: ignore
-          retention-days: 7
-
+# W1 (#9949): the former `test-cross-version` job (Racket 8.11 cross-version
+  # check, main push only) was REMOVED from this workflow. It re-ran the whole
+  # 1329-file fast suite on Racket 8.11 on every push (~61 min — the largest
+  # single main-CI job, docs/reports/TEST-WORK-MASS-v1.00.32.md). The
+  # compatibility verification itself is retained in full-regression.yml as the
+  # `cross-version-compat` job: weekly scheduled (Saturday cron) + every manual
+  # dispatch, same version identity, real fast-lane invocation, retained
+  # log/JSON evidence. The version-indexed package lock (schema-revision 2)
+  # still accepts 8.11; its selection matrix is pinned by
+  # tests/ci/verify-lock-selection-test.rkt (8.10 accepted / 8.11 accepted /
+  # 8.12 rejected). KNOWN-RED history: the v1.00.11 W0 comment described a
+  # single-runtime lock that v1.00.11 W1 replaced — that block is gone with
+  # the job it described.
   # ────────────────────────────────────────────────────────────
   # Gate 3: Security tier — sandbox/permission/safe-mode tests
   # ────────────────────────────────────────────────────────────

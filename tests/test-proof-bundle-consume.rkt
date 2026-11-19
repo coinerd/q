@@ -570,7 +570,7 @@
 
     (test-case "(b2) stale producer attempt vs the API-derived expected attempt -> not-reusable (N4)"
       ;; The nightly consumer derives expected-run-attempt from `gh run list
-      ;; --json ... runAttempt`; a bundle left over from an earlier attempt
+      ;; --json ... attempt`; a bundle left over from an earlier attempt
       ;; of the resolved run must be rejected (fallback: run the suite).
       (define stale-attempt (hash-set (base-request) 'expected-run-attempt 2))
       (define result (consume! bundle-file (request-file! stale-attempt) "decision-b2.json"))
@@ -802,7 +802,13 @@
       (check-true (string-contains? text "-n proof-bundle-fast"))
       (check-true (string-contains? text "GH_TOKEN: ${{ github.token }}"))
       ;; N4: the expected attempt is derived from the gh API response ...
-      (check-true (string-contains? text "--json databaseId,runAttempt"))
+      ;; W1 (#9949): gh's JSON field is `attempt` (REST: run_attempt). The
+      ;; former `--json databaseId,runAttempt` spelling made gh exit
+      ;; non-zero (`Unknown JSON field: "runAttempt"`), forcing every
+      ;; nightly onto the fallback path (run 44289721382).
+      (check-true (string-contains? text "--json databaseId,attempt"))
+      (check-false (string-contains? text "databaseId,runAttempt"))
+      (check-true (string-contains? text ".[0].attempt // empty"))
       (check-true (string-contains? text "--argjson attempt \"$RUN_ATTEMPT\""))
       (check-true (string-contains? text "\"expected-run-attempt\": $attempt"))
       ;; ... never copied from the bundle
@@ -831,8 +837,14 @@
       (check-true (regexp-match? #px"if: always\\(\\)" text))
       ;; a skipped suite is recorded (zero-tests-run statement)
       (check-true (string-contains? text "Record proof reuse"))
-      ;; the suite keeps its explicit timeout; lint still runs on every nightly
-      (check-true (string-contains? text "timeout-minutes: 15"))
+      ;; the suite keeps its explicit timeout (W1 #9949: raised 15 -> 120;
+      ;; the budget must fit the DESIGNED fallback execution — the unsharded
+      ;; fast suite measured 2141–3666s wall at --jobs 4, and this step runs
+      ;; the runner default --jobs 2 — so the old 15-minute budget killed
+      ;; every fallback mid-run, run 44289721382); lint still runs on every
+      ;; nightly
+      (check-true (string-contains? text "timeout-minutes: 120"))
+      (check-false (string-contains? text "timeout-minutes: 15"))
       (check-true (string-contains? text "./qt --lane fast"))
       (check-true (string-contains? text "racket scripts/lint-all.rkt"))
       ;; the BUG-0065 purge comment block stays intact
