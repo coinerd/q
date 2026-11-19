@@ -281,7 +281,7 @@ q/
 ├── runtime/        Agent session, compaction, resource loading, auth
 ├── sandbox/        Subprocess management, execution limits
 ├── skills/         Skill loading, context files, prompt templates
-├── tests/          Full test suite (1676 files)
+├── tests/          Full test suite (1674 files)
 ├── tools/          Tool registry, scheduler, 27 built-in tools
 ├── tui/            Terminal UI: rendering, input, state, clipboard
 ├── util/           JSONL, ANSI, markdown, IDs, cancellation, paths
@@ -294,10 +294,10 @@ q/
 
 | Metric | Value |
 |--------|-------|
-| Test files | 1676 |
+| Test files | 1674 |
 | Source modules | 976 |
 | Source lines | 239386 |
-| Test lines | 365433 |
+| Test lines | 365425 |
 | Test assertions | 52536 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 
