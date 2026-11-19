@@ -216,49 +216,75 @@
            (check-equal? (hash-ref marker 'files) '("tests/pass.rkt"))))
         (displayln "SKIP qt --file: Linux /proc or setsid unavailable")))
   (test-case "positional files are rejected and the error names the --file spelling"
-    (for ([args (in-list (list (list "full" "tests/pass.rkt") (list "run" "tests/pass.rkt")))])
-      (define-values (status out err) (apply invoke args))
-      (check-not-equal? status 0)
-      (check-regexp-match #rx"^qt: " err)
-      (check-regexp-match #rx"--file FILE" err)))
+    ;; One launch pins the `full` positional refusal. The unknown-COMMAND
+    ;; refusal the removed `run` spelling exercised ("only quick, full, default
+    ;; and release are available") is pinned WITH its message in
+    ;; tests/test-qt-lanes.rkt's "unsupported command and options" case.
+    (define-values (status out err) (invoke "full" "tests/pass.rkt"))
+    (check-not-equal? status 0)
+    (check-regexp-match #rx"^qt: " err)
+    (check-regexp-match #rx"--file FILE" err))
   (test-case "unsupported flags and values fail closed with a naming qt: message"
-    (for ([case
-           (in-list
-            (list
-             (list (list "full" "--bogus") #rx"^qt: unsupported option: --bogus$")
-             (list (list "full" "--suite" "nope")
-                   #rx"^qt: (?:full-plan: )?unsupported --suite: nope \\(valid: ")
-             (list (list "full" "--mode" "nope")
-                   #rx"^qt: (?:full-plan: )?unsupported --mode: nope \\(valid: ")
-             (list (list "full" "--profile" "nope")
-                   #rx"^qt: (?:full-plan: )?unsupported --profile: nope ")
-             (list (list "full" "--shard-plan" "nope")
-                   #rx"^qt: (?:full-plan: )?unsupported --shard-plan: nope ")
-             (list (list "full" "--shard-plan" "report")
-                   #rx"^qt: (?:full-plan: )?unsupported --shard-plan: report ")
-             (list (list "full" "--shard-plan" "measure")
-                   #rx"^qt: (?:full-plan: )?unsupported --shard-plan: measure ")
-             (list (list "full" "--shard-index" "2" "--shard-total" "2")
-                   #rx"^qt: (?:full-plan: )?--shard-index must be an integer in \\[0, 2\\)")
-             (list (list "full" "--repeat" "0")
-                   #rx"^qt: (?:full-plan: )?--repeat must be a positive integer")
-             (list (list "default" "--json-out" "x.json")
-                   #rx"^qt: default does not accept CI-surface option --json-out")
-             (list (list "quick" "--suite" "fast")
-                   #rx"^qt: quick does not accept CI-surface option --suite")
-             (list (list "full" "--suite" "fast" "--file" "tests/pass.rkt")
-                   #rx"^qt: (?:full-plan: )?cannot combine --suite with --file")
-             (list (list "full" "--file" "tests/pass.rkt" "--shard-total" "2")
-                   #rx"^qt: (?:full-plan: )?--file \\(explicit reproduction\\) cannot be sharded")
-             (list (list "full" "--changed" "--suite" "fast")
-                   #rx"^qt: --changed cannot be combined with CI-surface options")
-             (list (list "full" "--explain" "--json-out" "x.json")
-                   #rx"^qt: --explain cannot be combined with --json-out")
-             (list (list "full" "--file" "tests/missing.rkt")
-                   #rx"^qt: (?:full-plan: )?--file is not an existing test file")))])
+    ;; Five launches pin every distinct decision of qt's OWN argv grammar for
+    ;; the CI surface: the unknown-option refusal and the four combinations qt
+    ;; itself must refuse (a CI-surface flag on default/quick, --changed
+    ;; conflict, --explain conflict). The VALUE/combination validations are
+    ;; owned by scripts/testing/full-plan.rkt's resolve-qt-ci-plan and are
+    ;; asserted against that production owner without a subprocess in the next
+    ;; case; qt's `qt: ` wrapping of a full-plan failure stays pinned by the
+    ;; STRICT_TEST_RUNNER case below.
+    (for ([case (in-list (list (list (list "full" "--bogus") #rx"^qt: unsupported option: --bogus$")
+                               (list (list "default" "--json-out" "x.json")
+                                     #rx"^qt: default does not accept CI-surface option --json-out")
+                               (list (list "quick" "--suite" "fast")
+                                     #rx"^qt: quick does not accept CI-surface option --suite")
+                               (list (list "full" "--changed" "--suite" "fast")
+                                     #rx"^qt: --changed cannot be combined with CI-surface options")
+                               (list (list "full" "--explain" "--json-out" "x.json")
+                                     #rx"^qt: --explain cannot be combined with --json-out")))])
       (define-values (status out err) (apply invoke (car case)))
       (check-not-equal? status 0 (format "~a should fail" (car case)))
       (check-regexp-match (cadr case) (string-trim err))))
+  (test-case "CI-surface value validation is owned by full-plan's resolve-qt-ci-plan"
+    ;; The deterministic value/combination decisions live in
+    ;; scripts/testing/full-plan.rkt (validate-qt-ci-spec! plus the
+    ;; reproduction-file identity check), reached through its EXPORTED
+    ;; resolve-qt-ci-plan — the same function qt's CLI calls before anything
+    ;; runs. Asserting them against the production owner needs no subprocess
+    ;; and no copied implementation.
+    (define (ci-spec #:suite [suite #f]
+                     #:files [files '()]
+                     #:shard-index [index 0]
+                     #:shard-total [total 1]
+                     #:repeat [repeat 1]
+                     #:profile [profile 'local]
+                     #:mode [mode 'auto]
+                     #:shard-plan [shard-plan #f])
+      (qt-ci-spec suite files index total #f profile #f #f #f repeat mode shard-plan #f '()))
+    (for ([case (in-list
+                 (list (cons (ci-spec #:suite 'nope) #rx"unsupported --suite: nope \\(valid: ")
+                       (cons (ci-spec #:mode 'nope) #rx"unsupported --mode: nope \\(valid: ")
+                       (cons (ci-spec #:profile 'nope) #rx"unsupported --profile: nope \\(valid: ")
+                       (cons (ci-spec #:shard-plan "nope")
+                             #rx"unsupported --shard-plan: nope \\(valid: ")
+                       (cons (ci-spec #:shard-plan "report") #rx"unsupported --shard-plan: report ")
+                       (cons (ci-spec #:shard-plan "measure") #rx"unsupported --shard-plan: measure ")
+                       (cons (ci-spec #:shard-index 2 #:shard-total 2)
+                             #rx"--shard-index must be an integer in \\[0, 2\\), got 2")
+                       (cons (ci-spec #:repeat 0) #rx"--repeat must be a positive integer, got 0")
+                       (cons (ci-spec #:suite 'fast #:files '("tests/pass.rkt"))
+                             #rx"cannot combine --suite with --file")))])
+      (check-exn (cdr case) (lambda () (resolve-qt-ci-plan #f (car case)))))
+    ;; The two file-identity checks need a selection root: an explicit
+    ;; reproduction is refused when sharded and when the file does not exist.
+    (with-fixture-root
+     (list passing-fixture)
+     (lambda (dir)
+       (check-exn #rx"--file \\(explicit reproduction\\) cannot be sharded \\(--shard-total 2\\)"
+                  (lambda ()
+                    (resolve-qt-ci-plan dir (ci-spec #:files '("tests/pass.rkt") #:shard-total 2))))
+       (check-exn #rx"--file is not an existing test file: tests/missing\\.rkt"
+                  (lambda () (resolve-qt-ci-plan dir (ci-spec #:files '("tests/missing.rkt"))))))))
   (test-case "zero executed tests fail under STRICT_TEST_RUNNER=1"
     (if (full-execution-supported?)
         (with-fixture-root
@@ -407,16 +433,18 @@
                          (check-equal? (length (append files0 files1))
                                        (length (remove-duplicates (append files0 files1)))))))
   (test-case "the deleted plan modes are refused by qt before anything runs"
+    ;; One CLI launch proves qt refuses before ANY execution (the marker file
+    ;; is never created). Both deleted values hit the same full-plan validation,
+    ;; pinned without a subprocess by the resolve-qt-ci-plan owner case above.
     (with-fixture-root (list marker-fixture)
                        (lambda (dir)
                          (define marker (build-path dir "tests" "marker"))
-                         (for ([mode (in-list '("report" "measure"))])
-                           (define-values (status out err)
-                             (invoke-in dir "full" "--shard-plan" mode "--shard-total" "2"))
-                           (check-not-equal? status 0)
-                           (check-regexp-match #rx"unsupported --shard-plan" err)
-                           (check-false (regexp-match? #rx"full passed:" out))
-                           (check-false (file-exists? marker))))))
+                         (define-values (status out err)
+                           (invoke-in dir "full" "--shard-plan" "report" "--shard-total" "2"))
+                         (check-not-equal? status 0)
+                         (check-regexp-match #rx"unsupported --shard-plan" err)
+                         (check-false (regexp-match? #rx"full passed:" out))
+                         (check-false (file-exists? marker)))))
   (test-case "plain full --explain stays byte-identical (no CI-surface lines)"
     (with-fixture-root
      (list marker-fixture)
