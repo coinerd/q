@@ -83,13 +83,13 @@ explicit reproduction into a temp path.
 - `scripts/required-pr-checks.policy` untouched and byte-identical (13
   contexts; `test-cross-version` was never one of them).
 
-⚠️ **Residual risk (outside W1's allowed file scope):**
-`scripts/gsd-gates/gate-claims.rkt` → `ci-required-jobs` (the 16-entry
-milestone-closure list, distinct from the 13-context PR policy) still names
-`test-cross-version`. Until a scripts-owner change removes that entry,
-`scripts/milestone-gate.rkt` will classify the latest main CI run as
-`ci_required_job_missing` at milestone closure. This is a one-line follow-up
-for a wave allowed to touch `scripts/`.
+**Affected caller updated in-commit:** `scripts/gsd-gates/gate-claims.rkt` →
+`ci-required-jobs` (the milestone-closure list, distinct from the 13-context PR
+policy) no longer names `test-cross-version`; the list carries an explanatory
+`#9949` comment. `tests/test-milestone-gate.rkt` and
+`tests/test-release-audit-truth.rkt` now pin its absence. This keeps
+`scripts/milestone-gate.rkt` from classifying a main CI run without the removed
+push job as `ci_required_job_missing`.
 
 ## 4. Nightly investigation (run `44289721382`) — demonstrated and repaired
 

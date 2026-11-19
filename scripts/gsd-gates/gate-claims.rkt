@@ -210,8 +210,11 @@
 ;;
 ;; #9121: removed stale job names (lint-alignment, inter-wave-gate, macos smoke,
 ;; old matrix labels) and synced to the current sharded CI topology. The
-;; fast-suite shards (test (0..2)), platform/cross-version tests, aggregate
-;; jobs, gsd-governance, and abstraction-audit are all required.
+;; fast-suite shards (test (0..2)), platform test, aggregate jobs,
+;; gsd-governance, and abstraction-audit are all required.
+;; #9949: `test-cross-version` moved out of per-push ci.yml into the weekly and
+;; manually dispatched full-regression `cross-version-compat` job; it is no
+;; longer a main-CI closure requirement.
 ;;
 ;; `release-readiness` is intentionally NOT required: it runs on pull_request
 ;; and is skipped on main pushes, so requiring it would create false
@@ -227,7 +230,6 @@
            "test (2)"
            "test-aggregate"
            "test-platform"
-           "test-cross-version"
            "security"
            "release-dry-run"
            "smoke (ubuntu-latest)"
