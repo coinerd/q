@@ -195,3 +195,12 @@ require them.
 - Name collisions: any future test defining a local `make-test-event` remains
   unaffected; grep discipline (`require.*` form, not bare identifier) is what
   distinguished consumers from collisions here.
+
+## Post-W5 main reconciliation
+
+The measurements above were taken on W6's `524c93a4` base. W5 merged at
+`a85dd0f7` before this PR and added one focused owner; after integrating that
+main head the canonical tier matrix is **1170 rows** (the W6-only 1169 plus
+W5's single row), the covers manifest has **224 entries**, and README metrics
+were resynced. The three orphan-helper deletions and the documentation fix are
+unchanged; no new W6 deletion was introduced by the merge.
