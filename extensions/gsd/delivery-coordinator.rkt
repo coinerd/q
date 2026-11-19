@@ -87,7 +87,8 @@
          default-active-delivery-evidence-path
          default-artifact-provenance-root
          resolve-coordinator-repo
-         review-rejected-message)
+         review-rejected-message
+         delivery-stop-outcome)
 
 ;; Journal stage order excluding the typed stops
 ;; (awaiting-approval / retryable / blocked are outcomes, not linear stages).
@@ -171,6 +172,55 @@
   ;; Lossless checkpoint envelope: findings may themselves contain delimiters
   ;; or newlines.
   (string-append "review-rejected: " (jsexpr->string data)))
+
+;; ONE pure stop classification for typed controller effect results (W3
+;; pure-production pilot #9951). Before this function the review-outcome
+;; mapping lived INLINE in run-delivery-coordinator! — twice verbatim (the
+;; target effect after a cleared preflight, and every ordinary ladder
+;; effect) and once more with preflight-specific reason fallbacks (a
+;; refused preflight). This module is now the single classification
+;; authority: it consumes the typed kind plus its immutable payload hash
+;; and returns the delivery-outcome VALUE for every typed stop:
+;;   awaiting-review — the effect stopped awaiting genuine independent review
+;;   review-rejected — explicit head-bound REQUEST_CHANGES (typed payload kept)
+;;   review-infra    — reviewer transport/timeout/stale/malformed failure
+;;   retryable       — typed retryable delivery failure (e.g. CI pending)
+;;   blocked         — the controller refused the effect
+;; 'ok NEVER classifies here: the function returns #f for it because
+;; advancing the journal one stage is the CALLER's authenticated effect
+;; (durable fence recheck + eligibility blocker before the write). That
+;; effect boundary is deliberately NOT pure and stays inside
+;; run-delivery-coordinator!.
+;; Purity: no I/O, no parameters, no real clock, no journal access — the
+;; inputs are the kind symbol and payload hash, the output is a fresh
+;; delivery-outcome value. #:reason-fallback (the preflight path) replaces
+;; every per-kind default reason; #:blocked-message (the preflight path)
+;; carries its pre-composed blocked text verbatim.
+(define (delivery-stop-outcome kind
+                               data
+                               #:reason-fallback [reason-fallback #f]
+                               #:blocked-message [blocked-message #f])
+  (if (eq? kind 'ok)
+      #f
+      (case kind
+        [(awaiting-review)
+         (delivery-outcome
+          'awaiting-review
+          (hash-ref data 'reason (or reason-fallback "awaiting genuine independent review")))]
+        [(review-rejected) (delivery-outcome 'review-rejected (review-rejected-message data) data)]
+        [(review-infra)
+         (delivery-outcome
+          'review-infra
+          (hash-ref data 'reason (or reason-fallback "review infrastructure failure")))]
+        [(retryable)
+         (delivery-outcome 'retryable
+                           (hash-ref data 'reason (or reason-fallback "retryable delivery failure")))]
+        [else
+         (if blocked-message
+             (delivery-outcome 'blocked blocked-message)
+             (delivery-outcome
+              'blocked
+              (hash-ref data 'reason (or reason-fallback "controller refused the effect"))))])))
 
 (define (indexof lst v)
   (let loop ([i 0]
@@ -351,45 +401,28 @@
                        (blocked "controller returned a malformed effect result")]
                       [else
                        (define data (delivery-effect-result-data result))
-                       (case (delivery-effect-result-kind result)
-                         [(ok)
-                          (if (and (still-current?) (not (durable-blocker dir plan wave start-fence)))
-                              (begin
-                                (record-delivery-usage! dir plan wave data)
-                                (update-delivery-journal! dir plan wave (hasheq 'stage target))
-                                (delivery-outcome 'ok target))
-                              (blocked "stale continuation: campaign changed during the effect"))]
-                         [(awaiting-review)
-                          (delivery-outcome
-                           'awaiting-review
-                           (hash-ref data 'reason "awaiting genuine independent review"))]
-                         [(review-rejected)
-                          (delivery-outcome 'review-rejected (review-rejected-message data) data)]
-                         [(review-infra)
-                          (delivery-outcome 'review-infra
-                                            (hash-ref data 'reason "review infrastructure failure"))]
-                         [(retryable)
-                          (delivery-outcome 'retryable
-                                            (hash-ref data 'reason "retryable delivery failure"))]
-                         [else
-                          (delivery-outcome
-                           'blocked
-                           (hash-ref data 'reason "controller refused the effect"))])])]
+                       ;; W3 pilot: the ONE pure stop classification (shared
+                       ;; verbatim with the ordinary ladder path below); 'ok
+                       ;; keeps its authenticated advance at this boundary.
+                       (define stop (delivery-stop-outcome (delivery-effect-result-kind result) data))
+                       (cond
+                         [stop stop]
+                         [(and (still-current?) (not (durable-blocker dir plan wave start-fence)))
+                          (begin
+                            (record-delivery-usage! dir plan wave data)
+                            (update-delivery-journal! dir plan wave (hasheq 'stage target))
+                            (delivery-outcome 'ok target))]
+                         [else (blocked "stale continuation: campaign changed during the effect")])])]
                    [else
                     (define reason
                       (hash-ref (delivery-effect-result-data preflight)
                                 'reason
                                 "delivery preflight refused"))
-                    (case (delivery-effect-result-kind preflight)
-                      [(awaiting-review) (delivery-outcome 'awaiting-review reason)]
-                      [(retryable) (delivery-outcome 'retryable reason)]
-                      [(review-rejected)
-                       (define preflight-data (delivery-effect-result-data preflight))
-                       (delivery-outcome 'review-rejected
-                                         (review-rejected-message preflight-data)
-                                         preflight-data)]
-                      [(review-infra) (delivery-outcome 'review-infra reason)]
-                      [else (blocked (format "delivery preflight: ~a" reason))])])])]
+                    (delivery-stop-outcome (delivery-effect-result-kind preflight)
+                                           (delivery-effect-result-data preflight)
+                                           #:reason-fallback "delivery preflight refused"
+                                           #:blocked-message (format "delivery preflight: ~a"
+                                                                     reason))])])]
              [else
               (define result (controller dir plan wave target))
               (cond
@@ -397,35 +430,24 @@
                  (blocked "controller returned a malformed effect result")]
                 [else
                  (define data (delivery-effect-result-data result))
-                 (case (delivery-effect-result-kind result)
-                   [(ok)
-                    ;; Post-effect durable re-check against the CAPTURED
-                    ;; fence: a cancellation or takeover that landed while
-                    ;; the controller ran must reject the continuation, and
-                    ;; the blocker must stay green (an already-merged
-                    ;; idempotent retry is safe — the journal advances only
-                    ;; after this passes).
-                    (if (and (still-current?) (not (durable-blocker dir plan wave start-fence)))
-                        (begin
-                          (record-delivery-usage! dir plan wave data)
-                          (update-delivery-journal! dir plan wave (hasheq 'stage target))
-                          (delivery-outcome 'ok target))
-                        (blocked "stale continuation: campaign changed during the effect"))]
-                   [(awaiting-review)
-                    (delivery-outcome 'awaiting-review
-                                      (hash-ref data 'reason "awaiting genuine independent review"))]
-                   [(review-rejected)
-                    (delivery-outcome 'review-rejected (review-rejected-message data) data)]
-                   [(review-infra)
-                    (delivery-outcome 'review-infra
-                                      (hash-ref data 'reason "review infrastructure failure"))]
-                   [(retryable)
-                    (delivery-outcome 'retryable
-                                      (hash-ref data 'reason "retryable delivery failure"))]
+                 ;; W3 pilot: the ONE pure stop classification (the preflight
+                 ;; path above shares it). The 'ok advance keeps its
+                 ;; post-effect durable re-check against the CAPTURED fence:
+                 ;; a cancellation or takeover that landed while the
+                 ;; controller ran must reject the continuation, and the
+                 ;; blocker must stay green (an already-merged idempotent
+                 ;; retry is safe — the journal advances only after this
+                 ;; passes).
+                 (define stop (delivery-stop-outcome (delivery-effect-result-kind result) data))
+                 (cond
+                   [stop stop]
+                   [(and (still-current?) (not (durable-blocker dir plan wave start-fence)))
+                    (begin
+                      (record-delivery-usage! dir plan wave data)
+                      (update-delivery-journal! dir plan wave (hasheq 'stage target))
+                      (delivery-outcome 'ok target))]
                    [else
-                    (delivery-outcome
-                     'blocked
-                     (hash-ref data 'reason "controller refused the effect"))])])])])])]))
+                    (blocked "stale continuation: campaign changed during the effect")])])])])])]))
 
 ;; ============================================================
 ;; B2b: default production controller seam
