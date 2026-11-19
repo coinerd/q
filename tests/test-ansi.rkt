@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite default
 ;; @boundary unit
+;; @covers util/ansi.rkt
 
 ;; BOUNDARY: integration
 

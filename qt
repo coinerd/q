@@ -348,9 +348,12 @@
   (when (cli-options-evidence opts)
     (fail "quick does not accept --evidence (only ./qt release --candidate SHA --evidence PATH)"))
   (when (> (length positional) 1)
-    (fail "quick accepts at most one file or one --changed BASE..HEAD"))
+    (fail "quick accepts at most one file or one --changed base ref/range"))
   (when (and changed? (not (= (length positional) 1)))
-    (fail "quick --changed requires BASE..HEAD (an explicit range; nothing is selected silently)"))
+    (fail
+     (string-append
+      "quick --changed requires BASE..HEAD or a single base ref (a single base ref selects the "
+      "working-tree diff; nothing is selected silently)")))
   (when (and audit? (or changed? (pair? positional) explain?))
     (fail "--audit takes no other options: it prints the admission report"))
   (when audit?
@@ -704,6 +707,10 @@
   (displayln "  quick [FILE]                    Audited pure unit suite (one admitted file)")
   (displayln
    "  quick --changed BASE..HEAD      Changed-code impact reproduction over the audited owners")
+  (displayln
+   "                                  (a single base ref, e.g. HEAD, selects the working-tree")
+  (displayln
+   "                                   diff: staged, unstaged and untracked files)")
   (displayln "  quick --audit                   Print the admission audit (admitted/review-required/rejected)")
   (displayln "  default                         Complete offline PR verification (required-offline lane)")
   (displayln "  default --file FILE             Explicit reproduction, not a complete PR pass")

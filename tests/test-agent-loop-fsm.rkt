@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite default
 ;; @boundary unit
+;; @covers agent/loop-fsm.rkt
 
 ;; BOUNDARY: fsm
 

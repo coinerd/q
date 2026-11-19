@@ -2,6 +2,10 @@
 
 ;; @speed fast
 ;; @suite default
+;; @covers extensions/gsd/transition-logic.rkt extensions/gsd/session-state.rkt
+;; @covers extensions/gsd/state-machine.rkt extensions/gsd/policy.rkt
+;; @covers extensions/gsd/wave-status.rkt extensions/gsd/command-parser.rkt
+;; @covers extensions/gsd/plan-types.rkt
 ;; tests/test-audit-v09945-w3-gsd.rkt — GSD subsystem real-world audit
 ;;
 ;; Audit of the GSD (Get Stuff Done) subsystem covering:

@@ -124,6 +124,58 @@
        (check-true (fixture-ok? dir)))
      (lambda () (delete-directory/files dir #:must-exist? #f))))
 
+  (test-case "a content-edit refresh changes only hashes: closure and verdicts stay identical"
+    ;; W2 (review 7002474250): the refresh path for an ordinary edit must not
+    ;; be able to widen anything - the refreshed entry keeps the same closure,
+    ;; the same status, and the reviewed identity differs only in the hash of
+    ;; the edited file.
+    (define dir (make-fixture-root))
+    (dynamic-wind
+     void
+     (lambda ()
+       (fixture-admit! dir)
+       (define before (call-with-input-file (record-path dir) read))
+       (define before-fields (cdr (car (cdr (assoc 'owners before)))))
+       (write-file (build-path dir "lib" "pure.rkt")
+                   "#lang racket/base\n(provide pure-add)\n(define (pure-add a b) (+ a b 0))\n")
+       (fixture-admit! dir)
+       (define after (call-with-input-file (record-path dir) read))
+       (define after-owners (cdr (assoc 'owners after)))
+       (define after-fields (cdr (car after-owners)))
+       ;; Same closure, same admission verdict, same record shape.
+       (check-equal? (cdr (assoc 'closure after-fields))
+                     (cdr (assoc 'closure before-fields))
+                     "a content edit does not change the dependency closure")
+       (check-equal? (cdr (assoc 'status after-fields))
+                     (cdr (assoc 'status before-fields))
+                     "a clean content edit keeps the admission verdict")
+       (check-equal? (length after-owners)
+                     (length (cdr (assoc 'owners before)))
+                     "no owner is added or dropped")
+       ;; Exactly one hash changed: the edited file's.
+       (define changed
+         (for/list ([pair-before (in-list (cdr (assoc 'hashes before-fields)))]
+                    #:when (not (equal? pair-before
+                                        (assoc (car pair-before)
+                                               (cdr (assoc 'hashes after-fields))))))
+           (car pair-before)))
+       (check-equal? changed '("lib/pure.rkt") "only the edited file's hash moves"))
+     (lambda () (delete-directory/files dir #:must-exist? #f))))
+
+  (test-case "refresh is deterministic: two refreshes produce a byte-identical committed diff"
+    ;; The refresh is a committed diff, so it must be a pure function of the
+    ;; tree: re-running it on an unchanged tree produces the identical bytes.
+    (define dir (make-fixture-root))
+    (dynamic-wind void
+                  (lambda ()
+                    (fixture-admit! dir)
+                    (define bytes-1 (file->bytes (record-path dir)))
+                    (fixture-admit! dir)
+                    (check-equal? (file->bytes (record-path dir))
+                                  bytes-1
+                                  "refresh is a pure function of the tree"))
+                  (lambda () (delete-directory/files dir #:must-exist? #f))))
+
   (test-case "a capability-denylist hit is review-required, never admitted (§9)"
     (define dir (make-fixture-root))
     (dynamic-wind

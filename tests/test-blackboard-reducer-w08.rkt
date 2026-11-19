@@ -2,6 +2,7 @@
 
 ;; @speed fast  ;; @suite extensions
 ;; @boundary unit
+;; @covers agent/blackboard-reducer.rkt agent/blackboard.rkt
 
 ;; tests/test-blackboard-reducer-w08.rkt — W0 (v0.99.8) Reducer Audit Fix Tests
 ;;

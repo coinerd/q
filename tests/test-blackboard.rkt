@@ -2,6 +2,7 @@
 
 ;; @speed fast  ;; @suite extensions
 ;; @boundary unit
+;; @covers agent/blackboard.rkt
 
 ;; tests/test-blackboard.rkt — W1 (v0.99.7) Blackboard State Tests
 ;;

@@ -2,6 +2,7 @@
 
 ;; @speed fast  ;; @suite extensions
 ;; @boundary unit
+;; @covers agent/blackboard-reducer.rkt agent/blackboard.rkt
 
 ;; tests/test-blackboard-reducer.rkt — W2 (v0.99.7) Pure Event Reducer Tests
 ;;

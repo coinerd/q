@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite default
 ;; @boundary unit
+;; @covers tui/vdom.rkt tui/vdom-html-render.rkt tui/render/message-layout.rkt
 
 ;; q/tests/test-vdom-html-render.rkt — Tests for HTML render backend
 

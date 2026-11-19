@@ -3,6 +3,11 @@
 ;; @speed fast
 ;; @suite default
 ;; @boundary unit
+;; @covers runtime/context-assembly/conclusion-graph.rkt
+;; @covers runtime/context-assembly/config.rkt
+;; @covers runtime/context-assembly/task-conclusion.rkt
+;; @covers runtime/context-assembly/ws-evolution.rkt
+;; @covers runtime/working-set.rkt
 ;; ADR-0023 Phase 2 test scaffolding — GAP-4, GAP-5, GAP-8
 ;; TDD red phase: tests verify behaviors that need fixing.
 

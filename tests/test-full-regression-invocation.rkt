@@ -2,6 +2,9 @@
 ;; @speed fast
 ;; @suite workflows
 ;; @boundary integration
+;; @timeout 300
+;; The cold `raco test -t` compile of the qt/full-plan closure takes ~117 s
+;; locally; the runner's 120 s default left no headroom on a loaded shard.
 ;; tests/test-full-regression-invocation.rkt — W1 (#9949) workflow/CLI
 ;; invocation contract.
 ;;
