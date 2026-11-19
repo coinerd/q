@@ -103,31 +103,31 @@
 ;; may sleep until the retained task's expiry (+1s) so a real expiry passes
 ;; DURING the C1 subprocess wait, and may deliberately check the WRONG
 ;; answer to make C1 genuinely RED.
-(define harness-text
-  "#lang racket/base\n(require \"../../runtime/local.rkt\")\n(provide witness)\n(define (witness) (= answer 42))\n")
+(define (harness-text fx sleep-until)
+  ;; Strict one-literal-name/one-direct-check candidate grammar: a test-case
+  ;; admits exactly one direct check and the module admits no extra top-level
+  ;; form, so the expiry wait folds into the single direct check: the helper's
+  ;; exported `witness` itself sleeps past the retained task's expires-at and
+  ;; then answers, exactly where the old separate (wait-for-expiry) body form
+  ;; used to run. The witness module keeps its original checks and the author
+  ;; still writes only the two approved files. Template stays pinned at L117.
+  (string-append
+   "#lang racket/base\n(require \"../../runtime/local.rkt\")\n(provide witness)\n"
+   (format
+    "(define (witness) (let loop () (when (< (current-seconds) ~a) (sleep 1) (loop))) (= answer 42))\n"
+    (or (and sleep-until (+ (task-expires-at fx) 1)) 0))))
 (define (witness-text #:red? [red? #f] #:sleep-until [sleep-until #f])
   (string-append
-   "#lang racket\n"
-   ";; @speed fast\n;; @suite extensions\n;; @boundary unit\n;; @timeout "
+   "#lang racket\n;; @speed fast\n;; @suite extensions\n;; @boundary unit\n;; @timeout "
    (if sleep-until "360" "120")
-   "\n"
-   "(require rackunit \"helpers/witness.rkt\")\n(provide evidence-suite)\n"
-   (if sleep-until
-       (format
-        "(define (wait-for-expiry)\n  (let loop ()\n    (unless (>= (current-seconds) ~a)\n      (sleep 1)\n      (loop))))\n"
-        sleep-until)
-       "")
+   "\n(require rackunit \"helpers/witness.rkt\")\n(provide evidence-suite)\n"
    "(define evidence-suite\n  (test-suite \"witness\"\n    (test-case \"new regression\"\n"
-   (if sleep-until "      (wait-for-expiry)\n" "")
    (if red? "      (check-equal? (witness) #f))))\n" "      (check-true (witness)))))\n")
    "(module+ test (require rackunit/text-ui) (exit (run-tests evidence-suite)))\n"))
-
 (define ((author-runner fx #:red? [red? #f] #:sleep-until [sleep-until #f]) _)
   (define repo (current-directory))
-  (put-text repo "tests/helpers/witness.rkt" harness-text)
-  (put-text repo
-            "tests/test-witness.rkt"
-            (witness-text #:red? red? #:sleep-until (and sleep-until (+ (task-expires-at fx) 1))))
+  (put-text repo "tests/helpers/witness.rkt" (harness-text fx sleep-until))
+  (put-text repo "tests/test-witness.rkt" (witness-text #:red? red? #:sleep-until sleep-until))
   'ok)
 
 (define (auto-approve-publisher event payload)
