@@ -20,6 +20,7 @@
          racket/list
          racket/runtime-path
          racket/string
+         json
          "../scripts/testing/full-plan.rkt"
          (only-in "../scripts/testing/quick-audit.rkt" admitted-owners))
 
@@ -130,7 +131,10 @@
     (check-regexp-match #rx"(?i:measured on the legacy CLI)" doc)
     (check-true (string-contains? doc "The former L1/L2 impact levels of this guide are retired"))
     (check-false (string-contains? doc "## The L0–L3 loop") "the legacy ladder heading is gone")
-    (for ([tok '("`./qt quick`" "`./qt quick --changed BASE..HEAD`" "`./qt default`" "`./qt full`")])
+    (for ([tok '("`./qt quick`" "`./qt quick --changed BASE..HEAD`"
+                                "`./qt quick --changed HEAD`"
+                                "`./qt default`"
+                                "`./qt full`")])
       (check-true (string-contains? doc tok) (format "command column names ~a" tok))))
 
   (test-case "every ./qt token quoted in the doc resolves to the implemented CLI"
@@ -232,13 +236,15 @@
   (test-case "the everyday four-command loop and its measured costs are documented"
     (check-true (string-contains? flat "The documented day is four commands"))
     (for ([tok '("`./qt quick <file>`" "`./qt quick --changed BASE..HEAD`"
+                                       "`./qt quick --changed HEAD`"
                                        "`./qt full --file <file>`"
                                        "`./qt default --file <file>`"
                                        "`./qt default`")])
       (check-true (string-contains? doc tok) (format "the everyday loop names ~a" tok)))
     (check-true (string-contains? qt-text "default does not accept CI-surface option"))
-    (check-true (string-contains? flat "20 samples"))
-    (check-true (string-contains? flat "5 samples"))
+    ;; W2 (review 7002474250): every measured row states its sample count.
+    (for ([n '("21 samples" "5 samples" "5/2/2 samples" "3 samples")])
+      (check-true (string-contains? flat n) (format "sample count ~a is stated" n)))
     (check-equal? (length (regexp-match* #rx"[*][*]missed" doc))
                   2
                   "both loop-target misses are recorded, not hidden"))
@@ -264,3 +270,81 @@
                         "tests/test-gsd-auto-review-production-contract.rkt"
                         "tests/test-gsd-generated-metadata-correction-contract.rkt"))])
       (check-false (member f (admitted-owners)) (format "~a stays unadmitted" f)))))
+
+;; W2 (review 7002474250): the working-tree selection, the admission refresh
+;; workflow and the honest attribution split are machine-enforced doc claims —
+;; a doc claim that drifts from the code is a red test, and the doc moves in
+;; the same commit as its contract.
+(module+ test
+  (define manifest-path (build-path root "tests" ".coverage-manifest.json"))
+  (define (manifest-covers)
+    (define j (with-input-from-file manifest-path read-json))
+    (for/hash ([e (in-list (hash-ref j 'entries))]
+               #:when (and (hash? e) (string? (hash-ref e 'test #f))))
+      (values (hash-ref e 'test) (hash-ref e 'covers '()))))
+
+  (test-case "the working-tree selection path is documented against the real qt grammar"
+    ;; The single-base-ref form is the working-tree diff; the doc states which
+    ;; git inputs each form reads and that both forms map through one machinery.
+    (check-true
+     (string-contains? doc "staged, unstaged, untracked, added, deleted and renamed files all count"))
+    (check-true (string-contains? doc "git ls-files --others"))
+    (check-true (string-contains? doc "--no-renames"))
+    (check-true (string-contains? flat "working-tree diff against BASE"))
+    (check-true (string-contains? flat "commit range BASE..HEAD"))
+    (check-true (string-contains? flat "an empty selection is a failure, not a pass"))
+    ;; The qt CLI itself names both accepted forms.
+    (check-true (string-contains? qt-text "quick --changed requires BASE..HEAD or a single base ref"))
+    (check-true (string-contains? qt-text "(a single base ref, e.g. HEAD, selects the working-tree")))
+
+  (test-case "the admission refresh workflow is documented and implemented"
+    (define qa-text (file->string quick-audit-path))
+    (check-true (string-contains? qa-text "(define (refresh-record!")
+                "the refresh entry point exists")
+    ;; The doc quotes the exact refresh command.
+    (check-true (string-contains? doc "(require (file \"scripts/testing/quick-audit.rkt\"))"))
+    (check-true (string-contains? doc "(refresh-record!)"))
+    (check-true (string-contains? flat "reproduces the committed bytes byte-identically"))
+    ;; Refresh cures staleness only: structure and capability questions stay
+    ;; review-required, and quick re-checks admission after the run.
+    (check-true (string-contains? flat "the refresh cures staleness, never a capability question"))
+    (check-true (string-contains? flat "re-checks admission after the run"))
+    (check-true (string-contains? qt-text "refuses ~a post-run"))
+    (check-true (string-contains? flat "fail-closed on the executed identity"))
+    ;; The pinned refresh tests exist.
+    (define audit-test-text (file->string (build-path root "tests" "test-testing-audit.rkt")))
+    (check-true (string-contains? audit-test-text "a content-edit refresh changes only hashes"))
+    (check-true (string-contains? audit-test-text "refresh is deterministic")))
+
+  (test-case "attribution: every admitted owner is either attributed or a documented rider"
+    (define covers (manifest-covers))
+    (define owners (admitted-owners))
+    (define riders
+      (for/list ([o (in-list owners)]
+                 #:unless (hash-has-key? covers o))
+        o))
+    (define attributed
+      (for/list ([o (in-list owners)]
+                 #:when (hash-has-key? covers o))
+        o))
+    (check-equal? (length attributed) 20 "20 of 28 owners carry @covers attribution")
+    (check-equal? (length riders) 8 "the 8 remaining owners are the documented fail-open floor")
+    (check-true (string-contains? flat "8 of the 28 current owners, all deliberate")
+                "the doc states the rider count")
+    ;; Every rider is named in the doc (no silently-global owner).
+    (for ([r (in-list riders)])
+      (check-true (string-contains? doc r) (format "the doc names rider ~a" r)))
+    ;; Every attributed owner's targets exist (manifest regeneration is strict;
+    ;; this re-checks the committed artifact against the tree).
+    (for ([o (in-list attributed)])
+      (for ([c (in-list (hash-ref covers o))])
+        (check-true (file-exists? (build-path root c)) (format "~a covers existing ~a" o c)))))
+
+  (test-case "the W2 measurement report exists and the doc links it"
+    (define report-path (build-path root "docs" "reports" "W2-EDIT-LOOP-MEASUREMENT-v1.00.33.md"))
+    (check-true (file-exists? report-path) "the measurement report exists")
+    (define report (file->string report-path))
+    (check-true (string-contains? report "p90") "the report reports percentile summaries")
+    (check-true (string-contains? report "sample") "the report states sample counts")
+    (check-true (string-contains? doc "reports/W2-EDIT-LOOP-MEASUREMENT-v1.00.33.md")
+                "the quick-start links the report")))

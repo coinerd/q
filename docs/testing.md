@@ -15,18 +15,28 @@ budgets below (v1.00.28).
 | When | Command | What a pass establishes |
 |---|---|---|
 | Every red-green cycle | `./qt quick` | The audited pure-unit owner table runs green. Reproduction only — never PR verification. |
-| Before push | `./qt quick --changed BASE..HEAD` | The impact-selected audited owners for that diff run green. Reproduction only — never a PR pass. |
+| Before push (committed work) | `./qt quick --changed BASE..HEAD` | The impact-selected audited owners for that diff run green. Reproduction only — never a PR pass. |
+| Before push (working tree) | `./qt quick --changed HEAD` | The same selection for the working-tree diff against a single base ref: staged, unstaged, untracked, added, deleted and renamed files all count. Reproduction only — never a PR pass. |
 | Pre-PR | `./qt default` | Complete *offline* PR verification: the required-offline lane (union of the suites the required CI test jobs select). Platform and GitHub-hosted claims remain with CI. |
 | Complete available suite | `./qt full` | Every discovered test file (full Racket suite only, not PR/CI verification). |
 
 - `./qt quick` runs all admitted owners; `./qt quick tests/test-foo.rkt` runs
   one admitted file (a non-admitted file is refused). Failures print per-file
   evidence plus `Reproduce: ./qt quick <file>` and exit non-zero.
-- `./qt quick --changed BASE..HEAD` maps the diff through the `@covers`
-  manifest and the dependency graph onto the audited owners. Unattributable
-  owners are INCLUDED (fail open) and an escalation widens the selection to
-  the whole audited lane, never narrower. An empty diff or an empty selection
-  is a failure, not a pass.
+- `./qt quick --changed` takes a commit range (`BASE..HEAD`) or a single base
+  ref (`HEAD`, `origin/main`, …). A single base ref is the working-tree path:
+  it diffs `BASE` against the working tree (`git diff --name-only BASE`, so
+  staged and unstaged changes count) plus untracked files
+  (`git ls-files --others`), and a rename appears as its delete+add pair (the
+  diff is computed `--no-renames`, so both paths select). Deleted files are
+  selected too. Both forms map through the SAME `@covers` manifest and
+  dependency graph onto the audited owners — direct attribution, transitive
+  graph impacts, config/global escalations and unmapped-source escalations
+  behave identically; only the report label differs
+  (`working-tree diff against BASE` vs `commit range BASE..HEAD`).
+  Unattributable owners are INCLUDED (fail open) and an escalation widens the
+  selection to the whole audited lane, never narrower. An empty diff or an
+  empty selection is a failure, not a pass.
 - `./qt default --explain` prints the claim → lane → suite mapping (required
   CI test job → lane → suite), the detected host capabilities, the file
   selection, and the honesty lists — selection only, nothing executed.
@@ -51,28 +61,57 @@ not PR/CI verification)` — and the run output prints `NOT VERIFIED` /
 The documented day is four commands; each one below was executed against the
 current `./qt` before this text was written, and the measured costs are warm
 samples from the reference machine with their sample counts — recorded runs,
-not promises. Targets come from the testing-acceleration plan; both misses
-are recorded outcomes and stay here until the next measurement beats them.
+not promises. Targets come from the edit-loop review (7002474250): every miss
+below is a recorded outcome and stays here until the next measurement beats
+it. Full sample tables, selected owners and baseline setup:
+[W2-EDIT-LOOP-MEASUREMENT (v1.00.33 W2)](reports/W2-EDIT-LOOP-MEASUREMENT-v1.00.33.md).
 
 1. **Red-green cycle** — `./qt quick <file>` runs exactly one admitted owner
    (`./qt quick tests/test-ansi.rkt`); a non-admitted file is refused. This
-   is the innermost loop while editing.
-2. **Diff reproduction** — `./qt quick --changed BASE..HEAD` maps the diff
-   onto the audited owners through the attribution rules above and runs the
-   selected owners.
+   is the innermost loop while editing. If the edit touched a file in the
+   owner's reviewed closure (the test itself or any dependency it requires),
+   refresh the admission record first (below) — a stale record refuses the
+   owner until you do.
+2. **Diff reproduction** — `./qt quick --changed BASE..HEAD` maps the
+   committed diff onto the audited owners through the attribution rules above
+   and runs the selected owners; `./qt quick --changed HEAD` does the same
+   for uncommitted working-tree edits (including untracked scratch files).
 3. **One-file reproduction on a PR lane** — `./qt full --file <file>` (or
    `./qt default --file <file>`) runs exactly that file through the lane
    machinery; its pass line says `explicit reproduction only`, never a PR
    pass.
 4. **Pre-push** — `./qt default` is the complete offline PR verification;
-   today it selects 1378 files (`./qt default --explain` prints the
+   today it selects 1379 files (`./qt default --explain` prints the
    selection without executing anything).
 
 | Loop stage | Measured (warm, reference machine) | Target |
 |---|---|---|
-| Focused red-green (`./qt quick <file>`) | p50 4.7 s, p90 5.1 s — 20 samples over two small owners (tests/test-ansi.rkt, 23 tests; tests/test-agent-state.rkt, 7 tests) | ≤ 5 s — **missed by ~0.1 s end-to-end**: the test child itself runs 0.9–1.6 s (the runner's own RUN-SUMMARY wall-clock telemetry, observed via `./qt full --file`), the remainder is qt CLI startup plus the admission re-verification |
-| Impact reproduction (`./qt quick --changed BASE..HEAD`) | p90 37.7 s, range 35.1–37.7 s — 5 samples over a real 17-file diff (f7b8e62d..HEAD, the WA/B1–B3 test delta; 3 config escalations widened the selection to the whole audited lane) | ≤ 30 s — **missed**: the fail-open floor below makes a typical selection the whole audited loop (≈ 35 s for 28 files / 325 tests), so impact selection currently saves only the attributed owners |
-| Complete audited loop (`./qt quick`) | ≈ 35 s (28 files / 325 tests) | — |
+| Focused red-green (`./qt quick <file>`) | pooled p50 2.0 s, p90 5.0 s — 21 samples over three small owners (tests/test-ansi.rkt 23 tests p90 2.2 s; tests/test-agent-state.rkt 7 tests p90 2.0 s; tests/test-gsd-campaign-decision-pure.rkt 6 tests p90 5.4 s) | ≤ 3 s — **missed** on the pooled p90: 17 of 21 samples are ≤ 2.2 s; the GSD owner misses because its fresh child recompiles a `typed/racket` closure from source each run (source-only loading), ≈ 3 s of child-side compile alone |
+| Committed attributable impact (`./qt quick --changed BASE..HEAD`) | per-area p90 12.5 s (TUI, 9 owners), 13.9 s (GSD, 9 owners), 25.4 s (agent, 11 owners) — 5 samples each | ≤ 15 s — **missed** for the agent hub sample: `agent/state.rkt` is a dependency hub, so the graph correctly fans out to 11 owners, two of which are heavy (≈ 13 s and ≈ 5.6 s alone) under source-only child loading |
+| Uncommitted attributable impact (`./qt quick --changed HEAD`) | per-area p90 12.5 s (TUI, 9 owners), 13.1 s (GSD, 9 owners), 25.2 s (agent, 12 owners) — 5/2/2 samples | ≤ 15 s — same verdict as the committed row: the fan-out, not the diff input, is the cost |
+| Admission refresh after an ordinary content edit | p50 1.5 s, p90 1.7 s — 5 samples of the production record (28 owners) | — (measured; a one-time step per edit that touches a closure file) |
+| Deliberate broad fallback (`./qt quick` after an escalation) | p50 35.7 s, p90 36.1 s — 3 samples (28 files / 325 tests) | — (reported separately, as required: an escalation runs the whole audited lane) |
+| Complete audited loop (`./qt quick`, no diff) | ≈ 35 s (28 files / 325 tests) | — |
+
+An edit to an admitted owner's closure must be followed by one admission
+refresh before `quick` runs that owner again:
+
+```sh
+racket -e '(begin (require (file "scripts/testing/quick-audit.rkt")) (refresh-record!))'
+```
+
+The refresh re-scans every owner and its closure and rewrites
+`tests/.quick-admission.rktd`; it is a pure function of the tree (re-running
+it on an unchanged tree reproduces the committed bytes byte-identically), so
+it lands as a reviewed, committed diff in the same commit as the edit.
+Content-only changes re-admit automatically: the refreshed entry keeps the
+same closure and the same verdict, and only the edited file's hash moves
+(pinned by tests/test-testing-audit.rkt). A structure change or a capability
+denylist hit still records review-required after a refresh — the refresh
+cures staleness, never a capability question, which needs a human disposition
+in the reviewed table. `quick` re-checks admission after the run too, so a
+source change during the run cannot turn into a pass line (the evidence is
+fail-closed on the executed identity).
 
 **When the change has no audited owner.** `quick --changed` never answers a
 gap with a zero-test green. The verified behaviors:
@@ -84,8 +123,23 @@ gap with a zero-test green. The verified behaviors:
   open): the diff is reproduced by the complete audited loop, never by
   nothing. Demonstrated on an untracked scratch module, then removed.
 - Owners with no `@covers` attribution of their own ride along in every
-  selection (fail open) — 25 of the 28 current owners — so the selection
-  can never drop below them.
+  selection (fail open) — 8 of the 28 current owners, all deliberate:
+  - `tests/test-arch-boundaries.rkt`, `tests/test-arch-composition-root.rkt`,
+    `tests/test-arch-parameters.rkt`, `tests/test-arch-tool-constructor.rkt`
+    and `tests/test-agent-memory-decoupling.rkt` are recursive source-scan
+    owners over layer directories (`runtime/`, `tui/`, `extensions/`, `llm/`,
+    `agent/`, `util/`); a fixed module list would silently miss every newly
+    added file, so they stay global on purpose;
+  - `tests/test-agent-session-config.rkt` exercises a pure language pattern
+    (mutable-hash regression) with no production module required at all;
+  - `tests/test-audit-v09945-final-report.rkt` and
+    `tests/test-audit-v09945-w11-final.rkt` pin documentation/report and test
+    inventory integrity, which the impact selector maps only as `doc` inputs.
+  The other 20 owners carry `@covers` attribution (the modules each directly
+  requires, or — for the browser-close contract regression — the module whose
+  contract it pins), so a change to one of those modules selects exactly its
+  owners and the fail-open floor stays small. Attribution claims are checked
+  against the live manifest by tests/test-docs-accuracy.rkt.
 - If the selection would be empty (reachable only once every owner carries
   attribution and none is affected — not the case today), the command fails
   with `changed selection is empty: …` and exits non-zero; the same
@@ -102,10 +156,17 @@ gap with a zero-test green. The verified behaviors:
 record (`tests/.quick-admission.rktd`): a versioned capability-denylist scan
 over each owner and its reviewed closure gates admission.
 `./qt quick --audit` prints the live report — `admitted`, `review-required`,
-`rejected`, with reasons (28 owners / 325 tests at the time of writing). A
+`rejected`, with reasons (28 owners / 325 tests at the time of writing; the
+audit view scans every candidate and costs ≈ 30 s). A
 stale record, a closure-structure change, or a denylist hit is
-`review-required`; `quick` refuses to run such an owner, and re-checks
-admission after the run so a mid-run source change cannot slip through.
+`review-required`; `quick` refuses to run such an owner (exit 1), and
+re-checks admission after the run so a mid-run source change cannot slip
+through. The executed identity is fail-closed: result evidence carries the
+executed path, and a non-#f staleness/identity reason invalidates the result
+no matter what exit code or counts the child reported. Per-run admission is
+cheap (the CLI startup plus a selected-owner re-check is ≈ 0.9 s warm for one
+file, ≈ 3 s for a nine-owner `--changed HEAD --explain`), so the gate is
+checked before AND after every run, not sampled.
 
 Expansion status (testing-acceleration Phase D): the B1–B3 re-tier waves
 produced fast *contract* owners
