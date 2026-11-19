@@ -16,6 +16,12 @@ env:
 on:
   schedule:
     - cron: "30 2 * * *" # nightly, 02:30 UTC — full regression (heavy jobs)
+    # W1 (#9949): the Racket 8.11 compatibility lane below fires on THIS
+    # weekly cron only. `github.event.schedule` carries the exact cron
+    # string, so the nightly run leaves the compat lane skipped and the
+    # compatibility verification runs once a week (plus every manual
+    # dispatch). Per-push full-suite 8.11 execution was removed from ci.yml.
+    - cron: "40 2 * * 6" # weekly, Saturday 02:40 UTC — Racket 8.11 compatibility
   workflow_dispatch:
     inputs:
       suite:
@@ -82,7 +88,15 @@ jobs:
             LEDGER_ARGS=(--ledger .github/known-failures.json)
           fi
           # shellcheck disable=SC2086
-          STRICT_TEST_RUNNER=1 ./qt \
+          # W1 (#9949) repair: the invocation must be the explicit `full`
+          # command. Bare `./qt --suite ...` dispatches to the default PR
+          # lane, which refuses CI-surface flags ("qt: default does not
+          # accept CI-surface option --suite") — every shard of runs
+          # 44286441007 failed on exactly that message. `--suite` is a
+          # `full`-command flag; `--lane` stays out because a lane is a
+          # suite union and this matrix owns the shard via --shard-*.
+          # Pinned by tests/test-full-regression-invocation.rkt.
+          STRICT_TEST_RUNNER=1 ./qt full \
             --suite "$SUITE" \
             --jobs "$JOBS" \
             --shard-index ${{ matrix.shard }} --shard-total 6 \
@@ -198,6 +212,61 @@ jobs:
           name: results-platform
           path: |
             shard-results/platform.json
+            test-output.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────────
+  # Racket 8.11 cross-version compatibility (W1, #9949).
+  # The former ci.yml `test-cross-version` job re-ran the whole 1329-file
+  # fast suite on Racket 8.11 on EVERY main push (~61 min — the largest
+  # single main-CI job, docs/reports/TEST-WORK-MASS-v1.00.32.md). The
+  # compatibility verification itself is retained here: same version
+  # identity (8.11), a real fast-lane invocation, retained log/JSON
+  # evidence — on the weekly schedule above and on every manual dispatch.
+  # It is deliberately NOT a `summarize` required lane: the definitive
+  # full-regression status (run-summary.json) remains exactly the six
+  # Linux shards + workflows + platform lanes, so this job cannot weaken
+  # or substitute for that evidence. The version-indexed package lock
+  # (ci/racket-package-lock.rktd, schema-revision 2) accepts 8.11 —
+  # pinned by tests/ci/verify-lock-selection-test.rkt.
+  # ────────────────────────────────────────────────────────────
+  cross-version-compat:
+    if: >-
+      ${{ (github.event_name == 'schedule' && github.event.schedule == '40 2 * * 6') || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90 # unsharded fast suite under 8.11 measured ~61 min wall at --jobs 4
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: "8.11"
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null
+
+      - name: Compile gate
+        run: raco make main.rkt
+
+      - name: Run fast suite (Racket 8.11 compatibility)
+        run: |
+          set -euo pipefail
+          mkdir -p shard-results
+          # Explicit full-command lane surface (never bare `./qt --suite ...`:
+          # the default PR lane refuses CI-surface flags). The lane names the
+          # suite selection, so no --suite here.
+          STRICT_TEST_RUNNER=1 ./qt full --lane fast --jobs 4 \
+            --json-out shard-results/cross-version-811.json \
+            2>&1 | tee test-output.log
+
+      - name: Upload cross-version compatibility evidence
+        if: always() # evidence retention: a red compat lane must keep its log + JSON
+        uses: actions/upload-artifact@v7
+        with:
+          name: results-cross-version-811
+          path: |
+            shard-results/cross-version-811.json
             test-output.log
           if-no-files-found: warn
           retention-days: 30

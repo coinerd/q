@@ -404,7 +404,7 @@
   (check-not-false (member "test (2)" jobs))
   (check-not-false (member "test-aggregate" jobs))
   (check-not-false (member "test-platform" jobs))
-  (check-not-false (member "test-cross-version" jobs))
+  (check-false (member "test-cross-version" jobs))
   (check-not-false (member "smoke (ubuntu-latest)" jobs))
   (check-not-false (member "workflows (0)" jobs))
   (check-not-false (member "workflows (1)" jobs))
@@ -559,7 +559,6 @@
                                "test (2)"
                                "test-aggregate"
                                "test-platform"
-                               "test-cross-version"
                                "security"
                                "release-dry-run"
                                "smoke (ubuntu-latest)"
@@ -579,7 +578,6 @@
                              "test (2)"
                              "test-aggregate"
                              "test-platform"
-                             "test-cross-version"
                              "security"
                              "release-dry-run"
                              "smoke (ubuntu-latest)"
@@ -599,7 +597,6 @@
                              "test (1)"
                              "test-aggregate"
                              "test-platform"
-                             "test-cross-version"
                              "security"
                              "release-dry-run"
                              "smoke (ubuntu-latest)"
