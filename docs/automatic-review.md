@@ -495,12 +495,19 @@ trio gate before pinned non-force publication/readback. Malformed remaining
 items fail as infrastructure errors without changing the remote; no gate facts
 or remaining items are silently discarded.
 
-Focused proof now exercises the default production coordinator and real Python
-controller against a local Git remote (`tests/test-gsd-auto-review-production.rkt`).
-The actual isolated `/go` loop (`tests/test-gsd-auto-review-loop.rkt`) publishes
+The focused required-PR proof now exercises the default production coordinator
+and the real native review controller (`auto-review-seam-run!`) over a real Git
+remote (`tests/test-gsd-auto-review-production-contract.rkt`, wave B2). The
+Python control plane was removed before this milestone (#9913); the legacy
+`default-review-python` name survives only as the injected seam contract. The
+deep two-generation owned-Verify world stays owned by
+`tests/test-gsd-auto-review-production.rkt` (slow/full regression). The actual
+isolated `/go` loop (`tests/test-gsd-auto-review-loop.rkt`, slow owner) publishes
 rejection, loses the checkpoint outcome/marker, resumes from committed evidence,
-and enters exactly one ordinary fenced retry and fresh generation review. Only
-model transport responses are deterministic; controller statuses are not mocked.
+and enters exactly one ordinary fenced retry and fresh generation review, with
+`tests/test-gsd-auto-review-loop-contract.rkt` (wave B1) as its required-PR
+counterpart. Only model transport responses are deterministic; controller
+statuses are not mocked.
 The real-Git strict controller suite is owned by
 `tests/test-gsd-delivery-auto-review-native.rkt` (slow lane). Phase B deleted the
 shim that used to spawn the Python controller suite from the fast bucket, so the
