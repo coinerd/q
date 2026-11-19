@@ -1,5 +1,5 @@
 #lang racket
-;; @speed fast
+;; @speed slow
 ;; @suite extensions
 ;; @boundary integration
 ;; @mutates repo
