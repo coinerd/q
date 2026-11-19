@@ -68,6 +68,11 @@ jobs:
       EXTRA_ARGS: ${{ github.event.inputs.extra-args }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          # History-dependent owners (e.g. test-wave-integrity-adversarial)
+          # resolve pinned historical commits; the default shallow clone
+          # cannot see them. Same precedent as ci.yml's workflows job.
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup-racket
         with:
@@ -143,6 +148,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The W6 adversarial rehearsal check resolves a recorded head that
+          # predates the checkout tip; default fetch-depth 1 cannot see it.
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup-racket
         with:
