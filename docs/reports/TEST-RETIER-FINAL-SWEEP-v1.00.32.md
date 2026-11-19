@@ -5,7 +5,10 @@ Wave: #9938 (Phase F). Head audited: `039a97ba` (`feat/9938-phase-f-final-sweep`
 WB4 #9943, WC #9945, WD #9944). **WE (#9937) was not yet merged** at audit time;
 its retiering moves required-PR context membership and does not delete files —
 a one-line consumer re-grep is the only WF evidence WE could invalidate, and no
-WF decision below depends on a file WE would move.
+WF decision below depends on a file WE would move. Final state: WE merged as
+`08b3bf57` after the audit and before this report's PR; its two new contract owners
+and one helper were re-grepped for consumers (0 orphaned references), so the
+zero-deletion conclusion still holds.
 
 Mandate: delete superseded test/infrastructure code **only** where the
 replacement owner is verified authoritative and the orphaning happened **by the
