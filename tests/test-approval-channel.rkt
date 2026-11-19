@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite security
 ;; @boundary unit
+;; @covers runtime/approval/broker.rkt
 
 ;; Safe, digest-bound approval broker channel tests.
 

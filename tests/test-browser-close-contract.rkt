@@ -8,6 +8,8 @@
 ;; Error: browser-close!: broke its own contract | promised: void? | produced: (event ...)
 ;;
 ;; Fix: Added (void) as last expression in browser-close! body.
+;; @covers browser/service.rkt
+;; (contract pin: browser-close! at browser/service.rkt)
 
 ;; @speed fast
 ;; @suite default

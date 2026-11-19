@@ -2,6 +2,7 @@
 
 ;; @speed fast  ;; @suite default
 ;; @boundary unit
+;; @covers util/exn.rkt
 ;; Tests for util/exn.rkt — stream-error exception with recovery data.
 
 (require rackunit

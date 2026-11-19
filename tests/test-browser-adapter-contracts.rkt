@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite default
+;; @covers browser/adapter.rkt browser/types.rkt
 
 ;; tests/test-browser-adapter-contracts.rkt — Adapter contract boundary tests
 ;;

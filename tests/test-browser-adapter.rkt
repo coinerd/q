@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite default
 ;; @boundary unit
+;; @covers browser/adapter.rkt browser/types.rkt
 
 ;; tests/test-browser-adapter.rkt — Browser adapter interface tests
 ;;
