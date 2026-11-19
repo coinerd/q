@@ -64,10 +64,15 @@ jobs:
             RUN_ATTEMPT=""
             # Resolve the latest successful ci.yml run for THIS commit. N4
             # (review round 1): the expected run attempt is derived from the
-            # API response's runAttempt — never copied from the bundle.
-            if gh run list --workflow ci.yml --commit "$GITHUB_SHA" --status success --json databaseId,runAttempt --limit 5 > proof-bundle-decision/candidate-runs.json; then
+            # API response — never copied from the bundle. W1 (#9949) repair:
+            # gh's JSON field is `attempt` (the REST field is run_attempt).
+            # The old spelling asked gh for the REST name instead, so gh
+            # exited non-zero with `Unknown JSON field: "runAttempt"` and
+            # EVERY nightly fell back to the suite (run 44289721382 log,
+            # 10:58:11.842Z).
+            if gh run list --workflow ci.yml --commit "$GITHUB_SHA" --status success --json databaseId,attempt --limit 5 > proof-bundle-decision/candidate-runs.json; then
               RUN_ID="$(jq -r '.[0].databaseId // empty' proof-bundle-decision/candidate-runs.json)"
-              RUN_ATTEMPT="$(jq -r '.[0].runAttempt // empty' proof-bundle-decision/candidate-runs.json)"
+              RUN_ATTEMPT="$(jq -r '.[0].attempt // empty' proof-bundle-decision/candidate-runs.json)"
             else
               echo "resolve: gh run list unavailable (fallback: run the suite)" | tee proof-bundle-decision/fallback-cause.txt
             fi
@@ -184,7 +189,18 @@ jobs:
         # skip.
         if: steps.consume.outputs.bundle_ok != 'true'
         run: ./qt --lane fast
-        timeout-minutes: 15
+        # W1 (#9949): the fallback budget must fit the fallback execution.
+        # The previous 15-minute budget killed the suite mid-run (run
+        # 44289721382: "The action 'Run full test suite' has timed out after
+        # 15 minutes") although the designed worst case of this step is
+        # exactly "the suite runs": the unsharded fast suite measured
+        # 2141–3666s wall at --jobs 4 (docs/reports/TEST-WORK-MASS-v1.00.32.md;
+        # this step runs the runner default --jobs 2, so slower still).
+        # 120 minutes covers the measured worst case with margin. This is an
+        # execution budget, not an evidence control: freshness, reuse
+        # validation and the fail-closed fallback semantics above are
+        # untouched.
+        timeout-minutes: 120
 
       - name: Record proof reuse (suite skipped; zero tests run)
         if: steps.consume.outputs.bundle_ok == 'true'
