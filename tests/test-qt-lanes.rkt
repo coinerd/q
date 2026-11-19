@@ -285,43 +285,34 @@
         (check-eq? (lane-verdict lane #t '() (list (release-obligation 'x "x" 'local 'unavailable)))
                    'invalid
                    (format "~a: obligations on a non-release lane" lane)))
-      (check-eq? (lane-verdict lane #t '("README.md") (list (release-obligation 'x "x" 'local 'unavailable)))
-                 'surface
-                 (format "~a: a changed surface outranks an obligation" lane)))
+      (check-eq?
+       (lane-verdict lane #t '("README.md") (list (release-obligation 'x "x" 'local 'unavailable)))
+       'surface
+       (format "~a: a changed surface outranks an obligation" lane)))
     ;; The release lane is the only lane with obligations: an unverified
     ;; obligation is red, an empty blocking list is the only path to a pass.
-    (check-eq? (lane-verdict 'release #t '() (list (release-obligation 'x "x" 'local 'unavailable))) 'unverified)
+    (check-eq? (lane-verdict 'release #t '() (list (release-obligation 'x "x" 'local 'unavailable)))
+               'unverified)
     (check-eq? (lane-verdict 'release #t '() '()) 'ok "release with empty blocking is ok")
     ;; `blocking` is the already-filtered unverified list, so a verified
     ;; obligation filters away and cannot block the pass line either.
-    (check-eq? (lane-verdict 'release #t '() (release-blocking (list (release-obligation 'x "x" 'local 'verified))))
+    (check-eq? (lane-verdict 'release
+                             #t
+                             '()
+                             (release-blocking (list (release-obligation 'x "x" 'local 'verified))))
                'ok)
     (check-equal? (map release-obligation-slug (release-obligations))
                   '(governance-parity ci-verification branch-protection release-provenance)
                   "obligation ids are STABLE SLUGS, not positional not-verified-N/not-provided-N")
     (check-eq?
-     (for/sum ([o (in-list (release-obligations))] #:when (string-contains? (release-obligation-text o) "macOS"))
-       1)
+     (for/sum ([o (in-list (release-obligations))]
+               #:when (string-contains? (release-obligation-text o) "macOS"))
+              1)
      0
      "the macOS/platform claim is not a candidate obligation (CI test-platform is unchanged)")
     (check-eq? (lane-verdict 'release #t '() (release-blocking (release-obligations)))
                'unverified
                "the real obligation list blocks every release pass"))
-  (test-case "lane-verdict fields drive the verdict for a recorded run"
-    (with-lane-root
-     (lambda (dir)
-       (define plan (resolve-lane-plan 'default dir))
-       (if (full-execution-supported?)
-           (let* ([run (run-plan plan 2)]
-                  [verdict (lane-verdict 'default
-                                         (full-run-valid? run)
-                                         (full-run-surface-violations run)
-                                         '())])
-             (check-true (full-run-valid? run))
-             (check-eq? verdict 'ok)
-             (check-regexp-match default-pass-pattern
-                                 (default-pass-line run (length (lane-plan-unavailable plan)))))
-           (displayln "SKIP lane-verdict recorded run: Linux /proc or setsid unavailable")))))
   ;; --- lane table shape (final plan §6 E1) --------------------------------
   (test-case "lane table shape: suite sets with a one-element compatibility accessor"
     ;; A qt-lane carries a SUITE SET. Every pre-E1 lane keeps exactly one suite
@@ -332,15 +323,17 @@
       (define suites (qt-lane-suites lane))
       (check-true (and (pair? suites) (andmap symbol? suites))
                   (format "~a: suites is a non-empty list of symbols" name))
-      (check-equal? suites (remove-duplicates suites)
-                  (format "~a: suites are distinct" name))
-      (check-equal? (qt-lane-suite lane) suites
+      (check-equal? suites (remove-duplicates suites) (format "~a: suites are distinct" name))
+      (check-equal? (qt-lane-suite lane)
+                    suites
                     (format "~a: the compat accessor returns the suite set" name))
       (unless (eq? name 'required-offline)
         (check-equal? (length suites) 1 (format "~a: legacy lanes stay single-suite" name))))
-    (check-equal? (qt-lane-suite (qt-lane-ref 'fast)) '(fast)
+    (check-equal? (qt-lane-suite (qt-lane-ref 'fast))
+                  '(fast)
                   "the single-suite accessor stays a one-element list")
-    (check-equal? (qt-lane-suite (qt-lane-ref 'workflows)) '(workflows)
+    (check-equal? (qt-lane-suite (qt-lane-ref 'workflows))
+                  '(workflows)
                   "the workflows lane keeps its single suite"))
   (test-case "required-offline drift pin: the lane's suites are exactly the required CI test jobs' lanes"
     ;; Final plan §6 E1: the mapping is derived from the lane table (never from
@@ -348,14 +341,12 @@
     ;; suite list equals the set of lanes named by the required CI test jobs —
     ;; so claim-coverage drift fails in CI instead of shipping silently.
     (define policy-path (build-path root "scripts" "required-pr-checks.policy"))
-    (define policy-contexts
-      (call-with-input-file policy-path read))
+    (define policy-contexts (call-with-input-file policy-path read))
     ;; Required contexts that do not run tests: aggregation and static gates.
     (define non-producer-contexts
       '("lint" "lint-quality" "release-dry-run" "workflows-aggregate" "test-aggregate"))
     ;; The test producers this table maps to lanes (required-ci-producers).
-    (define producer-contexts
-      (append-map required-producer-contexts required-ci-producers))
+    (define producer-contexts (append-map required-producer-contexts required-ci-producers))
     (check-equal? (length policy-contexts) 13 "all 13 required contexts stay protected")
     (check-equal? (length producer-contexts) 8)
     ;; Every producer context the table names must be a REQUIRED context: a
@@ -366,10 +357,9 @@
     ;; Every required context must be accounted for: a NEW or RENAMED required
     ;; context must be classified here in the same commit (drift fails closed).
     (for ([ctx (in-list policy-contexts)])
-      (check-true (and (or (member ctx non-producer-contexts)
-                           (member ctx producer-contexts))
-                       #t)
-                  (format "required context ~a is neither a known non-producer nor a mapped test producer" ctx)))
+      (check-true
+       (and (or (member ctx non-producer-contexts) (member ctx producer-contexts)) #t)
+       (format "required context ~a is neither a known non-producer nor a mapped test producer" ctx)))
     ;; The lane's suite list is EXACTLY the union of the producers' lanes'
     ;; suites — in the final plan §6's own order.
     (define producer-suites
@@ -448,10 +438,8 @@
        (for ([tok (in-list requires-excluded-tokens)])
          (define rel (format "tests/req-~a.rkt" tok))
          (define f (path->string (build-path dir "tests" (format "req-~a.rkt" tok))))
-         (check-true (requires-excluded? f)
-                     (format "the classifier still flags ~a" tok))
-         (check-true (and (member rel rels) #t)
-                     (format "~a joins the required-offline union" tok))
+         (check-true (requires-excluded? f) (format "the classifier still flags ~a" tok))
+         (check-true (and (member rel rels) #t) (format "~a joins the required-offline union" tok))
          (if (host-capability-available? tok)
              (check-false (member rel unavailable-rels)
                           (format "~a runs here (never silently listed)" tok))
@@ -474,8 +462,7 @@
            (format "~a -> lane ~a -> suite"
                    (string-join (required-producer-contexts producer) ", ")
                    (required-producer-lane producer)))
-         (check-true (string-contains? text needle)
-                     (format "the mapping must name ~a" needle)))
+         (check-true (string-contains? text needle) (format "the mapping must name ~a" needle)))
        (check-true
         (string-contains?
          text
@@ -501,11 +488,11 @@
                                     "network: available"
                                     "provider-key: NOT available locally"
                                     "git: available"))])
-         (check-true (string-contains? text needle)
-                     (format "capabilities must state ~a" needle)))
+         (check-true (string-contains? text needle) (format "capabilities must state ~a" needle)))
        (check-regexp-match #rx"unavailable-here: 1 required-offline member" text)
        (check-true (for/or ([line (in-list lines)])
-                     (string-prefix? line "  unavailable-here: tests/keys.rkt (@requires provider-key)"))
+                     (string-prefix? line
+                                     "  unavailable-here: tests/keys.rkt (@requires provider-key)"))
                    "the unavailable-here member is NAMED with its unsatisfied requirement")
        (check-regexp-match #rx"CI stays authoritative" text)
        (check-regexp-match #rx"NOT VERIFIED by \\./qt default:" text)
@@ -522,34 +509,39 @@
     ;; The pure partition and the capability model, pinned directly: the local
     ;; profile policy cannot satisfy provider-key, an unknown token is never
     ;; claimed, and the partition names the file with its requirements.
-    (with-lane-root
-     (lambda (dir)
-       (define members (unavailable-here-members dir (lane-relative 'default dir)))
-       (check-equal? (map unavailable-here-file members) '("tests/keys.rkt"))
-       (check-equal? (unavailable-here-requirements (car members)) '("provider-key"))
-       (check-false (host-capability-available? "provider-key"))
-       (check-true (host-capability-available? "network"))
-       (check-true (host-capability-available? "terminal"))
-       (check-false (host-capability-available? "no-such-token")
-                    "an unknown token is never claimed (conservative, listed)"))))
-  (test-case "default runs exactly the runnable selection; unavailable-here never executes"
+    (with-lane-root (lambda (dir)
+                      (define members (unavailable-here-members dir (lane-relative 'default dir)))
+                      (check-equal? (map unavailable-here-file members) '("tests/keys.rkt"))
+                      (check-equal? (unavailable-here-requirements (car members)) '("provider-key"))
+                      (check-false (host-capability-available? "provider-key"))
+                      (check-true (host-capability-available? "network"))
+                      (check-true (host-capability-available? "terminal"))
+                      (check-false (host-capability-available? "no-such-token")
+                                   "an unknown token is never claimed (conservative, listed)"))))
+  (test-case "default runs exactly the runnable selection; the recorded run drives the verdict"
     (if (full-execution-supported?)
-        (with-lane-root (lambda (dir)
-                          (define plan (resolve-lane-plan 'default dir))
-                          (define run (run-plan plan 2))
-                          (check-true (full-run-valid? run))
-                          (check-equal? (full-run-files run) (lane-plan-files plan))
-                          (check-equal? (length (full-run-results run)) 6)
-                          (check-false (file-exists? (build-path dir "tests" "slow-ran"))
-                                       "a file in no required suite must not have been executed")
-                          (check-false (file-exists? (build-path dir "tests" "keys-ran"))
-                                       "the unavailable-here member must not have been executed")
-                          (check-regexp-match default-pass-pattern
-                                              (default-pass-line run
-                                                                 (length (lane-plan-unavailable plan))))
-                          ;; Per-file timeouts survive the union selection.
-                          (check-equal? (hash-count (full-timeouts (lane-plan-files plan)))
-                                        (length (lane-plan-files plan)))))
+        (with-lane-root
+         (lambda (dir)
+           (define plan (resolve-lane-plan 'default dir))
+           (define run (run-plan plan 2))
+           ;; ONE recorded run drives both the evidence contract and the lane
+           ;; verdict (W4b absorbed the separate lane-verdict recorded-run
+           ;; execution of the same fixture selection into this case).
+           (check-eq?
+            (lane-verdict 'default (full-run-valid? run) (full-run-surface-violations run) '())
+            'ok)
+           (check-true (full-run-valid? run))
+           (check-equal? (full-run-files run) (lane-plan-files plan))
+           (check-equal? (length (full-run-results run)) 6)
+           (check-false (file-exists? (build-path dir "tests" "slow-ran"))
+                        "a file in no required suite must not have been executed")
+           (check-false (file-exists? (build-path dir "tests" "keys-ran"))
+                        "the unavailable-here member must not have been executed")
+           (check-regexp-match default-pass-pattern
+                               (default-pass-line run (length (lane-plan-unavailable plan))))
+           ;; Per-file timeouts survive the union selection.
+           (check-equal? (hash-count (full-timeouts (lane-plan-files plan)))
+                         (length (lane-plan-files plan)))))
         (displayln "SKIP default lane execution: Linux /proc or setsid unavailable")))
   (test-case "default CLI runs the runnable selection, labels the result, lists unavailable-here"
     (if (full-execution-supported?)
@@ -691,7 +683,8 @@
            (check-regexp-match #rx"RELEASE OBLIGATION release-provenance \\[UNAVAILABLE\\]" text)
            ;; The evidence verdict line precedes the obligations; without
            ;; --evidence the CI results are unavailable, never inferred.
-           (check-regexp-match #rx"release evidence: unavailable \\(no --evidence input given\\)" text)
+           (check-regexp-match #rx"release evidence: unavailable \\(no --evidence input given\\)"
+                               text)
            (check-equal? (length (regexp-match* #rx"RELEASE OBLIGATION " text))
                          (length (release-obligations))
                          "every obligation is printed on its own line")
@@ -709,8 +702,11 @@
     (make-parent-directory* (build-path dir rel))
     (write-file (build-path dir rel) json-text))
   (define (results-doc sha pass fail)
-    (format "{\"run_summary\":{\"run_sha\":\"~a\",\"file_count\":2,\"pass\":~a,\"fail\":~a,\"timeout\":0,\"skip\":0}}"
-            sha pass fail))
+    (format
+     "{\"run_summary\":{\"run_sha\":\"~a\",\"file_count\":2,\"pass\":~a,\"fail\":~a,\"timeout\":0,\"skip\":0}}"
+     sha
+     pass
+     fail))
   (define candidate-sha "0123456789abcdef0123456789abcdef01234567")
   (test-case "release evidence: artifact directory binding and cleanliness"
     (define dir (make-temporary-file "qt-lanes-evidence-~a" 'directory))
@@ -718,7 +714,8 @@
      void
      (lambda ()
        ;; Absent and empty inputs are unavailable, never inferred.
-       (check-eq? (release-evidence-state (load-release-evidence candidate-sha (build-path dir "missing")))
+       (check-eq? (release-evidence-state (load-release-evidence candidate-sha
+                                                                 (build-path dir "missing")))
                   'unavailable)
        (check-eq? (release-evidence-state (load-release-evidence candidate-sha dir)) 'unavailable)
        ;; A clean, SHA-bound document verifies.
@@ -734,7 +731,8 @@
        (define failed (load-release-evidence candidate-sha dir))
        (check-eq? (release-evidence-state failed) 'failed)
        ;; Wrong SHA, missing attestation, malformed JSON: unavailable.
-       (write-evidence-doc dir "shard-3/test-results.json"
+       (write-evidence-doc dir
+                           "shard-3/test-results.json"
                            (results-doc "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" 1 0))
        (check-eq? (release-evidence-state (load-release-evidence candidate-sha dir)) 'unavailable)
        (delete-file (build-path dir "shard-3" "test-results.json"))
@@ -787,24 +785,25 @@
   (test-case "release evidence: obligation states follow the evidence, never inference"
     ;; No evidence: everything unavailable; only the local verifier can move.
     (define none (release-obligations-with-evidence (release-evidence 'unavailable "nothing" 0)))
-    (check-true (and (for/and ([o (in-list none)]) (eq? (release-obligation-state o) 'unavailable)) #t))
+    (check-true (and (for/and ([o (in-list none)])
+                       (eq? (release-obligation-state o) 'unavailable))
+                     #t))
     ;; Clean evidence verifies ONLY the ci-results obligation; the attestation
     ;; obligations stay unavailable (no input format yet) and keep blocking.
-    (define verified
-      (release-obligations-with-evidence (release-evidence 'clean "clean" 3)))
-    (check-equal?
-     (for/list ([o (in-list verified)]) (list (release-obligation-slug o) (release-obligation-state o)))
-     '((governance-parity unavailable)
-       (ci-verification verified)
-       (branch-protection unavailable)
-       (release-provenance unavailable)))
+    (define verified (release-obligations-with-evidence (release-evidence 'clean "clean" 3)))
+    (check-equal? (for/list ([o (in-list verified)])
+                    (list (release-obligation-slug o) (release-obligation-state o)))
+                  '((governance-parity unavailable) (ci-verification verified)
+                                                    (branch-protection unavailable)
+                                                    (release-provenance unavailable)))
     (check-equal? (map release-obligation-slug (release-blocking verified))
                   '(governance-parity branch-protection release-provenance))
     ;; Failed evidence is honest failure, not absence.
-    (define failed
-      (release-obligations-with-evidence (release-evidence 'failed "red" 2)))
+    (define failed (release-obligations-with-evidence (release-evidence 'failed "red" 2)))
     (define ci
-      (for/first ([o (in-list failed)] #:when (eq? (release-obligation-slug o) 'ci-verification)) o))
+      (for/first ([o (in-list failed)]
+                  #:when (eq? (release-obligation-slug o) 'ci-verification))
+        o))
     (check-eq? (release-obligation-state ci) 'failed)
     ;; The local verifier is applied by the run: valid + clean surfaces only.
     (define applied (release-apply-run verified #t '()))
@@ -816,7 +815,8 @@
     ;; The evidence line states the verdict in the fail-closed vocabulary.
     (check-regexp-match #rx"^release evidence: unavailable"
                         (release-evidence-line (release-evidence 'unavailable "nothing" 0)))
-    (check-regexp-match #rx"^release evidence: " (release-evidence-line (release-evidence 'clean "clean" 1))))
+    (check-regexp-match #rx"^release evidence: "
+                        (release-evidence-line (release-evidence 'clean "clean" 1))))
   ;; --- changed-file selection --------------------------------------------
   (test-case "changed selection includes affected and unattributable files, excludes unrelated"
     (with-lane-root (lambda (dir)
@@ -993,19 +993,22 @@
          full-label))
        (check-equal? (plan-label plan) full-label))))
   (test-case "unsupported command and options fail before any execution"
-    (for ([args (in-list '(("bogus") ("quick" "--changed")
-                                     ("release" "--changed")
-                                     ("default" "--bogus")
-                                     ("default" "extra")
-                                     ("full" "tests/test-qt-lanes.rkt")
-                                     ("default" "--changed" "a" "b")))])
+    ;; One launch per refusal; the message pins ride on the same invocation
+    ;; (W4b removed the three duplicate launches that re-invoked an already
+    ;; invoked spelling only to read its message).
+    (for ([case (in-list (list (cons '("bogus")
+                                     #rx"only quick, full, default and release are available")
+                               (cons '("quick" "--changed")
+                                     #rx"quick --changed requires BASE..HEAD or a single base ref")
+                               (cons '("release" "--changed") #rx"release does not accept --changed")
+                               (cons '("default" "--bogus") #rx"unsupported option: --bogus")
+                               (cons '("default" "extra") #f)
+                               (cons '("full" "tests/test-qt-lanes.rkt") #f)
+                               (cons '("default" "--changed" "a" "b") #f)))])
+      (define args (car case))
       (define-values (status out err) (apply invoke args))
       (check-not-equal? status 0 (format "~a should fail" args))
       (check-regexp-match #rx"^qt: " err)
-      (check-false (regexp-match? #rx"passed:" out) (format "~a must not execute" args)))
-    (let-values ([(status out err) (invoke "bogus")])
-      (check-regexp-match #rx"only quick, full, default and release are available" err))
-    (let-values ([(status out err) (invoke "release" "--changed")])
-      (check-regexp-match #rx"release does not accept --changed" err))
-    (let-values ([(status out err) (invoke "default" "--bogus")])
-      (check-regexp-match #rx"unsupported option: --bogus" err))))
+      (when (cdr case)
+        (check-regexp-match (cdr case) err))
+      (check-false (regexp-match? #rx"passed:" out) (format "~a must not execute" args)))))

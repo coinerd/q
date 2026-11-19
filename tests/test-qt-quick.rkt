@@ -69,12 +69,12 @@
           (check-equal? status 0 text)
           (check-regexp-match #rx"quick passed: 1 files, 6 tests" text))
         (displayln "SKIP campaign decisions: Linux /proc or setsid unavailable")))
-  (test-case "delivery verifier executes all ten decisions once"
-    (if (quick-supported?)
-        (let-values ([(status text) (run "quick" "tests/test-gsd-delivery-verifier-decision.rkt")])
-          (check-equal? status 0 text)
-          (check-regexp-match #rx"quick passed: 1 files, 10 tests" text))
-        (displayln "SKIP delivery verifier: Linux /proc or setsid unavailable")))
+  ;; The former "delivery verifier executes all ten decisions once" case was
+  ;; removed (W4b): it asserted the SAME single-file CLI contract as the
+  ;; campaign case above (named admitted owner runs, counted pass line) with a
+  ;; different payload, and that payload (tests/test-gsd-delivery-verifier-
+  ;; decision.rkt) is an audited quick owner, so the whole-suite case below
+  ;; already executes its ten decisions on every run of this file.
   (test-case "invalid jobs and paths fail"
     (for ([args '(("quick" "--jobs" "0") ("quick" "--jobs")
                                          ("quick" "../tests/test-vdom-html-render.rkt")
