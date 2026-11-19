@@ -23,6 +23,7 @@
 (provide run-quick
          run-quick-file
          quick-result-valid?
+         classify-quick-child-run
          (struct-out quick-result))
 
 (define current-quick-result-transform (make-parameter values))
@@ -43,6 +44,27 @@
        (exact-nonnegative-integer? (quick-result-failed r))
        (zero? (quick-result-failed r))
        (exact-positive-integer? (quick-result-total r))))
+
+;; The ONE trust classification for a finished audited child run (pure):
+;; observed facts in, (values reported-exit reason) out — the same decision for
+;; both evidence shapes, so the precedence lives exactly once:
+;;   identity mismatch ('identity — the trust root) > timeout > truncated >
+;;   nonzero exit > the evidence tail ('no-evidence for an absent/malformed
+;;   record, #f for a clean well-formed run).
+;; Only 'exit reports the child's own exit code; every other reason reports 1
+;; because the evidence may come from a child that exited 0 anyway (the
+;; contract quick-result-valid? enforces: a reason always invalidates).
+;; evidence ∈ 'matched (well-formed record naming exactly the requested path)
+;;          | 'mismatched (well-formed record naming a different path)
+;;          | 'absent (missing or malformed record — identity unknowable)
+(define (classify-quick-child-run evidence timed-out? truncated? child-exit)
+  (cond
+    [(eq? evidence 'mismatched) (values 1 'identity)]
+    [timed-out? (values 1 'timeout)]
+    [truncated? (values 1 'truncated)]
+    [(not (equal? child-exit 0)) (values child-exit 'exit)]
+    [(eq? evidence 'absent) (values 1 'no-evidence)]
+    [else (values child-exit #f)]))
 
 ;; Fail once, up front, instead of producing N identical per-file failures on a
 ;; host that cannot own process groups.
@@ -68,12 +90,6 @@
                           (lambda (in)
                             (define v (read in))
                             (and (eof-object? (read in)) v)))))
-
-;; A real check on the subprocess result (not on a quick-result): the child
-;; exited non-zero. Evidence may still exist, so this only classifies the
-;; failure, it never short-circuits the evidence read.
-(define (child-exited-nonzero? raw)
-  (and (subprocess-result? raw) (not (equal? 0 (subprocess-result-exit-code raw)))))
 
 (define (run-one path timeout)
   (define dir (make-temporary-file "qt-run-~a" 'directory))
@@ -111,31 +127,18 @@
           [(list (? string? identity)
                  (? exact-nonnegative-integer? failed)
                  (? exact-positive-integer? total))
-           (define reason
-             (cond
-               [(not (equal? identity path)) 'identity]
-               [timed-out? 'timeout]
-               [truncated? 'truncated]
-               [(not (equal? exit 0)) 'exit]
-               [else #f]))
-           (quick-result path
-                         ;; Only 'exit carries the child's own code; the other
-                         ;; reasons invalidate evidence from a child that may
-                         ;; have exited 0 anyway.
-                         (if (and reason (not (eq? reason 'exit))) 1 exit)
-                         failed
-                         total
-                         stdout
-                         stderr
-                         reason)]
+           ;; Well-formed evidence: the recorded identity is checkable.
+           (define-values (code reason)
+             (classify-quick-child-run (if (equal? identity path) 'matched 'mismatched)
+                                       timed-out?
+                                       truncated?
+                                       exit))
+           (quick-result path code failed total stdout stderr reason)]
           [_
-           (define reason
-             (cond
-               [timed-out? 'timeout]
-               [truncated? 'truncated]
-               [(child-exited-nonzero? raw) 'exit]
-               [else 'no-evidence]))
-           (quick-result path (if (child-exited-nonzero? raw) exit 1) #f #f stdout stderr reason)])]))
+           ;; Missing/malformed record: there is no identity to mismatch, so
+           ;; the classification runs on the child plane with 'absent evidence.
+           (define-values (code reason) (classify-quick-child-run 'absent timed-out? truncated? exit))
+           (quick-result path code #f #f stdout stderr reason)])]))
    (lambda () (delete-directory/files dir))))
 
 (define (check-arguments! files jobs timeout)
