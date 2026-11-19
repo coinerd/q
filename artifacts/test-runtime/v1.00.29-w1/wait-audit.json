@@ -27,30 +27,6 @@
    ],
    "suite": "other"
   },
-  "tests/helpers/b1-auto-review-loop-contract-fixture.rkt": {
-   "occurrences": [
-    {
-     "class": "F",
-     "disposition": "not-a-test-sleep",
-     "line": 485,
-     "reason": "sleep lives inside the generated VERIFY PROBE PROGRAM source (string constant) used to prove a genuine timeout and exit 124; the q test process never sleeps",
-     "text": "(sleep 60))"
-    }
-   ],
-   "suite": "other"
-  },
-  "tests/helpers/b2-review-contract-fixture.rkt": {
-   "occurrences": [
-    {
-     "class": "F",
-     "disposition": "not-a-test-sleep",
-     "line": 470,
-     "reason": "sleep lives inside the generated VERIFY PROBE PROGRAM source (string constant) used to prove a genuine timeout and exit 124; the q test process never sleeps",
-     "text": "(sleep 60))"
-    }
-   ],
-   "suite": "other"
-  },
   "tests/helpers/fast-fixtures.rkt": {
    "occurrences": [
     {
@@ -2911,6 +2887,18 @@
     }
    ],
    "suite": "testing"
+  },
+  "tests/helpers/review-contract-common.rkt": {
+   "occurrences": [
+    {
+     "class": "F",
+     "disposition": "not-a-test-sleep",
+     "line": 535,
+     "reason": "sleep lives inside the generated VERIFY PROBE PROGRAM source (string constant) used to prove a genuine timeout and exit 124; the q test process never sleeps (row consolidated from the two former B1/B2 helper rows in milestone #900 W4a; the probe source is emitted from this shared string constant, byte-identically per owner tag)",
+     "text": "   \"#lang racket/base\\n(module+ test\\n  (displayln \\\"~a slow probe: sleeping past the verification deadline\\\")\\n  (sleep 60))\\n\""
+    }
+   ],
+   "suite": "other"
   }
  },
  "remediated-families": [
@@ -2945,8 +2933,8 @@
   "sha256-at-w0": "6fbd4343b95217f847fd6a05d946d064f1ef98d3110266451cc651ab8d549166"
  },
  "summary": {
-  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll); BUG-0088 amendment-2 registers the store historical-expiry canary (bounded 3s expiry crossing for the two-link v1-v2-v3 spent history); R101 (BUG-0101) registers tests/test-gsd-supplemental-advance-failure.rkt (one generated-fixture source literal, not-a-test-sleep; one bounded expiry-boundary re-observation canary, class A retained with reason; two bounded 50ms lock-exclusion fixture polls, class B retained with reason); R102 (BUG-0102) registers tests/test-gsd-verification-terminal-events.rkt (one bounded log-drain settle before pump teardown, class C retained with reason; two bounded async-determinism polls for the attach and orphan-reconcile paths, class B retained with reason); R98 (BUG-0098) registers tests/test-tui-diagnostic-surface.rkt (three bounded async-delivery polls through the real installed stderr-guard route, class B retained with reason; one bounded negative-observation window after guard restore, class C retained with reason); R98 audit refresh: tests/test-tui-stderr-guard.rkt re-measured after the R98 additions (two carried-forward drain settles at their new lines plus one new drain settle and two bounded spill-disclosure polls, all retained with reasons); R101 unit-2 (BUG-0101 terminal-observation) registers tests/test-gsd-supplemental-terminal-observation.rkt (one generated-fixture source literal, not-a-test-sleep; one bounded six-second real-expiry re-observation canary, class A retained with reason); R101 expired-terminalizer re-measures tests/test-gsd-supplemental-terminal-observation.rkt (new bounded seam waits at lines 183,412,741,772,787,829,859, class B retained with reason) v1.00.33 testing-framework refactor: rows added for the new qt/runner truth suites (generated fixture sleeps classed not-a-test-sleep; bounded lifecycle polls classed retained-canary).",
-  "total-occurrences": 325,
+  "note": "rescan of the release tree; per-occurrence dispositions carried forward from v1.00.28-w1 where the file existed there, else retained-canary with a named bounded-wait reason; author-recovery contract sync refreshes verification lifecycle rows and records recovery-bounds and subprocess-ownership integration canaries (including generated shell fixture text); total counts all recorded rows, including historical dispositions; BUG-0088 registers the supplemental-authority lock-exclusion canary (bounded 0.1s broken-lock window, retained with reason) and three bounded frontend worker canaries (task-approval pointer poll, revocation-denial negative observation window, and durable-revocation poll); BUG-0088 amendment-2 registers the store historical-expiry canary (bounded 3s expiry crossing for the two-link v1-v2-v3 spent history); R101 (BUG-0101) registers tests/test-gsd-supplemental-advance-failure.rkt (one generated-fixture source literal, not-a-test-sleep; one bounded expiry-boundary re-observation canary, class A retained with reason; two bounded 50ms lock-exclusion fixture polls, class B retained with reason); R102 (BUG-0102) registers tests/test-gsd-verification-terminal-events.rkt (one bounded log-drain settle before pump teardown, class C retained with reason; two bounded async-determinism polls for the attach and orphan-reconcile paths, class B retained with reason); R98 (BUG-0098) registers tests/test-tui-diagnostic-surface.rkt (three bounded async-delivery polls through the real installed stderr-guard route, class B retained with reason; one bounded negative-observation window after guard restore, class C retained with reason); R98 audit refresh: tests/test-tui-stderr-guard.rkt re-measured after the R98 additions (two carried-forward drain settles at their new lines plus one new drain settle and two bounded spill-disclosure polls, all retained with reasons); R101 unit-2 (BUG-0101 terminal-observation) registers tests/test-gsd-supplemental-terminal-observation.rkt (one generated-fixture source literal, not-a-test-sleep; one bounded six-second real-expiry re-observation canary, class A retained with reason); R101 expired-terminalizer re-measures tests/test-gsd-supplemental-terminal-observation.rkt (new bounded seam waits at lines 183,412,741,772,787,829,859, class B retained with reason) v1.00.33 testing-framework refactor: rows added for the new qt/runner truth suites (generated fixture sleeps classed not-a-test-sleep; bounded lifecycle polls classed retained-canary). v1.00.33 milestone #900 W4a: the two B1/B2 helper fixture rows (each one class-F generated-probe-source literal) consolidated into the single shared helper row tests/helpers/review-contract-common.rkt (line 535, same class/disposition/reason); occurrence total decremented 325->324 because two identical construction copies became one shared construction.",
+  "total-occurrences": 324,
   "unit-fast-files": 5,
   "unit-fast-occurrences": 6,
   "unjustified-unit-fast-sleeps": 0
