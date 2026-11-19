@@ -1,5 +1,5 @@
 #lang racket/base
-;; @speed fast
+;; @speed slow
 ;; @timeout 300
 ;; @suite extensions
 ;; @covers extensions/gsd/delivery-recovery.rkt
