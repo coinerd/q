@@ -147,7 +147,13 @@
      (when section
        (define text (normalized (comment-stripped (string-join section "\n"))))
        (check-true (string-contains? text "- uses: actions/checkout@v7 with: fetch-depth: 0")
-                   (format "~a checkout must fetch full history" job))))))
+                   (format "~a checkout must fetch full history" job)))))
+ (test-case "the platform lane uses a currently schedulable macOS runner"
+   ;; macos-14 jobs cancelled before any step from 2026-11-07 onward; the
+   ;; floating label is the supported macOS runner and keeps real coverage.
+   (define wf (file->string fr-path))
+   (check-true (string-contains? wf "runs-on: macos-latest"))
+   (check-false (string-contains? wf "runs-on: macos-14"))))
 
 ;; ---------------------------------------------------------------
 ;; 2. The Racket 8.11 compatibility lane lives here (weekly + manual)
