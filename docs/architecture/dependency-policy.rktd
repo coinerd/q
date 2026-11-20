@@ -293,6 +293,10 @@
        (risk
         . "Bounded parallel/queue execution with process-group ownership, per-file timeouts, result-multiset validation and telemetry; a false green here hides every downstream failure")
        (owner . "tools"))
+      ("scripts/run-tests/reporting.rkt"
+       (risk
+        . "Shared result parsing and evidence rendering for every local, CI-sharded and aggregate run; repeatedly changed during the testing-framework campaigns, so a false green here hides downstream verdicts")
+       (owner . "tools"))
       ("scripts/run-tests.rkt"
        (risk
         . "Parallel test runner with subprocess orchestration, output parsing, and suite management")
