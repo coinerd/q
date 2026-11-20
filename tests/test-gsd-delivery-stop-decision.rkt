@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; @covers extensions/gsd/delivery-coordinator.rkt
+;; @covers extensions/gsd/delivery-outcome.rkt
 ;; @speed fast
 ;; @suite unit-fast
 ;; @boundary unit
@@ -18,7 +18,7 @@
 ;; clock or parameter access in the decision.
 (require rackunit
          (only-in racket/string string-prefix?)
-         (only-in "../extensions/gsd/delivery-coordinator.rkt"
+         (only-in "../extensions/gsd/delivery-outcome.rkt"
                   delivery-outcome
                   delivery-outcome-data
                   delivery-outcome-kind

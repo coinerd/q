@@ -108,7 +108,11 @@
          ;; reviewed capability hits (see reviewed-hits), both owned by the
          ;; production runner modules and off the decision paths this
          ;; owner executes.
-         "tests/test-qt-quick-run-classification.rkt")))
+         "tests/test-qt-quick-run-classification.rkt"
+         ;; R3c (#9948): the W3 pure-production pilot owner moves to its
+         ;; extracted pure module (delivery-outcome.rkt); its closure drops
+         ;; from the delivery-coordinator graph to one near-zero-hit module.
+         "tests/test-gsd-delivery-stop-decision.rkt")))
 
 ;; The owner set as a function (parameterized for fixture tests; the
 ;; production value is the reviewed table).

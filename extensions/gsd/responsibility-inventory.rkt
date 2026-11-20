@@ -738,6 +738,9 @@
                                  "delivery-handoff"
                                  "planning-paths"
                                  "sandbox/subprocess"))
+   ;; R3c (#9948): the pure delivery-outcome VALUE surface extracted from the
+   ;; coordinator. No effects, no parameters; json is the sole dependency.
+   (make-entry "delivery-outcome.rkt" 'pure-planning '() '() '("json"))
    ;; v1.00.33 recovery continuation: supported same-attempt repair-tail
    ;; recovery entry. Strict precheck + journal restore + independent clone
    ;; candidate + production verify; effects are delegated to the trusted

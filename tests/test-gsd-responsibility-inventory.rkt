@@ -138,9 +138,10 @@
       ;; authentic ownership-marker predicate, a pure read shell consumed by the
       ;; snapshot sweep, supersede rotation, archive cleanup and the doctor.
       ;; +1 candidate-preserving recovery core leaf
-      ;; (supplemental-preserved-candidate).
+      ;; (supplemental-preserved-candidate);
+      ;; +1 R3c pure delivery-outcome value module.
       (check-equal? (length inventory)
-                    114
+                    115
                     "every on-disk GSD module has exactly one inventory entry"))
 
     (test-case "supplemental worker descriptor projects policy without dispatch authority"
