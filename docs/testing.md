@@ -276,8 +276,8 @@ never used for a single-change claim.
 
 | Loop | Command | Median | p90 | Target | Verdict |
 |---|---|---:|---:|---:|---|
-| Focused pure decision | `racket tests/test-qt-quick-run-classification.rkt` | 1.752 s | 2.093 s | ≤ 3 s | PASS |
-| Focused pure decision | `racket tests/test-gsd-delivery-stop-decision.rkt` | 0.684 s | 0.773 s | ≤ 3 s | PASS |
+| Focused pure decision | `raco test tests/test-qt-quick-run-classification.rkt` | 1.083 s | 1.188 s | ≤ 3 s | PASS |
+| Focused pure decision | `raco test tests/test-gsd-delivery-stop-decision.rkt` | 0.923 s | 0.980 s | ≤ 3 s | PASS |
 | Focused through `quick` | `./qt quick tests/test-qt-quick-run-classification.rkt` | 4.937 s | 5.174 s | ≤ 3 s | MISS — CLI/admission overhead, not the test body; use the direct command while editing |
 | Committed attributable (`util/ansi.rkt`) | `./qt quick --changed BASE..HEAD` | 8.132 s | 8.462 s | ≤ 15 s | PASS (last-commit range) |
 | Committed attributable (`agent/state.rkt`) | `./qt quick --changed BASE..HEAD` | 8.224 s | 8.312 s | ≤ 15 s | PASS (last-commit range) |
@@ -289,9 +289,12 @@ never used for a single-change claim.
 
 Standard development workflow after this point:
 
-1. **While editing** — run the focused pure test directly (for example
-   `racket tests/test-gsd-delivery-stop-decision.rkt`). Extract pure decision logic naturally in
-   the feature wave when it removes duplicated inline branches; do not open a testing campaign.
+1. **While editing** — run the focused pure test with `raco test` (for example
+   `raco test tests/test-gsd-delivery-stop-decision.rkt`). Use `raco test`, not
+   `racket <file>`: when assertions live in a `module+ test` submodule, direct execution reports
+   success without running them. Both pure-decision owners were checked for positive counts (6/6
+   each) and non-zero exit on an injected defect. Extract pure decision logic naturally in the
+   feature wave when it removes duplicated inline branches; do not open a testing campaign.
 2. **After completing a change** — run impact selection: `./qt quick --changed HEAD` for the working
    tree or `./qt quick --changed BASE..HEAD` for committed work. Refresh the admission record once
    when an admitted owner's closure changed, then rerun.
