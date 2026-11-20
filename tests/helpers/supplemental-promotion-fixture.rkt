@@ -138,6 +138,15 @@
                     (relative-path? item)
                     (file-exists? (build-path (path-only full) item)))
                (visit (path->string (build-path (path-only full) item)))]
+              [(and (list? item)
+                    (= 3 (length item))
+                    (eq? (car item) 'define-runtime-path)
+                    (string? (caddr item))
+                    (string-suffix? (caddr item) ".rktd")
+                    (file-exists? (build-path (path-only full) (caddr item))))
+               ;; Runtime data files (.rktd) are copied too: preparation's
+               ;; exclusions input travels with the installed runner closure.
+               (visit (path->string (build-path (path-only full) (caddr item))))]
               [(list? item) (dep item)]))))))
   (for ([rel (in-hash-keys seen)])
     (define dst (build-path repo rel))
@@ -228,15 +237,10 @@
        (parameterize ([current-directory repo])
          (unless (system* (find-executable-path "raco") "fmt" "-i" "runtime/local.rkt")
            (error 'fixture "formatter unavailable")))
-       (git-text cwd
-                 "add"
-                 ".gitignore"
-                 "runtime/local.rkt"
-                 "tests/test-existing.rkt"
-                 "scripts/lint-all.rkt"
-                 "scripts/run-tests.rkt"
-                 "scripts/run-tests"
-                 "util")
+       ;; Mirror supplemental-go-fixture: stage the whole fixture worktree so
+       ;; every copied closure member is tracked (an untracked closure member
+       ;; makes committed-delivery-snapshot refuse the clean-tree identity).
+       (git-text cwd "add" "-A")
        (git-text cwd "commit" "-qm" "baseline")
        (define baseline-head (git-text cwd "rev-parse" "HEAD"))
        (define baseline-tree (git-text cwd "rev-parse" "HEAD^{tree}"))
