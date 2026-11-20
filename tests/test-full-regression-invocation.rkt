@@ -126,7 +126,28 @@
        (path->string p)))
    (check-equal? offenders
                  '()
-                 (format "bare ./qt --suite found in: ~a" (string-join offenders ", ")))))
+                 (format "bare ./qt --suite found in: ~a" (string-join offenders ", "))))
+ (test-case "history-dependent full-regression jobs use a full checkout"
+   (define lines (string-split (file->string fr-path) "\n"))
+   (define (job-section name)
+     (define start
+       (for/first ([l (in-list lines)]
+                   [i (in-naturals)]
+                   #:when (string-prefix? l (format "  ~a:" name)))
+         i))
+     (and start
+          (let loop ([rest (list-tail lines start)])
+            (cond
+              [(null? (cdr rest)) (list (car rest))]
+              [(regexp-match? #px"^  [a-zA-Z][a-zA-Z0-9_-]*:\\s*$" (cadr rest)) (list (car rest))]
+              [else (cons (car rest) (loop (cdr rest)))]))))
+   (for ([job (in-list '("test" "workflows-suite"))])
+     (define section (job-section job))
+     (check-true (and section #t) (format "~a job must exist" job))
+     (when section
+       (define text (normalized (comment-stripped (string-join section "\n"))))
+       (check-true (string-contains? text "- uses: actions/checkout@v7 with: fetch-depth: 0")
+                   (format "~a checkout must fetch full history" job))))))
 
 ;; ---------------------------------------------------------------
 ;; 2. The Racket 8.11 compatibility lane lives here (weekly + manual)
