@@ -468,6 +468,17 @@ coordination overhead (§4.2) and (b) the difference between targeted lint and t
 lint-quality check. No metric requirement was weakened; CL1 owns any architectural
 simplification of them.
 
+*Follow-up instance (run 44816737609 on merged head `8e1f2a19`, 2026-11-20):* with metrics
+fixed and main merged, the `test (1)` shard failed exactly one test —
+`tests/test-milestone-gate.rkt`'s **tier-ownership matrix drift check**
+(`artifacts/tier-ownership/v1.00.32-w0/ownership-matrix.json`): the branch's new test family
+was on disk but absent from the committed matrix. Fixed by the canonical generator
+(`scripts/run-tests/inventory.rkt --ownership-map --tier-matrix …`, the documented mechanism
+for inventory changes); `test-milestone-gate` then 75/75 locally. Two distinct governance
+surfaces (README metrics; tier-ownership matrix) have now failed in CI on this PR for the
+same underlying reason — a new test family requires synchronizing several derived artifacts
+by hand. The class, not these instances, is the CL1 candidate.
+
 ### 9.3 Feasible improvement candidates (recorded only; no CI change in CL0)
 
 1. **Sequential setup stages dominate the critical path:** with prepared-environment
