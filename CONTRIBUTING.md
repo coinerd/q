@@ -63,9 +63,13 @@ CI runs 6 lint checks that must all pass:
 1. Fork the repository
 2. Create a feature branch (see [Branch Naming](#branch-naming))
 3. Make changes with tests
-4. Ensure all tests pass: `racket scripts/run-tests.rkt`
-5. Ensure all lints pass: run each script in `scripts/`
-6. Submit a pull request
+4. Verify with targeted checks (routine budget 30–120 s): focused tests for the touched
+   seams (`racket tests/test-foo.rkt` or `./qt quick tests/test-foo.rkt`), impact selection
+   (`./qt quick --changed HEAD` or `BASE..HEAD`), the genuine boundary contract for any
+   affected effect, and the targeted lint scripts (below)
+5. Publish the pull request — the required CI checks run the comprehensive verification
+   (13 protected contexts); use `./qt default` only if you want the optional complete offline
+   rehearsal, and never present targeted local results as complete PR verification
 
 ## Code Style
 
