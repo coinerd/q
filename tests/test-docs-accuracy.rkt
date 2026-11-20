@@ -260,7 +260,10 @@
     (check-true (string-contains? flat "changed selection is empty")))
 
   (test-case "the admission expansion status names the real B1-B3 contract owners"
-    (check-true (string-contains? flat "no admission expansion happened"))
+    (check-true (string-contains? flat "no admission expansion came from those waves"))
+    ;; W5 admitted the first post-expansion owner; the doc states the audited
+    ;; set it produced (kept in sync with the owner-count pins above).
+    (check-true (string-contains? flat "29 owners / 331 tests"))
     (for ([f (in-list '("tests/test-gsd-auto-review-loop-contract.rkt"
                         "tests/test-gsd-auto-review-production-contract.rkt"
                         "tests/test-gsd-generated-metadata-correction-contract.rkt"))])
@@ -327,9 +330,9 @@
       (for/list ([o (in-list owners)]
                  #:when (hash-has-key? covers o))
         o))
-    (check-equal? (length attributed) 20 "20 of 28 owners carry @covers attribution")
+    (check-equal? (length attributed) 21 "21 of 29 owners carry @covers attribution")
     (check-equal? (length riders) 8 "the 8 remaining owners are the documented fail-open floor")
-    (check-true (string-contains? flat "8 of the 28 current owners, all deliberate")
+    (check-true (string-contains? flat "8 of the 29 current owners, all deliberate")
                 "the doc states the rider count")
     ;; Every rider is named in the doc (no silently-global owner).
     (for ([r (in-list riders)])
