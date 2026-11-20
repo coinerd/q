@@ -3,6 +3,13 @@
 Parent initiative: #9976 (Cognitive Load Reduction & Agent-Oriented Architecture).
 Status: **baseline only** — evidence of record; no production refactoring, no CL1+ implementation.
 
+> **Review extension (2026-11-20, PR #9983 follow-up).** The sections below numbered 8–9 and
+> the amendments to §4.2/§6/§7 were added after provisional baseline acceptance, against the
+> amended parent initiative (contract-driven, component-local verification). The original
+> pinned baseline sections (1–7) remain recorded at main
+> `003e425d2f1206436eb9c0b84353604ce85bb082`; later observations name their own revision
+> (`211e0518`/`a9f110f1`, PR #9983 branch) and date.
+
 | Item | Value |
 |---|---|
 | Pinned revision | `003e425d2f1206436eb9c0b84353604ce85bb082` (main, v1.00.32) |
@@ -228,7 +235,13 @@ a test-ownership geometry question, not a state.rkt refactor.
   ownership-map reports, README metric counts, testing docs — 4–6 surfaces (evidence: commits
   `d20ce530`, `52a66324`, `f264b06d`). Every surface guards a claim; the *discovery* of "which
   surfaces does my change touch?" is manual today. Candidate (CL1): derive the touch-list from
-  the existing `@covers` manifest + dependency graph; no new metadata.
+  the existing `@covers` manifest + dependency graph; no new metadata. *(Review extension —
+  concrete instance, revision `211e0518`: PR #9983's first CI run failed `metrics-sync`,
+  `metrics-lint` and `prose` because README's published metrics lagged the branch's new
+  files; a targeted local `metrics.rkt --lint` had passed while the files were still
+  untracked, because the counter reads git-tracked files. Fixed with the authoritative
+  `scripts/metrics.rkt --sync-all`; full `lint-all.rkt` then 23 passed / 2 warnings. Details
+  and the targeted-vs-comprehensive distinction: §9.2.)*
 - **Counting duplication:** two test-line/check counters (§1.4). Candidate: CL1 declares one
   counting authority; the other consumes it.
 - **Stale policy columns:** recorded fan-out/provide numbers in `dependency-policy.rktd`
@@ -244,8 +257,16 @@ a test-ownership geometry question, not a state.rkt refactor.
 Full frozen corpus, oracles and measurement protocol: **`docs/reports/CL0-AGENT-TASK-BENCHMARK-003e425d.md`**.
 Five tasks across GSD campaign/delivery, agent/session, provider, and tool/extension boundaries,
 each pinned to `003e425d` with an acceptance oracle and a fixed measurement procedure (tokens
-before first useful edit, files read, tool calls, owner-location time, elapsed, subsystems
-touched, unrelated modifications, first-attempt correctness, verification outcome).
+before first in-scope edit and first correct edit, files read, tool calls, owner-location time,
+elapsed, subsystems touched, unrelated modifications, verification outcome). *(Review extension:
+oracles strengthened — T1 full decision tuple verified by execution, T2 mutation-detection
+oracle demonstrated mechanically, T5 re-scoped to `tui/char-width.rkt` with independent
+behavioral assertions; amendment log in the protocol.)*
+
+Complementary safety corpus for prospective selective verification:
+**`docs/reports/CL0-SELECTIVE-VERIFICATION-CORPUS-003e425d.md`** (12 historical/fault-injection
+cases + measurement protocol; execution pending except the marked VERIFIED selection
+measurements).
 
 **No agent trials were run in this environment.** The measurements require independent fresh
 agent contexts with controlled model configurations, which CL0's authorization and tooling do
@@ -280,19 +301,45 @@ Acceptance: unchanged behavior (golden traces + fake ports + failure/restart sce
 reduced coordinator/routing fan-in in a re-run of the CL0 commands, no public API break,
 required verification green. **CL4 must re-verify this choice against CL1 maps before
 starting** — if the maps show the delivery-cluster routing (candidate area per #9981) has
-higher coordination cost, swap the pilot; the decision procedure is recorded here.
+higher coordination cost, swap the pilot; the decision procedure is recorded here. *(Review
+extension: acceptance is amended by the CL4 criterion in the recommendations below — the
+extraction alone does not prove component-local verification; contract coverage and safe
+verification selection must be demonstrated too.)*
 
-**CL1–CL5 recommendations (go/revise/reject criteria):**
-- CL1 GO if maps demonstrably reduce reads-to-owner on ≥2 of the frozen benchmark tasks
-  (reproduce §4 protocol with fresh contexts).
-- CL2 GO only if CL1 maps exist and the navigator's matched-task deltas beat CL0 numbers;
-  reject features whose maintenance exceeds the load they remove.
-- CL3 EVALUATE strictly per #9911 scope: startup/compile separation is already evidenced here
-  (§4.1); the worker must beat one-shot on representative debugging tasks without weakening
-  isolation; otherwise reject.
-- CL4 PROPOSED pilot above; reject extraction if locality gain does not survive the before/after
-  import + fan-in comparison (MA-10 discipline).
-- CL5 GO only as the comparative gate for whatever shipped; its protocol is frozen today.
+**CL1–CL5 recommendations (amended 2026-11-20 for the contract-driven, component-local
+verification objective; go/revise/reject criteria):**
+- **CL1 GO — re-scoped:** canonical subsystem maps **plus component behavioral-contract
+  mapping** — for each component: public behavioral interface, existing structural contracts,
+  guarantees actually established by tests, provider/consumer relationships, contract/test
+  ownership, dynamic dependencies and unresolved impacts — derived from existing metadata
+  (inventory, `@covers`, dependency policy, measured graph). This is not solely a
+  documentation initiative: CL1's deliverable is the contract/ownership data layer that
+  selection and navigation consume. GO criterion: the maps demonstrably reduce reads-to-owner
+  and identify affected contracts on ≥2 frozen benchmark tasks (fresh-context protocol).
+- **CL2 GO after CL1:** the navigator exposes relevant contracts, owners and tests (not only
+  files/symbols) for the changed set; matched-task deltas must beat CL0 numbers; it stays
+  developer tooling — never an authority for PR verification without separate evidence and
+  approval. Reject features whose maintenance exceeds the load they remove.
+- **CL3 EVALUATE strictly per #9911 scope:** interactive exploration and focused tests remain
+  distinct from authoritative verification; the worker must improve isolated component
+  verification (the measured ≈3.5 s compile share, §4.1) without becoming a selective-CI
+  substitute. Startup/compile separation is already evidenced; worker go/revise/reject on
+  measured debugging-task benefit vs isolation/security cost.
+- **CL4 GO for the pilot only with the amended acceptance bar:** the bounded GSD component
+  (supplemental-evidence observe→decide remains the leading candidate; re-confirm against CL1
+  maps) must demonstrate **independent understandability, modifiability and verification**:
+  contract coverage adequate for the component's guarantees (decision matrix, journal
+  invariants, failure/restart paths), a demonstrated safe selected set vs comprehensive
+  results on the defect corpus (including D5/D6-class cases), and preserved composition
+  guarantees. The extraction alone does NOT prove component-local verification.
+- **CL5 GO as the comparative gate:** prospective selective verification (defect corpus +
+  historical changes + current comprehensive results, shadow mode) is compared against
+  comprehensive verification; the deliverable is an evidence-backed go/revise/reject decision
+  with rollback criteria. Any authoritative CI-policy change requires separate maintainer
+  approval; the 2–5 min ordinary-PR target is bounded by setup-side overhead (§9.3), which
+  selection cannot remove.
+- Explicit rejections unchanged: universal effect frameworks, blanket TR migration,
+  size-driven splitting, general deep-interface extraction programs.
 
 ## 7. Uncertainties, blockers, unmeasured quantities
 
@@ -309,6 +356,13 @@ higher coordination cost, swap the pilot; the decision procedure is recorded her
   tool; both are recorded, neither was changed.
 - Machine context: Racket 8.10 cs, Linux KVM guest; absolute times do not transfer to other
   hosts; ratios and pass/fail verdicts do.
+- *(Review extension)* CI measurements (§9) are one observed PR run plus 12 recent successful
+  runs for the total-duration figure; per-phase distributions beyond that sample are not
+  measured, and no improvement candidate was implemented. Behavioral-contract assessment (§8)
+  covers four components — representative, not a repository-wide inventory (CL1 scope).
+- *(Review extension)* The selective-verification defect corpus is defined but unexecuted
+  except the marked VERIFIED selection measurements (D9/D10/D11); detected/missed/false-green
+  rates are PENDING until the shadow-mode protocol runs.
 
 ## Related existing work (not duplicated)
 
@@ -319,3 +373,117 @@ higher coordination cost, swap the pilot; the decision procedure is recorded her
 distribution of record), `docs/testing.md` (workflow + targets), `extensions/gsd/responsibility-inventory.rkt`
 (machine-checked GSD ownership), `benchmarks/` (SDK-pipeline mock harness — complementary,
 not agent trials).
+
+## 8. Contract-driven, component-local verification (review extension, 2026-11-20)
+
+Assessment basis: existing metadata only — `provide`/`contract-out` forms,
+`extensions/gsd/responsibility-inventory.rkt` (machine-checked effects), `@covers`/
+admission/quick-audit records, dependency-policy, the measured graph (§1), and the test
+suite. No new contract framework or repository-wide component inventory is introduced in CL0.
+
+**Structural vs behavioral independence.** The static graph is a clean DAG (§1.1) and the
+policy is enforced, but that establishes only *structural* independence: no import cycles,
+documented directions. *Behavioral* independence additionally requires that a component's
+observable guarantees hold without re-executing other components — input/output semantics,
+state invariants, event ordering, error/recovery, effects and resource ownership,
+authorization, cancellation/concurrency. Three measured facts show the gap between the two:
+(1) `util/` is reachable from 796 inbound edges and up to 365 transitive dependents — a
+behavioral change in `util/error/errors.rkt` or `util/event/event.rkt` can alter observable
+behavior everywhere while changing zero signatures; (2) 24 modules resolve dependencies
+dynamically (`dynamic-require`), invisible to static analysis; (3) provider consumers bind to
+message/stream *shapes*, not signatures (BUG-0003-class regressions), and view producers bind
+to struct payloads whose authority comes from the producer, not the consumer (campaign views).
+Acyclic imports + unchanged signatures are therefore **not sufficient evidence** for safe
+component-local verification; they are necessary context only.
+
+### 8.1 Component subset assessed
+
+| Component (cohesive responsibility) | Public behavioral interface | Structural contracts | Guarantees actually established by tests | Provider / consumer conformance | Composition & integration | Implicit assumptions / incomplete contracts | Unknown / dynamic deps | Broader verification required when |
+|---|---|---|---|---|---|---|---|---|
+| **Campaign decision** (`extensions/gsd/campaign-decision.rkt`) — the ONE pure `/go` routing decision | 4 transparent view structs (`campaign-delivery-view`, `campaign-lane-view`, `campaign-views`) + `campaign-decision` (kind/route/code/wave-index/merge-sha/message) + `decide-campaign-action`, `decide-lane-action`, `lane-route`, `route-code`, `campaign-decision-next-action` | plain `provide`; transparent structs; **no `contract-out`** — structural contracts are the inventory's declared effects (`'()`) and the typed decision vocabulary | decision matrix pinned: `tests/test-gsd-campaign-decision.rkt` (22 test-cases, precedence incl. stale-readback/cancel-before-pending, finalize requires authenticated SHA, deferred disjointness, typed block/resume routes) + `tests/test-gsd-campaign-decision-pure.rkt` (6; purity isolation) | provider = view producers: `delivery-handoff.rkt` (authenticated delivery facts), `delivery-finalize.rkt` (lane facts) — pinned in their owner tests; consumer = `go-orchestrator.rkt` `case` dispatch on `kind` (line 1438), pinned by `tests/test-gsd-go-orchestrator.rkt` (81 test-cases) | composition: `tests/test-gsd-governance-workflow.rkt` (29), campaign-entry and supplemental/review resume routes | decision TRUSTS producer authenticity (`awaiting` SHA assumed 40-hex; "authenticated" is the producer's claim); wave-index first-record-order semantics; message text is operator-only (never parsed) — contract is documented but not machine-checked | none static (fan-out 2); authority chain dynamic-free | durable-state transitions, lease/fencing, or the interpreter's effect loop change; any change to view struct fields (consumers compile but semantics move) |
+| **Supplemental evidence** (`supplemental-evidence-controller.rkt` + authority + journal) — governed supplemental T/K/S lane; the CL4 pilot candidate | 18+ provided operations spanning pointer I/O, task proposal, recovery, disposition, discovery, live-operation observation | no `contract-out`; inventory declares domain `campaign-state` with effects `(fs-write fs-read fs-rename fs-delete mkdir sha256 git parameterize path-ops dynamic-require)` — the widest effect set in the inventory | 34 supplemental* test files (entry, advance-failure, disposition store/campaign, preserved integration, publication, terminal observation) pin the governed flows incl. failure/restart paths | authority: `supplemental-evidence-authority.rkt` is the sole authority interpreter; controller consumes decisions — pinned by authority/evidence-readiness owners | journal + disposition stores + go-orchestrator routes; `tests/test-gsd-supplemental-*-integration` exercise composition | controller mixes observe/decide/coordinate (1826 LOC, fan-in 29); routing decisions not yet a pure kernel (the CL4 pilot evidence); pointer/disposition file formats documented but not centrally contracted | **8 dynamic-require edges** — the largest unresolved static blind spot; CL1 maps must mark them | any journal-schema or authority change; recovery paths; anything touching the dynamic dispatch targets |
+| **Shared event foundation** (`util/event/*`, `agent/event-structs/*`) — cross-component event language | typed event envelopes + bus (synchronous, ordered, exception-isolated, circuit-breaker) | `typed/racket` contracts on core event modules (13 production TR modules incl. event.rkt, event-access.rkt) | `tests/test-event-bus.rkt` (+ relocation/unification owners), golden iteration-event owners | providers = every emitter; consumers = TUI/SDK/extension sinks — conformance via golden event tests | `tests/test-iteration-event-golden.rkt`, hook-golden | ordering guarantees documented; consumer tolerance to new event kinds varies by sink | none | any event-taxononomy or bus-ordering change (CL0 §2 co-change: event-structs files have 256–289 transitive dependents) |
+| **Session store** (`runtime/session/session-store*`) — append-only JSONL, single durable session writer | facade provide; hash-chain verification/repair surface | inventory-level contracts; typed TR at store edges (agent-session) | `tests/test-session-store.rkt`, `tests/test-hash-chain.rkt`, `tests/test-session-store-integrity.rkt`, tree/fork owners | providers = session lifecycle writers only; consumers = resume/fork/context assembly | `tests/test-agent-session-tree.rkt`, session-tree-nav | repair semantics vs corruption classification boundary documented in code, thin in prose | none | recovery/replay behavior, hash-chain format, or fork semantics change |
+
+### 8.2 What the subset shows for the amended objectives
+
+- **Existing coverage is asymmetric:** pure-decision components (campaign decision) already
+  have near-model contract shape — typed vocabulary, decision matrix tests, one interpreter,
+  provider/consumer owners identifiable from `@covers` — while effectful coordinators
+  (supplemental evidence) concentrate mixed responsibilities and dynamic dispatch. The amended
+  objective's first-order gap is therefore *behavioral contract coverage and ownership
+  clarity for effectful components*, not test volume (21,156 test-cases exist).
+- **Verification-model mapping is derivable today** for these components from existing
+  metadata: internal change → owner test + affected boundary (e.g. campaign-decision edit →
+  the two decision tests + orchestrator consumer test); public interface change → + provider
+  conformance (delivery-handoff/finalize owners) + composition (governance workflow);
+  shared-dependency change (util/event, conn-pool) → transitive consumers (measured closure).
+- **Conservative conditions are enumerable** from existing data: security/authority surfaces
+  (worker-security, scratch, safe-mode), verification infrastructure (qt, admission,
+  metadata), unresolved impact (dynamic-require modules, unmapped new source — the D10/D11
+  corpus cases), and global invariants (hash chain, event ordering). These are exactly the
+  escalation rules the defect corpus (`docs/reports/CL0-SELECTIVE-VERIFICATION-CORPUS-003e425d.md`)
+  exercises.
+
+## 9. Remote CI critical-path baseline (review extension, 2026-11-20)
+
+Method: GitHub Actions REST jobs/steps API for PR #9983 run 44809549492 (head `211e0518`,
+triggered 20:14:32Z) plus job-log timestamps; representativeness from the 12 most recent
+successful CI runs on main/PRs (total wall clock 1456–1713 s, 2026-11-20). No workflow,
+caching, branch-protection or required-context policy was changed.
+
+### 9.1 PR #9983 run 44809549492 — phase measurements
+
+| Phase | Measured | Evidence |
+|---|---|---|
+| Publish → CI start | ≈ 3 s (push 20:14:32 → jobs created 20:14:33 → started 20:14:35) | jobs API `created_at`/`started_at` |
+| Queue time | 2–3 s per job (all 17 jobs) | jobs API |
+| Env setup + package install (cold-side lint jobs, no prepared artifact) | `setup-racket` 330 s (lint-quality) / 365 s (lint); inside it, the package-setup compile sub-step = **301.4 s** (`duration_ms=301418` in the job log) — ≈200 s of that is `raco setup` compiling the `q/tests` collection alone | job log step markers |
+| Cache preparation (producer) | `fast-env` `prepare-racket-environment` 263 s | jobs API step |
+| Cache restoration (shards) | test-shard `setup-racket` 21–36 s (prepared artifact restore) vs 330–365 s cold | jobs API steps |
+| Job-dependency waiting (critical path) | `lint` (374 s) → `fast-env` (282 s) → test shards: **11 min 1 s from lint start (20:14:35) to main test-job start (20:25:36)** | jobs API timestamps |
+| Racket compilation before execution | test shards: compile gate 59–82 s per shard (bounded eager compile) | jobs API steps |
+| Actual test execution | shards in progress at sampling; recent-run shard execution ≈ 746–840 s job duration incl. setup (run 44771765560) | jobs API |
+| Lint and security verification | lint-quality `lint-all.rkt` 39 s (on a warm store, post-setup); `security` suite 113 s execution / 387 s job | job log / jobs API |
+| Publish → authoritative verdict (recent successful runs) | **1456–1713 s total wall clock (≈24–29 min)** across 12 runs; aggregate runner seconds ≈ 5160 for one main run vs 1525 s critical path (3.4× fan-out) | runs API, 2026-11-20 sample |
+| Retries/reruns | attempt 1; no retries in this run | `run_attempt: 1` |
+
+The three inspected observations are **confirmed exactly**: ≈301 s package-setup compile in
+lint-quality (301.418 s sub-step), ≈5 min 30 s Racket setup (330 s step), ≈11 min from
+lint-job start to main test jobs start (11 min 01 s). Representativeness: the shape (two
+sequential setup stages — lint-gate side, then producer → shards — each paying large
+Racket/package setup) recurs across the sampled runs; absolute numbers vary with cache hits.
+
+### 9.2 The failed run as derived-metadata coordination evidence
+
+The same run's `lint-quality` failed `metrics-sync`, `metrics-lint` and `prose`: the branch's
+new files changed tree counts, and README's published metrics lagged. A targeted local
+`scripts/metrics.rkt --lint` had **passed** earlier on this branch while the new files were
+still untracked — the counter reads git-tracked files, so targeted local lint could not see
+the drift that comprehensive lint-quality sees. Fixed by the authoritative
+`scripts/metrics.rkt --sync-all` (README 1680 test files / 979 source modules / 239,865
+source lines / 366,702 test lines / 52,746 assertions); post-sync local `lint-all.rkt`:
+**23 passed / 2 warnings (81 s)**. Recorded as a concrete instance of (a) derived-metadata
+coordination overhead (§4.2) and (b) the difference between targeted lint and the complete
+lint-quality check. No metric requirement was weakened; CL1 owns any architectural
+simplification of them.
+
+### 9.3 Feasible improvement candidates (recorded only; no CI change in CL0)
+
+1. **Sequential setup stages dominate the critical path:** with prepared-environment
+   restore, shard setup drops from ≈330 s to 21–36 s — extending producer-restore coverage to
+   more lanes (or making the prepared artifact the default path where its guards allow) is the
+   single largest measured lever.
+2. **`q/tests` collection compilation inside `raco setup` (~200 s of the 301 s cold sub-step)**
+   — the test corpus is compiled as part of package setup on the fallback path; a lane split
+   that defers test-collection compilation off the critical setup stage would cut the
+   producer's 263 s and the cold jobs' 301 s (existing lane-split machinery already exists —
+   v1.00.16 W3 policy doc).
+3. **Lint-quality could consume the prepared environment or run before the heavy setup** —
+   39 s of lint inside a 375 s job shows a 10× setup-to-work ratio; the W2 topology checkpoint
+   deliberately keeps it producer-independent, so any change here must respect that recorded
+   constraint.
+4. **Critical-path shape:** 2–5 min ordinary-PR verdict is unreachable while publish→verdict
+   includes two sequential setup stages (~9 min before shards start). Component-local
+   *selection* alone cannot fix this — the fixed overhead is environment, not test volume;
+   this bounds what CL4/CL5 can honestly claim from selection without setup-side changes.
