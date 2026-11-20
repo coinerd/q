@@ -187,7 +187,10 @@ jobs:
   # (arm64) — the complementary platform to the linux shards above.
   # ────────────────────────────────────────────────────────────
   test-platform:
-    runs-on: macos-14
+    # macOS 14 jobs began cancelling before any step ran on 2026-11-07;
+    # use GitHub's currently supported floating macOS label so the platform
+    # lane is actually schedulable. Failure evidence still fails closed.
+    runs-on: macos-latest
     timeout-minutes: 90 # Retained through cache rollout: a cold locked store
                         # must complete before the warm-run evidence permits a
                         # measured budget reduction. The suite itself is ~15 min.
