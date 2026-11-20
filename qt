@@ -3,9 +3,52 @@
 (require racket/runtime-path
          racket/port
          racket/string
+         racket/lazy-require
          "scripts/testing/quick-audit.rkt"
-         "scripts/testing/quick-runner.rkt"
-         "scripts/testing/full-plan.rkt")
+         "scripts/testing/quick-runner.rkt")
+(lazy-require
+ ["scripts/testing/full-plan.rkt"
+   (candidate-relevant-untracked? change-report change-report-base change-report-changed
+   change-report-covers-count change-report-escalations change-report-excluded change-report-included
+   change-report-lines change-report-outside change-report-unattributable change-report?
+   changed-selection commits-changed default-label default-pass-line
+   default-pass-pattern full-default-timeout full-execution-supported? full-explain-lines
+   full-failure-lines full-file-timeout full-label full-lanes
+   full-not-provided full-obligations full-pass-line full-pass-pattern
+   full-result-reason full-run full-run-files full-run-results
+   full-run-surface-violations full-run-valid? full-run? full-selection
+   full-surface-violation-lines full-timeouts host-capability-available? lane-filter-lines
+   lane-plan lane-plan-changed lane-plan-files lane-plan-lane
+   lane-plan-rels lane-plan-root lane-plan-unavailable lane-plan-universe
+   lane-plan? lane-relative lane-selection lane-verdict
+   load-release-evidence plan-explain-lines plan-label plan-preamble
+   porcelain-z-untracked qt-ci-compat-options qt-ci-default-options qt-ci-exec-options
+   qt-ci-exec-options-on-run-start qt-ci-exec-options-phases qt-ci-exec-options-refuse-all-skipped? qt-ci-exec-options-refuse-zero-tests?
+   qt-ci-exec-options-strict? qt-ci-exec-options-suite-label qt-ci-exec-options? qt-ci-explain-lines
+   qt-ci-marker qt-ci-outcome qt-ci-outcome-exit-code qt-ci-outcome-ran?
+   qt-ci-outcome-results qt-ci-outcome? qt-ci-pass-line qt-ci-pass-pattern
+   qt-ci-plan qt-ci-plan-mode qt-ci-plan-rels qt-ci-plan-root
+   qt-ci-plan-shard-index qt-ci-plan-shard-plan qt-ci-plan-shard-total qt-ci-plan-spec
+   qt-ci-plan-suite qt-ci-plan? qt-ci-presentation qt-ci-run-files
+   qt-ci-spec qt-ci-spec-argv qt-ci-spec-durations qt-ci-spec-files
+   qt-ci-spec-json-out qt-ci-spec-ledger-path qt-ci-spec-mode qt-ci-spec-profile
+   qt-ci-spec-record-gate? qt-ci-spec-repeat qt-ci-spec-shard-index qt-ci-spec-shard-plan
+   qt-ci-spec-shard-total qt-ci-spec-suite qt-ci-spec-timeout qt-ci-spec?
+   qt-ci-suite-label qt-effective-mode qt-lane qt-lane-description
+   qt-lane-name qt-lane-ref qt-lane-shard-plan qt-lane-shard-total
+   qt-lane-suite qt-lane-suites qt-lane-timeout qt-lane?
+   qt-lanes qt-reproduction-file qt-shard-partition qt-shard-plan-modes
+   qt-strict-test-runner? qt-suite-files qt-suite-relative quick-changed-owners
+   release-apply-run release-blocking release-candidate-check release-evidence
+   release-evidence-documents release-evidence-line release-evidence-reason release-evidence-state
+   release-evidence? release-label release-obligation release-obligation-lines
+   release-obligation-slug release-obligation-state release-obligation-text release-obligation-verifier
+   release-obligation? release-obligations release-obligations-with-evidence release-pass-line
+   release-pass-pattern release-unverified-message required-ci-producers required-offline-suites
+   required-producer required-producer-contexts required-producer-lane required-producer?
+   resolve-lane-plan resolve-qt-ci-plan run-files run-full
+   run-plan run-qt-ci-plan unavailable-here unavailable-here-file
+   unavailable-here-members unavailable-here-requirements unavailable-here? working-tree-changed)])
 (define-runtime-path root ".")
 (define (fail fmt . args)
   (apply eprintf (string-append "qt: " fmt "\n") args)
