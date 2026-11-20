@@ -58,10 +58,10 @@
         (let-values ([(status text) (run "quick" "--jobs" "2")])
           (check-equal? status 0 text)
           ;; §3 expansion grew the reviewed owner table from 4 to 28 owners;
-          ;; the W5 pilot added the quick child-run classifier (29 owners,
-          ;; capability-denylist-scanned, generated admission record); the pin
-          ;; moves with that stated contract change.
-          (check-regexp-match #rx"quick passed: 29 files" text)
+          ;; W5 added the quick child-run classifier and R3c added the pure
+          ;; delivery-stop decision (30 owners, capability-denylist-scanned,
+          ;; generated admission record); the pin moves with that contract.
+          (check-regexp-match #rx"quick passed: 30 files" text)
           (check-regexp-match #rx"not PR/full verification" text))
         (displayln "SKIP quick suite: Linux /proc or setsid unavailable")))
   (test-case "campaign decisions execute and count six test cases"
