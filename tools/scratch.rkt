@@ -165,10 +165,14 @@
 ;; walk at every link target also normalizes platform aliases such as
 ;; /var -> /private/var, so the same directory always compares equal.
 ;;
-;; Links are resolved with `resolve-path` one candidate at a time, and every
-;; resolved link is remembered: a self-referential or cyclic link (where
+;; Links are resolved with `resolve-path` one candidate at a time, and the
+;; walk is bounded by a step counter: a self-referential or cyclic link (where
 ;; `resolve-path` makes no progress and returns the link itself) fails the
-;; whole resolution closed instead of being re-walked forever. A dangling link
+;; whole resolution closed instead of being re-walked forever, and any walk
+;; that exceeds the bound fails closed too. (An exact-spelling revisit map
+;; would misread platform aliases such as /var -> /private/var as a cycle,
+;; because a resolved target can legitimately re-encounter the alias
+;; spelling.) A dangling link
 ;; is followed to its lexical target (where the OS would create the file), and
 ;; an unreadable component raises and fails closed, so a link planted inside a
 ;; scratch root can neither escape containment nor hang the classifier.
@@ -180,9 +184,10 @@
                                                   (string->path p)))])
            (let loop ([remaining (explode-path complete)]
                       [prefix #f]
-                      [visited (hash)])
+                      [steps 0])
              (cond
                [(null? remaining) (or prefix (simplify-path complete #f))]
+               [(>= steps 64) #f]
                [else
                 (define candidate
                   (if prefix
@@ -191,20 +196,19 @@
                 (cond
                   [(link-exists? candidate)
                    (define key (path->string (simplify-path candidate #f)))
-                   (and (not (hash-ref visited key #f))
-                        (let* ([resolved (resolve-path candidate)]
-                               [resolved-complete (if (complete-path? resolved)
-                                                      resolved
-                                                      (path->complete-path resolved
-                                                                           (or (path-only candidate)
-                                                                               (current-directory))))]
-                               [resolved-simplified (simplify-path resolved-complete #f)])
-                          (and (not (equal? (path->string resolved-simplified) key))
-                               (loop (append (explode-path resolved-simplified) (cdr remaining))
-                                     #f
-                                     (hash-set visited key #t)))))]
+                   (let* ([resolved (resolve-path candidate)]
+                          [resolved-complete (if (complete-path? resolved)
+                                                 resolved
+                                                 (path->complete-path resolved
+                                                                      (or (path-only candidate)
+                                                                          (current-directory))))]
+                          [resolved-simplified (simplify-path resolved-complete #f)])
+                     (and (not (equal? (path->string resolved-simplified) key))
+                          (loop (append (explode-path resolved-simplified) (cdr remaining))
+                                #f
+                                (add1 steps))))]
                   [(or (file-exists? candidate) (directory-exists? candidate))
-                   (loop (cdr remaining) (simplify-path candidate #f) visited)]
+                   (loop (cdr remaining) (simplify-path candidate #f) (add1 steps))]
                   [else
                    ;; Non-existent tail: lexical from here on.
                    (simplify-path (for/fold ([acc candidate]) ([part (in-list (cdr remaining))])

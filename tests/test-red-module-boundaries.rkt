@@ -2,6 +2,7 @@
 
 ;; @speed fast
 ;; @suite fast
+;; @timeout 300
 
 ;; W10 v0.99.37: RED module boundary characterization tests.
 ;; These tests document the CURRENT behavior of the 4 RED modules.
