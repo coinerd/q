@@ -247,15 +247,38 @@
                  (task-done! (car v))
                  (record-late!)
                  (drain)))
-             ;; A worker that died without publishing fails the run.
-             (for ([id (in-list (hash-keys running))])
-               (define w (hash-ref running id))
-               (when (thread-dead? w)
+             ;; A worker that died without publishing fails the run. A death
+             ;; detection can beat a live worker's in-flight completion put,
+             ;; so before formatting the error, give already-completed
+             ;; results a short bounded grace drain: 0.05s polls, at most
+             ;; ~1s total, recording exactly like the immediate drain above
+             ;; (results hash, task-done!, record-late!). If every result
+             ;; lands inside the window, fall through to the normal success
+             ;; path; otherwise raise the same fail-closed error with the
+             ;; now-honest count.
+             (define dead-id
+               (for/first ([id (in-list (hash-keys running))]
+                           #:when (thread-dead? (hash-ref running id)))
+                 id))
+             (when dead-id
+               (define grace-deadline-ms (+ (current-inexact-milliseconds) 1000.0))
+               (let grace-drain ()
+                 (cond
+                   [(= (hash-count results) n) (void)]
+                   [(>= (current-inexact-milliseconds) grace-deadline-ms) (void)]
+                   [else
+                    (define v (sync/timeout 0.05 done))
+                    (when v
+                      (hash-set! results (car v) (cdr v))
+                      (task-done! (car v))
+                      (record-late!))
+                    (grace-drain)]))
+               (unless (= (hash-count results) n)
                  (error
                   'run-scheduled
                   (string-append "worker terminated without a result for ~s "
                                  "(~a result(s) missing, ~a of ~a inputs reported; fail closed)")
-                  id
+                  dead-id
                   (- n (hash-count results))
                   (hash-count results)
                   n)))
