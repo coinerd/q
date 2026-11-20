@@ -261,3 +261,41 @@ be repointed before any deletion of the adapter:
   coverage manifest's `generated_by` provenance string.
 
 Machine-readable W6 evidence: `artifacts/test-runtime/v1.00.28-w6/` (SHA-256 checksummed), report [`reports/LOCAL-TDD-LATENCY-v1.00.28.md`](reports/LOCAL-TDD-LATENCY-v1.00.28.md) (v1.00.28).
+
+## Final milestone #900 measurements and the standard workflow
+
+Measured on the merged tree at `9f292394` (5 warm samples each, 4-CPU Linux host). These are
+direct end-to-end observations, not projections; the broad fallback is reported separately and is
+never used for a single-change claim.
+
+| Loop | Command | Median | p90 | Target | Verdict |
+|---|---|---:|---:|---:|---|
+| Focused pure decision | `racket tests/test-qt-quick-run-classification.rkt` | 1.752 s | 2.093 s | ≤ 3 s | PASS |
+| Focused pure decision | `racket tests/test-gsd-delivery-stop-decision.rkt` | 0.684 s | 0.773 s | ≤ 3 s | PASS |
+| Focused through `quick` | `./qt quick tests/test-qt-quick-run-classification.rkt` | 4.937 s | 5.174 s | ≤ 3 s | MISS — CLI/admission overhead, not the test body; use the direct command while editing |
+| Committed attributable (`util/ansi.rkt`) | `./qt quick --changed BASE..HEAD` | 8.132 s | 8.462 s | ≤ 15 s | PASS (last-commit range) |
+| Committed attributable (`agent/state.rkt`) | `./qt quick --changed BASE..HEAD` | 8.224 s | 8.312 s | ≤ 15 s | PASS (last-commit range) |
+| Uncommitted attributable (`util/ansi.rkt`) | `./qt quick --changed HEAD` | 8.382 s | 8.451 s | ≤ 15 s | PASS |
+| Uncommitted attributable (`agent/state.rkt`) | `./qt quick --changed HEAD` | 8.621 s | 8.863 s | ≤ 15 s | PASS |
+| CLI startup | `./qt --help` | 0.913 s | 0.994 s | — | lazy `full-plan.rkt` load; baseline ~1.98 s |
+| CLI selection | `./qt quick --explain` | 1.705 s | 1.886 s | — | baseline ~3.26 s |
+| Broad fallback | `./qt quick` | 22.4 s | 23.1 s | — | 23 files / 228 tests; not a typical changed-code claim |
+
+Standard development workflow after this point:
+
+1. **While editing** — run the focused pure test directly (for example
+   `racket tests/test-gsd-delivery-stop-decision.rkt`). Extract pure decision logic naturally in
+   the feature wave when it removes duplicated inline branches; do not open a testing campaign.
+2. **After completing a change** — run impact selection: `./qt quick --changed HEAD` for the working
+   tree or `./qt quick --changed BASE..HEAD` for committed work. Refresh the admission record once
+   when an admitted owner's closure changed, then rerun.
+3. **Where effects are involved** — run the targeted genuine boundary contract (real Git, process,
+   terminal, or provider) for the changed seam. Do not replace it with a pure test or a skip.
+4. **Before integration** — run required PR verification (`./qt default` plus the protected CI
+   contexts). Platform and GitHub-hosted claims remain with CI.
+5. **Scheduled execution** — exhaustive regression runs on the full lane and cross-version
+   compatibility on its weekly/manual cadence. Neither substitutes for the focused loop.
+
+Simplify an expensive test only when modifying its associated production code. Preserve all 13
+required PR contexts, process isolation, and fail-closed evidence; no new framework, scheduler, cache,
+persistent worker, or policy layer was introduced.
