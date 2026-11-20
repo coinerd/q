@@ -39,8 +39,7 @@
          "architecture-baseline-helpers.rkt") ; json pkg: read-json (racket/json is
 
 (provide build-manifest
-         manifest->string
-         current-git-revision)
+         manifest->string)
 
 (define (entry-ref* entry key [default #f])
   ;; Metadata records use two shapes: proper (key value ...) assoc entries
@@ -102,18 +101,6 @@
 (define (read-source root path)
   (with-handlers ([exn:fail? (lambda (_) "")])
     (call-with-input-file (build-path root (string->path path)) (lambda (in) (port->string in)))))
-
-(define (current-git-revision root)
-  (define out (open-output-string))
-  (define err (open-output-string))
-  (define code
-    (parameterize ([current-directory root]
-                   [current-output-port out]
-                   [current-error-port err])
-      (system* (require-git) "rev-parse" "HEAD")))
-  (if (and code (non-empty-string? (string-trim (get-output-string out))))
-      (string-trim (get-output-string out))
-      "unknown"))
 
 ;; ---- graph ---------------------------------------------------------------------
 
@@ -286,7 +273,6 @@
      (name "scripts/subsystem-manifest.rkt")
      (reproduction-command
       "racket scripts/subsystem-manifest.rkt --out docs/architecture/subsystem-manifest.rktd"))
-    (revision ,(current-git-revision root))
     (production-modules ,(length modules))
     (subsystems ,subsystems)))
 
