@@ -165,8 +165,11 @@
     (refuse! "--authority-root must have mode 0700"))
   (simplify-path raw #f))
 (define (campaign!)
+  ;; Refuse the pinned missing --campaign-root BEFORE touching the authority
+  ;; root: on a clean HOME the default private store does not exist yet and
+  ;; its refusal must never mask the required-argument check.
+  (define root (need args 'campaign-root))
   (parameterize ([current-supplemental-authority-root (authority-root!)])
-    (define root (need args 'campaign-root))
     (unless (directory-exists? root)
       (refuse! "--campaign-root must exist"))
     (values (string->path root) (sha-arg args "plan") (wave-arg args))))
