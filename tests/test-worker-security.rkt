@@ -24,7 +24,7 @@
          (only-in "../sandbox/worker-dispatch.rkt" process-ipc-request)
          "../sandbox/worker-main.rkt"
          (only-in "../tools/builtins/bash-safety.rkt" sanctioned-scratch-root)
-         (only-in "../tools/scratch.rkt" current-scratch-base-dir)
+         (only-in "../tools/scratch.rkt" canonical-scratch-path current-scratch-base-dir)
          "../util/config-paths.rkt")
 
 (define-runtime-path here ".")
@@ -835,7 +835,7 @@
                "r91-only"
                "write"
                (hash 'path (path->string (build-path owned-b "f.txt")) 'content "trusted-only")
-               #:twd (path->string owned-b))))
+               #:twd (path->string (canonical-scratch-path owned-b)))))
            (check-equal? (ipc-response-status resp) 'ok (ipc-response-error-message resp))
            (check-equal? (file->string (build-path owned-b "f.txt")) "trusted-only")
            (check-equal? (current-directory) cwd-before "trust is never a chdir channel")
@@ -871,7 +871,7 @@
                                                                            (path->string owned-b))))
                         (check-equal? (ipc-response-status pwd-resp) 'ok)
                         (check-equal? (string-trim (format "~a" (ipc-response-content pwd-resp)))
-                                      (path->string owned-b))
+                                      (path->string (canonical-scratch-path owned-b)))
                         ;; …but it must not extend roots: writes into B are refused.
                         (define write-resp
                           (process-request-line
@@ -902,11 +902,12 @@
          (parameterize ([current-allowed-roots (list spawn-a)])
            (define req-args (hash 'path (path->string (build-path model-c "x.txt")) 'content "no"))
            (define resp
-             (process-request-line (make-trusted-request-json "r91-mix"
-                                                              "write"
-                                                              req-args
-                                                              #:wd (path->string model-c)
-                                                              #:twd (path->string owned-b))))
+             (process-request-line (make-trusted-request-json
+                                    "r91-mix"
+                                    "write"
+                                    req-args
+                                    #:wd (path->string model-c)
+                                    #:twd (path->string (canonical-scratch-path owned-b)))))
            ;; The worker chdirs to model C (plain cwd semantics) but the only
            ;; extended root is coordinator B — C stays refused.
            (check-equal? (ipc-response-status resp) 'error)
@@ -919,7 +920,7 @@
                "write"
                (hash 'path (path->string (build-path owned-b "y.txt")) 'content "yes")
                #:wd (path->string model-c)
-               #:twd (path->string owned-b))))
+               #:twd (path->string (canonical-scratch-path owned-b)))))
            (check-equal? (ipc-response-status ok-resp) 'ok (ipc-response-error-message ok-resp))
            (check-equal? (file->string (build-path owned-b "y.txt")) "yes")
            ;; And the model cwd never gained anything after the requests.
@@ -1017,7 +1018,7 @@
                "r91-sib"
                "write"
                (hash 'path (path->string (build-path base "b-escape" "x.txt")) 'content "no")
-               #:twd (path->string owned-b))))
+               #:twd (path->string (canonical-scratch-path owned-b)))))
            (check-equal? (ipc-response-status sibling-prefix) 'error)
            (check-false (directory-exists? (build-path base "b-escape")))
            ;; Absolute cross-root write refused; outside bytes preserved.
@@ -1026,7 +1027,7 @@
                                     "r91-cross-w"
                                     "write"
                                     (hash 'path (path->string victim) 'content "OVERWRITTEN")
-                                    #:twd (path->string owned-b))))
+                                    #:twd (path->string (canonical-scratch-path owned-b)))))
            (check-equal? (ipc-response-status cross-write) 'error)
            (check-equal? (file->string victim) "OUTSIDE-BYTES")
            ;; Absolute cross-root edit refused; outside bytes preserved.
@@ -1036,7 +1037,7 @@
                "r91-cross-e"
                "edit"
                (hash 'path (path->string victim) 'old-text "OUTSIDE" 'new-text "HACKED")
-               #:twd (path->string owned-b))))
+               #:twd (path->string (canonical-scratch-path owned-b)))))
            (check-equal? (ipc-response-status cross-edit) 'error)
            (check-equal? (file->string victim) "OUTSIDE-BYTES")
            ;; In-root write still works under the same trust (positive control).
@@ -1046,7 +1047,7 @@
                "r91-in"
                "write"
                (hash 'path (path->string (build-path owned-b "ok.txt")) 'content "fine")
-               #:twd (path->string owned-b))))
+               #:twd (path->string (canonical-scratch-path owned-b)))))
            (check-equal? (ipc-response-status in-root) 'ok)
            (check-equal? (file->string victim) "OUTSIDE-BYTES")))
        (lambda () (delete-directory/files base #:must-exist? #f))))
@@ -1133,7 +1134,7 @@
                  "r91-crash"
                  "edit"
                  (hash 'path (path->string edit-target) 'old-text "alpha" 'new-text "beta")
-                 #:twd (path->string owned-b))))
+                 #:twd (path->string (canonical-scratch-path owned-b)))))
              (check-equal? (ipc-response-status crashed) 'error)
              (check-true (string-contains? (or (ipc-response-error-message crashed) "") "crashed"))
              (check-equal? (current-allowed-roots) (list spawn-a)))
@@ -1148,7 +1149,7 @@
                  "r91-escape"
                  "edit"
                  (hash 'path (path->string edit-target) 'old-text "alpha" 'new-text "gamma")
-                 #:twd (path->string owned-b))))
+                 #:twd (path->string (canonical-scratch-path owned-b)))))
              (check-equal? escaped 'escaped "non-exn exception must propagate")
              (check-equal? (current-allowed-roots) (list spawn-a)))
            ;; And a follow-up request without trust cannot reach B.
@@ -1244,8 +1245,7 @@
   ;; suite/timeout policy); operator-selectable suites keep `--suite NAME`.
   ;; Either spelling names the same runner context.
   (define lines (file->lines ci-workflow-path*))
-  (define needles
-    (list (string-append "--lane " suite) (string-append "--suite " suite)))
+  (define needles (list (string-append "--lane " suite) (string-append "--suite " suite)))
   (define idx
     (for/first ([ln (in-list lines)]
                 [i (in-naturals)]
@@ -1356,8 +1356,7 @@
         ;; §11.2: the invoked entry point is the ./qt facade (directly, or
         ;; behind the compiled-root launcher's `-- racket ./qt`), never the
         ;; compat adapter.
-        (check-true (string-contains? w "./qt")
-                    "every tier must invoke the ./qt facade"))
+        (check-true (string-contains? w "./qt") "every tier must invoke the ./qt facade"))
       (check-true (string-contains? fast-window "--lane fast") "fast lane block drifted")
       (check-true (string-contains? platform-window "--lane platform") "platform lane block drifted")
       (check-true (string-contains? platform-window "raco make main.rkt")
