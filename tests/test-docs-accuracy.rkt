@@ -263,7 +263,7 @@
     (check-true (string-contains? flat "no admission expansion came from those waves"))
     ;; W5 admitted the first post-expansion owner and R3c the pure delivery
     ;; decision; the doc states the resulting audited set.
-    (check-true (string-contains? flat "30 owners / 337 tests"))
+    (check-true (string-contains? flat "23 owners / 228 tests"))
     (for ([f (in-list '("tests/test-gsd-auto-review-loop-contract.rkt"
                         "tests/test-gsd-auto-review-production-contract.rkt"
                         "tests/test-gsd-generated-metadata-correction-contract.rkt"))])
@@ -330,9 +330,9 @@
       (for/list ([o (in-list owners)]
                  #:when (hash-has-key? covers o))
         o))
-    (check-equal? (length attributed) 22 "22 of 30 owners carry @covers attribution")
-    (check-equal? (length riders) 8 "the 8 remaining owners are the documented fail-open floor")
-    (check-true (string-contains? flat "8 of the 30 current owners, all deliberate")
+    (check-equal? (length attributed) 21 "21 of 23 owners carry @covers attribution")
+    (check-equal? (length riders) 2 "the 2 remaining owners are the documented fail-open floor")
+    (check-true (string-contains? flat "2 of the 23 current owners, all deliberate")
                 "the doc states the rider count")
     ;; Every rider is named in the doc (no silently-global owner).
     (for ([r (in-list riders)])

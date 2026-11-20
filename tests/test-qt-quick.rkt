@@ -59,9 +59,11 @@
           (check-equal? status 0 text)
           ;; §3 expansion grew the reviewed owner table from 4 to 28 owners;
           ;; W5 added the quick child-run classifier and R3c added the pure
-          ;; delivery-stop decision (30 owners, capability-denylist-scanned,
-          ;; generated admission record); the pin moves with that contract.
-          (check-regexp-match #rx"quick passed: 30 files" text)
+          ;; delivery-stop decision; R3d retired the recursive arch source-scan
+          ;; and v09945 archival audit owners (23 owners,
+          ;; capability-denylist-scanned, generated admission record); the pin
+          ;; moves with that contract.
+          (check-regexp-match #rx"quick passed: 23 files" text)
           (check-regexp-match #rx"not PR/full verification" text))
         (displayln "SKIP quick suite: Linux /proc or setsid unavailable")))
   (test-case "campaign decisions execute and count six test cases"

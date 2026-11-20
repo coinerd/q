@@ -73,11 +73,13 @@
          "tests/test-vdom-html-render.rkt"
          "tests/test-gsd-campaign-decision-pure.rkt"
          "tests/test-gsd-delivery-verifier-decision.rkt"
-         ;; §3 expansion batch 1: the closure-clean, metadata-clean PREFIX of the
-         ;; unit-fast candidate list (deterministic; expanding the table is a PR
-         ;; diff). Every entry and its transitive closure was denylist-scanned
-         ;; clean at admission; the generated record carries the exact per-owner
-         ;; closure and hashes.
+         ;; §3 expansion batch 1: the closure-clean, metadata-clean unit-fast
+         ;; candidates (deterministic; expanding the table is a PR diff).
+         ;; Every entry and its transitive closure was denylist-scanned clean
+         ;; at admission; the generated record carries the exact per-owner
+         ;; closure and hashes. R3d (#9948) later retired the recursive arch
+         ;; source-scan owners and the v09945 archival audit owners from
+         ;; `quick` (global scans/report pins stay in `default` and full CI).
          "tests/test-adr-0023-phase2.rkt"
          "tests/test-agent-loop-fsm.rkt"
          "tests/test-agent-memory-decoupling.rkt"
@@ -88,13 +90,6 @@
          "tests/test-anthropic-helpers.rkt"
          "tests/test-approval-broker.rkt"
          "tests/test-approval-channel.rkt"
-         "tests/test-arch-boundaries.rkt"
-         "tests/test-arch-composition-root.rkt"
-         "tests/test-arch-parameters.rkt"
-         "tests/test-arch-tool-constructor.rkt"
-         "tests/test-audit-v09945-final-report.rkt"
-         "tests/test-audit-v09945-w11-final.rkt"
-         "tests/test-audit-v09945-w3-gsd.rkt"
          "tests/test-blackboard-reducer-w08.rkt"
          "tests/test-blackboard-reducer.rkt"
          "tests/test-blackboard.rkt"
