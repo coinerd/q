@@ -64,7 +64,9 @@
                   registry-active-count
                   verification-registry-incarnation)
          (only-in "../extensions/gsd/events.rkt" set-gsd-event-bus!)
-         (only-in "../extensions/gsd/campaign-state.rkt" migrate-campaign!)
+         (only-in "../extensions/gsd/campaign-state.rkt"
+                  migrate-campaign!
+                  set-campaign-record-execution-policy!)
          (only-in "../extensions/gsd/go-orchestrator.rkt" run-campaign-wave campaign-result-status))
 
 ;; ============================================================
@@ -87,6 +89,12 @@
       (define base (setup-standard-campaign!))
       (define plan (load-plan* base))
       (define rec (migrate-campaign! base))
+      ;; Historical coordinator fixture: keep the legacy lane (same reset as
+      ;; tests/test-gsd-go-orchestrator.rkt load-or-migrate) so the structured
+      ;; verifier under test decides the wave. Fresh migrations select
+      ;; owned-red-v1, whose owned author phases dispatch a model executor a
+      ;; stub runner can never satisfy.
+      (set-campaign-record-execution-policy! rec #f)
       (define result
         (run-campaign-wave base
                            rec
@@ -99,18 +107,49 @@
       (cleanup-tmp base))
 
     (test-case "coordinator marks wave failed when structured verifier rejects"
+      ;; The rejection under test is the BRANCH evidence check: STATE.md
+      ;; declares issue 42, so the expected delivery branch is
+      ;; feature/issue-42-wave, while the fixture checkout carries the wave
+      ;; work on feature/issue-99-wave. The fixture satisfies the owned
+      ;; author gate for real — clean committed feature branch, committed
+      ;; regular q/tests/ file listed in frozen FILES, GitHub-style origin —
+      ;; but the wave runs on the LEGACY coordinator lane (the same
+      ;; historical-fixture policy reset as test-gsd-go-orchestrator's
+      ;; load-or-migrate): owned-red-v1 author phases dispatch a model
+      ;; executor this stub runner can never satisfy, which would block the
+      ;; wave before the structured verifier under test ever runs.
       (define base (make-tmp-git-repo))
-      (make-git-branch! base "feature/issue-99-wave") ; wrong branch
+      (make-git-branch! base "feature/issue-99-wave") ; wrong branch vs issue 42 below
       (make-git-file-change! base)
+      ;; Committed regular test file so the checkout is fully clean and the
+      ;; frozen FILES genuinely authorize test authorship.
+      (make-directory* (build-path base "q" "tests"))
+      (call-with-output-file
+       (build-path base "q" "tests" "test-placeholder.rkt")
+       (lambda (out)
+         (display "#lang racket/base\n(provide placeholder)\n(define placeholder 1)\n" out))
+       #:exists 'truncate)
+      (define (sh . args)
+        (define exit
+          (parameterize ([current-directory (build-path base "q")])
+            (apply system*/exit-code GIT args)))
+        (unless (zero? exit)
+          (error 'wrong-branch-fixture "command failed: ~a" (cons 'sh args))))
+      (sh "add" "-A")
+      (sh "commit" "-q" "-m" "wave zero: committed wave file and evidence test")
+      ;; The author/delivery identity gate authenticates a GitHub origin;
+      ;; the fixture template clones under a throwaway remote name.
+      (sh "remote" "add" "origin" "https://github.com/q-fixture/q-fixture.git")
       (write-plan! base 0 "Wave Zero" "zero")
       (write-wave-doc! base
                        0
                        "zero"
-                       '("q/ui-core/preferences.rkt")
+                       '("q/ui-core/preferences.rkt" "q/tests/test-placeholder.rkt")
                        "raco make q/ui-core/preferences.rkt")
       (write-state! base 0 "42")
       (define plan (load-plan* base))
       (define rec (migrate-campaign! base))
+      (set-campaign-record-execution-policy! rec #f)
       (define result
         (run-campaign-wave base
                            rec
