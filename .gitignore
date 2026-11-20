@@ -10,6 +10,7 @@ compiled/
 !docs/reports/gsd-wave-reviews/*.rktd
 !docs/reports/gsd-wave-validation/*.rktd
 !docs/reports/architecture-baseline-*.rktd
+!docs/reports/architecture-graph-*.rktd
 !tests/.quick-admission.rktd
 
 # Coverage reports

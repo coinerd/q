@@ -17,7 +17,7 @@ budgets below (v1.00.28).
 | Every red-green cycle | `./qt quick` | The audited pure-unit owner table runs green. Reproduction only — never PR verification. |
 | Before push (committed work) | `./qt quick --changed BASE..HEAD` | The impact-selected audited owners for that diff run green. Reproduction only — never a PR pass. |
 | Before push (working tree) | `./qt quick --changed HEAD` | The same selection for the working-tree diff against a single base ref: staged, unstaged, untracked, added, deleted and renamed files all count. Reproduction only — never a PR pass. |
-| Pre-PR | `./qt default` | Complete *offline* PR verification: the required-offline lane (union of the suites the required CI test jobs select). Platform and GitHub-hosted claims remain with CI. |
+| Pre-PR (optional, comprehensive) | `./qt default` | Complete *offline* verification: the required-offline lane (union of the suites the required CI test jobs select). Optional locally — the mandatory comprehensive gate is the protected CI workflow. Platform and GitHub-hosted claims remain with CI. |
 | Complete available suite | `./qt full` | Every discovered test file (full Racket suite only, not PR/CI verification). |
 
 - `./qt quick` runs all admitted owners; `./qt quick tests/test-foo.rkt` runs
@@ -80,9 +80,15 @@ it. Full sample tables, selected owners and baseline setup:
    `./qt default --file <file>`) runs exactly that file through the lane
    machinery; its pass line says `explicit reproduction only`, never a PR
    pass.
-4. **Pre-push** — `./qt default` is the complete offline PR verification;
-   today it selects 1379 files (`./qt default --explain` prints the
-   selection without executing anything).
+4. **Before publishing** — the publication gate is targeted verification, not a full local
+   run: focused owners for the touched seams, impact selection (`./qt quick --changed HEAD`
+   or `BASE..HEAD`), the genuine boundary contract for any affected effect, and the targeted
+   lint scripts. Routine budget: 30–120 s. Then publish the PR and let the protected CI
+   workflow run the comprehensive mandatory verification (the 13 required contexts — the
+   same claim `./qt default` rehearses offline, 1379 files today, if you want the optional
+   local rehearsal). Targeted local results are never presented as complete PR verification:
+   every `./qt` pass line carries its own honest label, and PR descriptions must state what
+   actually ran locally.
 
 | Loop stage | Measured (warm, reference machine) | Target |
 |---|---|---|
@@ -294,8 +300,11 @@ Standard development workflow after this point:
    when an admitted owner's closure changed, then rerun.
 3. **Where effects are involved** — run the targeted genuine boundary contract (real Git, process,
    terminal, or provider) for the changed seam. Do not replace it with a pure test or a skip.
-4. **Before integration** — run required PR verification (`./qt default` plus the protected CI
-   contexts). Platform and GitHub-hosted claims remain with CI.
+4. **Before integration** — comprehensive PR verification is the protected CI workflow: the 13
+   required contexts run in CI on the PR head SHA (optionally rehearsed offline first with
+   `./qt default`). Platform and GitHub-hosted claims remain with CI. Publish targeted-verified
+   PRs without waiting for a redundant complete local run; merge protection stays exactly as
+   configured.
 5. **Scheduled execution** — exhaustive regression runs on the full lane and cross-version
    compatibility on its weekly/manual cadence. Neither substitutes for the focused loop.
 
