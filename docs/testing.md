@@ -89,9 +89,9 @@ it. Full sample tables, selected owners and baseline setup:
 | Focused red-green (`./qt quick <file>`) | pooled p50 2.0 s, p90 5.0 s — 21 samples over three small owners (tests/test-ansi.rkt 23 tests p90 2.2 s; tests/test-agent-state.rkt 7 tests p90 2.0 s; tests/test-gsd-campaign-decision-pure.rkt 6 tests p90 5.4 s) | ≤ 3 s — **missed** on the pooled p90: 17 of 21 samples are ≤ 2.2 s; the GSD owner misses because its fresh child recompiles a `typed/racket` closure from source each run (source-only loading), ≈ 3 s of child-side compile alone |
 | Committed attributable impact (`./qt quick --changed BASE..HEAD`) | per-area p90 12.5 s (TUI, 9 owners), 13.9 s (GSD, 9 owners), 25.4 s (agent, 11 owners) — 5 samples each | ≤ 15 s — **missed** for the agent hub sample: `agent/state.rkt` is a dependency hub, so the graph correctly fans out to 11 owners, two of which are heavy (≈ 13 s and ≈ 5.6 s alone) under source-only child loading |
 | Uncommitted attributable impact (`./qt quick --changed HEAD`) | per-area p90 12.5 s (TUI, 9 owners), 13.1 s (GSD, 9 owners), 25.2 s (agent, 12 owners) — 5/2/2 samples | ≤ 15 s — same verdict as the committed row: the fan-out, not the diff input, is the cost |
-| Admission refresh after an ordinary content edit | p50 1.5 s, p90 1.7 s — 5 samples of the production record (28 owners) | — (measured; a one-time step per edit that touches a closure file) |
-| Deliberate broad fallback (`./qt quick` after an escalation) | p50 35.7 s, p90 36.1 s — 3 samples (28 files / 325 tests) | — (reported separately, as required: an escalation runs the whole audited lane) |
-| Complete audited loop (`./qt quick`, no diff) | ≈ 35 s (28 files / 325 tests) | — |
+| Admission refresh after an ordinary content edit | p50 1.5 s, p90 1.7 s — 5 samples of the production record (29 owners) | — (measured; a one-time step per edit that touches a closure file) |
+| Deliberate broad fallback (`./qt quick` after an escalation) | p50 35.7 s, p90 36.1 s — 3 samples (29 files / 331 tests) | — (reported separately, as required: an escalation runs the whole audited lane) |
+| Complete audited loop (`./qt quick`, no diff) | ≈ 35 s (29 files / 331 tests) | — |
 
 An edit to an admitted owner's closure must be followed by one admission
 refresh before `quick` runs that owner again:
@@ -123,7 +123,7 @@ gap with a zero-test green. The verified behaviors:
   open): the diff is reproduced by the complete audited loop, never by
   nothing. Demonstrated on an untracked scratch module, then removed.
 - Owners with no `@covers` attribution of their own ride along in every
-  selection (fail open) — 8 of the 28 current owners, all deliberate:
+  selection (fail open) — 8 of the 29 current owners, all deliberate:
   - `tests/test-arch-boundaries.rkt`, `tests/test-arch-composition-root.rkt`,
     `tests/test-arch-parameters.rkt`, `tests/test-arch-tool-constructor.rkt`
     and `tests/test-agent-memory-decoupling.rkt` are recursive source-scan
@@ -156,7 +156,7 @@ gap with a zero-test green. The verified behaviors:
 record (`tests/.quick-admission.rktd`): a versioned capability-denylist scan
 over each owner and its reviewed closure gates admission.
 `./qt quick --audit` prints the live report — `admitted`, `review-required`,
-`rejected`, with reasons (28 owners / 325 tests at the time of writing; the
+`rejected`, with reasons (29 owners / 331 tests at the time of writing; the
 audit view scans every candidate and costs ≈ 30 s). A
 stale record, a closure-structure change, or a denylist hit is
 `review-required`; `quick` refuses to run such an owner (exit 1), and
@@ -176,8 +176,11 @@ produced fast *contract* owners
 `@boundary integration` with real Git/process worlds — each carries a
 denylist-v1 capability hit (`make-temporary-file`, `delete-file`), so none
 is admissible. No genuinely pure extracted decision owner from B1–B3 exists
-in the tree yet, so no admission expansion happened: the audited set stays
-28 owners / 325 tests. A future expansion must arrive as pure decision code
+in the tree yet, so no admission expansion came from those waves. The W5
+bounded pure pilot then added the first post-expansion owner
+(`tests/test-qt-quick-run-classification.rkt`, its two closure capability
+hits reviewed in `reviewed-hits`): the audited set is now
+29 owners / 331 tests. A future expansion must arrive as pure decision code
 through this same reviewed scan-plus-record path — a metadata tag alone
 admits nothing, and integration contracts stay out of `quick` even when
 they carry `@speed fast`.

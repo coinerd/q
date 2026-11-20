@@ -68,40 +68,47 @@
 ;; no @requires beyond gateable tokens, no @mutates/@isolation).
 (define current-admitted-owners
   (make-parameter ;; The four original audited owners (their closures were re-reviewed as
-                  ;; part of the §3 expansion; fingerprints became the generated record).
-                  (list "tests/test-exn-recovery.rkt"
-                        "tests/test-vdom-html-render.rkt"
-                        "tests/test-gsd-campaign-decision-pure.rkt"
-                        "tests/test-gsd-delivery-verifier-decision.rkt"
-                        ;; §3 expansion batch 1: the closure-clean, metadata-clean PREFIX of the
-                        ;; unit-fast candidate list (deterministic; expanding the table is a PR
-                        ;; diff). Every entry and its transitive closure was denylist-scanned
-                        ;; clean at admission; the generated record carries the exact per-owner
-                        ;; closure and hashes.
-                        "tests/test-adr-0023-phase2.rkt"
-                        "tests/test-agent-loop-fsm.rkt"
-                        "tests/test-agent-memory-decoupling.rkt"
-                        "tests/test-agent-queue.rkt"
-                        "tests/test-agent-session-config.rkt"
-                        "tests/test-agent-state.rkt"
-                        "tests/test-ansi.rkt"
-                        "tests/test-anthropic-helpers.rkt"
-                        "tests/test-approval-broker.rkt"
-                        "tests/test-approval-channel.rkt"
-                        "tests/test-arch-boundaries.rkt"
-                        "tests/test-arch-composition-root.rkt"
-                        "tests/test-arch-parameters.rkt"
-                        "tests/test-arch-tool-constructor.rkt"
-                        "tests/test-audit-v09945-final-report.rkt"
-                        "tests/test-audit-v09945-w11-final.rkt"
-                        "tests/test-audit-v09945-w3-gsd.rkt"
-                        "tests/test-blackboard-reducer-w08.rkt"
-                        "tests/test-blackboard-reducer.rkt"
-                        "tests/test-blackboard.rkt"
-                        "tests/test-browser-adapter-contracts.rkt"
-                        "tests/test-browser-adapter.rkt"
-                        "tests/test-browser-close-contract.rkt"
-                        "tests/test-browser-errors.rkt")))
+   ;; part of the §3 expansion; fingerprints became the generated record).
+   (list "tests/test-exn-recovery.rkt"
+         "tests/test-vdom-html-render.rkt"
+         "tests/test-gsd-campaign-decision-pure.rkt"
+         "tests/test-gsd-delivery-verifier-decision.rkt"
+         ;; §3 expansion batch 1: the closure-clean, metadata-clean PREFIX of the
+         ;; unit-fast candidate list (deterministic; expanding the table is a PR
+         ;; diff). Every entry and its transitive closure was denylist-scanned
+         ;; clean at admission; the generated record carries the exact per-owner
+         ;; closure and hashes.
+         "tests/test-adr-0023-phase2.rkt"
+         "tests/test-agent-loop-fsm.rkt"
+         "tests/test-agent-memory-decoupling.rkt"
+         "tests/test-agent-queue.rkt"
+         "tests/test-agent-session-config.rkt"
+         "tests/test-agent-state.rkt"
+         "tests/test-ansi.rkt"
+         "tests/test-anthropic-helpers.rkt"
+         "tests/test-approval-broker.rkt"
+         "tests/test-approval-channel.rkt"
+         "tests/test-arch-boundaries.rkt"
+         "tests/test-arch-composition-root.rkt"
+         "tests/test-arch-parameters.rkt"
+         "tests/test-arch-tool-constructor.rkt"
+         "tests/test-audit-v09945-final-report.rkt"
+         "tests/test-audit-v09945-w11-final.rkt"
+         "tests/test-audit-v09945-w3-gsd.rkt"
+         "tests/test-blackboard-reducer-w08.rkt"
+         "tests/test-blackboard-reducer.rkt"
+         "tests/test-blackboard.rkt"
+         "tests/test-browser-adapter-contracts.rkt"
+         "tests/test-browser-adapter.rkt"
+         "tests/test-browser-close-contract.rkt"
+         "tests/test-browser-errors.rkt"
+         ;; W5 (#9953) bounded pure pilot, candidate 2: the quick child-run
+         ;; trust classifier. classify-quick-child-run decides over
+         ;; already-captured evidence values; its closure carries two
+         ;; reviewed capability hits (see reviewed-hits), both owned by the
+         ;; production runner modules and off the decision paths this
+         ;; owner executes.
+         "tests/test-qt-quick-run-classification.rkt")))
 
 ;; The owner set as a function (parameterized for fixture tests; the
 ;; production value is the reviewed table).
@@ -153,7 +160,17 @@
     (list
      "subprocess"
      "tests/test-gsd-delivery-verifier-decision.rkt"
-     "binds a define-runtime-path constant for closure authentication; no subprocess is spawned by the decision functions under test"))))
+     "binds a define-runtime-path constant for closure authentication; no subprocess is spawned by the decision functions under test"))
+   "tests/test-qt-quick-run-classification.rkt"
+   (list
+    (list
+     "subprocess"
+     "sandbox/subprocess.rkt"
+     "subprocess bindings/constants in the production runner module; the classifier decides over captured evidence values and never spawns")
+    (list
+     "make-temporary-file"
+     "scripts/testing/quick-runner.rkt"
+     "evidence-directory helper inside run-one, the effectful child runner; the classifier consumes evidence values, never the filesystem"))))
 
 (define (reviewed-hit? owner capability hit-file)
   (and capability
