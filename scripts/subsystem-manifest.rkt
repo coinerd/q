@@ -41,6 +41,47 @@
 (provide build-manifest
          manifest->string)
 
+(define (require-input-file root . relative)
+  (define path (apply build-path root relative))
+  (unless (file-exists? path)
+    (raise-user-error 'subsystem-manifest "required input missing: ~a" relative))
+  path)
+
+(define (require-datum path what)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (raise-user-error 'subsystem-manifest
+                                                 "required input ~a is unparseable: ~a"
+                                                 what
+                                                 (exn-message e)))])
+    (call-with-input-file path read)))
+
+(define (require-nonempty what value)
+  (unless (and (list? value) (pair? value))
+    (raise-user-error 'subsystem-manifest "required input ~a is empty or malformed" what))
+  value)
+
+;; A tracked module that cannot be read is an inconsistent tree: generation
+;; fails instead of recording an empty source (CL1 review).
+(define (require-tracked-source root path)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (raise-user-error 'subsystem-manifest
+                                                 "tracked module ~a cannot be read: ~a"
+                                                 path
+                                                 (exn-message e)))])
+    (call-with-input-file (build-path root (string->path path)) (lambda (in) (port->string in)))))
+
+;; Optional inputs (CL1 review): recorded as explicitly unavailable in the
+;; manifest's input-availability record instead of being silently omitted.
+;; availability is a mutable symbol-keyed hash.
+(define (load-optional what loader root availability)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (hash-set! availability what (format "unavailable: ~a" (exn-message e)))
+                     #f)])
+    (define value (loader root))
+    (hash-set! availability what "available")
+    value))
+
 (define (entry-ref* entry key [default #f])
   ;; Metadata records use two shapes: proper (key value ...) assoc entries
   ;; (dependency-policy exceptions) and improper (key . value) pairs (quick
@@ -94,9 +135,15 @@
     (for/list ([line (in-list (string-split (get-output-string out) "\n"))]
                #:unless (string=? (string-trim line) ""))
       (string-trim line)))
-  (if ok?
-      (sort (remove-duplicates parsed string=?) string<?)
-      '()))
+  ;; Fail-closed (CL1 review): a failed listing or an empty tracked-file set
+  ;; would silently build an empty manifest that looks valid.
+  (unless ok?
+    (raise-user-error 'subsystem-manifest
+                      "git ls-files failed: ~a"
+                      (string-trim (get-output-string err))))
+  (unless (pair? parsed)
+    (raise-user-error 'subsystem-manifest "no tracked Racket files under ~a" root))
+  (sort (remove-duplicates parsed string=?) string<?))
 
 (define (read-source root path)
   (with-handlers ([exn:fail? (lambda (_) "")])
@@ -126,63 +173,98 @@
 ;; ---- metadata loaders ------------------------------------------------------------
 
 (define (load-coverage-mappings root)
-  (with-handlers ([exn:fail? (lambda (_) '())])
-    (call-with-input-file (build-path root "tests" ".coverage-manifest.json")
-                          (lambda (in)
-                            (define data (read-json in))
-                            (for/list ([entry (in-list (hash-ref data 'entries '()))])
-                              (cons (hash-ref entry 'test) (hash-ref entry 'covers '())))))))
+  (define path (require-input-file root "tests" ".coverage-manifest.json"))
+  (define data
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (raise-user-error 'subsystem-manifest
+                                                   "coverage manifest unparseable: ~a"
+                                                   (exn-message e)))])
+      (call-with-input-file path read-json)))
+  (define entries (require-nonempty "coverage-manifest entries" (hash-ref data 'entries #f)))
+  (for/list ([entry (in-list entries)])
+    (define test (hash-ref entry 'test #f))
+    (define covers (hash-ref entry 'covers #f))
+    (unless (and (string? test) (pair? covers))
+      (raise-user-error 'subsystem-manifest "coverage entry lacks test/covers: ~a" entry))
+    (unless (file-exists? (build-path root test))
+      (raise-user-error 'subsystem-manifest "coverage test missing on disk: ~a" test))
+    (for ([covered (in-list covers)])
+      (unless (file-exists? (build-path root covered))
+        (raise-user-error 'subsystem-manifest
+                          "coverage target missing on disk: ~a (from ~a)"
+                          covered
+                          test)))
+    (cons test covers)))
 
 (define (load-admission-owners root)
-  (with-handlers ([exn:fail? (lambda (_) '())])
-    (define data (call-with-input-file (build-path root "tests" ".quick-admission.rktd") read))
-    (define owners (entry-ref*-list data 'owners))
-    (for/list ([owner (in-list owners)])
-      (cons (car owner) (cdr owner)))))
+  (define path (require-input-file root "tests" ".quick-admission.rktd"))
+  (define data (require-datum path "quick-admission record"))
+  (define owners (entry-ref*-list data 'owners))
+  (unless (and (pair? owners) (andmap pair? owners))
+    (raise-user-error 'subsystem-manifest "admission record has no audited owners"))
+  (for/list ([owner (in-list owners)])
+    (define test (car owner))
+    (unless (string? test)
+      (raise-user-error 'subsystem-manifest "admission record entry without a test path: ~a" owner))
+    (unless (file-exists? (build-path root test))
+      (raise-user-error 'subsystem-manifest "admitted owner missing on disk: ~a" test))
+    (for ([file (in-list (entry-ref*-list (cdr owner) 'closure))])
+      (unless (file-exists? (build-path root file))
+        (raise-user-error 'subsystem-manifest
+                          "owner closure file missing on disk: ~a (from ~a)"
+                          file
+                          test)))
+    (cons test (cdr owner))))
 
 (define (load-ownership-areas root)
-  (with-handlers ([exn:fail? (lambda (_) '())])
-    (call-with-input-file (build-path root "reports" "test-ownership-map.json")
-                          (lambda (in)
-                            (for/list ([area (in-list (hash-ref (read-json in) 'areas '()))])
-                              (cons (hash-ref area 'area)
-                                    (hash-ref area 'suite (hash-ref area 'owning_path ""))))))))
+  (define path (require-input-file root "reports" "test-ownership-map.json"))
+  (call-with-input-file path
+                        (lambda (in)
+                          (for/list ([area (in-list (hash-ref (read-json in) 'areas '()))])
+                            (cons (hash-ref area 'area)
+                                  (hash-ref area 'suite (hash-ref area 'owning_path "")))))))
 
 (define (load-gsd-inventory root)
-  (with-handlers ([exn:fail? (lambda (_) '())])
-    (define mod (build-path root "extensions" "gsd" "responsibility-inventory.rkt"))
-    (define inventory (dynamic-require mod 'inventory))
-    (define entry-module-file (dynamic-require mod 'entry-module-file))
-    (define entry-domain (dynamic-require mod 'entry-domain))
-    (define entry-effects (dynamic-require mod 'entry-effects))
-    (for/list ([e (in-list inventory)])
-      (cons (entry-module-file e) (list (entry-domain e) (entry-effects e))))))
+  (define mod (build-path root "extensions" "gsd" "responsibility-inventory.rkt"))
+  (define inventory (dynamic-require mod 'inventory))
+  (define entry-module-file (dynamic-require mod 'entry-module-file))
+  (define entry-domain (dynamic-require mod 'entry-domain))
+  (define entry-effects (dynamic-require mod 'entry-effects))
+  (require-nonempty "gsd responsibility inventory" inventory)
+  (for/list ([e (in-list inventory)])
+    (cons (entry-module-file e) (list (entry-domain e) (entry-effects e)))))
 
 (define (load-policy-exception-files root)
-  (with-handlers ([exn:fail? (lambda (_) '())])
-    (define policy
-      (call-with-input-file (build-path root "docs" "architecture" "dependency-policy.rktd") read))
-    (for/list ([exception (in-list (dependency-policy-exceptions policy))])
-      (cons (entry-ref* exception 'layer) (entry-ref* exception 'file)))))
+  (define path (require-input-file root "docs" "architecture" "dependency-policy.rktd"))
+  (define policy (require-datum path "dependency policy"))
+  (unless (assoc 'known-exceptions policy)
+    (raise-user-error 'subsystem-manifest "dependency policy lacks a known-exceptions section"))
+  (for/list ([exception (in-list (dependency-policy-exceptions policy))])
+    (cons (entry-ref* exception 'layer) (entry-ref* exception 'file))))
 
 ;; ---- assembly ---------------------------------------------------------------------
 
 (define (production-module-records root)
   (define paths (tracked-rkt-paths/root root))
-  (for/list ([path (in-list paths)]
-             #:unless (test-path? path))
-    (cons path (read-source root path))))
+  (define records
+    (for/list ([path (in-list paths)]
+               #:unless (test-path? path))
+      (cons path (require-tracked-source root path))))
+  (unless (pair? records)
+    (raise-user-error 'subsystem-manifest "no production modules found under ~a" root))
+  records)
 
 (define (dynamic-require? source)
   (regexp-match? #rx"dynamic-require" source))
 
 (define (build-manifest root)
+  (define availability (make-hash))
   (define modules (production-module-records root))
   (define graph (build-graph root modules))
   (define coverage (load-coverage-mappings root))
   (define admission (load-admission-owners root))
-  (define ownership (load-ownership-areas root))
-  (define gsd (load-gsd-inventory root))
+  (define ownership (load-optional 'ownership-map load-ownership-areas root availability))
+  (define gsd (load-optional 'gsd-inventory load-gsd-inventory root availability))
   (define policy-exceptions (load-policy-exception-files root))
 
   (define subsystem-names
@@ -203,6 +285,21 @@
               #:key car))
       (define member-paths (map car members))
       (define member-set (list->set member-paths))
+      (define gsd-column
+        (if (not gsd)
+            'unavailable
+            (for/list ([module+facts (in-list (sort gsd string<? #:key car))]
+                       #:do [(define module-file (car module+facts))]
+                       #:when (set-member? member-set (string-append "extensions/gsd/" module-file)))
+              (list (list 'module module-file)
+                    (list 'domain (first (cdr module+facts)))
+                    (list 'effects (second (cdr module+facts)))))))
+      (define ownership-column
+        (if (not ownership)
+            'unavailable
+            (for/first ([area+suite (in-list ownership)]
+                        #:when (string=? (car area+suite) name))
+              (cdr area+suite))))
       (define provide-total (for/sum ([record (in-list members)]) (provide-spec-count (cdr record))))
       (define dynamic-modules
         (for/list ([record (in-list members)]
@@ -247,32 +344,35 @@
                                                                       target-subsys))
                       1))
           `((to ,target-subsys) (edges ,count))))
-      `((name ,name)
-        (production-modules ,(length members))
-        (provide-total ,provide-total)
-        (dynamic-require-modules ,dynamic-modules)
-        (owner-tests ,owner-tests)
-        (coverage-mappings ,coverage-here)
-        (outbound-edges ,outbound)
-        (gsd-inventory ,(for/list ([module+facts (in-list (sort gsd string<? #:key car))]
-                                   #:do [(define module-file (car module+facts))]
-                                   #:when (set-member? member-set
-                                                       (string-append "extensions/gsd/" module-file)))
-                          `((module ,module-file) (domain ,(first (cdr module+facts)))
-                                                  (effects ,(second (cdr module+facts))))))
-        (policy-exceptions ,(sort (for/list ([layer+file (in-list policy-exceptions)]
-                                             #:when (string=? (car layer+file) name))
-                                    (cdr layer+file))
-                                  string<?))
-        (ownership-suite ,(for/first ([area+suite (in-list ownership)]
-                                      #:when (string=? (car area+suite) name))
-                            (cdr area+suite))))))
+      `((name ,name) (production-modules ,(length members))
+                     (provide-total ,provide-total)
+                     (dynamic-require-modules ,dynamic-modules)
+                     (owner-tests ,owner-tests)
+                     (coverage-mappings ,coverage-here)
+                     (outbound-edges ,outbound)
+                     (gsd-inventory ,gsd-column)
+                     (policy-exceptions ,(sort (for/list ([layer+file (in-list policy-exceptions)]
+                                                          #:when (string=? (car layer+file) name))
+                                                 (cdr layer+file))
+                                               string<?))
+                     (ownership-suite ,ownership-column))))
+
+  (define input-availability
+    (sort (append (for/list ([what (in-list '(coverage-manifest admission-record
+                                                                dependency-policy
+                                                                tracked-sources))])
+                    (cons what "required"))
+                  (for/list ([(what status) (in-hash availability)])
+                    (cons what status)))
+          string<?
+          #:key (lambda (pair) (symbol->string (car pair)))))
 
   `((schema-version 1)
     (generator
      (name "scripts/subsystem-manifest.rkt")
      (reproduction-command
       "racket scripts/subsystem-manifest.rkt --out docs/architecture/subsystem-manifest.rktd"))
+    (input-availability ,input-availability)
     (production-modules ,(length modules))
     (subsystems ,subsystems)))
 

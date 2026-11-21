@@ -31,8 +31,7 @@
 
 ;; raco test does not guarantee the repo root as CWD: anchor every relative
 ;; path to this file's location (same pattern as tests/test-milestone-gate.rkt).
-(define repo-root
-  (simplify-path (build-path (path-only manifest-path) ".." "..")))
+(define repo-root (simplify-path (build-path (path-only manifest-path) ".." "..")))
 
 (define committed (string-trim (file->string manifest-path)))
 (define rebuilt (manifest->string (build-manifest repo-root)))
@@ -150,4 +149,103 @@
     (check-true (string-contains? supplemental-text "dynamic-require")
                 "supplemental-evidence map marks its unresolved dynamic edges")
     (check-true (string-contains? supplemental-text "supplemental-evidence-controller.rkt")
-                "supplemental-evidence map names the controller")))
+                "supplemental-evidence map names the controller"))
+
+  (test-case "optional inputs are recorded, never silently omitted"
+    (define datum (call-with-input-file manifest-path read))
+    (define availability (entry-ref* datum 'input-availability))
+    (check-true (pair? availability) "input-availability record present")
+    (for ([record (in-list availability)])
+      (define status (cdr record))
+      (check-true (and (string? status) (non-empty-string? status))
+                  (format "input ~a has an explicit status" (car record)))
+      (check-false (string-contains? status "unavailable")
+                   (format "input ~a is available in this repository" (car record)))))
+
+  (test-case "generation fails loudly when a required input is missing or corrupt"
+    (check-true (and (find-executable-path "git") #t))
+    (define (expect-failure root pattern)
+      (define message
+        (with-handlers ([exn:fail? exn-message])
+          (build-manifest root)
+          #f))
+      (check-true (and message (regexp-match? pattern message))
+                  (format "generation failed with ~a (got: ~a)" pattern message)))
+    (define (make-fixture-root)
+      (define root (make-temporary-file "cl1fixture-~a" 'directory))
+      (parameterize ([current-directory root])
+        (system* (find-executable-path "git") "init" "--quiet")
+        (make-directory* (build-path root "pkg"))
+        (make-directory* (build-path root "tests"))
+        (make-directory* (build-path root "docs" "architecture"))
+        (call-with-output-file (build-path root "pkg" "a.rkt")
+                               (lambda (out) (display "#lang racket/base\n(provide alpha)\n" out)))
+        (call-with-output-file (build-path root "tests" "test-a.rkt")
+                               (lambda (out) (display "#lang racket\n" out)))
+        (call-with-output-file
+         (build-path root "tests" ".coverage-manifest.json")
+         (lambda (out)
+           (display "{\"entries\":[{\"test\":\"tests/test-a.rkt\",\"covers\":[\"pkg/a.rkt\"]}]}"
+                    out)))
+        (call-with-output-file
+         (build-path root "tests" ".quick-admission.rktd")
+         (lambda (out)
+           (writeln '((record-version . 1)
+                      (owners ("tests/test-a.rkt" (status . admitted)
+                                                  (capability . #f)
+                                                  (hit-file . "pkg/a.rkt")
+                                                  (closure "tests/test-a.rkt" "pkg/a.rkt")
+                                                  (hashes ("tests/test-a.rkt" . "abc")))))
+                    out)))
+        (call-with-output-file (build-path root "docs" "architecture" "dependency-policy.rktd")
+                               (lambda (out) (display "((known-exceptions))" out)))
+        (system* (find-executable-path "git") "add" "-A"))
+      root)
+
+    ;; happy path: valid fixture builds; optional inputs marked unavailable
+    (define root (make-fixture-root))
+    (dynamic-wind
+     void
+     (lambda ()
+       (define manifest (build-manifest root))
+       (check-equal? (entry-ref* manifest 'production-modules) 1)
+       (define availability (entry-ref* manifest 'input-availability))
+       (check-true (and (assoc 'gsd-inventory availability) #t) "optional gsd inventory recorded")
+       (check-true (string-contains? (cdr (assoc 'gsd-inventory availability)) "unavailable")
+                   "missing optional gsd inventory is marked unavailable, not omitted")
+       (check-true (and (assoc 'ownership-map availability) #t) "optional ownership map recorded")
+       ;; required input removed -> explicit failure naming the input
+       (delete-file (build-path root "tests" ".coverage-manifest.json"))
+       (expect-failure root #rx"required input missing")
+       ;; required input corrupt -> explicit failure
+       (call-with-output-file (build-path root "tests" ".coverage-manifest.json")
+                              (lambda (out) (display "{not json" out))
+                              #:exists 'truncate/replace)
+       (expect-failure root #rx"unparseable")
+       ;; relationship violation: coverage target no longer exists
+       (call-with-output-file
+        (build-path root "tests" ".coverage-manifest.json")
+        (lambda (out)
+          (display "{\"entries\":[{\"test\":\"tests/test-a.rkt\",\"covers\":[\"pkg/gone.rkt\"]}]}"
+                   out))
+        #:exists 'truncate/replace)
+       (expect-failure root #rx"coverage target missing on disk")
+       ;; restore valid coverage, then empty the admission record -> explicit failure
+       (call-with-output-file
+        (build-path root "tests" ".coverage-manifest.json")
+        (lambda (out)
+          (display "{\"entries\":[{\"test\":\"tests/test-a.rkt\",\"covers\":[\"pkg/a.rkt\"]}]}" out))
+        #:exists 'truncate/replace)
+       (call-with-output-file (build-path root "tests" ".quick-admission.rktd")
+                              (lambda (out) (writeln '((record-version . 1) (owners ())) out))
+                              #:exists 'truncate/replace)
+       (expect-failure root #rx"no audited owners"))
+     (lambda () (delete-directory/files root)))
+
+    ;; tracked source deleted from disk -> explicit failure
+    (define root2 (make-fixture-root))
+    (dynamic-wind void
+                  (lambda ()
+                    (delete-file (build-path root2 "pkg" "a.rkt"))
+                    (expect-failure root2 #rx"cannot be read"))
+                  (lambda () (delete-directory/files root2)))))
