@@ -74,16 +74,23 @@
                 (string-split (git-output root '("ls-files" "--" "*.rkt")) "\n"))
         string<?))
 
+;; Returns (values datums parse-error-or-#f). A reader error keeps the reliable
+;; prefix instead of silently turning a malformed module into an empty module.
 (define (read-datums source)
   (define without-lang (regexp-replace #px"^#lang[^\n]*(?:\n|$)" source ""))
-  (with-handlers ([exn:fail:read? (lambda (_) '())])
-    (call-with-input-string without-lang
-                            (lambda (in)
-                              (let loop ([acc '()])
-                                (define datum (read in))
-                                (if (eof-object? datum)
-                                    (reverse acc)
-                                    (loop (cons datum acc))))))))
+  (call-with-input-string without-lang
+                          (lambda (in)
+                            (let loop ([acc '()])
+                              (define result
+                                (with-handlers ([exn:fail:read? (lambda (e)
+                                                                  (cons #f (exn-message e)))])
+                                  (cons #t (read in))))
+                              (if (car result)
+                                  (let ([datum (cdr result)])
+                                    (if (eof-object? datum)
+                                        (values (reverse acc) #f)
+                                        (loop (cons datum acc))))
+                                  (values (reverse acc) (cdr result)))))))
 
 (define (source-text root path)
   (call-with-input-file (build-path root (string->path path)) port->string))
@@ -92,6 +99,13 @@
   (if (file-exists? (build-path root (string->path rel)))
       (call-with-input-file (build-path root (string->path rel)) sha1)
       "missing"))
+
+(define (source-identity root paths)
+  (define blob
+    (string-join (for/list ([p (in-list paths)])
+                   (format "~a:~a" p (sha1-fingerprint root p)))
+                 "\n"))
+  (call-with-input-bytes (string->bytes/utf-8 blob) sha1))
 
 (define (manifest-path)
   "docs/architecture/subsystem-manifest.rktd")
@@ -144,66 +158,68 @@
           'capability
           (or (entry-ref owner 'capability) #f))))
 
+;; Coverage evidence is either available or explicitly unavailable. An empty
+;; collection is never silently reported as "no owner tests".
 (define (load-coverage-entries root)
   (define coverage-file (build-path root (string->path (coverage-path))))
-  (unless (file-exists? coverage-file)
-    '())
-  (define data
-    (with-handlers ([exn:fail? (lambda (_) (hash))])
-      (call-with-input-file coverage-file read-json)))
-  (if (hash? data)
-      (hash-ref data 'entries '())
-      '()))
+  (cond
+    [(not (file-exists? coverage-file)) (values '() 'unavailable:missing)]
+    [else
+     (define data
+       (with-handlers ([exn:fail? (lambda (_) #f)])
+         (call-with-input-file coverage-file read-json)))
+     (cond
+       [(not (hash? data)) (values '() 'unavailable:unparseable)]
+       [else
+        (define entries (hash-ref data 'entries #f))
+        (if (and (list? entries)
+                 (for/and ([e (in-list entries)])
+                   (and (hash? e) (string? (hash-ref e 'test #f)) (list? (hash-ref e 'covers #f)))))
+            (values entries 'available)
+            (values '() 'unavailable:malformed))])]))
+
+(define (coverage-available? status)
+  (eq? status 'available))
 
 (define (hash-merge a b)
   (for/fold ([result a]) ([(k v) (in-hash b)])
     (hash-set result k v)))
 
 (define (coverage-tests root path)
+  (define-values (entries status) (load-coverage-entries root))
   (define manifest (load-manifest root))
-  (for/list ([entry (in-list (load-coverage-entries root))]
-             #:when (member path (hash-ref entry 'covers '())))
-    (define test (hash-ref entry 'test ""))
-    (hash-merge (hash 'test test) (or (manifest-owner-status manifest test) (hash)))))
+  (values (for/list ([entry (in-list entries)]
+                     #:when (member path (hash-ref entry 'covers '())))
+            (define test (hash-ref entry 'test ""))
+            (hash-merge (hash 'test test) (or (manifest-owner-status manifest test) (hash))))
+          status))
 
 ;; ------------------------------------------------------------ static index --
 
 (define (definition-record datum module)
-  (and (pair? datum)
-       (let ([head (car datum)]
-             [target (and (pair? (cdr datum)) (cadr datum))])
-         (cond
-           [(memq head
-                  '(define define/contract
-                     define+provide
-                     define-syntax
-                     define-syntax-rule
-                     define-values))
-            (define name
-              (cond
-                [(symbol? target) target]
-                [(pair? target) (car target)]
-                [else #f]))
-            (and (symbol? name)
-                 (hash 'name
-                       (symbol->string name)
-                       'module
-                       module
-                       'kind
-                       (symbol->string head)
-                       'line
-                       #f))]
-           [(memq head '(struct define-struct))
-            (and (symbol? target)
-                 (hash 'name
-                       (symbol->string target)
-                       'module
-                       module
-                       'kind
-                       (symbol->string head)
-                       'line
-                       #f))]
-           [else #f]))))
+  (and
+   (pair? datum)
+   (let ([head (car datum)]
+         [target (and (pair? (cdr datum)) (cadr datum))])
+     (cond
+       [(memq head
+              '(define define/contract
+                 define+provide
+                 define-syntax
+                 define-syntax-rule
+                 define-values))
+        (define name
+          (cond
+            [(symbol? target) target]
+            [(pair? target) (car target)]
+            [else #f]))
+        (and (symbol? name)
+             (hash 'name (symbol->string name) 'module module 'kind (symbol->string head) 'line #f))]
+       [(memq head '(struct define-struct))
+        (and
+         (symbol? target)
+         (hash 'name (symbol->string target) 'module module 'kind (symbol->string head) 'line #f))]
+       [else #f]))))
 
 (define (top-level-forms datum)
   (if (and (pair? datum) (eq? (car datum) 'begin))
@@ -249,28 +265,102 @@
                 #:when (regexp-match? rx line))
       n)))
 
-(define (dynamic-require-modules path source)
+(define (collect-runtime-paths forms)
+  (for/hash ([d (in-list forms)]
+             #:when (and (pair? d)
+                         (eq? (car d) 'define-runtime-path)
+                         (pair? (cdr d))
+                         (symbol? (cadr d))
+                         (pair? (cddr d))
+                         (string? (caddr d))))
+    (values (cadr d) (caddr d))))
+
+;; Every `dynamic-require` call is retained, even when its target cannot be
+;; resolved. Unresolved targets are uncertainty, never empty evidence.
+(define (collect-dynamic-calls datums)
   (define (walk value)
     (cond
-      [(and (pair? value)
-            (eq? (car value) 'dynamic-require)
-            (pair? (cdr value))
-            (string? (cadr value))
-            (string-suffix? (cadr value) ".rkt"))
-       (filter values (list (normal-require-path path (cadr value))))]
+      [(and (pair? value) (eq? (car value) 'dynamic-require) (pair? (cdr value)))
+       (list (hash 'target (cadr value)))]
       [(pair? value) (append (walk (car value)) (walk (cdr value)))]
       [else '()]))
-  (sort (remove-duplicates (apply append (map walk (read-datums source))) string=?) string<?))
+  (remove-duplicates (apply append (map walk datums))
+                     (lambda (a b) (equal? (hash-ref a 'target) (hash-ref b 'target)))))
+
+(define (resolve-dynamic-calls idx record calls)
+  (define runtime-paths (hash-ref record 'runtime-paths))
+  (sort (for/list ([call (in-list calls)])
+          (define target (hash-ref call 'target))
+          (define candidate
+            (cond
+              [(string? target) target]
+              [(symbol? target) (hash-ref runtime-paths target #f)]
+              [else #f]))
+          (define normalized
+            (and candidate
+                 (string-suffix? candidate ".rkt")
+                 (normal-require-path (hash-ref record 'path) candidate)))
+          (define resolved? (and normalized (hash-has-key? (hash-ref idx 'records) normalized)))
+          (hash 'target
+                (~a target)
+                'status
+                (cond
+                  [resolved? (if (symbol? target) 'runtime-path-resolved 'literal-resolved)]
+                  [else 'unresolved])
+                'module
+                (or normalized #f)
+                'reason
+                (cond
+                  [resolved? "resolved against tracked sources"]
+                  [(not candidate) "dynamic target is computed or unbound"]
+                  [else "target is not a tracked .rkt source"])))
+        (lambda (a b) (string<? (hash-ref a 'target) (hash-ref b 'target)))))
 
 (define (module-record root path)
   (define source (source-text root path))
-  (define forms (apply append (map top-level-forms (read-datums source))))
-  (define definitions (filter values (map (lambda (d) (definition-record d path)) forms)))
+  (define-values (datums parse-error) (read-datums source))
+  (define forms (apply append (map top-level-forms datums)))
+  (define runtime-paths (collect-runtime-paths forms))
+  (define struct-fields
+    (for/hash ([d (in-list forms)]
+               #:when (and (pair? d)
+                           (memq (car d) '(struct define-struct))
+                           (symbol? (cadr d))
+                           (pair? (cddr d))
+                           (list? (caddr d))))
+      (values (cadr d) (filter symbol? (caddr d)))))
+  (define (struct-bindings name)
+    (define fields (hash-ref struct-fields name '()))
+    (cons (symbol->string name)
+          (append (list (string-append (symbol->string name) "?"))
+                  (for/list ([field (in-list fields)])
+                    (format "~a-~a" name field)))))
+  (define (expand-struct-out spec)
+    (if (and (pair? spec)
+             (eq? (car spec) 'struct-out)
+             (symbol? (cadr spec))
+             (hash-has-key? struct-fields (cadr spec)))
+        (map string->symbol (struct-bindings (cadr spec)))
+        spec))
+  (define definitions
+    (append (filter values (map (lambda (d) (definition-record d path)) forms))
+            (for*/list ([d (in-list forms)]
+                        #:when
+                        (and (pair? d) (memq (car d) '(struct define-struct)) (symbol? (cadr d)))
+                        [field (in-list (hash-ref struct-fields (cadr d) '()))])
+              (hash 'name
+                    (format "~a-~a" (cadr d) field)
+                    'module
+                    path
+                    'kind
+                    "generated-struct-accessor"
+                    'line
+                    #f))))
   (define explicit-exports
     (for*/list ([d (in-list forms)]
                 #:when (and (pair? d) (eq? (car d) 'provide))
                 [spec (in-list (cdr d))]
-                [name (in-list (provide-specs spec))]
+                [name (in-list (provide-specs (expand-struct-out spec)))]
                 #:when name)
       (hash 'name
             name
@@ -308,8 +398,15 @@
         exports
         'requires
         (collected-module-path-strings source)
-        'dynamic-requires
-        (dynamic-require-modules path source)
+        'runtime-paths
+        runtime-paths
+        'dynamic-calls
+        (collect-dynamic-calls datums)
+        'struct-fields
+        (for/hash ([(k v) (in-hash struct-fields)])
+          (values (symbol->string k) (map symbol->string v)))
+        'parse-error
+        parse-error
         'unresolved-exports
         (and unresolved-exports #t)))
 
@@ -319,13 +416,15 @@
 
 (define (build-index #:root [root #f])
   (define r (resolve-root root))
-  (or (hash-ref index-cache r #f)
-      (let* ([paths (tracked-rkt-paths r)]
-             [_ (unless (pair? paths)
-                  (raise-user-error 'semantic-navigator
-                                    "no tracked Racket sources under ~a; refusing an empty index"
-                                    r))]
-             [records (for/hash ([p (in-list paths)])
+  (define paths (tracked-rkt-paths r))
+  (unless (pair? paths)
+    (raise-user-error 'semantic-navigator
+                      "no tracked Racket sources under ~a; refusing an empty index"
+                      r))
+  (define identity (source-identity r paths))
+  (define cached (hash-ref index-cache r #f))
+  (or (and cached (equal? (hash-ref cached 'source-identity) identity) cached)
+      (let* ([records (for/hash ([p (in-list paths)])
                         (values p (module-record r p)))]
              [deps (for/hash ([p (in-list paths)])
                      (values
@@ -351,7 +450,9 @@
                 (hash->immutable-hash (for/hash ([(k v) (in-hash callers)])
                                         (values k (sort v string<?))))
                 'maps
-                (map-files r)))
+                (map-files r)
+                'source-identity
+                identity))
         (hash-set! index-cache r idx)
         idx)))
 
@@ -376,6 +477,23 @@
             (filter values (regexp-match* rx line #:match-select cadr))))
    string=?))
 
+(define (expected-map-files root)
+  (define readme (build-path root (string->path (maps-dir)) "README.md"))
+  (if (file-exists? readme)
+      (sort (for/list ([m (in-list (regexp-match* #px"\\]\\(([^)]+\\.md)\\)"
+                                             (file->string readme)
+                                             #:match-select cadr))]
+                       #:unless (or (string=? m "README.md") (string-contains? m "/")))
+              (string-append (maps-dir) "/" m))
+            string<?)
+      '()))
+
+(define (manifest-dynamic-modules datum)
+  (remove-duplicates
+   (apply append (for/list ([sub (in-list (manifest-subsystems datum))])
+                   (or (entry-ref sub 'dynamic-require-modules) '())))
+   string=?))
+
 (define (freshness-info root index)
   (define manifest (load-manifest root))
   (define availability (or (entry-ref manifest 'input-availability) '()))
@@ -383,30 +501,46 @@
     (for/list ([entry (in-list availability)]
                #:when (string-contains? (format "~a" (cdr entry)) "unavailable"))
       (car entry)))
-  (define missing-maps
-    (for/list ([rel (in-list (hash-ref index 'maps))]
+  (define present-maps (hash-ref index 'maps))
+  (define map-deletions
+    (for/list ([rel (in-list present-maps)]
                #:unless (file-exists? (build-path root (string->path rel))))
       rel))
-  (hash 'stale?
-        (and (or (pair? unavailable)
-                 (pair? missing-maps)
-                 (null? (hash-ref index 'maps))
-                 (not (file-exists? (build-path root (string->path (manifest-path))))))
-             #t)
-        'unavailable-inputs
-        (sort (map symbol->string unavailable) string<?)
-        'missing-maps
-        missing-maps
+  (define map-index-gaps
+    (for/list ([rel (in-list (expected-map-files root))]
+               #:unless (member rel present-maps))
+      rel))
+  (define missing-maps (remove-duplicates (append map-deletions map-index-gaps) string<?))
+  (define metadata-unavailable?
+    (or (pair? unavailable)
+        (pair? missing-maps)
+        (null? present-maps)
+        (not (file-exists? (build-path root (string->path (manifest-path)))))))
+  (hash 'stale? (and metadata-unavailable? #t)
+        'stale-semantics
+        (string-append
+         "stale? reports DETECTED missing/unavailable metadata only; it does not assert "
+         "regeneration was validated. See regeneration-verified and source-identity.")
+        'metadata-availability
+        (hash 'unavailable-inputs (sort (map symbol->string unavailable) string<?)
+              'missing-maps missing-maps
+              'manifest-exists? (file-exists? (build-path root (string->path (manifest-path))))
+              'coverage-exists? (file-exists? (build-path root (string->path (coverage-path))))
+              'admission-exists? (file-exists? (build-path root (string->path (admission-path)))))
+        'source-identity
+        (hash 'tracked-modules (length (hash-ref index 'paths))
+              'digest (hash-ref index 'source-identity))
+        'regeneration-verified #f
+        'regeneration-command "raco test tests/test-subsystem-maps.rkt (not executed here)"
         'revision
         (let ([head (string-trim (git-output root '("rev-parse" "HEAD")))])
           (if (regexp-match? #px"^[0-9a-f]{40}$" head) head "unavailable: no committed HEAD"))
         'fingerprints
         (for/list ([rel (in-list (sort (append (list (manifest-path) (coverage-path) (admission-path))
-                                               (hash-ref index 'maps))
-                                       string<?))])
+                                               present-maps)
+                                        string<?))])
           (hash 'path rel 'sha1 (sha1-fingerprint root rel)))
-        'byte-regeneration-check
-        "tests/test-subsystem-maps.rkt (not executed by the navigator)"))
+        'byte-regeneration-check "tests/test-subsystem-maps.rkt (not executed by the navigator)"))
 
 (define (textual-reference? root path name)
   (with-handlers ([exn:fail? (lambda (_) #f)])
@@ -437,51 +571,41 @@
   (define record (hash-ref (hash-ref idx 'records) path #f))
   (unless record
     (raise-user-error 'semantic-navigator "no tracked module: ~a" path))
-  (define owners (coverage-tests r path))
+  (define-values (owners coverage-status) (coverage-tests r path))
   (define excerpts (map-excerpts r idx path))
-  (define dynamic (hash-ref record 'dynamic-requires))
+  (define dynamic (resolve-dynamic-calls idx record (hash-ref record 'dynamic-calls)))
+  (define manifest (load-manifest r))
+  (define manifest-marker? (member path (manifest-dynamic-modules manifest)))
+  (define unresolved-dynamic? (for/or ([d (in-list dynamic)])
+                                (eq? (hash-ref d 'status) 'unresolved)))
   (define freshness (freshness-info r idx))
   (define uncertainty
-    (append (if (pair? dynamic)
-                '(dynamic-require)
-                '())
-            (if (null? owners)
-                '(no-owner-tests)
-                '())
-            (if (null? excerpts)
-                '(no-curated-map)
-                '())
-            (if (hash-ref record 'unresolved-exports)
-                '(unresolved-provide-form)
-                '())
-            (if (hash-ref freshness 'stale?)
-                '(stale-map-metadata)
-                '())))
-  (hash 'module
-        path
-        'subsystem
-        (car (string-split path "/"))
-        'definitions
-        (hash-ref record 'definitions)
-        'exports
-        (hash-ref record 'exports)
-        'requires
-        (hash-ref record 'requires)
-        'callers
-        (caller-records idx path)
-        'dynamic-requires
-        (for/list ([d (in-list dynamic)])
-          (hash 'module d 'status 'unresolved))
-        'owner-tests
-        owners
-        'map-excerpts
-        excerpts
-        'freshness
-        freshness
-        'uncertainty
-        (remove-duplicates uncertainty)
-        'verification-note
-        verification-note))
+    (append (if (pair? dynamic) '(dynamic-require) '())
+            (if unresolved-dynamic? '(unresolved-dynamic-target) '())
+            (if (and manifest-marker? (null? dynamic))
+                '(manifest-dynamic-marker-unexplained) '())
+            (if (coverage-available? coverage-status)
+                (if (null? owners) '(no-owner-tests) '())
+                '(coverage-unavailable))
+            (if (hash-ref record 'parse-error) '(source-parse-incomplete) '())
+            (if (null? excerpts) '(no-curated-map) '())
+            (if (hash-ref record 'unresolved-exports) '(unresolved-provide-form) '())
+            (if (hash-ref freshness 'stale?) '(stale-map-metadata) '())))
+  (hash 'module path
+        'subsystem (car (string-split path "/"))
+        'definitions (hash-ref record 'definitions)
+        'exports (hash-ref record 'exports)
+        'requires (hash-ref record 'requires)
+        'callers (caller-records idx path)
+        'dynamic-requires dynamic
+        'manifest-dynamic-marker? (and manifest-marker? #t)
+        'owner-tests owners
+        'coverage-status coverage-status
+        'source-parse-error (hash-ref record 'parse-error)
+        'map-excerpts excerpts
+        'freshness freshness
+        'uncertainty (remove-duplicates uncertainty)
+        'verification-note verification-note))
 
 (define (symbol-query name #:root [root #f] #:limit [limit 20])
   (define idx (build-index #:root root))
@@ -527,9 +651,11 @@
                 '(caller-list-truncated)
                 '())
             (if (for/or ([m (in-list defining-modules)])
-                  (pair? (hash-ref (hash-ref (hash-ref idx 'records) m) 'dynamic-requires)))
-                '(dynamic-require)
-                '())))
+                  (pair? (hash-ref (hash-ref (hash-ref idx 'records) m) 'dynamic-calls)))
+                '(dynamic-require) '())
+            (if (for/or ([m (in-list defining-modules)])
+                  (hash-ref (hash-ref (hash-ref idx 'records) m) 'parse-error))
+                '(source-parse-incomplete) '())))
   (hash 'symbol
         (symbol->string name)
         'definitions
@@ -555,7 +681,7 @@
   (define changes (sort (remove-duplicates changed) string<?))
   (define report (changed-selection r (admitted-owners) changes))
   (define included (change-report-included report))
-  (define entries (load-coverage-entries r))
+  (define-values (entries coverage-status) (load-coverage-entries r))
   (define manifest (load-manifest r))
   (define owner-tests
     (for/list ([test (in-list included)])
@@ -591,9 +717,13 @@
             (if (pair? (change-report-unattributable report))
                 (list (format "~a owners had no @covers attribution (included fail open)"
                               (length (change-report-unattributable report))))
-                '())))
+                '())
+            (if (coverage-available? coverage-status)
+                '()
+                (list (format "coverage metadata unavailable: ~a" coverage-status)))))
   (hash 'changed
         changes
+        'coverage-status coverage-status
         'selected-owners
         included
         'excluded-owners
@@ -616,9 +746,7 @@
         'revision
         (or revision
             (let ([head (string-trim (git-output r '("rev-parse" "HEAD")))])
-              (if (regexp-match? #px"^[0-9a-f]{40}$" head)
-                  head
-                  "unavailable: no committed HEAD")))
+              (if (regexp-match? #px"^[0-9a-f]{40}$" head) head "unavailable: no committed HEAD")))
         'uncertainty
         uncertainty
         'verification-note
@@ -736,24 +864,43 @@
     [(vector? datum) (canonical-write (vector->list datum) out)]
     [else (write datum out)]))
 
+(define (entry-label v)
+  (define base (or (hash-ref v 'module #f)
+                   (hash-ref v 'test #f)
+                   (hash-ref v 'map #f)
+                   (hash-ref v 'task #f)
+                   (hash-ref v 'path #f)
+                   (hash-ref v 'symbol #f)
+                   "item"))
+  (define line (hash-ref v 'line #f))
+  (define status (hash-ref v 'status #f))
+  (format "~a~a~a" base (if line (format ":~a" line) "")
+          (if status (format " [~a]" status) "")))
+
 (define (render datum machine?)
   (if machine?
       (canonical-write datum (current-output-port))
-      (for ([(key value) (in-hash datum)])
+      (for ([key (in-list (sort (hash-keys datum)
+                                (lambda (a b) (string<? (~a a) (~a b)))))])
+        (define value (hash-ref datum key))
         (printf "~a: " key)
         (cond
-          [(and (list? value)
-                (for/and ([v (in-list value)])
-                  (hash? v)))
-           (printf "~a entries\n" (length value))
-           (for ([v (in-list value)])
-             (printf
-              "  - ~a\n"
-              (or (hash-ref v 'module #f) (hash-ref v 'test #f) (hash-ref v 'map #f)
-                  (hash-ref v 'task #f) (hash-ref v 'path #f) (hash-ref v 'symbol #f)
-                  "item")))]
+          [(and (list? value) (for/and ([v (in-list value)]) (hash? v)))
+           (printf "~a entries
+" (length value))
+           (for ([v (in-list (take-n value 20))])
+             (printf "  - ~a~a\n"
+                     (entry-label v)
+                     (let ([text (hash-ref v 'text #f)])
+                       (if text (format " — ~a" text) ""))))
+           (when (> (length value) 20) (printf "  ... ~a more entries\n" (- (length value) 20)))]
           [(list? value) (printf "~a\n" (string-join (map ~a value) ", "))]
-          [(hash? value) (printf "~a keys\n" (hash-count value))]
+          [(hash? value)
+           (printf "~a\n"
+                   (string-join (for/list ([k (in-list (sort (hash-keys value)
+                                                              (lambda (a b) (string<? (~a a) (~a b)))))])
+                                  (format "~a=~a" k (hash-ref value k)))
+                                ", "))]
           [else (printf "~a\n" value)])))
   (newline))
 

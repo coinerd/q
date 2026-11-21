@@ -13,10 +13,11 @@ it is not part of the trusted runtime, it does not execute tests, and it require
 - The CL1 manifest's subsystems are **top-level directory groupings**, not component
   boundaries. This tool adds static module- and symbol-level resolution on top; capability
   boundaries are still recorded in the curated maps and remain an explicit modelling step.
-- Freshness here means "inputs currently exist and their content fingerprints are shown".
-  The byte-identical regeneration check (`tests/test-subsystem-maps.rkt`) is referenced but
-  **not executed** by the navigator. Absent/stale metadata is reported, never treated as a
-  green signal.
+- Freshness has three separate fields: **metadata availability** (including coverage
+  availability), **source identity** (a digest of all tracked source fingerprints) and
+  **regeneration-verified**, which is always `#f` because the byte-identical regeneration
+  check (`tests/test-subsystem-maps.rkt`) is referenced but **not executed** here. `stale? #f`
+  means only "no missing metadata detected", never "regeneration was validated".
 - `context` reuses **qt's own** `changed-selection` over admitted owners. It is labelled a
   **reproduction aid**, never a PR verification claim; all required CI contexts remain
   unchanged and authoritative. No `./qt` gate or policy was modified.
@@ -47,10 +48,14 @@ Multiple defining modules produce `ambiguous-symbol`; an unmatched name produces
 
 ### `module PATH`
 
-Subsystem, definitions, exports, direct static `require` edges, direct static callers, literal
-`dynamic-require` targets (always `unresolved`), owner tests from `@covers`, and the curated
-map lines that mention the module. Uncertainty names unresolved provide forms, dynamic edges,
-missing owner tests, absent curated maps and stale/missing metadata.
+Subsystem, definitions, exports, direct static `require` edges, direct static callers, resolved
+`dynamic-require` targets (`literal-resolved` or `runtime-path-resolved`, cross-checked against
+the CL1 manifest marker) and `unresolved` targets with a reason. Owner tests from `@covers` are
+distinguished from `coverage-unavailable`: missing/corrupt metadata is never reported as absent
+ownership. Reader failures keep the reliable prefix and add `source-parse-incomplete`; generated
+`struct-out` accessors are represented where statically established. Uncertainty names
+unresolved targets, unresolved provide forms, missing owner tests, absent curated maps and
+stale/missing metadata.
 
 ### `context PATH... | --changed RANGE`
 
@@ -91,13 +96,26 @@ these inputs or comes from a curated map that is itself pinned by `tests/test-su
 
 - Tests: `tests/test-semantic-navigator.rkt` pins ambiguous/missing symbols, dynamic edges,
   ownership gaps, stale/missing maps, reuse of qt selection and CL0 containment behaviour.
-- The index is a snapshot of tracked sources in one worktree; it does not watch the filesystem.
-  Re-run a query after edits; content fingerprints make the observed input set explicit.
+- The index caches per repository root, but reuse is gated by a digest of every tracked source's
+  content (`source-identity`), so edits invalidate it automatically. `invalidate-index-cache!`
+  remains available for explicit invalidation. Content fingerprints make the observed input set
+  explicit.
 - Static parsing does not expand macros or resolve arbitrary computed `provide`/`require`
-  forms; those are reported as unresolved uncertainty, never guessed.
+  forms; those are reported as unresolved uncertainty, never guessed. `dynamic-require` targets
+  bound by `define-runtime-path` are resolved statically; computed targets stay `unresolved`.
 - Textual importer candidates are not proof of a call, correct binding or behavioral
   dependency. Dynamic requires, reflection and runtime-generated dependencies remain
   unresolved and require broader verification.
 - The selective-verification defect corpus and the frozen CL0 task corpus are for later
   shadow-mode/safety evaluation (CL4/CL5). This tool is not an authority for PR verification
   and does not change the required CI contexts.
+
+## Quantitative benchmark deferral
+
+The CL2 acceptance criterion to compare context consumption, file reads, development time and
+correctness against CL0 is **not satisfied by this implementation**: no fresh-context agent
+trials were executed, and mechanical fact containment does not measure cognitive load. The
+implementation therefore supports only the claim that relevant facts are *available* in a
+bounded bundle. Quantitative comparison is proposed for explicit deferral to CL5 (#9982)
+under the frozen CL0 protocol; that deferral requires maintainer approval before CL2 is
+closed as fully measured.
