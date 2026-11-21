@@ -113,10 +113,14 @@ The core is invoked **only at stage E**, never at P1/P2/P3/I1/I2:
   booleans computed by the adapter (`preserved-shape-valid?`, `third-generation?`), so the core needs
   no policy import.
 - P2 stays adapter-side (pointer load + expected-sha comparison).
-- Stage E is two pure calls in a fixed order, because the E5/E6 reads must not happen when E1–E4
-  already refuse: `(decide-disposition-lineage request amendment terminal campaign)` evaluates
-  E1–E4, then the adapter reads context/source, then
-  `(decide-disposition-evidence amendment context source)` evaluates E5–E6.
+- Stage E is **one pure evaluator per observable stage**, called by the adapter immediately after
+  that stage's facts are read: `decide-disposition-identity` (E1), `decide-disposition-terminal`
+  (E2), `decide-disposition-allocation` (E3), `decide-disposition-campaign` (E4),
+  `decide-disposition-context` (E5), `decide-disposition-source` (E6). Each refusal returns before
+  the adapter observes the next stage, so an invalid amendment cannot trigger parent
+  authentication and an invalid context cannot trigger source/journal/proof reads.
+  `decide-disposition-lineage` and `decide-disposition-evidence` remain as pure compositions of
+  those stages for the decision matrix.
 - P3/I1/I2 stay adapter-side; P3 additionally builds the descriptor and seals the task, I2
   re-authenticates preserved facts and performs the CAS install.
 
@@ -174,7 +178,15 @@ New fast, mutation-free files:
   **multi-fault precedence cases** (e.g. amendment mismatch + terminal drift; wrong allocation +
   stale fence; context drift + source drift) asserting the winning code and the exact message.
 - `tests/test-gsd-supplemental-disposition-decision-purity.rkt` — transitive closure and source
-  audit described above, plus an export-surface pin (views, decision accessors, two evaluators).
+  audit described above, plus an export-surface pin (views, decision accessors, six stage
+  evaluators and the two compositions).
+
+Adapter-level ordering guards live in `tests/test-gsd-supplemental-disposition-eligibility.rkt`:
+E1 is asserted before parent authentication with a corrupt campaign file, E4 before the context
+read with an unreadable journal, and E5 before the source/proof read with an empty proof root.
+The E5a identity precheck is pinned by the pure matrix (it refuses from identity fields alone, with
+no expected value supplied); a mismatched task context cannot be constructed at the adapter level
+without fabricating authenticated lineage, which the fixture policy forbids.
 
 Retained unchanged as integration guards: the six tests in §3.3. Shadow evidence only: required CI
 contexts, admission records and `qt` selection remain authoritative.

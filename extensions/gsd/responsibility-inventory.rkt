@@ -1304,6 +1304,10 @@
                                "../../util/json/checksum"
                                "supplemental-disposition-claim"
                                "evidence-readiness"))
+   ;; Pure decision core for the disposition gate (CL4 #9981): no effects, no
+   ;; repository reads and no non-`racket/base` requires. The adapter below owns
+   ;; every observation, lease, lock and write.
+   (make-entry "supplemental-disposition-decision.rkt" 'campaign-state '() '() '())
    (make-entry "supplemental-evidence-disposition.rkt"
                'campaign-state
                '(git parameterize sha256)
@@ -1322,6 +1326,7 @@
                                "supplemental-evidence-authority"
                                "supplemental-evidence-format"
                                "supplemental-evidence-journal"
+                               "supplemental-disposition-decision"
                                "supplemental-disposition-policy"
                                "supplemental-evidence-controller"
                                "../gsd-planning/execution-policy"))
