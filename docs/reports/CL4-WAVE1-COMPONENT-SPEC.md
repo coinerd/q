@@ -113,7 +113,10 @@ The core is invoked **only at stage E**, never at P1/P2/P3/I1/I2:
   booleans computed by the adapter (`preserved-shape-valid?`, `third-generation?`), so the core needs
   no policy import.
 - P2 stays adapter-side (pointer load + expected-sha comparison).
-- Stage E becomes one pure call: `(decide-supplemental-disposition eligibility-views)`.
+- Stage E is two pure calls in a fixed order, because the E5/E6 reads must not happen when E1–E4
+  already refuse: `(decide-disposition-lineage request amendment terminal campaign)` evaluates
+  E1–E4, then the adapter reads context/source, then
+  `(decide-disposition-evidence amendment context source)` evaluates E5–E6.
 - P3/I1/I2 stay adapter-side; P3 additionally builds the descriptor and seals the task, I2
   re-authenticates preserved facts and performs the CAS install.
 
@@ -122,22 +125,23 @@ The core is invoked **only at stage E**, never at P1/P2/P3/I1/I2:
 ```text
 (struct disposition-amendment-view (plan-id wave parent-proposal parent-approval
                                     terminal-body-sha256 terminal-record-sha256 allocation))
-(struct disposition-terminal-view  (proposal-sha256 terminal-sha256 terminal-record-sha256
+(struct disposition-request-view   (plan-id wave pointer expected-pointer))
+(struct disposition-terminal-view  (proposal terminal-sha256 terminal-record-digest
                                     allocation late-terminal?))
-(struct disposition-campaign-view   (record-present? wave-found? attempt-found? wave-status
+(struct disposition-campaign-view   (record-found? wave-found? attempt-found? status
                                      cancelled? budget-paused? attempt-id attempt-fence
                                      coordinator-fence))
-(struct disposition-context-view    (plan-id wave snapshot-sha256 expected-context actual-context))
-(struct disposition-source-view     (source-present? manifest-present? execution-cwd context-repo
-                                     branch-match? origin-match? head-match? tree-match?))
+(struct disposition-context-view    (plan-id wave snapshot-sha256 expected actual))
+(struct disposition-source-view     (source-found? proof-found? execution-cwd context-repo
+                                     refs-match? head-match? tree-match?))
 (struct disposition-decision        (status code message))   ; status = allow | refuse
 ```
 
 - Every field is either a primitive or an already-authenticated immutable value read by the adapter;
   `late-terminal?` and the context/ownership comparisons are computed by the adapter where they
   require authority or storage helpers.
-- `decide-supplemental-disposition` evaluates stages in order and returns `refuse` with the exact
-  current message and a stable machine code, or `allow`.
+- The two evaluators return `refuse` with the exact current message and a stable machine code, or
+  `allow`. Messages are owned by the core so the adapter raises exactly one copy of each text.
 - **Dependency invariant:** the core's **transitive import closure contains no effectful module**.
   Target closure is `{racket/base}` only (structs and pure helpers in the same file). If a pure
   predicate is shared, it moves to a leaf module whose own closure is also `{racket/base}`.
@@ -152,7 +156,7 @@ The core is invoked **only at stage E**, never at P1/P2/P3/I1/I2:
 
 | Dimension | Specification |
 | --- | --- |
-| Inputs/outputs | five view structs → one `disposition-decision` (`allow`/`refuse` + stable code + verbatim adapter message) |
+| Inputs/outputs | six view structs → `disposition-decision` (`allow`/`refuse` + stable code + verbatim adapter message) via two ordered evaluators |
 | State ownership | core owns no state; durable writer stays `supplemental-disposition-claim.rkt` (single CAS); wave status untouched |
 | Side effects | core: none, and none transitively; adapter keeps lease, lock, git head, journal/receipt/proof reads, retention and claim install |
 | Ordering | stages 0, P1, P2, E, P3, I1, I2 as in §3.2; earlier-stage refusal always wins; no prose-based authorization |
@@ -170,7 +174,7 @@ New fast, mutation-free files:
   **multi-fault precedence cases** (e.g. amendment mismatch + terminal drift; wrong allocation +
   stale fence; context drift + source drift) asserting the winning code and the exact message.
 - `tests/test-gsd-supplemental-disposition-decision-purity.rkt` — transitive closure and source
-  audit described above.
+  audit described above, plus an export-surface pin (views, decision accessors, two evaluators).
 
 Retained unchanged as integration guards: the six tests in §3.3. Shadow evidence only: required CI
 contexts, admission records and `qt` selection remain authoritative.
@@ -206,7 +210,7 @@ measurements.
   test-runner/scheduler/CI changes, generic framework or DSL, broad GSD rearrangement, and CL0
   trials (owned by CL5 #9982).
 
-## 7. Wave 2 plan (after these corrections are accepted)
+## 7. Wave 2 plan (implemented on this branch, pending review)
 
 Files: `extensions/gsd/supplemental-disposition-decision.rkt`,
 `extensions/gsd/supplemental-evidence-disposition.rkt` (stage-preserving adapter),
