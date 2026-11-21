@@ -140,8 +140,10 @@
       ;; +1 candidate-preserving recovery core leaf
       ;; (supplemental-preserved-candidate);
       ;; +1 R3c pure delivery-outcome value module.
+      ;; +1 CL4 #9981 pure disposition decision core
+      ;; (supplemental-disposition-decision).
       (check-equal? (length inventory)
-                    115
+                    116
                     "every on-disk GSD module has exactly one inventory entry"))
 
     (test-case "supplemental worker descriptor projects policy without dispatch authority"
