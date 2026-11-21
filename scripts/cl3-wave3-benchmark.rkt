@@ -96,32 +96,35 @@
 
 (define (worker-eval! root task label)
   (parameterize ([active-workers '()])
-    (dynamic-wind
-     void
-     (lambda ()
-       (define start (current-inexact-milliseconds))
-       (define session (start-tracked-worker! root))
-       (define spawn-ms (/ (round (* 1000.0 (- (current-inexact-milliseconds) start))) 1000.0))
-       (define load
-         (request! session
-                   (hash 'op "load" 'path (path->string (build-path root (cl3-task-module task))))))
-       (unless (equal? (hash-ref load 'status #f) "ok")
-         (error 'cl3-wave3 (format "~a: load failed: ~s" label load)))
-       (define eval-response (request! session (hash 'op "eval" 'code (expression-code root task))))
-       (unless (equal? (hash-ref eval-response 'status #f) "ok")
-         (error 'cl3-wave3 (format "~a: eval failed: ~s" label eval-response)))
-       (hash 'ms
-             (/ (round (* 1000.0 (- (current-inexact-milliseconds) start))) 1000.0)
-             'spawn-ms
-             spawn-ms
-             'load-ms
-             (hash-ref load 'wall-ms)
-             'text
-             (first-output-line (hash-ref eval-response 'stdout ""))
-             'memory
-             (and (pair? (hash-ref eval-response 'values '()))
-                  (hash-ref (car (hash-ref eval-response 'values '())) 'text #f))))
-     kill-tracked-workers!)))
+    (define start (current-inexact-milliseconds))
+    ;; `ms` covers spawn + load + eval + worker cleanup: the dynamic-wind
+    ;; completes before the elapsed time is read, so worker teardown is not
+    ;; silently excluded the way it is for one-shot (exit is inside the call).
+    (define result
+      (dynamic-wind
+       void
+       (lambda ()
+         (define session (start-tracked-worker! root))
+         (define spawn-ms (/ (round (* 1000.0 (- (current-inexact-milliseconds) start))) 1000.0))
+         (define load
+           (request! session
+                     (hash 'op "load" 'path (path->string (build-path root (cl3-task-module task))))))
+         (unless (equal? (hash-ref load 'status #f) "ok")
+           (error 'cl3-wave3 (format "~a: load failed: ~s" label load)))
+         (define eval-response (request! session (hash 'op "eval" 'code (expression-code root task))))
+         (unless (equal? (hash-ref eval-response 'status #f) "ok")
+           (error 'cl3-wave3 (format "~a: eval failed: ~s" label eval-response)))
+         (hash 'spawn-ms
+               spawn-ms
+               'load-ms
+               (hash-ref load 'wall-ms)
+               'text
+               (first-output-line (hash-ref eval-response 'stdout ""))
+               'memory
+               (and (pair? (hash-ref eval-response 'values '()))
+                    (hash-ref (car (hash-ref eval-response 'values '())) 'text #f))))
+       kill-tracked-workers!))
+    (hash-set result 'ms (/ (round (* 1000.0 (- (current-inexact-milliseconds) start))) 1000.0))))
 
 (define (target-zo-path root task)
   (define module (cl3-task-module task))
@@ -184,8 +187,14 @@
                           (hash-ref fresh 'load-ms 0.0)
                           'total-ms
                           (+ edit-ms compile-ms (hash-ref fresh 'ms))
-                          'process-count
-                          (if (memq approach '(one-shot one-shot-warm)) 2 1)
+                          ;; Measured path = post-edit evaluation only (1 process for
+                          ;; every approach). The pre-edit baseline evaluation is a
+                          ;; separate process whose duration is excluded, so the whole
+                          ;; workflow always starts 2 direct Racket processes.
+                          'measured-path-process-count
+                          1
+                          'workflow-process-count
+                          2
                           'correct?
                           #t))
                   kill-tracked-workers!)))
@@ -235,9 +244,13 @@
                         'fresh-ms
                         (stats "post-edit correct evaluation"
                                (map (lambda (trial) (hash-ref trial 'fresh-ms)) trials))
-                        'process-count
-                        (stats "direct Racket process count"
-                               (map (lambda (trial) (hash-ref trial 'process-count)) trials))
+                        'measured-path-process-count
+                        (stats "direct Racket processes on the measured post-edit path"
+                               (map (lambda (trial) (hash-ref trial 'measured-path-process-count))
+                                    trials))
+                        'workflow-process-count
+                        (stats "direct Racket processes in the whole workflow"
+                               (map (lambda (trial) (hash-ref trial 'workflow-process-count)) trials))
                         'all-correct?
                         (andmap (lambda (trial) (hash-ref trial 'correct?)) trials)
                         'trials
@@ -275,9 +288,15 @@
      (string-append "target compiled/ is warm from the compilation block and reused across trials; "
                     "trials are interleaved with a per-iteration rotation recorded in trial.order")
      'cleanup-definition
-     "workers are tracked and killed in a dynamic-wind, so cleanup runs even if an assertion fails"
+     (string-append
+      "workers are tracked and killed in a dynamic-wind, so cleanup runs even if an assertion fails; "
+      "Worker evaluation timing includes spawn, load, eval AND cleanup, matching one-shot where "
+      "process exit is inside the measured call")
      'process-definition
-     "direct Racket processes started by the workflow; process-tree ownership is not verified"
+     (string-append
+      "direct Racket processes started by the workflow; the measured post-edit path always starts "
+      "one process, and the excluded pre-edit baseline evaluation starts another; "
+      "process-tree ownership is not verified")
      'tasks
      (for/list ([task (in-list tasks)])
        (task-report worktree task n))))
