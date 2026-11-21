@@ -187,14 +187,14 @@
                           (hash-ref fresh 'load-ms 0.0)
                           'total-ms
                           (+ edit-ms compile-ms (hash-ref fresh 'ms))
-                          ;; Measured path = post-edit evaluation only (1 process for
-                          ;; every approach). The pre-edit baseline evaluation is a
-                          ;; separate process whose duration is excluded, so the whole
-                          ;; workflow always starts 2 direct Racket processes.
+                          ;; Direct process launches, not verified process trees.
+                          ;; Post-edit path: evaluation process + explicit `raco make`
+                          ;; when the approach precompiles. Whole workflow adds the
+                          ;; excluded pre-edit baseline evaluation process.
                           'measured-path-process-count
-                          1
+                          (+ 1 (if (memq approach '(one-shot-warm clean-worker-warm)) 1 0))
                           'workflow-process-count
-                          2
+                          (+ 2 (if (memq approach '(one-shot-warm clean-worker-warm)) 1 0))
                           'correct?
                           #t))
                   kill-tracked-workers!)))
