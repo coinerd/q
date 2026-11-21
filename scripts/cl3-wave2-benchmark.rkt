@@ -150,9 +150,24 @@
                  (hash-ref fresh 'ms))
            '()))
 
+;; Every worker started for a trial is tracked so cleanup runs even when an
+;; assertion raises mid-workflow (the success path also kills its worker).
+(define active-workers (make-parameter '()))
+
+(define (start-tracked-worker! root)
+  (define session (start-worker! #:directory root))
+  (active-workers (cons session (active-workers)))
+  session)
+
+(define (kill-tracked-workers!)
+  (for ([session (in-list (active-workers))])
+    (with-handlers ([exn:fail? void])
+      (kill-worker! session)))
+  (active-workers '()))
+
 (define (timed-start-worker! root)
   (define start (current-inexact-milliseconds))
-  (define session (start-worker! #:directory root))
+  (define session (start-tracked-worker! root))
   (values (/ (round (* 1000.0 (- (current-inexact-milliseconds) start))) 1000.0) session))
 
 (define (timed-kill-worker! session)
@@ -160,7 +175,7 @@
   (define result (kill-worker! session))
   (values (/ (round (* 1000.0 (- (current-inexact-milliseconds) start))) 1000.0) result))
 
-(define (run-reload-workflow! root task)
+(define (run-namespace-reset-workflow! root task)
   (write-task-source! root task (cl3-task-before task))
   (clear-compiled! root task)
   (define expression (probe-expression root task))
@@ -282,18 +297,37 @@
            (hash 'baseline-phase baseline 'edit-ms edit-ms 'fresh-phase fresh)
            '("process replacement used a fresh OS process for the post-edit evaluation")))
 
-(define approaches '(one-shot persistent-reload process-replacement))
+;; `persistent-namespace-reset` is named for what it actually does: the post-edit
+;; correct value only appears after reload AND a namespace reset plus reload.
+(define approaches '(one-shot persistent-namespace-reset process-replacement))
 
 (define (run-approach! root task approach)
   (case approach
     [(one-shot) (run-one-shot-workflow! root task)]
-    [(persistent-reload) (run-reload-workflow! root task)]
+    [(persistent-namespace-reset) (run-namespace-reset-workflow! root task)]
     [(process-replacement) (run-replacement-workflow! root task)]
     [else (error 'cl3-wave2 "unknown approach: ~a" approach)]))
+
+(define (run-trial! root task approach)
+  (parameterize ([active-workers '()])
+    (dynamic-wind void (lambda () (run-approach! root task approach)) kill-tracked-workers!)))
 
 (define (task-report root task n)
   (write-task-source! root task (cl3-task-before task))
   (define compilation (measure-compilation! root task))
+  (define collected
+    (make-hash (for/list ([approach (in-list approaches)])
+                 (cons approach '()))))
+  (for ([i (in-range n)])
+    (define rotation (remainder i (length approaches)))
+    (define order (append (drop approaches rotation) (take approaches rotation)))
+    (for ([approach (in-list order)])
+      (define trial (run-trial! root task approach))
+      (hash-set! collected
+                 approach
+                 (cons (hash-set (hash-set trial 'iteration i) 'order (map symbol->string order))
+                       (hash-ref collected approach)))))
+  (define _ordered collected)
   (hash 'name
         (cl3-task-name task)
         'module
@@ -307,10 +341,11 @@
         'compilation
         compilation
         'approaches
+        ;; Trials are interleaved: each iteration rotates the approach order so
+        ;; OS/Racket cache warmth from one approach does not systematically
+        ;; favour a later one. The realised order is recorded per trial.
         (for/hash ([approach (in-list approaches)])
-          (define trials
-            (for/list ([i (in-range n)])
-              (run-approach! root task approach)))
+          (define trials (reverse (hash-ref collected approach)))
           (define total-values (map (lambda (trial) (hash-ref trial 'total-ms)) trials))
           (values approach
                   (hash 'n
@@ -346,11 +381,26 @@
      'quantile-definition
      "linear interpolation at rank q*(n-1), rounded to 0.001 ms (CL0-compatible)"
      'correctness-oracle
-     "expected integer is written into the source fixture before each trial and checked against every evaluated value"
+     (string-append
+      "an injected cl3-probe-value binding is written into a copy of each real module "
+      "and its returned integer is checked against the expected value; this measures "
+      "module-load and source-change overhead, NOT end-to-end debugging of real component logic")
+     'compilation-definition
+     (string-append
+      "target-module `raco make` after deleting that module's compiled/ directory; "
+      "dependency .zo files shared with the rest of the tree are NOT cleared, so this is "
+      "not a fully cold dependency-chain build")
+     'cache-policy
+     (string-append
+      "compiled/ is cleared once per task before the compilation block; trials are then "
+      "interleaved with a per-iteration rotation recorded in trial.order, so OS/Racket "
+      "cache warmth is distributed across approaches rather than fixed by approach order")
      'memory-definition
-     "(current-memory-use 'cumulative) maximum across workflow evaluations; allocation proxy, not OS peak RSS"
+     "(current-memory-use 'cumulative) maximum across workflow evaluations; allocation proxy, not OS peak RSS or retained heap"
      'process-definition
-     "direct Racket processes started by the workflow; descendants not enumerated"
+     "direct Racket processes started by the workflow; process-tree ownership and descendants are not verified"
+     'cleanup-definition
+     "workers started for a trial are tracked and killed in a dynamic-wind, so cleanup runs even when an assertion fails"
      'tasks
      (for/list ([task (in-list tasks)])
        (task-report worktree task n))))
