@@ -23,7 +23,11 @@
          default-part-i-findings
          dependency-policy-exceptions
          dependency-policy-composition-roots
-         dependency-policy-provide-risks)
+         dependency-policy-provide-risks
+         provide-spec-count
+         collected-module-path-strings
+         normal-require-path
+         test-path?)
 
 (define finding-statuses '("OPEN" "PARTIALLY_RESOLVED" "RESOLVED" "STALE_INCORRECT"))
 
