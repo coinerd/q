@@ -297,6 +297,70 @@
                        (lambda (p) (put-json! p (disposition-fixture-root-pointer df))))))
          (for ([entry (in-list cases)])
            ((second entry) (lambda () (both! (first entry)))))
+         ;; ---- CL4 Wave 2 refusal-ORDERING guards ----
+         ;; Each case breaks an earlier stage AND makes a later observation
+         ;; unusable. The earlier refusal must survive, proving the adapter
+         ;; decides before it observes the next stage.
+         (define (refused-with! label rx thunk)
+           (with-check-info (['ordering label]) (check-exn rx thunk)))
+         (define bogus-proposal (hasheq 'kind "task-proposal" 'sha256 (make-string 64 #\7)))
+         (define bogus-approval (hasheq 'kind "task-approval" 'sha256 (make-string 64 #\8)))
+         ;; E1 is decided before parent authentication: the substituted pointer
+         ;; has no real approval to inspect, and the campaign file is corrupt.
+         (with-file-change
+          pointer
+          (lambda (p)
+            (put-json! p
+                       (hasheq 'schema
+                               "supplemental-pointer/v1"
+                               'task-proposal
+                               bogus-proposal
+                               'task-approval
+                               bogus-approval)))
+          (lambda ()
+            (with-file-change campaign-path
+                              (lambda (p) (display-to-file "not-json" p #:exists 'truncate))
+                              (lambda ()
+                                (refused-with! "E1 precedes parent authentication and campaign read"
+                                               #rx"outside the fixed disposition amendment"
+                                               (lambda ()
+                                                 (propose-supplemental-disposition!
+                                                  base
+                                                  plan
+                                                  1
+                                                  (hash-ref bogus-proposal 'sha256)
+                                                  (+ (current-seconds) 14400))))))))
+         ;; E4 is decided before the E5/E6 reads: the campaign is not failed and
+         ;; the delivery journal is unreadable.
+         (with-file-change campaign-path
+                           (lambda (_)
+                             (define rec (load-campaign-record base plan))
+                             (set-campaign-wave-status! (wave rec) 'interrupted)
+                             (persist-campaign! base rec))
+                           (lambda ()
+                             (with-file-change journal
+                                               (lambda (p)
+                                                 (display-to-file "not-json" p #:exists 'truncate))
+                                               (lambda ()
+                                                 (refused-with! "E4 precedes context/source reads"
+                                                                #rx"parent must own current failed"
+                                                                (lambda () (propose)))))))
+         ;; E5 is decided before the E6 proof read: the frozen snapshot is
+         ;; tampered (context mismatch) and the owned-proof root is empty, so an
+         ;; eager E6 read would fail differently.
+         (define empty-proof-root (build-path base "negative-empty-proofs"))
+         (make-directory empty-proof-root)
+         (with-file-change
+          (car (find-files (lambda (p) (and (file-exists? p) (regexp-match? #rx"[.]md$" p)))
+                           frozen))
+          (lambda (p) (display-to-file "\nnegative ordering tamper\n" p #:exists 'append))
+          (lambda ()
+            (parameterize ([current-owned-proof-root empty-proof-root])
+              ;; The authenticated context read fails at E5 (snapshot
+              ;; verification); the empty proof root proves E6 was never read.
+              (refused-with! "E5 precedes source/proof reads"
+                             #rx"snapshot"
+                             (lambda () (propose))))))
          (define redirected-pointer (build-path base "negative-pointer.json"))
          (dynamic-wind (lambda ()
                          (rename-file-or-directory pointer redirected-pointer)

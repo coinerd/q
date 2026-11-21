@@ -81,31 +81,44 @@
     (refuse (disposition-decision-message decision))))
 (define (eligible! base plan wave pointer #:preserved [preserved #f])
   (define a (amendment))
-  ;; Phase E1–E4: facts the gate already required before any evidence read.
+  (define amend (amendment-view a))
+  ;; E1 — request identity is decided BEFORE any parent authentication or read,
+  ;; so an invalid amendment survives even when later inputs are unreadable.
+  (refuse-decision!
+   (decide-disposition-identity (disposition-request-view plan wave pointer (parent-pointer a))
+                                amend))
+  ;; E2 — only now authenticate the parent and check its terminal lineage.
   (define-values (proposal task terminal)
     (inspect-supplemental-disposition-parent (hash-ref pointer 'task-approval)))
+  (define term
+    (disposition-terminal-view proposal
+                               (hash-ref terminal 'sha256)
+                               (sha256-string (canonical-evidence-json terminal))
+                               (hash-ref (hash-ref terminal 'facts) 'allocation)
+                               (disposition-late-terminal? a terminal)))
+  (refuse-decision! (decide-disposition-terminal amend term))
+  ;; E3 — allocation, before any campaign read.
+  (refuse-decision! (decide-disposition-allocation amend term))
+  ;; E4 — campaign ownership, status, cancellation, budget and fences.
   (define rec (load-campaign-record base plan))
   (define w
     (and rec (findf (lambda (w) (= wave (campaign-wave-index w))) (campaign-record-waves rec))))
   (define attempt (and w (campaign-wave-current-attempt w)))
-  (refuse-decision! (decide-disposition-lineage
-                     (disposition-request-view plan wave pointer (parent-pointer a))
-                     (amendment-view a)
-                     (disposition-terminal-view proposal
-                                                (hash-ref terminal 'sha256)
-                                                (sha256-string (canonical-evidence-json terminal))
-                                                (hash-ref (hash-ref terminal 'facts) 'allocation)
-                                                (disposition-late-terminal? a terminal))
-                     (disposition-campaign-view (and rec #t)
-                                                (and w #t)
-                                                (and attempt #t)
-                                                (and w (campaign-wave-status w))
-                                                (and rec (campaign-record-cancellation rec) #t)
-                                                (and rec (campaign-record-budget-pause rec) #t)
-                                                (and attempt (campaign-attempt-id attempt))
-                                                (and attempt (campaign-attempt-fence-token attempt))
-                                                (and rec (campaign-fence-token rec)))))
-  ;; Phase E5–E6: authenticated reads happen only after lineage admitted the request.
+  (refuse-decision!
+   (decide-disposition-campaign amend
+                                term
+                                (disposition-campaign-view (and rec #t)
+                                                           (and w #t)
+                                                           (and attempt #t)
+                                                           (and w (campaign-wave-status w))
+                                                           (and rec (campaign-record-cancellation rec) #t)
+                                                           (and rec (campaign-record-budget-pause rec) #t)
+                                                           (and attempt (campaign-attempt-id attempt))
+                                                           (and attempt
+                                                                (campaign-attempt-fence-token attempt))
+                                                           (and rec (campaign-fence-token rec)))))
+  ;; E5 — authenticate and compare the evidence context BEFORE any source,
+  ;; journal or proof read.
   (define context (hash-ref task 'context))
   ;; Preserved mode authenticates the retained E_old receipt/context WITHOUT the
   ;; physical live-source gate: the live checkout is the metadata descendant M,
@@ -116,6 +129,14 @@
     (if preserved
         (preserved-parent-context base plan wave)
         (current-evidence-context base plan wave)))
+  (refuse-decision!
+   (decide-disposition-context amend
+                               (disposition-context-view (hash-ref context 'plan-id)
+                                                         (hash-ref context 'wave)
+                                                         (hash-ref context 'snapshot-sha256)
+                                                         expected
+                                                         context)))
+  ;; E6 — retained source, journal and receipt-owned proof equality.
   (define descendant (and preserved (hash-ref preserved 'descendant-source)))
   (define source (committed-delivery-snapshot (hash-ref context 'repo)))
   (define journal (load-delivery-journal base plan wave))
@@ -129,24 +150,18 @@
     (if descendant
         (hash-ref descendant 'tree)
         (hash-ref context 'tree)))
-  (refuse-decision! (decide-disposition-evidence
-                     (amendment-view a)
-                     (disposition-context-view (hash-ref context 'plan-id)
-                                               (hash-ref context 'wave)
-                                               (hash-ref context 'snapshot-sha256)
-                                               expected
-                                               context)
-                     (disposition-source-view
-                      (and source #t)
-                      (and manifest #t)
-                      (and manifest (hash-ref manifest 'execution-cwd #f))
-                      (hash-ref context 'repo)
-                      (and source
-                           (for/and ([key '(branch origin)])
-                             (equal? (hash-ref source key) (hash-ref context key)))
-                           #t)
-                      (and source (equal? (hash-ref source 'head) expected-head) #t)
-                      (and source (equal? (hash-ref source 'tree) expected-tree) #t))))
+  (refuse-decision!
+   (decide-disposition-source (disposition-source-view
+                               (and source #t)
+                               (and manifest #t)
+                               (and manifest (hash-ref manifest 'execution-cwd #f))
+                               (hash-ref context 'repo)
+                               (and source
+                                    (for/and ([key '(branch origin)])
+                                      (equal? (hash-ref source key) (hash-ref context key)))
+                                    #t)
+                               (and source (equal? (hash-ref source 'head) expected-head) #t)
+                               (and source (equal? (hash-ref source 'tree) expected-tree) #t))))
   (values proposal task terminal))
 (define (propose-supplemental-disposition! base
                                            plan

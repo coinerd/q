@@ -104,6 +104,12 @@
                                disposition-decision-status
                                disposition-decision-code
                                disposition-decision-message
+                               decide-disposition-identity
+                               decide-disposition-terminal
+                               decide-disposition-allocation
+                               decide-disposition-campaign
+                               decide-disposition-context
+                               decide-disposition-source
                                decide-disposition-lineage
                                decide-disposition-evidence))
   (check-equal? (sort exports string<?) (sort (map symbol->string allowed) string<?)))

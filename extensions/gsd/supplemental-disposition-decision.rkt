@@ -32,6 +32,12 @@
          disposition-decision-status
          disposition-decision-code
          disposition-decision-message
+         decide-disposition-identity
+         decide-disposition-terminal
+         decide-disposition-allocation
+         decide-disposition-campaign
+         decide-disposition-context
+         decide-disposition-source
          decide-disposition-lineage
          decide-disposition-evidence)
 
@@ -98,67 +104,106 @@
 (define (allow)
   (disposition-decision 'allow 'eligible #f))
 
-;; ------------------------------------------------- phase E1–E4: lineage --
+;; ------------------------------------------------- stage-by-stage decisions --
+;;
+;; One evaluator per observable stage. The adapter calls them in order and only
+;; reads the NEXT stage's facts after the previous stage allowed, so a refusal
+;; never triggers a later observation (authentication, campaign, journal, proof).
 
-(define (decide-disposition-lineage request amendment terminal campaign)
-  (define plan-id (disposition-request-view-plan-id request))
-  (define wave (disposition-request-view-wave request))
-  (define allocation (disposition-amendment-view-allocation amendment))
+(define (refused? decision) (eq? (disposition-decision-status decision) 'refuse))
+(define (chain decision thunk) (if (refused? decision) decision (thunk)))
+
+;; E1 — request identity against the fixed amendment (no parent authentication).
+(define (decide-disposition-identity request amendment)
   (cond
-    [(not (and (equal? plan-id (disposition-amendment-view-plan-id amendment))
-               (equal? wave (disposition-amendment-view-wave amendment))
-               (equal? (disposition-request-view-pointer request)
-                       (disposition-request-view-expected-pointer request))))
-     (deny 'outside-amendment msg-outside-amendment)]
-    [(not (and (equal? (disposition-terminal-view-proposal terminal)
-                       (disposition-amendment-view-parent-proposal amendment))
-               (equal? (disposition-terminal-view-terminal-sha256 terminal)
-                       (disposition-amendment-view-terminal-body-sha256 amendment))
-               (equal? (disposition-terminal-view-terminal-record-digest terminal)
-                       (disposition-amendment-view-terminal-record-sha256 amendment))))
-     (deny 'terminal-drift msg-terminal-drift)]
-    [(not (equal? (disposition-terminal-view-allocation terminal) allocation))
-     (deny 'wrong-allocation msg-wrong-allocation)]
-    [else (decide-campaign-state campaign allocation terminal)]))
+    [(and (equal? (disposition-request-view-plan-id request)
+                  (disposition-amendment-view-plan-id amendment))
+          (equal? (disposition-request-view-wave request)
+                  (disposition-amendment-view-wave amendment))
+          (equal? (disposition-request-view-pointer request)
+                  (disposition-request-view-expected-pointer request)))
+     (allow)]
+    [else (deny 'outside-amendment msg-outside-amendment)]))
 
-(define (decide-campaign-state campaign allocation terminal)
+;; E2 — authenticated parent terminal lineage.
+(define (decide-disposition-terminal amendment terminal)
+  (cond
+    [(and (equal? (disposition-terminal-view-proposal terminal)
+                  (disposition-amendment-view-parent-proposal amendment))
+          (equal? (disposition-terminal-view-terminal-sha256 terminal)
+                  (disposition-amendment-view-terminal-body-sha256 amendment))
+          (equal? (disposition-terminal-view-terminal-record-digest terminal)
+                  (disposition-amendment-view-terminal-record-sha256 amendment)))
+     (allow)]
+    [else (deny 'terminal-drift msg-terminal-drift)]))
+
+;; E3 — the failed parent allocation.
+(define (decide-disposition-allocation amendment terminal)
+  (cond
+    [(equal? (disposition-terminal-view-allocation terminal)
+             (disposition-amendment-view-allocation amendment))
+     (allow)]
+    [else (deny 'wrong-allocation msg-wrong-allocation)]))
+
+;; E4 — campaign ownership, status, cancellation, budget and fences.
+(define (decide-disposition-campaign amendment terminal campaign)
+  (define allocation (disposition-amendment-view-allocation amendment))
   (define late? (disposition-terminal-view-late-terminal? terminal))
   (define status (disposition-campaign-view-status campaign))
   (cond
-    [(not (and (disposition-campaign-view-record-found? campaign)
-               (disposition-campaign-view-wave-found? campaign)
-               (disposition-campaign-view-attempt-found? campaign)
-               (or (eq? status 'failed) (and late? (eq? status 'awaiting-delivery)))
-               (not (disposition-campaign-view-cancelled? campaign))
-               (not (disposition-campaign-view-budget-paused? campaign))
-               (equal? (disposition-campaign-view-attempt-id campaign)
-                       (hash-ref allocation 'attempt-id))
-               (equal? (disposition-campaign-view-attempt-fence campaign)
-                       (hash-ref allocation 'attempt-fence))
-               (equal? (disposition-campaign-view-coordinator-fence campaign)
-                       (hash-ref allocation 'coordinator-fence))))
-     (deny 'campaign-state msg-campaign-state)]
-    [else (allow)]))
+    [(and (disposition-campaign-view-record-found? campaign)
+          (disposition-campaign-view-wave-found? campaign)
+          (disposition-campaign-view-attempt-found? campaign)
+          (or (eq? status 'failed) (and late? (eq? status 'awaiting-delivery)))
+          (not (disposition-campaign-view-cancelled? campaign))
+          (not (disposition-campaign-view-budget-paused? campaign))
+          (equal? (disposition-campaign-view-attempt-id campaign) (hash-ref allocation 'attempt-id))
+          (equal? (disposition-campaign-view-attempt-fence campaign)
+                  (hash-ref allocation 'attempt-fence))
+          (equal? (disposition-campaign-view-coordinator-fence campaign)
+                  (hash-ref allocation 'coordinator-fence)))
+     (allow)]
+    [else (deny 'campaign-state msg-campaign-state)]))
 
-;; ------------------------------------------------ phase E5–E6: evidence --
+;; E5 — authenticated evidence context equality.
+(define (decide-disposition-context amendment context)
+  (cond
+    [(and (equal? (disposition-context-view-plan-id context)
+                  (disposition-amendment-view-plan-id amendment))
+          (equal? (disposition-context-view-wave context)
+                  (disposition-amendment-view-wave amendment))
+          (equal? (disposition-context-view-snapshot-sha256 context)
+                  (disposition-amendment-view-snapshot-sha256 amendment))
+          (equal? (disposition-context-view-actual context)
+                  (disposition-context-view-expected context)))
+     (allow)]
+    [else (deny 'context-changed msg-context-changed)]))
+
+;; E6 — retained clean source and receipt-owned proof equality.
+(define (decide-disposition-source source)
+  (cond
+    [(and (disposition-source-view-source-found? source)
+          (disposition-source-view-proof-found? source)
+          (equal? (disposition-source-view-execution-cwd source)
+                  (disposition-source-view-context-repo source))
+          (disposition-source-view-refs-match? source)
+          (disposition-source-view-head-match? source)
+          (disposition-source-view-tree-match? source))
+     (allow)]
+    [else (deny 'source-changed msg-source-changed)]))
+
+;; Pure compositions that document the full order. The adapter calls the stage
+;; evaluators directly (one at a time) so it never observes a later stage early;
+;; these remain for the pure matrix and for future pure consumers.
+(define (decide-disposition-lineage request amendment terminal campaign)
+  (chain (decide-disposition-identity request amendment)
+         (lambda ()
+           (chain (decide-disposition-terminal amendment terminal)
+                  (lambda ()
+                    (chain (decide-disposition-allocation amendment terminal)
+                           (lambda ()
+                             (decide-disposition-campaign amendment terminal campaign))))))))
 
 (define (decide-disposition-evidence amendment context source)
-  (cond
-    [(not (and (equal? (disposition-context-view-plan-id context)
-                       (disposition-amendment-view-plan-id amendment))
-               (equal? (disposition-context-view-wave context)
-                       (disposition-amendment-view-wave amendment))
-               (equal? (disposition-context-view-snapshot-sha256 context)
-                       (disposition-amendment-view-snapshot-sha256 amendment))
-               (equal? (disposition-context-view-actual context)
-                       (disposition-context-view-expected context))))
-     (deny 'context-changed msg-context-changed)]
-    [(not (and (disposition-source-view-source-found? source)
-               (disposition-source-view-proof-found? source)
-               (equal? (disposition-source-view-execution-cwd source)
-                       (disposition-source-view-context-repo source))
-               (disposition-source-view-refs-match? source)
-               (disposition-source-view-head-match? source)
-               (disposition-source-view-tree-match? source)))
-     (deny 'source-changed msg-source-changed)]
-    [else (allow)]))
+  (chain (decide-disposition-context amendment context)
+         (lambda () (decide-disposition-source source))))

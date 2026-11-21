@@ -199,6 +199,32 @@
                                 #:source (source #:head? #f)))
                 'context-changed))
 
+(test-case "each stage decides from its own facts and composes in order"
+  ;; Identity refuses with no terminal/campaign facts supplied at all.
+  (check-equal? (code (decide-disposition-identity (request #:wave 9) (amendment)))
+                'outside-amendment)
+  (check-true (allowed? (decide-disposition-identity (request) (amendment))))
+  ;; Terminal, allocation and campaign stages each gate one fact.
+  (check-equal? (code (decide-disposition-terminal (amendment)
+                                                   (terminal #:digest (make-string 40 #\1))))
+                'terminal-drift)
+  (check-equal? (code (decide-disposition-allocation (amendment) (terminal #:allocation (hasheq))))
+                'wrong-allocation)
+  (check-equal? (code (decide-disposition-campaign (amendment)
+                                                   (terminal)
+                                                   (campaign #:paused? #t)))
+                'campaign-state)
+  ;; Evidence stages gate context before source.
+  (check-equal? (code (decide-disposition-context (amendment) (context #:wave 2)))
+                'context-changed)
+  (check-equal? (code (decide-disposition-source (source #:head? #f))) 'source-changed)
+  ;; Compositions preserve the same order.
+  (check-equal? (code (decide-disposition-lineage (request #:wave 9)
+                                                  (amendment)
+                                                  (terminal #:digest (make-string 40 #\1))
+                                                  (campaign #:paused? #t)))
+                'outside-amendment))
+
 (test-case "refusal text has one owner and is stable"
   (check-equal? (message (lineage #:campaign (campaign #:paused? #t)))
                 (string-append
