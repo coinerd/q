@@ -36,6 +36,8 @@
          decide-disposition-terminal
          decide-disposition-allocation
          decide-disposition-campaign
+         decide-disposition-context-identity
+         decide-disposition-context-equality
          decide-disposition-context
          decide-disposition-source
          decide-disposition-lineage
@@ -165,19 +167,33 @@
      (allow)]
     [else (deny 'campaign-state msg-campaign-state)]))
 
-;; E5 — authenticated evidence context equality.
-(define (decide-disposition-context amendment context)
+;; E5a — task-context identity. This is a separate evaluator because the
+;; adapter must run it BEFORE the authenticated context helper: a mismatched
+;; plan/wave/snapshot refuses without reading receipts, proofs or git state.
+(define (decide-disposition-context-identity amendment plan-id wave snapshot-sha256)
   (cond
-    [(and (equal? (disposition-context-view-plan-id context)
-                  (disposition-amendment-view-plan-id amendment))
-          (equal? (disposition-context-view-wave context)
-                  (disposition-amendment-view-wave amendment))
-          (equal? (disposition-context-view-snapshot-sha256 context)
-                  (disposition-amendment-view-snapshot-sha256 amendment))
-          (equal? (disposition-context-view-actual context)
-                  (disposition-context-view-expected context)))
+    [(and (equal? plan-id (disposition-amendment-view-plan-id amendment))
+          (equal? wave (disposition-amendment-view-wave amendment))
+          (equal? snapshot-sha256 (disposition-amendment-view-snapshot-sha256 amendment)))
      (allow)]
     [else (deny 'context-changed msg-context-changed)]))
+
+;; E5b — authenticated context equality (expected is the authenticated live or
+;; retained context; both values are already-read immutable facts).
+(define (decide-disposition-context-equality expected actual)
+  (cond
+    [(equal? actual expected) (allow)]
+    [else (deny 'context-changed msg-context-changed)]))
+
+;; E5 — pure composition of the identity precheck and the equality check.
+(define (decide-disposition-context amendment context)
+  (chain (decide-disposition-context-identity amendment
+                                              (disposition-context-view-plan-id context)
+                                              (disposition-context-view-wave context)
+                                              (disposition-context-view-snapshot-sha256 context))
+         (lambda ()
+           (decide-disposition-context-equality (disposition-context-view-expected context)
+                                                (disposition-context-view-actual context)))))
 
 ;; E6 — retained clean source and receipt-owned proof equality.
 (define (decide-disposition-source source)

@@ -184,6 +184,9 @@ New fast, mutation-free files:
 Adapter-level ordering guards live in `tests/test-gsd-supplemental-disposition-eligibility.rkt`:
 E1 is asserted before parent authentication with a corrupt campaign file, E4 before the context
 read with an unreadable journal, and E5 before the source/proof read with an empty proof root.
+The E5a identity precheck is pinned by the pure matrix (it refuses from identity fields alone, with
+no expected value supplied); a mismatched task context cannot be constructed at the adapter level
+without fabricating authenticated lineage, which the fixture policy forbids.
 
 Retained unchanged as integration guards: the six tests in §3.3. Shadow evidence only: required CI
 contexts, admission records and `qt` selection remain authoritative.

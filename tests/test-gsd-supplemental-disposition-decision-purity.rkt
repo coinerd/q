@@ -108,6 +108,8 @@
                                decide-disposition-terminal
                                decide-disposition-allocation
                                decide-disposition-campaign
+                               decide-disposition-context-identity
+                               decide-disposition-context-equality
                                decide-disposition-context
                                decide-disposition-source
                                decide-disposition-lineage

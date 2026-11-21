@@ -217,6 +217,23 @@
   ;; Evidence stages gate context before source.
   (check-equal? (code (decide-disposition-context (amendment) (context #:wave 2)))
                 'context-changed)
+  ;; E5a is a standalone precheck: it refuses from identity fields alone, with
+  ;; no expected/authenticated value supplied at all.
+  (check-equal? (refusal (decide-disposition-context-identity (amendment)
+                                                              (make-string 64 #\9)
+                                                              1
+                                                              (make-string 40 #\f)))
+                (list 'refuse 'context-changed "parent context, frozen snapshot or receipt changed"))
+  (check-equal? (code (decide-disposition-context-identity (amendment)
+                                                           (make-string 64 #\9)
+                                                           1
+                                                           (make-string 40 #\f)))
+                'context-changed)
+  (check-true (allowed? (decide-disposition-context-identity (amendment) plan-id 1 (make-string 40 #\f))))
+  ;; E5b compares only the two authenticated values.
+  (check-equal? (code (decide-disposition-context-equality (hasheq 'a 1) (hasheq 'a 2)))
+                'context-changed)
+  (check-true (allowed? (decide-disposition-context-equality (hasheq 'a 1) (hasheq 'a 1))))
   (check-equal? (code (decide-disposition-source (source #:head? #f))) 'source-changed)
   ;; Compositions preserve the same order.
   (check-equal? (code (decide-disposition-lineage (request #:wave 9)

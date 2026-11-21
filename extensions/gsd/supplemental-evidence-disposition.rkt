@@ -117,9 +117,16 @@
                                                            (and attempt
                                                                 (campaign-attempt-fence-token attempt))
                                                            (and rec (campaign-fence-token rec)))))
-  ;; E5 — authenticate and compare the evidence context BEFORE any source,
-  ;; journal or proof read.
+  ;; E5a — task-context identity is decided BEFORE the authenticated helper;
+  ;; a mismatch must not trigger receipt, proof or git reads.
   (define context (hash-ref task 'context))
+  (refuse-decision!
+   (decide-disposition-context-identity amend
+                                        (hash-ref context 'plan-id)
+                                        (hash-ref context 'wave)
+                                        (hash-ref context 'snapshot-sha256)))
+  ;; E5b — authenticate and compare the evidence context BEFORE any source,
+  ;; journal or proof read.
   ;; Preserved mode authenticates the retained E_old receipt/context WITHOUT the
   ;; physical live-source gate: the live checkout is the metadata descendant M,
   ;; never E_old.head, and the preserved-candidate leaf proves that exact K->M
@@ -129,13 +136,7 @@
     (if preserved
         (preserved-parent-context base plan wave)
         (current-evidence-context base plan wave)))
-  (refuse-decision!
-   (decide-disposition-context amend
-                               (disposition-context-view (hash-ref context 'plan-id)
-                                                         (hash-ref context 'wave)
-                                                         (hash-ref context 'snapshot-sha256)
-                                                         expected
-                                                         context)))
+  (refuse-decision! (decide-disposition-context-equality expected context))
   ;; E6 — retained source, journal and receipt-owned proof equality.
   (define descendant (and preserved (hash-ref preserved 'descendant-source)))
   (define source (committed-delivery-snapshot (hash-ref context 'repo)))
