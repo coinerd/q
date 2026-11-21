@@ -19,6 +19,7 @@
          racket/list
          racket/path
          racket/string
+         "experiment-config.rkt"
          "oracle.rkt"
          "session-metrics.rkt"
          "task-spec.rkt")
@@ -30,40 +31,33 @@
          find-newest-session-file
          last-assistant-text
          reset-worktree!
+         available-models
+         pi-version
          ->jsexpr)
 
 ;; ---- command construction --------------------------------------------------------
 
-;; The verbatim tool allowlist from the CL0 protocol (read-only + write +
-;; shell; no grep/find/ls divergence between arms).
-(define trial-tools "read,bash,edit,write")
+;; tool allowlist: the shared experiment-config value (identical in both arms).
+;; A per-call override exists only for the dry-run CLI / tests; the config is
+;; the authority and run-trial never passes a different value.
 
-;; trial-command : task-id arm-revision session-dir out-dir
-;;                 #:provider p #:model m #:thinking t -> (listof string)
+;; trial-command : task-id arm-config session-dir out-dir [#:pi path] -> (listof string)
 ;;
-;; The exact fresh-session command line. arm-revision and out-dir are part of
-;; the trial identity: the revision is stamped into the session name so a
-;; session file is traceable to its arm, and out-dir is accepted so the
-;; signature matches the series metadata contract even though the command
-;; itself never writes there.
-(define (trial-command task-id
-                       arm-revision
-                       session-dir
-                       out-dir
-                       #:provider provider
-                       #:model model
-                       #:thinking thinking
-                       #:pi [pi-executable "pi"])
+;; The exact fresh-session command line, derived from ONE arm config (revision
+;; + provider/model/thinking/tool allowlist). There is no default model here
+;; on purpose: a trial cannot run without an explicit experiment config.
+(define (trial-command task-id arm-cfg session-dir out-dir #:pi [pi-executable "pi"])
   (define spec (task-spec task-id))
-  (define short-rev (substring arm-revision 0 (min 8 (string-length arm-revision))))
+  (define revision (hash-ref arm-cfg 'revision))
+  (define short-rev (substring revision 0 (min 8 (string-length revision))))
   (list pi-executable
         "-p"
         "--provider"
-        provider
+        (hash-ref arm-cfg 'provider)
         "--model"
-        model
+        (hash-ref arm-cfg 'model)
         "--thinking"
-        thinking
+        (hash-ref arm-cfg 'thinking)
         "--no-extensions"
         "--no-mcp"
         "--no-skills"
@@ -71,10 +65,39 @@
         "--session-dir"
         session-dir
         "--tools"
-        trial-tools
+        (hash-ref arm-cfg 'tool-allowlist)
         "--name"
-        (format "cl5-~a-~a" (string-downcase (symbol->string task-id)) short-rev)
+        (format "cl5-~a-~a-~a"
+                (string-downcase (symbol->string (hash-ref arm-cfg 'arm)))
+                (string-downcase (symbol->string task-id))
+                short-rev)
         (hash-ref spec 'prompt)))
+
+;; ---- effective CLI identity --------------------------------------------------------
+
+;; `pi --version` (used in every series metadata hash).
+(define (pi-version #:pi [pi-executable "pi"] #:timeout-ms [timeout-ms 60000])
+  (define-values (exit-code stdout stderr _timed-out?)
+    (run-captured (list pi-executable "--version") #:cwd (current-directory) #:timeout-ms timeout-ms))
+  (cond
+    [(not (equal? exit-code 0))
+     (raise-arguments-error 'pi-version "cannot read the pi CLI version" "stderr" stderr)]
+    [else (string-trim stdout)]))
+
+;; Provider's advertised models, parsed by experiment-config's pure parser.
+(define (available-models provider #:pi [pi-executable "pi"] #:timeout-ms [timeout-ms 120000])
+  (define-values (exit-code stdout stderr _timed-out?)
+    (run-captured (list pi-executable "--list-models" provider)
+                  #:cwd (current-directory)
+                  #:timeout-ms timeout-ms))
+  (unless (equal? exit-code 0)
+    (raise-arguments-error 'available-models
+                           "cannot enumerate the provider's models"
+                           "provider"
+                           provider
+                           "stderr"
+                           stderr))
+  (parse-model-list stdout))
 
 ;; ---- session discovery -------------------------------------------------------------
 
@@ -121,16 +144,20 @@
 ;; Run one trial in an existing pinned worktree. Returns the trial record
 ;; hash. The worktree must already be at the arm revision; the harness resets
 ;; it AFTER grading so the next trial starts clean.
+;;
+;; The configuration comes from ONE arm config (scripts/cl5/experiment-config.rkt).
+;; After the session, the EFFECTIVE provider/model/thinking are verified against
+;; that config and a mismatch raises: an invalid trial is never recorded.
 (define (run-trial task-id
                    worktree
-                   #:provider provider
-                   #:model model
-                   #:thinking thinking
-                   #:arm-revision arm-revision
+                   #:config config
+                   #:arm arm
                    #:session-dir session-dir
                    #:reset? [reset? #t]
                    #:timeout-ms [timeout-ms 3600000])
   (define spec (task-spec task-id))
+  (define arm-cfg (arm-config config arm))
+  (define arm-revision (hash-ref arm-cfg 'revision))
   ;; The session directory must be OUTSIDE the worktree (a `git clean` between
   ;; trials would delete it) and must be absolute (pi resolves it against the
   ;; process cwd, which is the worktree).
@@ -139,33 +166,36 @@
   (define before (session-jsonl-files absolute-session-dir))
   (define command
     (trial-command task-id
-                   arm-revision
+                   arm-cfg
                    (path->string absolute-session-dir)
-                   (path->string absolute-session-dir)
-                   #:provider provider
-                   #:model model
-                   #:thinking thinking))
+                   (path->string absolute-session-dir)))
   (define-values (exit-code stdout stderr timed-out?)
     (run-captured command #:cwd worktree #:timeout-ms timeout-ms))
   (define session-file (find-newest-session-file absolute-session-dir before))
+  (unless session-file
+    (raise-arguments-error 'run-trial
+                           "trial produced no session file; refusing to record an unverified trial"
+                           "task"
+                           (symbol->string task-id)
+                           "exit-code"
+                           exit-code
+                           "stderr"
+                           stderr))
+  (define-values (events _skipped) (read-session-events session-file))
+  (define effective (verify-effective-config events arm-cfg))
   (define repo-root (path->string (path->complete-path worktree)))
   (define metrics
-    (and session-file
-         (session-metrics-file session-file
-                               (hash-ref spec 'ownership-set)
-                               #:repo-root repo-root
-                               #:owner-paths (hash-ref spec 'owner-location-paths))))
+    (session-metrics-file session-file
+                          (hash-ref spec 'ownership-set)
+                          #:repo-root repo-root
+                          #:owner-paths (hash-ref spec 'owner-location-paths)))
   (define changed (changed-paths worktree arm-revision))
   (define constraint
     (and (eq? (hash-ref spec 'oracle) 'execution)
          (diff-constraint changed (hash-ref spec 'ownership-set) (hash-ref spec 'ownership-set))))
   (define oracle-record
     (cond
-      [(not session-file)
-       (hash 'verdict 'fail 'reasons (list "no session file produced") 'recorded (hash))]
-      [(eq? (hash-ref spec 'oracle) 'text)
-       (define-values (events _skipped) (read-session-events session-file))
-       (grade-task task-id (last-assistant-text events))]
+      [(eq? (hash-ref spec 'oracle) 'text) (grade-task task-id (last-assistant-text events))]
       [else
        (define execution (grade-task-by-execution task-id worktree #:timeout-ms timeout-ms))
        (define constraint-pass? (eq? (hash-ref constraint 'verdict) 'pass))
@@ -183,8 +213,23 @@
   (define record
     (hash 'task
           (symbol->string task-id)
+          'arm
+          arm
           'arm-revision
           arm-revision
+          'configured
+          (hash 'provider
+                (hash-ref arm-cfg 'provider)
+                'model
+                (hash-ref arm-cfg 'model)
+                'full-id
+                (hash-ref arm-cfg 'full-id)
+                'thinking
+                (hash-ref arm-cfg 'thinking)
+                'tool-allowlist
+                (hash-ref arm-cfg 'tool-allowlist))
+          'effective
+          effective
           'session-file
           (and session-file (path->string session-file))
           'exit-code
@@ -223,8 +268,9 @@
 
 ;; ---- series (append-only JSON) -------------------------------------------------------
 
-(define (series-path-for arm-revision out-dir)
-  (build-path out-dir (format "CL5-TRIALS-~a.json" arm-revision)))
+(define (series-path-for arm arm-revision out-dir)
+  (define short-rev (substring arm-revision 0 (min 8 (string-length arm-revision))))
+  (build-path out-dir (format "CL5-TRIALS-~a-~a.json" (symbol->string arm) short-rev)))
 
 (define (current-host)
   (or (getenv "CL5_HOST") (getenv "HOSTNAME") "unknown"))
@@ -241,37 +287,33 @@
     [(path? value) (path->string value)]
     [else value]))
 
-;; Run n trials per task (rotation order) and append the records to the
-;; series file docs/reports/CL5-TRIALS-<base-sha>.json. Append-only: an
-;; existing series is extended, never overwritten, and only when its stamped
-;; metadata (revision/model/thinking) matches this run exactly — a drifted
-;; configuration is an error, not a new file.
+;; Run n trials per task (rotation order) for ONE arm and append the records
+;; to the series file docs/reports/CL5-TRIALS-<arm>-<short-sha>.json.
+;;
+;; The arm's provider/model/thinking come from the experiment config; an
+;; unavailable model raises BEFORE the first session (no fallback), and an
+;; existing series may only be extended when its stamped identity matches
+;; exactly — a drifted configuration is an error, not a new file.
 (define (run-series tasks
                     worktree
-                    #:provider provider
-                    #:model model
-                    #:thinking thinking
-                    #:arm-revision arm-revision
+                    #:config config
+                    #:arm arm
                     #:n [n 3]
                     #:rotation [rotation tasks]
                     #:session-dir session-dir
                     #:out-dir [out-dir "docs/reports"]
-                    #:timeout-ms [timeout-ms 3600000])
-  (define path (series-path-for arm-revision out-dir))
-  (define model-name (format "~a/~a" provider model))
+                    #:timeout-ms [timeout-ms 3600000]
+                    #:models [models #f])
+  (define arm-cfg (arm-config config arm))
+  (define arm-revision (hash-ref arm-cfg 'revision))
+  (define short-rev (substring arm-revision 0 (min 8 (string-length arm-revision))))
+  ;; Fail closed before the first session: the provider must advertise the
+  ;; configured model. `models` is injectable only so tests can exercise the
+  ;; refusal without a network call; production passes #f and asks the CLI.
+  (assert-model-available (or models (available-models (hash-ref arm-cfg 'provider))) arm-cfg)
+  (define path (series-path-for arm arm-revision out-dir))
   (define metadata
-    (hash 'revision
-          arm-revision
-          'host
-          (current-host)
-          'model
-          model-name
-          'thinking
-          thinking
-          'n
-          n
-          'rotation
-          (map symbol->string rotation)))
+    (series-metadata config arm #:host (current-host) #:n n #:rotation rotation))
   (define existing
     (and (file-exists? path)
          (with-handlers ([exn:fail? (lambda (_) #f)])
@@ -281,26 +323,14 @@
                            "series file exists but is not readable JSON; refusing to overwrite"
                            "path"
                            (path->string path)))
-  (when existing
-    (for ([key '(revision model thinking)])
-      (unless (equal? (hash-ref existing key #f) (hash-ref metadata key))
-        (raise-arguments-error 'run-series
-                               "series metadata mismatch; a series never mixes configurations"
-                               "key"
-                               key
-                               "existing"
-                               (hash-ref existing key #f)
-                               "requested"
-                               (hash-ref metadata key)))))
+  (when existing (check-series-metadata existing metadata))
   (define new-trials
     (for*/list ([round (in-range n)]
                 [task-id (in-list rotation)])
       (run-trial task-id
                  worktree
-                 #:provider provider
-                 #:model model
-                 #:thinking thinking
-                 #:arm-revision arm-revision
+                 #:config config
+                 #:arm arm
                  #:session-dir session-dir
                  #:timeout-ms timeout-ms)))
   (define all-trials
@@ -319,39 +349,34 @@
 
 (module+ main
   (define task-id #f)
-  (define arm-revision #f)
-  (define provider #f)
-  (define model #f)
-  (define thinking #f)
+  (define arm #f)
   (define session-dir "cl5-sessions")
   (define dry-run? #f)
   (command-line
    #:program "trial-runner.rkt"
    #:once-each ["--task" id "task id (T1, T3, T4, T2, T5)" (set! task-id (string->symbol id))]
-   ["--arm-revision" rev "full SHA of the arm's pinned revision" (set! arm-revision rev)]
-   ["--provider"
+   ["--arm"
     name
-    "provider name (required; never read from the environment)"
-    (set! provider name)]
-   ["--model" id "model id (required; never read from the environment)" (set! model id)]
-   ["--thinking" level "thinking level (required)" (set! thinking level)]
+    "arm: baseline or intervention (selects the pinned revision from the experiment config)"
+    (set! arm (string->symbol name))]
    ["--session-dir" dir "where pi writes the session JSONL" (set! session-dir dir)]
    ["--dry-run" "print the exact command and task spec; execute nothing" (set! dry-run? #t)])
-  (unless (and task-id arm-revision provider model thinking)
-    (raise-user-error 'trial-runner
-                      "--task, --arm-revision, --provider, --model and --thinking are all required"))
+  (unless (and task-id arm)
+    (raise-user-error 'trial-runner "--task and --arm are required"))
   (unless dry-run?
     (raise-user-error 'trial-runner
-                      "W1 executes no trials; rerun with --dry-run (live execution is W3)"))
+                      "this harness executes no trials; rerun with --dry-run (execution is W3)"))
+  (define config (experiment-config #:pi-version (pi-version)))
+  (define arm-cfg (arm-config config arm))
   (define spec (task-spec task-id))
   (define command
-    (trial-command task-id
-                   arm-revision
-                   session-dir
-                   "docs/reports"
-                   #:provider provider
-                   #:model model
-                   #:thinking thinking))
+    (trial-command task-id arm-cfg (path->string (path->complete-path session-dir)) "docs/reports"))
+  (printf "experiment:  ~a\n" (hash-ref config 'id))
+  (printf "arm:         ~a @ ~a\n" arm (hash-ref arm-cfg 'revision))
+  (printf "model:       ~a (thinking ~a)\n"
+          (hash-ref arm-cfg 'full-id)
+          (hash-ref arm-cfg 'thinking))
+  (printf "pi version:  ~a\n" (hash-ref config 'pi-version))
   (printf "task:        ~a (~a, oracle: ~a)\n"
           (hash-ref spec 'id)
           (hash-ref spec 'kind)
