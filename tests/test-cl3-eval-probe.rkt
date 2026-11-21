@@ -13,7 +13,9 @@
          racket/list
          racket/runtime-path
          racket/string
-         "../scripts/cl3-eval-probe.rkt")
+         "../scripts/cl3-benchmark-probe.rkt"
+         "../scripts/cl3-eval-probe.rkt"
+         "../scripts/cl3-worker-probe.rkt")
 
 (define-runtime-path repo-root "..")
 
@@ -37,7 +39,7 @@
                   (check-equal? (hash-ref (eval! session "(define cl3-x 41)") 'status) "ok")
                   (check-equal? (value-text (eval! session "(+ cl3-x 1)")) "42"))))
 
-(test-case "reload reports stale-instance risk while reset is a clean environment"
+(test-case "reload is stale, reset is a clean namespace, and worker replacement is the process boundary"
   (define module-path (build-path (find-system-path 'temp-dir) "cl3-probe-reload.rkt"))
   (write-module module-path "#lang racket/base\n(provide f)\n(define (f) 1)\n")
   (with-session
@@ -51,10 +53,17 @@
      (define reload (request! session (hash 'op "reload" 'path (path->string module-path))))
      (check-equal? (hash-ref reload 'status) "ok")
      (check-true (string-contains? (hash-ref reload 'note) "may be stale"))
-     ;; The evaluation finding: a captured closure can survive reload unchanged.
      (check-equal? (value-text (eval! session "(old-f)")) "1")
-     (check-equal? (hash-ref (request! session (hash 'op "reset")) 'status) "ok")
-     (check-equal? (hash-ref (eval! session "(old-f)") 'status) "error")))
+     (check-equal? (value-text (eval! session "(f)")) "1")
+     (define reset (request! session (hash 'op "reset")))
+     (check-equal? (hash-ref reset 'status) "ok")
+     (check-true (string-contains? (hash-ref reset 'note) "process-global state"))
+     (check-true (string-contains? (hash-ref reset 'note) "worker replacement"))
+     (check-equal? (hash-ref (eval! session "(old-f)") 'status) "error")
+     (check-equal? (hash-ref (request! session (hash 'op "load" 'path (path->string module-path)))
+                             'status)
+                   "ok")
+     (check-equal? (value-text (eval! session "(f)")) "2")))
   (delete-file module-path))
 
 (test-case "malformed expressions produce structured errors without killing the worker"
@@ -64,25 +73,45 @@
                   (check-true (hash-has-key? (hash-ref bad 'error) 'message))
                   (check-equal? (value-text (eval! session "(+ 1 1)")) "2"))))
 
-(test-case "excessive output is bounded and flagged"
+(test-case "bounded collectors cap stored bytes and rendered values"
+  (define-values (port collect) (make-bounded-collector 128))
+  (display (make-string 100000 #\x) port)
+  (flush-output port)
+  (define result (collect))
+  (check-equal? (hash-ref result 'stored-bytes) 128)
+  (check-true (> (hash-ref result 'discarded-bytes) 0))
+  (check-true (hash-ref result 'truncated?))
+  (check-equal? (string-length (hash-ref result 'text)) 128)
+  (define rendered (render-value (make-list 10000 'x)))
+  (check-true (<= (string-length (car rendered)) max-value-chars))
+  (check-true (cdr rendered)))
+
+(test-case "excessive output is bounded and flagged end to end"
   (with-session (lambda (session)
                   (define result (eval! session "(displayln (make-string 20000 #\\x))"))
                   (check-equal? (hash-ref result 'status) "ok")
+                  (check-true (hash-ref result 'bounded-output?))
                   (check-true (hash-ref result 'truncated?))
-                  (check-true (<= (string-length (hash-ref result 'stdout)) 4096)))))
+                  (check-true (<= (string-length (hash-ref result 'stdout)) max-diagnostic-chars)))))
 
-(test-case "an infinite loop is timed out and the child is reaped"
+(test-case "an infinite loop is timed out and the direct child is reaped"
   (define session (start-worker! #:directory repo-root))
   (define result (eval! session "(let loop () (loop))" #:timeout 2))
   (check-equal? (hash-ref result 'status) "timeout")
   (check-true (hash-ref result 'terminated?))
-  (check-true (number? (hash-ref (kill-worker! session) 'exit-status))))
+  (define cleanup (kill-worker! session))
+  (check-true (number? (hash-ref cleanup 'exit-status)))
+  (check-false (hash-ref cleanup 'descendant-cleanup-verified?)))
 
 (test-case "worker crash is detected and cleaned up"
   (define session (start-worker! #:directory repo-root))
   (define result (eval! session "(exit 1)" #:timeout 5))
   (check-true (and (member (hash-ref result 'status) '("crash" "timeout")) #t))
   (check-true (number? (hash-ref (kill-worker! session) 'exit-status))))
+
+(test-case "percentiles use the CL0-compatible linear-interpolation definition"
+  (check-equal? (percentile '(1 2 3 4) 0.5) 2.5)
+  (check-equal? (percentile '(1 2 3 4) 0.9) 3.7))
 
 (test-case "evaluation prototype is not wired into production verification"
   (define qt (file->string (build-path repo-root "qt")))

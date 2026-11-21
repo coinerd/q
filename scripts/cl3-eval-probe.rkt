@@ -2,8 +2,11 @@
 
 ;; scripts/cl3-eval-probe.rkt — CL3 evaluation-only driver for the child worker.
 ;; Never imported by q's runtime/tools: it exists only to measure #9911 tradeoffs.
-;; Requests are bounded by a wall-clock timeout; timeouts/crashes always kill
-;; and reap the child before returning.
+;;
+;; Timeout boundary: a single deadline covers write, wait and the complete line
+;; read, so an incomplete line cannot block past the requested timeout. On
+;; timeout/crash the direct child is killed and reaped. Descendant process-tree
+;; cleanup is NOT established in Wave 1 and is a production-promotion gate.
 
 (require racket/format
          racket/list
@@ -23,6 +26,9 @@
 (define-runtime-path worker-script "cl3-worker-probe.rkt")
 
 (struct worker-session (proc out in err) #:transparent)
+
+(define (elapsed-ms start)
+  (/ (round (* 1000.0 (- (current-inexact-milliseconds) start))) 1000.0))
 
 (define (start-worker! #:directory [dir (current-directory)])
   (define-values (proc out in err)
@@ -57,10 +63,15 @@
         "terminated"
         'exit-status
         (with-handlers ([exn:fail? (lambda (_) "unknown")])
-          (subprocess-status proc))))
+          (subprocess-status proc))
+        'descendant-cleanup-verified?
+        #f))
 
 (define (request! session request #:timeout [timeout-seconds 5])
   (define start (current-inexact-milliseconds))
+  (define deadline (+ start (* 1000.0 timeout-seconds)))
+  (define (remaining-seconds)
+    (max 0.0 (/ (- deadline (current-inexact-milliseconds)) 1000.0)))
   (define result
     (with-handlers ([exn:fail?
                      (lambda (e)
@@ -68,9 +79,16 @@
       (write-json request (worker-session-in session))
       (newline (worker-session-in session))
       (flush-output (worker-session-in session))
-      (define ready? (sync/timeout timeout-seconds (worker-session-out session)))
+      ;; A reader thread makes the deadline cover the entire line read, not
+      ;; just readiness of the first byte.
+      (define reply-channel (make-channel))
+      (define reader
+        (thread (lambda ()
+                  (channel-put reply-channel (cons 'line (read-line (worker-session-out session)))))))
+      (define envelope (sync/timeout (remaining-seconds) reply-channel))
       (cond
-        [(not ready?)
+        [(not envelope)
+         (kill-thread reader)
          (kill-worker! session)
          (hash 'status
                "timeout"
@@ -79,7 +97,7 @@
                'terminated?
                #t)]
         [else
-         (define line (read-line (worker-session-out session)))
+         (define line (cdr envelope))
          (cond
            [(eof-object? line)
             (kill-worker! session)
@@ -98,7 +116,7 @@
                                                'raw
                                                line))])
               (string->jsexpr line))])])))
-  (hash-set result 'wall-ms (inexact->exact (round (- (current-inexact-milliseconds) start)))))
+  (hash-set result 'wall-ms (elapsed-ms start)))
 
 (define (stop-worker! session)
   (define response
@@ -106,8 +124,7 @@
                      (lambda (e)
                        (hash 'status "driver-error" 'error (hash 'message (exn-message e))))])
       (request! session (hash 'op "stop") #:timeout 3)))
-  (define cleanup (kill-worker! session))
-  (hash 'response response 'cleanup cleanup))
+  (hash 'response response 'cleanup (kill-worker! session)))
 
 (module+ main
   (define args (vector->list (current-command-line-arguments)))
