@@ -19,6 +19,10 @@ either. Every concrete module and test named here is checked to exist by
 | TUI rendering / commands (incl. Unicode width helpers in `tui/char-width.rkt`) | (map not in pilot set — see overview.md TUI stack) | overview.md | `tests/test-ansi.rkt`, `tests/tui/test-char-width.rkt` |
 | Everyday verification workflow | — | [../../testing.md](../../testing.md) | `./qt quick <owner>` |
 
+For module/symbol-level lookup on top of these maps, see the
+[CL2 semantic navigator](../semantic-navigator.md) (developer-only; navigational evidence,
+not behavioral verification).
+
 Machine-readable manifest (derived, not hand-maintained):
 [`../subsystem-manifest.rktd`](../subsystem-manifest.rktd) — one record per top-level
 subsystem: production module count, provide totals, audited quick owners with capability
