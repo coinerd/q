@@ -23,20 +23,39 @@
          racket/system
          "selection-cases.rkt")
 
-(provide run-case
+(provide run-command
+         run-case
          run-experiment
          selected-plan
          parse-explain-output
+         resolve-command-path
+         classify-run
          ->jsexpr)
 
 ;; ---- running commands in the worktree -------------------------------------------
 
+;; First argument of a command, resolved for subprocess:
+;;   * "./x" or "../x" -> cwd-relative path
+;;   * bare name       -> PATH lookup, else unchanged
+;;   * absolute path   -> unchanged
+(define (resolve-command-path program cwd)
+  (define text (if (path? program) (path->string program) program))
+  (cond
+    [(regexp-match? #px"^\\.{1,2}/" text)
+     (path->string (simplify-path (build-path (simplify-path (path->complete-path cwd)) text)))]
+    [(absolute-path? (string->path text)) text]
+    [else (path->string (or (find-executable-path text) (string->path text)))]))
+
 ;; -> (values exit-code elapsed-seconds stdout stderr timed-out?)
 (define (run-command command #:cwd cwd #:timeout-seconds [timeout-seconds 5400])
   (define start (current-inexact-milliseconds))
+  ;; `subprocess` does not search PATH, and a relative executable such as
+  ;; "./qt" must resolve inside the WORKTREE — otherwise the harness would run
+  ;; the caller's checkout while measuring the trial one.
+  (define executable (resolve-command-path (first command) cwd))
   (define-values (proc out in err)
     (parameterize ([current-directory cwd])
-      (subprocess #f #f #f (car command) (cdr command))))
+      (apply subprocess #f #f #f executable (rest command))))
   (close-output-port in)
   (define done (make-semaphore 0))
   (define out-box (box ""))
@@ -63,6 +82,37 @@
           (unbox out-box)
           (unbox err-box)
           (not finished?)))
+
+;; ---- admission refresh (documented workflow step) ---------------------------------
+
+;; Changing an admitted owner's closure makes `./qt quick` fail closed until the
+;; admission record is refreshed — the documented workflow ("refresh the record
+;; once when an admitted owner's closure changed, then rerun"). The experiment
+;; performs that refresh and RESTORES both derived files afterwards, recording
+;; that it happened so the cost is visible rather than hidden.
+(define admission-files
+  (list "tests/.quick-admission.rktd" "tests/.coverage-manifest.json"))
+
+(define (refresh-admission! worktree)
+  (define-values (exit-code _elapsed stdout stderr _timed-out?)
+    (run-command (list "racket"
+                       "-e"
+                       (string-append "(begin (require (file \"scripts/testing/quick-audit.rkt\"))"
+                                      " (refresh-record!))"))
+                 #:cwd worktree
+                 #:timeout-seconds 1800))
+  (unless (equal? exit-code 0)
+    (raise-arguments-error 'refresh-admission!
+                           "admission refresh failed"
+                           "stderr"
+                           (if (equal? stderr "") stdout stderr)))
+  #t)
+
+(define (restore-derived-files! worktree)
+  (for ([rel (in-list admission-files)])
+    (define-values (_exit _elapsed _out _err _timed-out?)
+      (run-command (list "git" "checkout" "--" rel) #:cwd worktree #:timeout-seconds 300))
+    (void)))
 
 ;; ---- the selector's chosen set ----------------------------------------------------
 
@@ -131,7 +181,7 @@
         'comprehensive-timed-out
         full-timeout?
         'classification
-        (classify-selection selected-exit full-exit)))
+        (classify-run selected-exit selected-timeout? full-exit full-timeout?)))
 
 ;; ---- experiment driver ---------------------------------------------------------------
 
@@ -165,6 +215,14 @@
                            revision
                            "head"
                            head)))
+
+;; A timed-out or killed run is NOT evidence about detection: the ground truth
+;; was never obtained. Such a case is recorded as 'unavailable so it can never
+;; be counted as detected or missed.
+(define (classify-run selected-exit selected-timed-out? comprehensive-exit comprehensive-timed-out?)
+  (cond
+    [(or selected-timed-out? comprehensive-timed-out?) 'unavailable]
+    [else (classify-selection selected-exit comprehensive-exit)]))
 
 (define (->jsexpr value)
   (cond

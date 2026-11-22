@@ -66,6 +66,20 @@
     (check-equal? (classify-selection 0 0) 'true-negative)
     (check-equal? (classify-selection 1 0) 'false-positive))
 
+  (test-case "timeouts are unavailable, never detection evidence"
+    (check-equal? (classify-run 0 #f 0 #t) 'unavailable)
+    (check-equal? (classify-run 0 #t 1 #f) 'unavailable)
+    (check-equal? (classify-run 1 #f 1 #t) 'unavailable)
+    (check-equal? (classify-run 0 #f 1 #f) 'missed)
+    (check-equal? (classify-run 1 #f 1 #f) 'detected)
+    (check-equal? (classify-run 0 #f 0 #f) 'true-negative))
+
+  (test-case "relative executables resolve inside the worktree"
+    (check-equal? (resolve-command-path "./qt" "/tmp/wt") "/tmp/wt/qt")
+    (check-equal? (resolve-command-path "./qt" "/tmp/wt/") "/tmp/wt/qt")
+    (check-false (string-prefix? (resolve-command-path "git" "/tmp/wt") "/tmp/wt/git"))
+    (check-equal? (resolve-command-path "/bin/echo" "/tmp/wt") "/bin/echo"))
+
   (test-case "explain parser reads included files and escalations"
     (define text
       (string-append "changed files: 1\n"
