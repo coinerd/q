@@ -30,6 +30,8 @@
          selected-plan
          parse-explain-output
          resolve-command-path
+         restore-derived-files!
+         changed-paths
          current-admission-refresh
          current-derived-restore
          current-case-runner
@@ -132,11 +134,29 @@
                            (if (equal? stderr "") stdout stderr)))
   #t)
 
-(define (restore-derived-files! worktree)
-  (for ([rel (in-list admission-files)])
-    (define-values (_exit _elapsed _out _err _timed-out?)
-      (run-command (list "git" "checkout" "--" rel) #:cwd worktree #:timeout-seconds 300))
-    (void)))
+;; Restore BOTH the index and the worktree from `source` (default HEAD).
+;; `git checkout -- <file>` restores from the INDEX, so a staged refresh would
+;; survive it; `git restore --source ... --staged --worktree` cannot.
+(define (restore-derived-files! worktree [source #f])
+  (define args
+    (append (list "git" "restore")
+            (if source (list (format "--source=~a" source)) '("--source=HEAD"))
+            (list "--staged" "--worktree" "--")
+            admission-files))
+  (define-values (exit-code _elapsed stdout stderr _timed-out?)
+    (run-command args #:cwd worktree #:timeout-seconds 300))
+  (unless (equal? exit-code 0)
+    (raise-arguments-error 'restore-derived-files!
+                           "cannot restore derived files"
+                           "stderr"
+                           (if (equal? stderr "") stdout stderr)))
+  #t)
+
+;; Changed paths between two tree objects (no worktree/index involvement).
+(define (changed-paths worktree from-tree to-tree)
+  (string-split (git! worktree "diff-tree" "-r" "--name-only" "--no-commit-id"
+                       from-tree to-tree)
+                "\n"))
 
 ;; ---- the selector's chosen set ----------------------------------------------------
 
@@ -394,18 +414,44 @@
     (begin
       (git! worktree "add" "-A")
       (git! worktree "write-tree")))
-  (define record-identity
+  (define record-at-revision
     (for/list ([rel (in-list admission-files)])
       (hash 'path rel 'sha (git! worktree "rev-parse" (format "HEAD:~a" rel)))))
-  ((current-derived-restore) worktree)
+  ;; A refreshed admission record changes the selection diff. Record that
+  ;; preparation difference instead of claiming an identical execution tree.
+  (define record-changed?
+    (pair? (filter (lambda (entry)
+                     (not (equal? (git! worktree "hash-object" (hash-ref entry 'path))
+                                  (hash-ref entry 'sha))))
+                   record-at-revision)))
+  ((current-derived-restore) worktree revision)
   (define restored-sha
     (begin
       (git! worktree "add" "-A")
       (git! worktree "write-tree")))
+  (define revision-tree (git! worktree "rev-parse" (string-append revision "^{tree}")))
+  (define commits-changes (changed-paths worktree revision-tree restored-sha))
+  ;; A clean control must change nothing; a defect must change exactly the
+  ;; registered files and nothing else.
+  (define declared-changes (if (eq? label 'defect) (hash-ref case 'changed '()) '()))
   (hash 'selected measured
         'measured-tree-sha tree-sha
         'committed-tree-sha restored-sha
-        'record-at-revision record-identity))
+        'record-at-revision record-at-revision
+        'preparation
+        (hash 'admission-refreshed? #t
+              'record-changed-by-refresh? record-changed?
+              'record-in-selection-diff? record-changed?
+              'note
+              (string-append "the selector refuses a stale admission record, so the selected run "
+                             "executes against a refreshed record; the committed tree carries only "
+                             "the registered mutation"))
+        'committed-changes commits-changes
+        'declared-changes declared-changes
+        'provenance-ok?
+        (and (= (length commits-changes) (length declared-changes))
+             (null? (filter (lambda (rel) (not (member rel declared-changes))) commits-changes))
+             (null? (filter (lambda (rel) (not (member rel commits-changes))) declared-changes)))))
 
 ;; Commit whatever is staged in the worktree to a uniquely named scratch branch
 ;; and push it; returns the exact commit SHA CI must match.
@@ -449,6 +495,19 @@
    (lambda ()
      (define state
        (measure-selected! worktree revision case label #:files selected-files))
+     ;; Never dispatch CI for a tree that carries more (or less) than the
+     ;; registered mutation: that would make the sample non-comparable.
+     (unless (hash-ref state 'provenance-ok?)
+       (raise-arguments-error 'run-case-ci
+                              "committed state does not match the registered case mutation"
+                              "case"
+                              (hash-ref case 'id)
+                              "label"
+                              label
+                              "declared"
+                              (hash-ref state 'declared-changes)
+                              "committed"
+                              (hash-ref state 'committed-changes)))
      ;; A cached verdict is keyed by the COMMITTED tree sha, so the same tree
      ;; always carries the same CI evidence and no new run is dispatched.
      (define tree-key (hash-ref state 'committed-tree-sha))
@@ -489,6 +548,14 @@
            (hash-ref state 'committed-tree-sha)
            'record-at-revision
            (hash-ref state 'record-at-revision)
+           'preparation
+           (hash-ref state 'preparation)
+           'committed-changes
+           (hash-ref state 'committed-changes)
+           'declared-changes
+           (hash-ref state 'declared-changes)
+           'provenance-ok?
+           (hash-ref state 'provenance-ok?)
            'ci-verdict
            (hash-ref verdict 'verdict)
            'ci-run-id

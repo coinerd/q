@@ -160,4 +160,44 @@
     (check-false (hash-ref missed 'covered?))
     (check-equal? (hash-ref missed 'not-selected) (list "tests/test-gsd-wave-status.rkt"))
     (check-false (hash-ref (expected-scope-check (hash) '() '()) 'covered?)))
+
+  (test-case "derived files restore from the pinned source, index included"
+    ;; Regression for the D5 provenance defect: `git checkout -- <file>`
+    ;; restores from the INDEX, so a staged refresh survived and the committed
+    ;; tree carried two files. The restore must reset index AND worktree.
+    (define repo (make-temporary-file "cl5-restore-~a" 'directory))
+    (dynamic-wind
+     void
+     (lambda ()
+       (make-directory* (build-path repo "tests"))
+       (for ([rel (in-list (list "tests/.quick-admission.rktd" "tests/.coverage-manifest.json"))])
+         (call-with-output-file (build-path repo rel)
+                                (lambda (out) (display "original\n" out))))
+       (define (git . args)
+         (define-values (exit-code o e)
+           (let-values ([(proc out in err)
+                         (parameterize ([current-directory repo])
+                           (apply subprocess #f #f #f (or (find-executable-path "git") "git") args))])
+             (close-output-port in)
+             (define out-str (port->string out))
+             (define err-str (port->string err))
+             (subprocess-wait proc)
+             (values (subprocess-status proc) out-str err-str)))
+         (unless (equal? exit-code 0)
+           (error 'git "git ~a failed: ~a ~a" args o e))
+         (string-trim o))
+       (git "-c" "user.email=t@example.invalid" "-c" "user.name=t" "init" "-q")
+       (git "-c" "user.email=t@example.invalid" "-c" "user.name=t" "add" "-A")
+       (git "-c" "user.email=t@example.invalid" "-c" "user.name=t" "commit" "-q" "-m" "base")
+       ;; Refresh (modify) and stage, exactly like the admission refresh does.
+       (for ([rel (in-list (list "tests/.quick-admission.rktd" "tests/.coverage-manifest.json"))])
+         (call-with-output-file (build-path repo rel)
+                                (lambda (out) (display "refreshed\n" out))
+                                #:exists 'truncate))
+       (git "add" "-A")
+       (restore-derived-files! repo)
+       (check-equal? (git "status" "--porcelain") "")
+       (check-equal? (file->string (build-path repo "tests/.quick-admission.rktd")) "original\n")
+       (check-equal? (git "diff" "--cached" "--name-only") ""))
+     (lambda () (delete-directory/files repo))))
 )
