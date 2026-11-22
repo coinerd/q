@@ -21,6 +21,7 @@
          racket/port
          racket/string
          racket/system
+         "ci-evidence.rkt"
          "selection-cases.rkt")
 
 (provide run-command
@@ -29,6 +30,13 @@
          selected-plan
          parse-explain-output
          resolve-command-path
+         current-admission-refresh
+         current-derived-restore
+         current-case-runner
+         run-case-ci
+         run-experiment-ci
+         classify-ci-pair
+         git!
          classify-run
          ->jsexpr)
 
@@ -47,41 +55,52 @@
     [else (path->string (or (find-executable-path text) (string->path text)))]))
 
 ;; -> (values exit-code elapsed-seconds stdout stderr timed-out?)
+;;
+;; Completion means the CHILD PROCESS has exited AND both output readers have
+;; drained. Waiting only for reader EOF could report a verdict while the child
+;; was still running (early EOF when the child closes one stream), so this
+;; polls the process status and both reader threads against one deadline.
 (define (run-command command #:cwd cwd #:timeout-seconds [timeout-seconds 5400])
-  (define start (current-inexact-milliseconds))
   ;; `subprocess` does not search PATH, and a relative executable such as
   ;; "./qt" must resolve inside the WORKTREE — otherwise the harness would run
   ;; the caller's checkout while measuring the trial one.
   (define executable (resolve-command-path (first command) cwd))
+  (define start (current-inexact-milliseconds))
   (define-values (proc out in err)
     (parameterize ([current-directory cwd])
       (apply subprocess #f #f #f executable (rest command))))
   (close-output-port in)
-  (define done (make-semaphore 0))
   (define out-box (box ""))
   (define err-box (box ""))
-  (thread (lambda ()
-            (set-box! out-box
-                      (with-handlers ([exn:fail? (lambda (_) "")])
-                        (port->string out)))
-            (semaphore-post done)))
-  (thread (lambda ()
-            (set-box! err-box
-                      (with-handlers ([exn:fail? (lambda (_) "")])
-                        (port->string err)))
-            (semaphore-post done)))
-  (define finished? (sync/timeout timeout-seconds done))
-  (unless finished?
-    (subprocess-kill proc #t)
-    (subprocess-wait proc))
-  (sync/timeout 0 done)
-  (sync/timeout 0 done)
+  (define out-thread
+    (thread (lambda ()
+              (set-box! out-box (with-handlers ([exn:fail? (lambda (_) "")]) (port->string out))))))
+  (define err-thread
+    (thread (lambda ()
+              (set-box! err-box (with-handlers ([exn:fail? (lambda (_) "")]) (port->string err))))))
+  (define deadline (+ start (* 1000.0 timeout-seconds)))
+  (define (readers-done?) (and (thread-dead? out-thread) (thread-dead? err-thread)))
+  (define (process-running?) (eq? (subprocess-status proc) 'running))
+  (define (wait-for-completion)
+    (cond
+      [(and (readers-done?) (not (process-running?))) #f]
+      [(> (current-inexact-milliseconds) deadline)
+       (subprocess-kill proc #t)
+       (subprocess-wait proc)
+       ;; Give the readers a bounded moment to drain after the kill.
+       (let drain ([waited 0])
+         (cond [(readers-done?) (void)]
+               [(> waited 100) (void)]
+               [else (sleep 0.05) (drain (add1 waited))]))
+       #t]
+      [else (sleep 0.02) (wait-for-completion)]))
+  (define timed-out? (wait-for-completion))
   (define status (subprocess-status proc))
   (values (if (exact-integer? status) status -1)
           (/ (- (current-inexact-milliseconds) start) 1000.0)
           (unbox out-box)
           (unbox err-box)
-          (not finished?)))
+          timed-out?))
 
 ;; ---- admission refresh (documented workflow step) ---------------------------------
 
@@ -235,6 +254,124 @@
     [else value]))
 
 ;; Run every case (defect state + clean control), writing one JSON series.
+;; Injectable for tests: the orchestration must call the refresh exactly once
+;; per defect state and restore the derived files afterwards.
+(define current-admission-refresh (make-parameter refresh-admission!))
+(define current-derived-restore (make-parameter restore-derived-files!))
+(define current-case-runner (make-parameter run-case))
+
+;; ---- CI-backed state preparation (Option A) ---------------------------------------
+
+(define (git! worktree . args)
+  (define-values (exit-code _elapsed stdout stderr _timed-out?)
+    (run-command (append (list "git"
+                               "-c" "user.email=cl5-harness@example.invalid"
+                               "-c" "user.name=CL5 harness")
+                         args)
+                 #:cwd worktree
+                 #:timeout-seconds 600))
+  (unless (equal? exit-code 0)
+    (raise-arguments-error 'git!
+                           "git command failed"
+                           "args"
+                           args
+                           "stderr"
+                           (if (equal? stderr "") stdout stderr)))
+  (string-trim stdout))
+
+;; Commit the requested state (defect: with the injection; control: unchanged)
+;; to a uniquely named scratch branch, push it, and return the exact commit SHA
+;; the CI run must match.
+(define (push-state! worktree revision case label branch)
+  (when (eq? label 'defect) (void (apply-case! worktree case)))
+  (git! worktree "checkout" "-q" "--detach" revision)
+  (git! worktree "add" "-A")
+  (git! worktree "commit" "-q" "--allow-empty" "-m"
+        (format "cl5 w2 state: ~a ~a" (hash-ref case 'id) label))
+  (define sha (git! worktree "rev-parse" "HEAD"))
+  (git! worktree "push" "-q" "-f" "origin" (format "HEAD:refs/heads/~a" branch))
+  sha)
+
+;; One CI-backed case state: prepare, dispatch, wait for the exact SHA, record
+;; the verdict, then restore the worktree and delete the scratch branch.
+(define (run-case-ci repo-root worktree revision case label nonce
+                     #:timeout-seconds [timeout-seconds 2400])
+  (define branch (scratch-branch-name (hash-ref case 'id) label nonce))
+  (define sha (push-state! worktree revision case label branch))
+  (define verdict
+    (ci-verdict-for-sha repo-root sha #:branch branch #:timeout-seconds timeout-seconds))
+  ;; Restore the worktree to the pinned revision and drop the scratch branch.
+  (git! worktree "reset" "-q" "--hard" revision)
+  (git! worktree "clean" "-q" "-fd")
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (git! worktree "push" "-q" "origin" "--delete" branch))
+  (hash 'case
+        (hash-ref case 'id)
+        'label
+        label
+        'branch
+        branch
+        'head-sha
+        sha
+        'verdict
+        (hash-ref verdict 'verdict)
+        'run-id
+        (hash-ref verdict 'run-id #f)
+        'detecting
+        (hash-ref verdict 'detecting '())
+        'unavailable-reasons
+        (hash-ref verdict 'unavailable-reasons '())))
+
+;; Pair classification for CI-backed evidence. Both states must be available
+;; and the control must pass, otherwise the case is 'unavailable — a defect
+;; "detected" against a red control proves nothing.
+(define (classify-ci-pair defect-verdict control-verdict)
+  (cond
+    [(or (eq? defect-verdict 'unavailable) (eq? control-verdict 'unavailable)) 'unavailable]
+    [(eq? control-verdict 'fail) 'unavailable]
+    [(eq? defect-verdict 'fail) 'detected]
+    [else 'not-detected-by-comprehensive]))
+
+(define (run-experiment-ci repo-root
+                           worktree
+                           #:revision revision
+                           #:out-file out-file
+                           #:cases [cases selection-cases]
+                           #:nonce [nonce (number->string (current-seconds))]
+                           #:timeout-seconds [timeout-seconds 2400])
+  (preflight! worktree revision)
+  (define records
+    (for/list ([case (in-list cases)])
+      (define defect
+        (run-case-ci repo-root worktree revision case 'defect nonce #:timeout-seconds timeout-seconds))
+      (define control
+        (run-case-ci repo-root worktree revision case 'control nonce #:timeout-seconds timeout-seconds))
+      (hash 'case
+            (hash-ref case 'id)
+            'category
+            (hash-ref case 'category)
+            'note
+            (hash-ref case 'note)
+            'expect
+            (hash-ref case 'expect)
+            'defect
+            defect
+            'control
+            control
+            'classification
+            (classify-ci-pair (hash-ref defect 'verdict) (hash-ref control 'verdict)))))
+  (define report
+    (hash 'experiment "CL5 W2 shadow selection, CI ground truth (#9982)"
+          'revision revision
+          'worktree (path->string worktree)
+          'nonce nonce
+          'cases records))
+  (make-directory* (path-only out-file))
+  (call-with-output-file out-file
+                         (lambda (out) (write-string (jsexpr->string (->jsexpr report)) out))
+                         #:exists 'truncate/replace)
+  (hash 'out-file (path->string out-file) 'cases (length records) 'records records))
+
 (define (run-experiment worktree
                         #:revision revision
                         #:out-file out-file
@@ -244,10 +381,18 @@
     (for/list ([case (in-list cases)])
       (define original (apply-case! worktree case))
       (define defect
-        (dynamic-wind void
-                      (lambda () (run-case worktree case #:label 'defect))
-                      (lambda () (restore-case! worktree case original))))
-      (define clean (run-case worktree case #:label 'control))
+        (dynamic-wind
+         void
+         (lambda ()
+           ;; Refresh the admission record INSIDE the defect state, so an
+           ;; admission refusal can never be mistaken for the injected defect,
+           ;; and restore the derived files afterwards.
+           ((current-admission-refresh) worktree)
+           ((current-case-runner) worktree case #:label 'defect))
+         (lambda ()
+           (restore-case! worktree case original)
+           ((current-derived-restore) worktree))))
+      (define clean ((current-case-runner) worktree case #:label 'control))
       (hash 'case
             (hash-ref case 'id)
             'category
@@ -280,10 +425,14 @@
   (define revision #f)
   (define out-file #f)
   (define case-ids '())
+  (define ci? #f)
+  (define repo-root (path->string (build-path (current-directory) "..")))
   (command-line #:program "selection-experiment.rkt"
                 #:once-each ["--worktree" path "clean disposable checkout" (set! worktree path)]
                 ["--revision" sha "full SHA the worktree is pinned at" (set! revision sha)]
                 ["--out" path "JSON output file" (set! out-file path)]
+   ["--ci" "use exact-SHA CI ground truth instead of local ./qt full" (set! ci? #t)]
+   ["--repo-root" path "workspace root holding scripts/gh_helpers.py" (set! repo-root path)]
                 ["--case"
                  id
                  "case id (repeatable); default: every registered case"
@@ -295,8 +444,14 @@
         selection-cases
         (map selection-case (reverse case-ids))))
   (define result
-    (run-experiment (string->path worktree)
+    (if ci?
+        (run-experiment-ci (string->path repo-root)
+                           (string->path worktree)
+                           #:revision revision
+                           #:out-file (string->path out-file)
+                           #:cases cases)
+        (run-experiment (string->path worktree)
                     #:revision revision
-                    #:out-file (string->path out-file)
-                    #:cases cases))
+                        #:out-file (string->path out-file)
+                        #:cases cases)))
   (printf "wrote ~a (~a case(s))\\n" (hash-ref result 'out-file) (hash-ref result 'cases)))

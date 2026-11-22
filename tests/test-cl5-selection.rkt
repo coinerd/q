@@ -74,6 +74,53 @@
     (check-equal? (classify-run 1 #f 1 #f) 'detected)
     (check-equal? (classify-run 0 #f 0 #f) 'true-negative))
 
+  (test-case "run-command waits for process exit, not just reader EOF"
+    ;; The child closes stdout immediately but keeps running and later exits 7:
+    ;; an EOF-triggered implementation would report the command as finished.
+    (define-values (exit-code _elapsed _out _err timed-out?)
+      (run-command (list "sh" "-c" "exec 1>&-; sleep 2; exit 7") #:cwd "/tmp" #:timeout-seconds 30))
+    (check-equal? exit-code 7)
+    (check-false timed-out?))
+
+  (test-case "a hung command times out and is killed"
+    (define-values (exit-code _elapsed _out _err timed-out?)
+      (run-command (list "sh" "-c" "sleep 30") #:cwd "/tmp" #:timeout-seconds 1))
+    (check-true timed-out?)
+    (check-true (not (equal? exit-code 0))))
+
+  (test-case "the defect state refreshes admission once and restores the tree"
+    ;; A minimal tree holding the real module text so the substitution applies.
+    (define tree (make-temporary-file "cl5-adm-~a" 'directory))
+    (define module-rel "extensions/gsd/wave-status.rkt")
+    (define source (file->string (build-path repo-root module-rel)))
+    (define calls '())
+    (define (record! kind detail) (set! calls (cons (list kind detail) calls)) #t)
+    (dynamic-wind
+     void
+     (lambda ()
+       (make-directory* (build-path tree "extensions" "gsd"))
+       (call-with-output-file (build-path tree module-rel)
+                              (lambda (out) (display source out)))
+       (parameterize ([current-admission-refresh (lambda (wt) (record! 'refresh (path->string wt)))]
+                      [current-derived-restore (lambda (wt) (record! 'restore (path->string wt)))]
+                      [current-case-runner
+                       (lambda (wt case #:label label)
+                         (record! 'run (list label (file->string (build-path wt module-rel)))) )])
+         (define case (selection-case 'D5))
+         (define original (apply-case! tree case))
+         ((current-admission-refresh) tree)
+         ((current-case-runner) tree case #:label 'defect)
+         (restore-case! tree case original)
+         ((current-derived-restore) tree))
+       (define kinds (map car calls))
+       (check-equal? (length (filter (lambda (kind) (eq? kind 'refresh)) kinds)) 1)
+       (check-equal? (length (filter (lambda (kind) (eq? kind 'restore)) kinds)) 1)
+       ;; The refresh ran while the injected text was present.
+       (define run-entry (for/first ([c (in-list calls)] #:when (eq? (car c) 'run)) c))
+       (check-true (string-contains? (second (second run-entry)) "silent fallback"))
+       (check-equal? (file->string (build-path tree module-rel)) source))
+     (lambda () (delete-directory/files tree))))
+
   (test-case "relative executables resolve inside the worktree"
     (check-equal? (resolve-command-path "./qt" "/tmp/wt") "/tmp/wt/qt")
     (check-equal? (resolve-command-path "./qt" "/tmp/wt/") "/tmp/wt/qt")
