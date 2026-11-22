@@ -97,14 +97,27 @@
     (check-equal? (hash-ref decoded 'thinking) "high")
     (check-equal? (hash-ref decoded 'pi-version) "1.6.0"))
 
-  (test-case "series metadata mismatch is rejected instead of merged"
-    (define requested (series-metadata config 'baseline #:host "host-a" #:n 3))
+  (test-case "series metadata mismatch is rejected on the full identity"
+    (define requested (series-metadata config 'baseline #:host "host-a" #:n 3 #:rotation '(T1 T2)))
     (check-equal? (check-series-metadata requested requested) requested)
-    (for ([key (in-list '(revision provider model thinking pi-version))])
+    ;; Every identity field is pinned: model identity, both arms, host class,
+    ;; tool allowlist, case count and rotation order.
+    (check-equal? series-identity-keys
+                  '(arm revision provider model full-id thinking tool-allowlist pi-version host n rotation))
+    (for ([key (in-list series-identity-keys)])
       (check-exn exn:fail?
                  (lambda ()
-                   (check-series-metadata (hash-set requested key "historical-kimi-value") requested))
-                 (format "mismatch on ~a must raise" key))))
+                   (check-series-metadata (hash-set requested key "drifted-value") requested))
+                 (format "mismatch on ~a must raise" key)))
+    ;; A rotation change is a different experiment even with identical counts.
+    (check-exn exn:fail?
+               (lambda ()
+                 (check-series-metadata (hash-set requested 'rotation '("T2" "T1")) requested)))
+    ;; The requested metadata must carry a verified CLI version.
+    (check-exn exn:fail?
+               (lambda ()
+                 (check-series-metadata (hash-set requested 'pi-version #f)
+                                        (hash-set requested 'pi-version #f)))))
 
   (test-case "an unavailable model refuses; a near-match is not a fallback"
     (define advertised
@@ -161,6 +174,32 @@
                  (verify-effective-config (session-events #:model "deepseek-v4-pro") config)))
     (check-exn exn:fail?
                (lambda () (verify-effective-config (session-events #:thinking "medium") config)))
+    ;; An intermediate substitution that is later reverted (A -> B -> A) must be
+    ;; rejected too: the series is fixed-model for the whole session.
+    (define switched-events
+      (list (hash 'type "session" 'timestamp "2026-11-21T22:29:03.368Z")
+            (hash 'type "model_change" 'timestamp "2026-11-21T22:29:03.503Z"
+                  'provider "deepseek" 'modelId "deepseek-flash")
+            (hash 'type "thinking_level_change" 'timestamp "2026-11-21T22:29:03.503Z"
+                  'thinkingLevel "high")
+            (hash 'type "model_change" 'timestamp "2026-11-21T22:30:00.000Z"
+                  'provider "kimi-coding" 'modelId "k3-256k")
+            (hash 'type "model_change" 'timestamp "2026-11-21T22:31:00.000Z"
+                  'provider "deepseek" 'modelId "deepseek-flash")))
+    (check-exn exn:fail?
+               (lambda () (verify-effective-config switched-events config)))
+    (define thinking-switched
+      (list (hash 'type "session" 'timestamp "2026-11-21T22:29:03.368Z")
+            (hash 'type "model_change" 'timestamp "2026-11-21T22:29:03.503Z"
+                  'provider "deepseek" 'modelId "deepseek-flash")
+            (hash 'type "thinking_level_change" 'timestamp "2026-11-21T22:29:03.503Z"
+                  'thinkingLevel "high")
+            (hash 'type "thinking_level_change" 'timestamp "2026-11-21T22:30:00.000Z"
+                  'thinkingLevel "medium")
+            (hash 'type "thinking_level_change" 'timestamp "2026-11-21T22:31:00.000Z"
+                  'thinkingLevel "high")))
+    (check-exn exn:fail?
+               (lambda () (verify-effective-config thinking-switched config)))
     ;; Absence of an event is also a failure, not an implicit default.
     (check-exn exn:fail?
                (lambda ()

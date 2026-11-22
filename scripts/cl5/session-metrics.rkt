@@ -131,6 +131,14 @@
     (let ([value (hash-ref usage key 0)]) (if (number? value) value 0)))
   (+ (num 'input) (num 'cacheRead) (num 'cacheWrite)))
 
+;; An assistant message with a text block is answer material. The LAST such
+;; message is the navigation answer point (CL0 §1: "before the final answer").
+(define (message-has-text? message)
+  (define content (hash-ref message 'content '()))
+  (and (list? content)
+       (for/or ([item (in-list content)])
+         (and (hash? item) (equal? (hash-ref item 'type #f) "text")))))
+
 (define (message-tool-calls message)
   (filter (lambda (item) (and (hash? item) (equal? (hash-ref item 'type #f) "toolCall")))
           (let ([content (hash-ref message 'content '())])
@@ -183,6 +191,14 @@
       (event-ms event)))
   (define token-sum 0)
   (define context-at-edit #f)
+  (define last-context #f)
+  ;; Answer-point accumulators: snapshot at every assistant text message so the
+  ;; LAST snapshot is "before the final answer" for navigation tasks.
+  (define answer-tokens 0)
+  (define answer-context #f)
+  (define answer-files 0)
+  (define answer-calls 0)
+  (define answer-ms #f)
   (define files-read (mutable-set))
   (define investigation-calls 0)
   (define first-edit-found? #f)
@@ -207,9 +223,10 @@
          (set! assistant-turn-count (add1 assistant-turn-count))
          ;; Inclusive token accounting: this message is counted when the first
          ;; in-scope edit has not happened in any EARLIER message.
+         (set! last-context (assistant-context-total message))
          (unless first-edit-found?
-          (set! token-sum (+ token-sum (assistant-usage-total message)))
-          (set! context-at-edit (assistant-context-total message)))
+           (set! token-sum (+ token-sum (assistant-usage-total message)))
+           (set! context-at-edit (assistant-context-total message)))
          (for ([call (in-list (message-tool-calls message))])
            (set! tool-call-count (add1 tool-call-count))
            (define name (hash-ref call 'name #f))
@@ -243,7 +260,15 @@
                 (unless first-edit-found?
                   (set! first-edit-found? #t)
                   (set! first-edit-ms (and start-ms ms (- ms start-ms))))]
-               [write-path (set-add! unrelated-writes write-path)]))))]))
+               [write-path (set-add! unrelated-writes write-path)])))
+         ;; Snapshot AFTER this message's calls are processed: the answer point
+         ;; is the end of the last assistant message that carried text.
+         (when (message-has-text? message)
+           (set! answer-tokens token-sum)
+           (set! answer-context last-context)
+           (set! answer-files (set-count files-read))
+           (set! answer-calls investigation-calls)
+           (set! answer-ms (and start-ms ms (- ms start-ms)))))]))
   (hash 'tokens-before-first-in-scope-edit
         (and first-edit-found? token-sum)
         'context-tokens-at-first-in-scope-edit
@@ -252,6 +277,16 @@
         (and first-edit-found? (set-count files-read))
         'investigation-calls-before-first-edit
         (and first-edit-found? investigation-calls)
+        'tokens-before-answer
+        (and answer-ms answer-tokens)
+        'context-tokens-at-answer
+        answer-context
+        'files-read-before-answer
+        (and answer-ms answer-files)
+        'investigation-calls-before-answer
+        (and answer-ms answer-calls)
+        'answer-ms
+        answer-ms
         'owner-location-ms
         owner-location-ms
         'first-edit-ms

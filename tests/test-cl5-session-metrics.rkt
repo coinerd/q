@@ -32,6 +32,9 @@
 (define (tool-call name arguments)
   (hash 'type "toolCall" 'id "call-1" 'name name 'arguments arguments))
 
+(define (text-part text)
+  (hash 'type "text" 'text text))
+
 (define (assistant-event t calls in-tokens out-tokens)
   (hash 'type
         "message"
@@ -83,6 +86,27 @@
         (assistant-event (ts 40 "000") '() 9000 900)))
 
 (module+ test
+  (test-case "navigation answer metrics snapshot at the last assistant text"
+    ;; No edits: the answer point is the final assistant text message.
+    (define events
+      (list (session-event (ts 0 "000"))
+            (assistant-event (ts 5 "000")
+                             (list (tool-call "read" (hash 'path "agent/state.rkt")))
+                             1000
+                             100)
+            (assistant-event (ts 9 "000")
+                             (list (tool-call "read" (hash 'path "agent/loop.rkt")))
+                             2000
+                             100)
+            (assistant-event (ts 12 "000") (list (text-part "the answer")) 3000 50)))
+    (define m (session-metrics events '() #:owner-paths (list "agent/state.rkt")))
+    (check-equal? (hash-ref m 'files-read-before-answer) 2)
+    (check-equal? (hash-ref m 'investigation-calls-before-answer) 2)
+    (check-equal? (hash-ref m 'answer-ms) 12000)
+    (check-equal? (hash-ref m 'tokens-before-answer) 6250)
+    (check-equal? (hash-ref m 'context-tokens-at-answer) 3000)
+    ;; No in-scope edit, so the edit-relative fields stay unset.
+    (check-false (hash-ref m 'tokens-before-first-in-scope-edit)))
   (test-case "iso8601->ms parses Zulu timestamps with fractions"
     (check-equal? (iso8601->ms "1970-01-01T00:00:00.000Z") 0)
     (check-equal? (iso8601->ms "1970-01-01T00:00:01.500Z") 1500)

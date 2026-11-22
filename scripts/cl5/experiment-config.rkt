@@ -47,6 +47,7 @@
          verify-effective-config
          experiment-metadata
          series-metadata
+         series-identity-keys
          check-series-metadata)
 
 ;; ---- the configuration ----------------------------------------------------------
@@ -201,55 +202,80 @@
 
 ;; ---- effective configuration from a transcript -------------------------------------
 
-;; Last value recorded for a transcript event type.
-(define (last-field events type key)
-  (for/last ([event (in-list events)]
+;; Events of one transcript type, in order.
+(define (events-of-type events type)
+  (for/list ([event (in-list events)]
              #:when (equal? (hash-ref event 'type #f) type))
-    (hash-ref event key #f)))
+    event))
 
 ;; Read the EFFECTIVE provider/model/thinking from a session transcript.
+;; Reports the distinct observed identities so a caller can see the evidence.
 (define (effective-config events)
+  (define model-events (events-of-type events "model_change"))
+  (define thinking-events (events-of-type events "thinking_level_change"))
   (hash 'provider
-        (last-field events "model_change" 'provider)
+        (and (pair? model-events) (hash-ref (last model-events) 'provider #f))
         'model
-        (last-field events "model_change" 'modelId)
+        (and (pair? model-events) (hash-ref (last model-events) 'modelId #f))
         'thinking
-        (last-field events "thinking_level_change" 'thinkingLevel)))
+        (and (pair? thinking-events) (hash-ref (last thinking-events) 'thinkingLevel #f))
+        'model-changes
+        (for/list ([event (in-list model-events)])
+          (format "~a/~a" (hash-ref event 'provider #f) (hash-ref event 'modelId #f)))
+        'thinking-changes
+        (for/list ([event (in-list thinking-events)]) (hash-ref event 'thinkingLevel #f))))
 
-;; Fail closed: the session must show exactly the requested identity. A
-;; missing event is as invalid as a substituted one — the harness never
-;; assumes the CLI did what it was asked.
+;; Fail closed: the session must show exactly the requested identity for its
+;; WHOLE lifetime. Checking only the last event would accept an intermediate
+;; switch that was later reverted (A -> B -> A), which is exactly what a
+;; fixed-model series must reject. Any mismatching event raises, and a missing
+;; event type is as invalid as a substituted one.
 (define (verify-effective-config events config)
-  (define effective (effective-config events))
-  (define provider (hash-ref effective 'provider))
-  (define model (hash-ref effective 'model))
-  (define thinking (hash-ref effective 'thinking))
-  (unless provider
+  (define requested-provider (hash-ref config 'provider))
+  (define requested-model (hash-ref config 'model))
+  (define requested-thinking (hash-ref config 'thinking))
+  (define model-events (events-of-type events "model_change"))
+  (define thinking-events (events-of-type events "thinking_level_change"))
+  (when (null? model-events)
     (raise-arguments-error 'verify-effective-config "session records no model_change event"))
-  (unless thinking
-    (raise-arguments-error 'verify-effective-config "session records no thinking_level_change event"))
-  (unless (equal? provider (hash-ref config 'provider))
+  (when (null? thinking-events)
     (raise-arguments-error 'verify-effective-config
-                           "effective provider differs from the requested configuration"
-                           "requested"
-                           (hash-ref config 'provider)
-                           "effective"
-                           provider))
-  (unless (equal? model (hash-ref config 'model))
-    (raise-arguments-error 'verify-effective-config
-                           "effective model differs from the requested configuration"
-                           "requested"
-                           (hash-ref config 'model)
-                           "effective"
-                           model))
-  (unless (equal? thinking (hash-ref config 'thinking))
-    (raise-arguments-error 'verify-effective-config
-                           "effective thinking level differs from the requested configuration"
-                           "requested"
-                           (hash-ref config 'thinking)
-                           "effective"
-                           thinking))
-  (hash 'provider provider 'model model 'thinking thinking 'verified? #t))
+                           "session records no thinking_level_change event"))
+  (for ([event (in-list model-events)])
+    (define provider (hash-ref event 'provider #f))
+    (define model (hash-ref event 'modelId #f))
+    (unless (and (equal? provider requested-provider) (equal? model requested-model))
+      (raise-arguments-error 'verify-effective-config
+                             "session observed a different provider/model at some point"
+                             "requested"
+                             (format "~a/~a" requested-provider requested-model)
+                             "observed"
+                             (format "~a/~a" provider model)
+                             "timestamp"
+                             (hash-ref event 'timestamp #f))))
+  (for ([event (in-list thinking-events)])
+    (define thinking (hash-ref event 'thinkingLevel #f))
+    (unless (equal? thinking requested-thinking)
+      (raise-arguments-error 'verify-effective-config
+                             "session observed a different thinking level at some point"
+                             "requested"
+                             requested-thinking
+                             "observed"
+                             thinking
+                             "timestamp"
+                             (hash-ref event 'timestamp #f))))
+  (hash 'provider
+        requested-provider
+        'model
+        requested-model
+        'thinking
+        requested-thinking
+        'verified?
+        #t
+        'model-changes
+        (length model-events)
+        'thinking-changes
+        (length thinking-events)))
 
 ;; ---- metadata ------------------------------------------------------------------
 
@@ -288,6 +314,8 @@
         arm
         'revision
         (hash-ref arm-cfg 'revision)
+        'full-id
+        (hash-ref arm-cfg 'full-id)
         'provider
         (hash-ref arm-cfg 'provider)
         'model
@@ -308,14 +336,26 @@
         (map (lambda (task) (symbol->string task)) rotation)))
 
 ;; Series files are append-only, so a second run may only extend a series
-;; whose stamped identity matches EXACTLY. A changed provider, model,
-;; thinking level, CLI version or arm revision is an error — the honest
-;; response is a new series, never a merge of two configurations.
+;; whose stamped identity matches EXACTLY: both pinned arms, the model
+;; identity, the thinking level, the tool allowlist, the CLI version, the
+;; host class, the trial count and the rotation. A changed value is an error
+;; — the honest response is a new series, never a merge of two experiments.
+(define series-identity-keys
+  '(arm revision provider model full-id thinking tool-allowlist pi-version host n rotation))
+
+;; The running pi version must be present and must equal the stamp: a series
+;; cannot claim a CLI version its runner never verified.
 (define (check-series-metadata existing requested)
-  (for ([key (in-list '(revision provider model thinking pi-version))])
+  (define running-version (hash-ref requested 'pi-version #f))
+  (unless (and (string? running-version) (not (equal? running-version "")))
+    (raise-arguments-error 'check-series-metadata
+                           "requested series metadata has no verified pi version"
+                           "pi-version"
+                           running-version))
+  (for ([key (in-list series-identity-keys)])
     (unless (equal? (hash-ref existing key #f) (hash-ref requested key #f))
       (raise-arguments-error 'check-series-metadata
-                             "series metadata mismatch; a series never mixes configurations"
+                             "series metadata mismatch; a series never mixes experiments"
                              "key"
                              key
                              "existing"

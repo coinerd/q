@@ -137,6 +137,9 @@ one `test-case` for it in `tests/tui/test-char-width.rkt`. Nothing else changes.
 ;;   provenance          — report section the spec projects
 ;;   ownership-set       — paths the task may read/write; '() for navigation
 ;;                         tasks (any write there is unrelated by definition)
+;;   write-paths         — the subset the oracle's diff constraint requires to
+;;                         have changed (T2 may modify only its test file; the
+;;                         production reference is read-only)
 ;;   owner-location-paths— the authoritative implementation paths used by the
 ;;                         owner-location-time metric (CL0 report §1 step 4)
 ;;   answer-spec         — task-specific frozen facts (hash)
@@ -156,6 +159,8 @@ one `test-case` for it in `tests/tui/test-char-width.rkt`. Nothing else changes.
               (string-append report-file " §2 T1")
               'ownership-set
               '()
+              'write-paths
+              '()
               'owner-location-paths
               (list "extensions/gsd/campaign-decision.rkt")
               'answer-spec
@@ -173,6 +178,8 @@ one `test-case` for it in `tests/tui/test-char-width.rkt`. Nothing else changes.
               'provenance
               (string-append report-file " §2 T3")
               'ownership-set
+              '()
+              'write-paths
               '()
               'owner-location-paths
               (list "agent/state.rkt")
@@ -192,6 +199,8 @@ one `test-case` for it in `tests/tui/test-char-width.rkt`. Nothing else changes.
               (string-append report-file " §2 T4")
               'ownership-set
               '()
+              'write-paths
+              '()
               'owner-location-paths
               (list "llm/provider-errors.rkt" "runtime/provider-retry.rkt")
               'answer-spec
@@ -210,6 +219,8 @@ one `test-case` for it in `tests/tui/test-char-width.rkt`. Nothing else changes.
               (string-append report-file " §3 T2")
               'ownership-set
               (list "extensions/gsd/delivery-outcome.rkt" "tests/test-gsd-delivery-stop-decision.rkt")
+              'write-paths
+              (list "tests/test-gsd-delivery-stop-decision.rkt")
               'owner-location-paths
               (list "extensions/gsd/delivery-outcome.rkt")
               'answer-spec
@@ -227,6 +238,8 @@ one `test-case` for it in `tests/tui/test-char-width.rkt`. Nothing else changes.
               'provenance
               (string-append report-file " §3 T5")
               'ownership-set
+              (list "tui/char-width.rkt" "tests/tui/test-char-width.rkt")
+              'write-paths
               (list "tui/char-width.rkt" "tests/tui/test-char-width.rkt")
               'owner-location-paths
               (list "tui/char-width.rkt")
@@ -278,6 +291,25 @@ one `test-case` for it in `tests/tui/test-char-width.rkt`. Nothing else changes.
   (when (and (eq? kind 'implementation) (null? ownership-set))
     (raise-arguments-error 'validate-task-specs
                            "implementation task must own at least one path"
+                           "task"
+                           id))
+  (define write-paths (hash-ref spec 'write-paths #f))
+  (unless (list-of-strings? write-paths)
+    (raise-arguments-error 'validate-task-specs
+                           "spec has no write-paths list (may be empty for navigation tasks)"
+                           "task"
+                           id))
+  (for ([path (in-list write-paths)])
+    (unless (member path ownership-set)
+      (raise-arguments-error 'validate-task-specs
+                             "write-path is not inside the ownership set"
+                             "task"
+                             id
+                             "path"
+                             path)))
+  (when (and (eq? kind 'implementation) (null? write-paths))
+    (raise-arguments-error 'validate-task-specs
+                           "implementation task must require at least one written file"
                            "task"
                            id))
   (unless (list-of-strings? (hash-ref spec 'owner-location-paths #f))

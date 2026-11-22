@@ -31,6 +31,7 @@
          find-newest-session-file
          last-assistant-text
          reset-worktree!
+         write-series!
          available-models
          pi-version
          ->jsexpr)
@@ -108,16 +109,13 @@
         path)
       '()))
 
-;; The session file produced by a trial: the newest .jsonl under session-dir
-;; that was not present before the run (pi may nest by working directory).
-;; Falls back to the newest .jsonl overall when the pre-run set is unknown.
+;; The session file produced by THIS trial: the newest .jsonl under
+;; session-dir that did not exist before the run. There is deliberately no
+;; "fall back to the newest file overall" path — picking up a stale session
+;; would attach another trial's transcript to this record.
 (define (find-newest-session-file session-dir [before '()])
   (define fresh (filter (lambda (path) (not (member path before))) (session-jsonl-files session-dir)))
-  (define candidates
-    (if (null? fresh)
-        (session-jsonl-files session-dir)
-        fresh))
-  (and (pair? candidates) (argmax file-or-directory-modify-seconds candidates)))
+  (and (pair? fresh) (argmax file-or-directory-modify-seconds fresh)))
 
 ;; Concatenated text blocks of the LAST assistant message — the trial's
 ;; submitted answer for navigation tasks.
@@ -148,6 +146,10 @@
 ;; The configuration comes from ONE arm config (scripts/cl5/experiment-config.rkt).
 ;; After the session, the EFFECTIVE provider/model/thinking are verified against
 ;; that config and a mismatch raises: an invalid trial is never recorded.
+;;
+;; Cleanup is guaranteed: the worktree is reset in a dynamic-wind after-thunk,
+;; so an exception during grading, oracle execution or effective-config
+;; verification still leaves a clean tree for the next trial.
 (define (run-trial task-id
                    worktree
                    #:config config
@@ -155,6 +157,25 @@
                    #:session-dir session-dir
                    #:reset? [reset? #t]
                    #:timeout-ms [timeout-ms 3600000])
+  (define arm-cfg (arm-config config arm))
+  (define arm-revision (hash-ref arm-cfg 'revision))
+  (dynamic-wind
+   void
+   (lambda ()
+     (run-trial-body task-id
+                     worktree
+                     #:config config
+                     #:arm arm
+                     #:session-dir session-dir
+                     #:timeout-ms timeout-ms))
+   (lambda () (when reset? (reset-worktree! worktree arm-revision)))))
+
+(define (run-trial-body task-id
+                        worktree
+                        #:config config
+                        #:arm arm
+                        #:session-dir session-dir
+                        #:timeout-ms [timeout-ms 3600000])
   (define spec (task-spec task-id))
   (define arm-cfg (arm-config config arm))
   (define arm-revision (hash-ref arm-cfg 'revision))
@@ -192,12 +213,15 @@
   (define changed (changed-paths worktree arm-revision))
   (define constraint
     (and (eq? (hash-ref spec 'oracle) 'execution)
-         (diff-constraint changed (hash-ref spec 'ownership-set) (hash-ref spec 'ownership-set))))
+         (diff-constraint changed
+                          (hash-ref spec 'ownership-set)
+                          (hash-ref spec 'write-paths))))
   (define oracle-record
     (cond
       [(eq? (hash-ref spec 'oracle) 'text) (grade-task task-id (last-assistant-text events))]
       [else
-       (define execution (grade-task-by-execution task-id worktree #:timeout-ms timeout-ms))
+       (define execution
+         (grade-task-by-execution task-id worktree #:revision arm-revision #:timeout-ms timeout-ms))
        (define constraint-pass? (eq? (hash-ref constraint 'verdict) 'pass))
        (hash-set* execution
                   'verdict
@@ -210,6 +234,13 @@
                       (list (format "diff constraint failed: stray=~a missing=~a"
                                     (hash-ref constraint 'stray)
                                     (hash-ref constraint 'missing)))))]))
+  ;; First-correct-edit: CL0 distinguishes the first in-scope edit from the
+  ;; first edit whose final state passes. This harness grades the final tree,
+  ;; so when the oracle passes the two coincide and the basis is recorded; a
+  ;; per-edit bisect is not performed (and is never implied).
+  (define first-edit-ms (and metrics (hash-ref metrics 'first-edit-ms #f)))
+  (define first-correct-edit-ms
+    (and (eq? (hash-ref oracle-record 'verdict) 'pass) first-edit-ms))
   (define record
     (hash 'task
           (symbol->string task-id)
@@ -231,21 +262,21 @@
           'effective
           effective
           'session-file
-          (and session-file (path->string session-file))
+          (path->string session-file)
           'exit-code
           exit-code
           'timed-out
           timed-out?
           'changed-paths
           changed
+          'first-correct-edit-ms
+          first-correct-edit-ms
+          'first-correct-edit-basis
+          (if first-correct-edit-ms "final-oracle-pass" #f)
           'metrics
           metrics
           'oracle
           oracle-record))
-  ;; Reset AFTER grading: the next trial starts from the arm revision and the
-  ;; agent's work is already captured in `changed-paths`.
-  (when reset?
-    (reset-worktree! worktree arm-revision))
   record)
 
 ;; Restore the worktree to the arm revision: tracked edits, deletions and
@@ -294,6 +325,20 @@
 ;; unavailable model raises BEFORE the first session (no fallback), and an
 ;; existing series may only be extended when its stamped identity matches
 ;; exactly — a drifted configuration is an error, not a new file.
+;; Write the whole series file (metadata + all records so far). Called after
+;; EVERY trial so a crash or a quota abort loses at most the in-flight trial —
+;; the completed records are already on disk, and each is append-only in the
+;; sense that no later run rewrites them.
+(define (write-series! path metadata trials)
+  (define directory (path-only path))
+  (when directory (make-directory* directory))
+  (call-with-output-file path
+                         (lambda (out)
+                           (write-string (jsexpr->string
+                                          (hash-set (->jsexpr metadata) 'trials trials))
+                                         out))
+                         #:exists 'truncate/replace))
+
 (define (run-series tasks
                     worktree
                     #:config config
@@ -303,17 +348,31 @@
                     #:session-dir session-dir
                     #:out-dir [out-dir "docs/reports"]
                     #:timeout-ms [timeout-ms 3600000]
-                    #:models [models #f])
+                    #:models [models #f]
+                    #:cli-version [cli-version #f])
   (define arm-cfg (arm-config config arm))
   (define arm-revision (hash-ref arm-cfg 'revision))
-  (define short-rev (substring arm-revision 0 (min 8 (string-length arm-revision))))
-  ;; Fail closed before the first session: the provider must advertise the
-  ;; configured model. `models` is injectable only so tests can exercise the
-  ;; refusal without a network call; production passes #f and asks the CLI.
+  ;; Fail closed before the first session, on both identities:
+  ;;  * the provider must advertise the configured model (no fallback);
+  ;;  * the pi version running now must equal the version stamped in the
+  ;;    config, or the series cannot claim a CLI identity.
   (assert-model-available (or models (available-models (hash-ref arm-cfg 'provider))) arm-cfg)
+  (define stamped-version (hash-ref config 'pi-version #f))
+  (unless (and (string? stamped-version) (not (equal? stamped-version "")))
+    (raise-arguments-error 'run-series
+                           "config carries no verified pi version; refusing to start a series"
+                           "pi-version"
+                           stamped-version))
+  (define running-version (or cli-version (pi-version)))
+  (unless (equal? running-version stamped-version)
+    (raise-arguments-error 'run-series
+                           "running pi version differs from the stamped configuration"
+                           "stamped"
+                           stamped-version
+                           "running"
+                           running-version))
   (define path (series-path-for arm arm-revision out-dir))
-  (define metadata
-    (series-metadata config arm #:host (current-host) #:n n #:rotation rotation))
+  (define metadata (series-metadata config arm #:host (current-host) #:n n #:rotation rotation))
   (define existing
     (and (file-exists? path)
          (with-handlers ([exn:fail? (lambda (_) #f)])
@@ -324,26 +383,19 @@
                            "path"
                            (path->string path)))
   (when existing (check-series-metadata existing metadata))
-  (define new-trials
-    (for*/list ([round (in-range n)]
-                [task-id (in-list rotation)])
+  (define trials (if existing (hash-ref existing 'trials '()) '()))
+  (for* ([round (in-range n)] [task-id (in-list rotation)])
+    (define record
       (run-trial task-id
                  worktree
                  #:config config
                  #:arm arm
                  #:session-dir session-dir
-                 #:timeout-ms timeout-ms)))
-  (define all-trials
-    (append (if existing
-                (hash-ref existing 'trials '())
-                '())
-            (map ->jsexpr new-trials)))
-  (make-directory* out-dir)
-  (define series (hash-set (->jsexpr metadata) 'trials all-trials))
-  (call-with-output-file path
-                         (lambda (out) (write-string (jsexpr->string series) out))
-                         #:exists 'truncate/replace)
-  (hash 'series-file (path->string path) 'trial-count (length all-trials)))
+                 #:timeout-ms timeout-ms))
+    (set! trials (append trials (list (->jsexpr record))))
+    ;; Checkpoint: the completed trial is durable before the next one starts.
+    (write-series! path metadata trials))
+  (hash 'series-file (path->string path) 'trial-count (length trials)))
 
 ;; ---- CLI: dry-run only ----------------------------------------------------------
 

@@ -24,6 +24,9 @@
 (define (verdict-of result)
   (hash-ref result 'verdict))
 
+(define (grade-task-verdict task-id text)
+  (hash-ref (grade-task task-id text) 'verdict))
+
 (module+ test
   ;; ---- path extraction -------------------------------------------------------
 
@@ -87,6 +90,25 @@
     (check-equal? (verdict-of result) 'partial)
     (check-true (for/or ([reason (in-list (hash-ref result 'reasons))])
                   (string-contains? reason "go-orchestrator"))))
+
+  (test-case "T1: one #f with both field labels is partial, not a pass"
+    ;; Two distinct #f fields must be reported; one cannot pin wave-index AND merge-sha.
+    (check-equal? (grade-task-verdict 'T1
+                                      "kind complete route none code campaign-complete wave-index #f merge-sha"
+                                      )
+                  'partial)
+    (check-equal? (grade-task-verdict 'T1
+                                      "kind complete route none code campaign-complete wave-index merge-sha #f")
+                  'partial))
+
+  (test-case "suite-result-summary parses both raco test shapes"
+    (check-equal? (suite-result-summary "45 tests passed\n")
+                  (hash 'failed 0 'total 45))
+    (check-equal? (suite-result-summary "1 test passed\n")
+                  (hash 'failed 0 'total 1))
+    (check-equal? (suite-result-summary "1/22 test failures\n")
+                  (hash 'failed 1 'total 22))
+    (check-false (suite-result-summary "no summary here")))
 
   (test-case "T1: 'complete does not match inside 'campaign-complete"
     ;; only campaign-complete mentioned: 'complete must be reported missing
@@ -166,7 +188,8 @@
   (test-case "implementation tasks have no text grading"
     (check-false (grade-task 'T2 "any text"))
     (check-false (grade-task 'T5 "any text"))
-    (check-exn #rx"not execution-graded" (lambda () (grade-task-by-execution 'T1 "/tmp"))))
+    (check-exn #rx"not execution-graded"
+               (lambda () (grade-task-by-execution 'T1 "/tmp" #:revision "0"))))
 
   (test-case "pure command builders"
     (check-equal? (t2-test-command "tests/test-gsd-delivery-stop-decision.rkt")
@@ -204,25 +227,77 @@
        (call-with-output-file module-path
                               (lambda (out) (display module-text out))
                               #:exists 'truncate/replace)
-       (call-with-output-file
-        (build-path test-dir "test-gsd-delivery-stop-decision.rkt")
-        (lambda (out)
-          (display
-           (string-append "#lang racket\n"
-                          "(require rackunit \"../extensions/gsd/delivery-outcome.rkt\")\n"
-                          "(test-case \"review-infra stop classifies as review-infra\"\n"
-                          "  (check-equal? (delivery-stop-outcome 'review-infra (hash))\n"
-                          "                '(review-infra . \"review infrastructure failure\")))\n")
-           out))
-        #:exists 'truncate/replace)
-       (define result (t2-verdict tree #:timeout-ms 120000))
+       (define unrelated-case
+         (string-append "#lang racket\n"
+                        "(require rackunit \"../extensions/gsd/delivery-outcome.rkt\")\n"
+                        "(test-case \"blocked outcome is unrelated to the mutation\"\n"
+                        "  (check-equal? (delivery-stop-outcome 'other (hash))\n"
+                        "                '(blocked . \"blocked\")))\n"))
+       (define agent-case
+         (string-append "#lang racket\n"
+                        "(require rackunit \"../extensions/gsd/delivery-outcome.rkt\")\n"
+                        "(test-case \"blocked outcome is unrelated to the mutation\"\n"
+                        "  (check-equal? (delivery-stop-outcome 'other (hash))\n"
+                        "                '(blocked . \"blocked\")))\n"
+                        "(test-case \"review-infra stop classifies as review-infra\"\n"
+                        "  (check-equal? (delivery-stop-outcome 'review-infra (hash))\n"
+                        "                '(review-infra . \"review infrastructure failure\")))\n"))
+       (call-with-output-file (build-path test-dir "test-gsd-delivery-stop-decision.rkt")
+                              (lambda (out) (display agent-case out))
+                              #:exists 'truncate/replace)
+       (define result (t2-verdict tree #:baseline-test-text unrelated-case #:timeout-ms 120000))
        (check-equal? (hash-ref result 'verdict) 'pass)
        (check-equal? (hash-ref result 'clean-exit) 0)
        (check-true (not (equal? (hash-ref result 'mutated-exit) 0)))
        (check-equal? (hash-ref result 'failing-assertion)
                      "expected: '(review-infra . \"review infrastructure failure\")")
+       (check-equal? (hash-ref result 'baseline-cases) 1)
+       (check-equal? (hash-ref result 'agent-cases) 2)
+       (check-true (hash-ref result 'new-test-case?))
+       (check-equal? (hash-ref result 'baseline-mutated-exit) 0)
        ;; the tree is restored byte-identically
        (check-equal? (file->string module-path) module-text))
+     (lambda () (delete-directory/files tree))))
+
+  (test-case "t2-verdict fails when the pre-existing suite already detects the mutation"
+    (define tree (make-temporary-file "cl5-t2base-~a" 'directory))
+    (dynamic-wind
+     void
+     (lambda ()
+       (define module-dir (build-path tree "extensions" "gsd"))
+       (define test-dir (build-path tree "tests"))
+       (make-directory* module-dir)
+       (make-directory* test-dir)
+       (define substitution (m-stop-1-substitution))
+       (define module-text
+         (string-append
+          "#lang racket/base\n"
+          "(provide delivery-stop-outcome)\n"
+          "(define (delivery-outcome kind message) (cons kind message))\n"
+          "(define (delivery-stop-outcome kind data #:reason-fallback [reason-fallback #f])\n"
+          "  (case kind\n"
+          "    [(review-infra)\n     "
+          (first substitution)
+          "]\n"
+          "    [else (delivery-outcome 'blocked \"blocked\")]))\n"))
+       (call-with-output-file (build-path module-dir "delivery-outcome.rkt")
+                              (lambda (out) (display module-text out))
+                              #:exists 'truncate/replace)
+       (define detecting-case
+         (string-append "#lang racket\n"
+                        "(require rackunit \"../extensions/gsd/delivery-outcome.rkt\")\n"
+                        "(test-case \"review-infra stop\"\n"
+                        "  (check-equal? (delivery-stop-outcome 'review-infra (hash))\n"
+                        "                '(review-infra . \"review infrastructure failure\")))\n"))
+       (call-with-output-file (build-path test-dir "test-gsd-delivery-stop-decision.rkt")
+                              (lambda (out) (display detecting-case out))
+                              #:exists 'truncate/replace)
+       ;; Baseline ALREADY contains the detecting case: the agent added nothing
+       ;; that changes detection power, so the oracle must not pass.
+       (define result (t2-verdict tree #:baseline-test-text detecting-case #:timeout-ms 120000))
+       (check-equal? (hash-ref result 'verdict) 'fail)
+       (check-false (hash-ref result 'new-test-case?))
+       (check-true (not (equal? (hash-ref result 'baseline-mutated-exit) 0))))
      (lambda () (delete-directory/files tree))))
 
   ;; ---- T5 execution grader over a synthetic tree ------------------------------------
@@ -266,6 +341,25 @@
      "                     (+ used (for/sum ([c (in-list (car gs))]) (char-width c)))\n"
      "                     (cons (car gs) acc))))]))\n"))
 
+  (define (write-t5-test! tree text)
+    (make-directory* (build-path tree "tests" "tui"))
+    (call-with-output-file (build-path tree "tests" "tui" "test-char-width.rkt")
+                           (lambda (out) (display text out))
+                           #:exists 'truncate/replace))
+
+  (define t5-baseline-case
+    (string-append "#lang racket\n"
+                   "(require rackunit \"../../tui/char-width.rkt\")\n"
+                   "(test-case \"pre-existing width case\"\n"
+                   "  (check-equal? (string-visible-width \"abc\") 3))\n"))
+
+  (define (t5-agent-case extra)
+    (string-append t5-baseline-case
+                   "(test-case \"added ellipsis case\"\n"
+                   "  (check-true (string? "
+                   extra
+                   ")))\n"))
+
   (test-case "t5-verdict: all six assertions hold on a correct synthetic module"
     (define tree (make-temporary-file "cl5-t5-~a" 'directory))
     (dynamic-wind (lambda () (void))
@@ -274,10 +368,17 @@
                     (call-with-output-file (build-path tree "tui" "char-width.rkt")
                                            (lambda (out) (display synthetic-char-width-module out))
                                            #:exists 'truncate/replace)
-                    (define result (t5-verdict tree #:timeout-ms 120000))
+                    ;; The agent's own test file must have gained a case; the
+                    ;; extra case here is structurally representative only.
+                    (write-t5-test! tree
+                                    (t5-agent-case "(truncate-with-ellipsis \"abcdef\" 4)"))
+                    (define result (t5-verdict tree
+                                               #:baseline-test-text t5-baseline-case
+                                               #:timeout-ms 120000))
                     (check-equal? (hash-ref result 'verdict) 'pass)
                     (check-equal? (length (hash-ref result 'assertions)) 6)
-                    (check-false (hash-ref result 'failing)))
+                    (check-false (hash-ref result 'failing))
+                    (check-true (hash-ref result 'new-test-case?)))
                   (lambda () (delete-directory/files tree))))
 
   (test-case "t5-verdict: a budget-ignoring module fails with the failing assertion named"
@@ -296,7 +397,8 @@
                                   "(define (truncate-with-ellipsis s budget) s)\n")
                    out))
         #:exists 'truncate/replace)
-       (define result (t5-verdict tree #:timeout-ms 120000))
+       (write-t5-test! tree (t5-agent-case "(truncate-with-ellipsis \"abcdef\" 4)"))
+       (define result (t5-verdict tree #:baseline-test-text t5-baseline-case #:timeout-ms 120000))
        (check-equal? (hash-ref result 'verdict) 'fail)
        ;; budget-0 (a1) is the first violated assertion
        (check-equal? (hash-ref result 'failing) 'a1-zero-budget))
@@ -315,7 +417,8 @@
                                                         "(define (string-visible-width s) 0)\n")
                                          out))
                               #:exists 'truncate/replace)
-       (define result (t5-verdict tree #:timeout-ms 120000))
+       (write-t5-test! tree (t5-agent-case "(truncate-with-ellipsis \"abcdef\" 4)"))
+       (define result (t5-verdict tree #:baseline-test-text t5-baseline-case #:timeout-ms 120000))
        (check-equal? (hash-ref result 'verdict) 'fail)
        (check-equal? (hash-ref result 'failing) 'a1-zero-budget))
      (lambda () (delete-directory/files tree)))))

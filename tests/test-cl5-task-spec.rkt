@@ -32,6 +32,21 @@
                              (walk (hash-ref spec 'answer-spec)))))
 
 (module+ test
+  (test-case "write-paths separate writable targets from read-only owners"
+    (define t2 (task-spec 'T2))
+    ;; T2 may write ONLY its test file; the production module is a read-only reference.
+    (check-equal? (hash-ref t2 'write-paths) '("tests/test-gsd-delivery-stop-decision.rkt"))
+    (check-not-false (member "extensions/gsd/delivery-outcome.rkt" (hash-ref t2 'ownership-set)))
+    (check-false (member "extensions/gsd/delivery-outcome.rkt" (hash-ref t2 'write-paths)))
+    (define t5 (task-spec 'T5))
+    (check-equal? (hash-ref t5 'write-paths)
+                  '("tui/char-width.rkt" "tests/tui/test-char-width.rkt"))
+    (for ([spec (in-list task-specs)])
+      (for ([path (in-list (hash-ref spec 'write-paths))])
+        (check-not-false (member path (hash-ref spec 'ownership-set)))))
+    ;; Navigation tasks may not write at all.
+    (for ([spec (in-list task-specs)] #:when (eq? (hash-ref spec 'kind) 'navigation))
+      (check-equal? (hash-ref spec 'write-paths) '())))
   (test-case "specs are exactly the five frozen tasks in corpus order"
     (check-equal? (map (lambda (spec) (hash-ref spec 'id)) task-specs) '(T1 T3 T4 T2 T5))
     (check-equal? (length task-specs) 5))

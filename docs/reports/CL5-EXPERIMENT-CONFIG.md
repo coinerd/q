@@ -52,8 +52,10 @@ rejects a floating ref, a short SHA, or equal arm revisions.
 | arm revision not a full SHA, or arms equal | raises |
 | configured model absent from `pi --list-models <provider>` | raises; **no fallback** to another model or provider |
 | provider quota / rate limit | reported as a blocker; never worked around by switching provider or model |
-| session transcript records a different provider/model/thinking | raises; the trial is not recorded |
+| session transcript records a different provider/model/thinking **at any point** (including an intermediate switch that is later reverted) | raises; the trial is not recorded |
 | session transcript has no model or thinking event | raises; absence is not assumed to mean "default was fine" |
+| series metadata differs on arm, revision, provider, model, full id, thinking, tool allowlist, pi version, host class, trial count or rotation | refuses to extend the series |
+| the running `pi --version` differs from the version stamped in the config (or no version was stamped) | raises before the first session |
 
 ## 5. Verification evidence (effective configuration)
 

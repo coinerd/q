@@ -44,6 +44,8 @@
          t5-check-program
          t5-command
          t5-verdict
+         suite-result-summary
+         file-at-revision
          changed-paths
          diff-constraint
          run-captured)
@@ -107,7 +109,15 @@
   (define symbols-found
     (filter (lambda (s) (symbol-mentioned? answer-text s)) '("complete" "none" "campaign-complete")))
   (define hash-false-count (length (regexp-match* #rx"#f" answer-text)))
-  (define facts-ok? (and (= (length symbols-found) 3) (>= hash-false-count 1) (null? missing-paths)))
+  ;; wave-index and merge-sha are BOTH #f in the frozen tuple, and CL0 requires
+  ;; every field to be reported. One #f plus the three keywords is not enough
+  ;; (it cannot pin two distinct fields), so both labels AND two #f occurrences
+  ;; are required for a pass.
+  (define wave-label? (regexp-match? #px"(?i:wave[-_ ]?index)" answer-text))
+  (define merge-label? (regexp-match? #px"(?i:merge[-_ ]?sha)" answer-text))
+  (define false-fields-ok? (and wave-label? merge-label? (>= hash-false-count 2)))
+  (define facts-ok?
+    (and (= (length symbols-found) 3) false-fields-ok? (null? missing-paths)))
   (define nothing-found?
     (and (null? symbols-found) (zero? hash-false-count) (= (length missing-paths) 4)))
   (define reasons
@@ -117,6 +127,8 @@
                        #:unless (member s symbols-found))
               (format "missing decision value: ~a" s))
             (cond
+              [(not wave-label?) (list "wave-index field not reported")]
+              [(not merge-label?) (list "merge-sha field not reported")]
               [(zero? hash-false-count) (list "missing #f for wave-index/merge-sha")]
               [(= hash-false-count 1)
                (list "only one #f seen; wave-index and merge-sha not independently confirmed")]
@@ -133,6 +145,8 @@
                       symbols-found
                       'hash-false-count
                       hash-false-count
+                      'wave-index-label wave-label?
+                      'merge-sha-label merge-label?
                       'missing-paths
                       missing-paths)))
 
@@ -310,6 +324,40 @@
   (sync/timeout 0 done) ; drain the semaphore on the timeout path
   (values (if (exact-integer? status) status -1) (unbox out-box) (unbox err-box) (not finished?)))
 
+;; ---- suite evidence ------------------------------------------------------------
+
+;; `raco test` prints either "<n> tests passed" (clean) or
+;; "<failed>/<total> test failures" (red). Parse both shapes; #f when the
+;; output carries neither, so an unparsable run is a failure rather than 0.
+(define (suite-result-summary output)
+  (define failure-match (regexp-match #px"([0-9]+)/([0-9]+) test failures" output))
+  (define pass-match (regexp-match #px"([0-9]+) tests? passed" output))
+  (cond
+    [failure-match
+     (hash 'failed (string->number (list-ref failure-match 1))
+           'total (string->number (list-ref failure-match 2)))]
+    [pass-match
+     (hash 'failed 0 'total (string->number (list-ref pass-match 1)))]
+    [else #f]))
+
+;; File content at a revision (used to run the pre-existing suite against the
+;; same mutation). Raises when the revision does not contain the path.
+(define (file-at-revision worktree revision path #:timeout-ms [timeout-ms 120000])
+  (define-values (exit-code stdout stderr _timed-out?)
+    (run-captured (list "git" "show" (format "~a:~a" revision path))
+                  #:cwd worktree
+                  #:timeout-ms timeout-ms))
+  (unless (equal? exit-code 0)
+    (raise-arguments-error 'file-at-revision
+                           "cannot read the file at the pinned revision"
+                           "revision"
+                           revision
+                           "path"
+                           path
+                           "stderr"
+                           stderr))
+  stdout)
+
 ;; ---- T2 execution grader ---------------------------------------------------------
 
 ;; Pure command builder: the oracle command from CL0 §3 T2.
@@ -331,43 +379,89 @@
         (string-trim line))
       #f))
 
-;; T2 verdict on a trial tree: the owner test must pass against the clean
-;; module and FAIL against M-STOP-1; the module is restored afterwards.
-;; Returns a hash with the verdict, both exit codes, and the first failing
-;; assertion line of the mutated run.
+;; T2 verdict on a trial tree. The oracle has three parts and all must hold:
+;;   1. the agent's test file passes against the clean module;
+;;   2. the SAME run fails under M-STOP-1 (it detects the mutation);
+;;   3. the PRE-EXISTING suite (the file as checked out at the arm revision)
+;;      passes under M-STOP-1 — so the added case, not the old ones, is what
+;;      detects the mutation — and the case count strictly increased.
+;; The module and the test file are restored before returning.
 (define (t2-verdict tree-path
+                    #:revision [revision #f]
+                    #:baseline-test-text [baseline-test-text #f]
                     #:test-file [test-rel "tests/test-gsd-delivery-stop-decision.rkt"]
                     #:module-file [module-rel "extensions/gsd/delivery-outcome.rkt"]
                     #:timeout-ms [timeout-ms 180000])
+  (define test-path (build-path tree-path test-rel))
   (define module-path (build-path tree-path module-rel))
-  (define original-text (file->string module-path))
-  (define-values (clean-exit clean-out clean-err clean-timed-out?)
-    (run-captured (t2-test-command test-rel) #:cwd tree-path #:timeout-ms timeout-ms))
-  (define-values (mutated-exit mutated-out mutated-err mutated-timed-out?)
+  (define original-module (file->string module-path))
+  (define agent-test (file->string test-path))
+  ;; The pre-existing suite comes from the pinned revision, or from an explicit
+  ;; fixture in unit tests. One of them is required: without a baseline the
+  ;; "the added case detects the mutation" guarantee cannot be established.
+  (define baseline-test
+    (or baseline-test-text
+        (and revision (file-at-revision tree-path revision test-rel #:timeout-ms timeout-ms))
+        (raise-arguments-error 't2-verdict
+                               "no baseline suite: pass #:revision or #:baseline-test-text")))
+  (define (write-text path text)
+    (call-with-output-file path (lambda (out) (display text out)) #:exists 'truncate/replace))
+  (define (run-suite)
+    (define-values (exit-code stdout stderr timed-out?)
+      (run-captured (t2-test-command test-rel) #:cwd tree-path #:timeout-ms timeout-ms))
+    (hash 'exit
+          exit-code
+          'timed-out
+          timed-out?
+          'summary
+          (suite-result-summary (string-append stdout "\n" stderr))
+          'output
+          (string-append stdout "\n" stderr)))
+  (define clean-agent (run-suite))
+  ;; Pre-existing suite: clean, then under the mutation it must NOT detect.
+  (define baseline-clean (dynamic-wind void (lambda () (write-text test-path baseline-test) (run-suite)) void))
+  (define baseline-mutated
+    (dynamic-wind
+     (lambda () (write-text test-path baseline-test) (apply-m-stop-1 module-path))
+     run-suite
+     (lambda () (write-text module-path original-module) (write-text test-path agent-test))))
+  (define agent-mutated
     (dynamic-wind (lambda () (apply-m-stop-1 module-path))
-                  (lambda ()
-                    (run-captured (t2-test-command test-rel) #:cwd tree-path #:timeout-ms timeout-ms))
-                  (lambda ()
-                    (call-with-output-file module-path
-                                           (lambda (out) (display original-text out))
-                                           #:exists 'truncate/replace))))
+                  run-suite
+                  (lambda () (write-text module-path original-module))))
+  (define agent-cases (and (hash-ref clean-agent 'summary) (hash-ref (hash-ref clean-agent 'summary) 'total)))
+  (define baseline-cases
+    (and (hash-ref baseline-clean 'summary) (hash-ref (hash-ref baseline-clean 'summary) 'total)))
+  (define new-case? (and agent-cases baseline-cases (> agent-cases baseline-cases)))
   (define pass?
-    (and (equal? clean-exit 0)
-         (not clean-timed-out?)
-         (not (equal? mutated-exit 0))
-         (not mutated-timed-out?)))
+    (and (equal? (hash-ref clean-agent 'exit) 0)
+         (not (hash-ref clean-agent 'timed-out))
+         (equal? (hash-ref baseline-clean 'exit) 0)
+         (equal? (hash-ref baseline-mutated 'exit) 0)
+         (not (hash-ref baseline-mutated 'timed-out))
+         (not (equal? (hash-ref agent-mutated 'exit) 0))
+         (not (hash-ref agent-mutated 'timed-out))
+         new-case?))
   (hash 'verdict
         (if pass? 'pass 'fail)
         'clean-exit
-        clean-exit
+        (hash-ref clean-agent 'exit)
         'mutated-exit
-        mutated-exit
+        (hash-ref agent-mutated 'exit)
+        'baseline-mutated-exit
+        (hash-ref baseline-mutated 'exit)
+        'agent-cases
+        agent-cases
+        'baseline-cases
+        baseline-cases
+        'new-test-case?
+        new-case?
         'failing-assertion
-        (extract-failing-assertion (string-append mutated-out "\n" mutated-err))
-        'clean-timed-out
-        clean-timed-out?
-        'mutated-timed-out
-        mutated-timed-out?))
+        (extract-failing-assertion (hash-ref agent-mutated 'output))
+        'timed-out
+        (or (hash-ref clean-agent 'timed-out)
+            (hash-ref baseline-mutated 'timed-out)
+            (hash-ref agent-mutated 'timed-out))))
 
 ;; ---- T5 execution grader ---------------------------------------------------------
 
@@ -444,39 +538,80 @@
 (define (t5-command)
   (list "racket" "-e" (t5-check-program)))
 
-;; T5 verdict on a trial tree: all six assertions must hold.
-(define (t5-verdict tree-path #:timeout-ms [timeout-ms 120000])
+;; T5 verdict on a trial tree: the six behavioral assertions hold AND the
+;; owner test file gained at least one case relative to the arm revision (the
+;; task explicitly asks for one added test-case). Both the module and the test
+;; file are restored before returning.
+(define (t5-verdict tree-path
+                    #:revision [revision #f]
+                    #:baseline-test-text [baseline-test-text #f]
+                    #:test-file [test-rel "tests/tui/test-char-width.rkt"]
+                    #:timeout-ms [timeout-ms 180000])
+  (define test-path (build-path tree-path test-rel))
+  (define agent-test (file->string test-path))
+  ;; The pre-existing suite comes from the pinned revision, or from an explicit
+  ;; fixture in unit tests. One of them is required: without a baseline the
+  ;; "the added case detects the mutation" guarantee cannot be established.
+  (define baseline-test
+    (or baseline-test-text
+        (and revision (file-at-revision tree-path revision test-rel #:timeout-ms timeout-ms))
+        (raise-arguments-error 't2-verdict
+                               "no baseline suite: pass #:revision or #:baseline-test-text")))
   (define-values (exit-code stdout stderr timed-out?)
     (run-captured (t5-command) #:cwd tree-path #:timeout-ms timeout-ms))
   (define results
-    (with-handlers ([exn:fail? (lambda (_) #f)])
-      (read (open-input-string stdout))))
-  (define pairs
-    (and (list? results)
-         (andmap (lambda (p) (and (pair? p) (symbol? (car p)) (boolean? (cdr p)))) results)
-         results))
-  (define all-ok? (and pairs (= (length pairs) 6) (andmap cdr pairs)))
+    (with-handlers ([exn:fail? (lambda (_) #f)]) (read (open-input-string stdout))))
+  (define pairs (if (list? results) results '()))
+  (define failing (for/first ([pair (in-list pairs)] #:unless (cdr pair)) (car pair)))
+  (define assertions-ok? (and (= (length pairs) 6) (andmap cdr pairs)))
+  (define (run-cases)
+    (define-values (suite-exit suite-out suite-err _t)
+      (run-captured (t2-test-command test-rel) #:cwd tree-path #:timeout-ms timeout-ms))
+    (hash 'exit suite-exit 'summary (suite-result-summary (string-append suite-out "\n" suite-err))))
+  (define agent-cases-run (run-cases))
+  (define baseline-cases-run
+    (dynamic-wind
+     (lambda ()
+       (call-with-output-file test-path
+                              (lambda (out) (display baseline-test out))
+                              #:exists 'truncate/replace))
+     run-cases
+     (lambda ()
+       (call-with-output-file test-path
+                              (lambda (out) (display agent-test out))
+                              #:exists 'truncate/replace))))
+  (define agent-cases (and (hash-ref agent-cases-run 'summary)
+                           (hash-ref (hash-ref agent-cases-run 'summary) 'total)))
+  (define baseline-cases (and (hash-ref baseline-cases-run 'summary)
+                              (hash-ref (hash-ref baseline-cases-run 'summary) 'total)))
+  (define new-case? (and agent-cases baseline-cases (> agent-cases baseline-cases)))
   (hash 'verdict
-        (if (and (equal? exit-code 0) (not timed-out?) all-ok?) 'pass 'fail)
+        (if (and assertions-ok? new-case? (equal? (hash-ref agent-cases-run 'exit) 0))
+            'pass
+            'fail)
         'assertions
-        (or pairs '())
+        pairs
         'failing
-        (and pairs
-             (for/first ([p (in-list pairs)]
-                         #:unless (cdr p))
-               (car p)))
+        failing
         'exit-code
         exit-code
         'timed-out
         timed-out?
+        'agent-cases
+        agent-cases
+        'baseline-cases
+        baseline-cases
+        'new-test-case?
+        new-case?
         'stderr
         stderr))
 
-;; Execution grading dispatch; navigation tasks have no execution grader.
-(define (grade-task-by-execution task-id tree-path #:timeout-ms [timeout-ms 180000])
+;; Dispatcher: execution-graded tasks (T2/T5) need the arm revision so the
+;; pre-existing suite and the case-count baseline come from the pinned tree.
+(define (grade-task-by-execution task-id tree-path #:revision revision #:timeout-ms [timeout-ms 180000])
   (case task-id
-    [(T2) (t2-verdict tree-path #:timeout-ms timeout-ms)]
-    [(T5) (t5-verdict tree-path #:timeout-ms timeout-ms)]
+    [(T2) (t2-verdict tree-path #:revision revision #:timeout-ms timeout-ms)]
+    [(T5) (t5-verdict tree-path #:revision revision #:timeout-ms timeout-ms)]
     [else
      (raise-arguments-error 'grade-task-by-execution "task is not execution-graded" "task" task-id)]))
 
