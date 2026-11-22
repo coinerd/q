@@ -19,6 +19,7 @@
          racket/list
          racket/string
          "../scripts/cl5/experiment-config.rkt"
+         "../scripts/cl5/oracle.rkt"
          "../scripts/cl5/task-spec.rkt"
          "../scripts/cl5/trial-runner.rkt")
 
@@ -53,6 +54,78 @@
     (check-true (string-contains? (path->string path) "CL5-TRIALS-baseline-003e425d.json"))
     (define other (series-path-for 'intervention intervention-revision "docs/reports"))
     (check-not-equal? (path->string path) (path->string other)))
+
+  (test-case "worktree state check rejects wrong HEAD and dirty trees"
+    (check-equal? (verify-worktree-state "/tmp/wt" "abc" '() "abc")
+                  (hash 'head "abc" 'clean? #t 'revision "abc"))
+    (check-exn #rx"not the configured arm revision"
+               (lambda () (verify-worktree-state "/tmp/wt" "def" '() "abc")))
+    (check-exn #rx"worktree is dirty"
+               (lambda ()
+                 (verify-worktree-state "/tmp/wt" "abc" (list " M scripts/x.rkt") "abc"))))
+
+  (test-case "output inside the disposable worktree is rejected"
+    (check-true (path-inside? "/tmp/wt/sessions" "/tmp/wt"))
+    (check-true (path-inside? "/tmp/wt/a/b" "/tmp/wt"))
+    (check-false (path-inside? "/tmp/wt-other/sessions" "/tmp/wt"))
+    (check-false (path-inside? "/tmp/sessions" "/tmp/wt")))
+
+  (test-case "preflight on a real checkout: wrong SHA, dirty tree and primary checkout"
+    (define repo (make-temporary-file "cl5-repo-~a" 'directory))
+    (dynamic-wind
+     void
+     (lambda ()
+       (define (git . args)
+         (define-values (exit-code _out _err _t)
+           (run-captured (append (list "git" "-c" "user.email=cl5@example.invalid"
+                                       "-c" "user.name=CL5")
+                                 args)
+                         #:cwd repo
+                         #:timeout-ms 60000))
+         (unless (equal? exit-code 0)
+           (error 'git "failed: ~a" args)))
+       (define (git-out . args)
+         (define-values (exit-code out _err _t)
+           (run-captured (append (list "git") args) #:cwd repo #:timeout-ms 60000))
+         (unless (equal? exit-code 0) (error 'git "failed: ~a" args))
+         (string-trim out))
+       (git "init" "-q")
+       (call-with-output-file (build-path repo "tracked.rkt")
+                              (lambda (out) (display "#lang racket/base\n" out)))
+       (git "add" "tracked.rkt")
+       (git "commit" "-q" "-m" "fixture")
+       (define head (git-out "rev-parse" "HEAD"))
+       ;; A primary checkout is refused without the explicit opt-in.
+       (check-exn #rx"primary checkout"
+                  (lambda () (worktree-preflight repo head)))
+       ;; With the opt-in, a clean checkout at the right SHA passes.
+       (check-equal? (hash-ref (worktree-preflight repo head #:allow-primary? #t) 'head)
+                     head)
+       ;; Wrong SHA is rejected.
+       (check-exn #rx"not the configured arm revision"
+                  (lambda ()
+                    (worktree-preflight repo (make-string 40 #\0) #:allow-primary? #t)))
+       ;; Dirty tree is rejected.
+       (call-with-output-file (build-path repo "tracked.rkt")
+                              (lambda (out) (display "#lang racket/base\n;; dirty\n" out))
+                              #:exists 'truncate/replace)
+       (check-exn #rx"worktree is dirty"
+                  (lambda () (worktree-preflight repo head #:allow-primary? #t)))
+       ;; Output inside the tree is rejected once the tree is clean again.
+       (git "checkout" "--" "tracked.rkt")
+       (check-exn #rx"inside the disposable worktree"
+                  (lambda ()
+                    (worktree-preflight repo
+                                        head
+                                        #:allow-primary? #t
+                                        #:session-dir (build-path repo "sessions"))))
+       ;; Cleanup refuses a primary checkout without the opt-in.
+       (check-exn #rx"refusing to reset a primary checkout"
+                  (lambda () (reset-worktree! repo head)))
+       (reset-worktree! repo head #:allow-primary? #t)
+       (check-equal? (git-out "rev-parse" "HEAD") head)
+       (check-equal? (git-out "status" "--porcelain") ""))
+     (lambda () (delete-directory/files repo))))
 
   (test-case "first-correct-edit is claimed only when a single edit is attributable"
     (define-values (ms basis) (first-correct-edit #t 1 4200))

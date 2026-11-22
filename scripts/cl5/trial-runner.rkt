@@ -32,6 +32,9 @@
          find-newest-session-file
          last-assistant-text
          reset-worktree!
+         worktree-preflight
+         verify-worktree-state
+         path-inside?
          first-correct-edit
          write-series!
          available-models
@@ -139,6 +142,110 @@
                                      '())))
                    "\n")))
 
+;; ---- worktree preflight ------------------------------------------------------------
+
+;; Pure state check: the checkout must be at exactly the configured revision and
+;; carry no modifications, so a trial can never benchmark the wrong tree (and a
+;; later cleanup can never erase a developer's uncommitted work).
+(define (verify-worktree-state worktree head status-lines revision)
+  (unless (equal? head revision)
+    (raise-arguments-error 'worktree-preflight
+                           "worktree HEAD is not the configured arm revision"
+                           "worktree"
+                           (path->string (if (path? worktree) worktree (string->path worktree)))
+                           "configured"
+                           revision
+                           "head"
+                           head))
+  (unless (null? status-lines)
+    (raise-arguments-error 'worktree-preflight
+                           "worktree is dirty; refusing to run a trial over uncommitted changes"
+                           "worktree"
+                           (path->string (if (path? worktree) worktree (string->path worktree)))
+                           "changes"
+                           status-lines))
+  (hash 'head head 'clean? #t 'revision revision))
+
+;; Is `child` inside `parent`? Used to keep session/series output out of the
+;; disposable tree that the harness resets.
+(define (path-inside? child parent)
+  (define child-string (path->string (simplify-path (path->complete-path child))))
+  (define parent-string (string-trim (path->string (simplify-path (path->complete-path parent)))
+                                     "/"
+                                     #:left? #f
+                                     #:right? #t
+                                     #:repeat? #t))
+  (or (equal? child-string (string-append parent-string "/"))
+      (string-prefix? child-string (string-append parent-string "/"))))
+
+;; Full preflight, run BEFORE pi and before any destructive cleanup:
+;;   * the path is an existing git checkout;
+;;   * it is a disposable linked worktree (a `.git` FILE), not a primary
+;;     checkout — a primary checkout needs an explicit opt-in;
+;;   * HEAD equals the arm revision and `git status` is empty;
+;;   * session and series output live outside the tree.
+;; On any failure it raises and mutates nothing.
+(define (worktree-preflight worktree
+                            revision
+                            #:allow-primary? [allow-primary? #f]
+                            #:session-dir [session-dir #f]
+                            #:out-dir [out-dir #f]
+                            #:timeout-ms [timeout-ms 120000])
+  (define root (simplify-path (path->complete-path (if (path? worktree) worktree (string->path worktree)))))
+  (unless (directory-exists? root)
+    (raise-arguments-error 'worktree-preflight "worktree does not exist" "worktree" (path->string root)))
+  (define dot-git (build-path root ".git"))
+  (unless (file-or-directory-type dot-git #t)
+    (raise-arguments-error 'worktree-preflight
+                           "path is not a git checkout"
+                           "worktree"
+                           (path->string root)))
+  (define primary? (directory-exists? dot-git))
+  (when (and primary? (not allow-primary?))
+    (raise-arguments-error 'worktree-preflight
+                           "refusing to run trials in a primary checkout; use a disposable `git worktree add`"
+                           "worktree"
+                           (path->string root)))
+  (define (git . args)
+    (define-values (exit-code stdout stderr _timed-out?)
+      (run-captured (append (list "git") args) #:cwd root #:timeout-ms timeout-ms))
+    (unless (equal? exit-code 0)
+      (raise-arguments-error 'worktree-preflight
+                             "git command failed during preflight"
+                             "args"
+                             args
+                             "stderr"
+                             stderr))
+    (string-trim stdout))
+  (define head (git "rev-parse" "HEAD"))
+  (define status-text (git "status" "--porcelain" "--no-renames"))
+  (define status-lines
+    (if (equal? status-text "")
+        '()
+        (filter (lambda (line) (not (equal? line ""))) (string-split status-text "\n"))))
+  (verify-worktree-state root head status-lines revision)
+  (for ([label/out (in-list (list (cons 'session-dir session-dir) (cons 'out-dir out-dir)))])
+    (define out (cdr label/out))
+    (when (and out (path-inside? out root))
+      (raise-arguments-error 'worktree-preflight
+                             "output directory is inside the disposable worktree"
+                             "which"
+                             (car label/out)
+                             "path"
+                             (path->string (path->complete-path out))
+                             "worktree"
+                             (path->string root))))
+  (hash 'worktree
+        (path->string root)
+        'head
+        head
+        'revision
+        revision
+        'primary-checkout?
+        primary?
+        'clean?
+        #t))
+
 ;; ---- one trial ---------------------------------------------------------------------
 
 ;; Run one trial in an existing pinned worktree. Returns the trial record
@@ -158,9 +265,16 @@
                    #:arm arm
                    #:session-dir session-dir
                    #:reset? [reset? #t]
+                   #:allow-primary? [allow-primary? #f]
                    #:timeout-ms [timeout-ms 3600000])
   (define arm-cfg (arm-config config arm))
   (define arm-revision (hash-ref arm-cfg 'revision))
+  ;; Preflight BEFORE pi and before any destructive cleanup: a wrong or dirty
+  ;; checkout is rejected without being reset.
+  (worktree-preflight worktree
+                      arm-revision
+                      #:allow-primary? allow-primary?
+                      #:session-dir session-dir)
   (dynamic-wind
    void
    (lambda ()
@@ -170,7 +284,8 @@
                      #:arm arm
                      #:session-dir session-dir
                      #:timeout-ms timeout-ms))
-   (lambda () (when reset? (reset-worktree! worktree arm-revision)))))
+   (lambda ()
+     (when reset? (reset-worktree! worktree arm-revision #:allow-primary? allow-primary?)))))
 
 (define (run-trial-body task-id
                         worktree
@@ -307,7 +422,19 @@
 ;; Restore the worktree to the arm revision: tracked edits, deletions and
 ;; untracked files (including compiled bytecode). This is a harness action on
 ;; a disposable trial worktree, never on a developer checkout.
-(define (reset-worktree! worktree arm-revision #:timeout-ms [timeout-ms 300000])
+(define (reset-worktree! worktree arm-revision
+                         #:allow-primary? [allow-primary? #f]
+                         #:timeout-ms [timeout-ms 300000])
+  ;; Never destroy a checkout we did not verify as disposable: a primary
+  ;; checkout needs the explicit opt-in that preflight also requires.
+  (define dot-git (build-path (simplify-path (path->complete-path worktree)) ".git"))
+  (unless (file-or-directory-type dot-git #t)
+    (raise-arguments-error 'reset-worktree! "not a git checkout" "worktree" (path->string worktree)))
+  (when (and (directory-exists? dot-git) (not allow-primary?))
+    (raise-arguments-error 'reset-worktree!
+                           "refusing to reset a primary checkout"
+                           "worktree"
+                           (path->string worktree)))
   (define-values (reset-exit _o reset-err _t)
     (run-captured (list "git" "reset" "--hard" arm-revision) #:cwd worktree #:timeout-ms timeout-ms))
   (define-values (clean-exit _o2 clean-err _t2)

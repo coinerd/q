@@ -43,7 +43,24 @@ rejects a floating ref, a short SHA, or equal arm revisions.
 - The frozen CL0 task corpus, prompts, oracles and the pre-registered decision thresholds in
   `.planning/PLAN-CL5-9982.md` are unchanged by this configuration change.
 
-## 4. Fail-closed behavior
+## 4. Trial preflight (before pi, before any cleanup)
+
+Every trial calls `worktree-preflight` **before** launching a session and **before** the
+destructive `git reset --hard` / `git clean -fdx` cleanup:
+
+| Check | Behavior on failure |
+|---|---|
+| the path exists and is a git checkout | raises; nothing is touched |
+| it is a disposable linked worktree (`.git` is a file) | raises for a primary checkout unless `#:allow-primary? #t` is passed explicitly |
+| `git rev-parse HEAD` equals the configured arm revision | raises, naming both SHAs — the checkout is **not** reset |
+| `git status --porcelain` is empty | raises, listing the changes — the checkout is **not** reset |
+| session/series output is outside the tree | raises |
+
+Cleanup repeats the disposable-checkout guard, so a primary checkout is never reset even if a
+caller bypassed preflight. Negative cases covered by tests: wrong HEAD, dirty worktree, primary
+checkout, output inside the tree, and cleanup on a primary checkout.
+
+## 5. Fail-closed behavior
 
 | Condition | Behavior |
 |---|---|
@@ -57,7 +74,7 @@ rejects a floating ref, a short SHA, or equal arm revisions.
 | series metadata differs on arm, revision, provider, model, full id, thinking, tool allowlist, pi version, host class, trial count or rotation | refuses to extend the series |
 | the running `pi --version` differs from the version stamped in the config (or no version was stamped) | raises before the first session |
 
-## 5. Verification evidence (effective configuration)
+## 6. Verification evidence (effective configuration)
 
 `pi` recognizes the configuration:
 
@@ -91,7 +108,7 @@ thinking_level_change {"thinkingLevel":"high"}
 from the transcript of every real trial and raises on any difference, so a silent substitution
 cannot enter a series.
 
-## 6. Wave ordering and current boundary
+## 7. Wave ordering and current boundary
 
 - Wave 2 (deterministic shadow-selection experiment over the CL0 defect corpus) runs before
   Wave 3 and is unaffected by this model change: it executes no model.
