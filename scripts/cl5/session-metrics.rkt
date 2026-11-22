@@ -205,6 +205,7 @@
   (define first-edit-ms #f)
   (define owner-location-ms #f)
   (define in-scope-writes (mutable-set))
+  (define in-scope-edit-count 0)
   (define unrelated-writes (mutable-set))
   (define tool-call-count 0)
   (define assistant-turn-count 0)
@@ -257,6 +258,7 @@
              (cond
                [(and write-in-repo? (member write-path ownership-set))
                 (set-add! in-scope-writes write-path)
+                (set! in-scope-edit-count (add1 in-scope-edit-count))
                 (unless first-edit-found?
                   (set! first-edit-found? #t)
                   (set! first-edit-ms (and start-ms ms (- ms start-ms))))]
@@ -293,6 +295,8 @@
         first-edit-ms
         'elapsed-ms
         (and start-ms last-ms (- last-ms start-ms))
+        'in-scope-edit-count
+        in-scope-edit-count
         'written-subsystems
         (sort (map subsystem-of (set->list in-scope-writes)) string<?)
         'unrelated-writes

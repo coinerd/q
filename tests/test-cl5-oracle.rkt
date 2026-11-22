@@ -91,14 +91,28 @@
     (check-true (for/or ([reason (in-list (hash-ref result 'reasons))])
                   (string-contains? reason "go-orchestrator"))))
 
-  (test-case "T1: one #f with both field labels is partial, not a pass"
-    ;; Two distinct #f fields must be reported; one cannot pin wave-index AND merge-sha.
-    (check-equal? (grade-task-verdict 'T1
-                                      "kind complete route none code campaign-complete wave-index #f merge-sha"
-                                      )
+  (test-case "T1 grades each named field's value, not token counts"
+    (define base
+      "kind: 'complete, route: 'none, code: 'campaign-complete, wave-index: #f, merge-sha: #f; \
+       extensions/gsd/campaign-decision.rkt extensions/gsd/go-orchestrator.rkt \
+       extensions/gsd/campaign-state.rkt extensions/gsd/campaign-repository.rkt")
+    (check-equal? (grade-task-verdict 'T1 base) 'pass)
+    ;; Two #f tokens are present but wave-index carries a wrong value.
+    (check-equal? (grade-task-verdict
+                   'T1
+                   (string-replace base "wave-index: #f" "wave-index: 0"))
                   'partial)
-    (check-equal? (grade-task-verdict 'T1
-                                      "kind complete route none code campaign-complete wave-index merge-sha #f")
+    ;; Both #f present but under the wrong labels: no field evidence.
+    (check-equal? (grade-task-verdict
+                   'T1
+                   "kind: 'complete, route: 'none, code: 'campaign-complete, other: #f, spare: #f; \
+                    extensions/gsd/campaign-decision.rkt extensions/gsd/go-orchestrator.rkt \
+                    extensions/gsd/campaign-state.rkt extensions/gsd/campaign-repository.rkt")
+                  'partial)
+    ;; A wrong code value is a wrong field even though every label appears.
+    (check-equal? (grade-task-verdict
+                   'T1
+                   (string-replace base "code: 'campaign-complete" "code: 'campaign-complete-wrong"))
                   'partial))
 
   (test-case "suite-result-summary parses both raco test shapes"
@@ -110,12 +124,12 @@
                   (hash 'failed 1 'total 22))
     (check-false (suite-result-summary "no summary here")))
 
-  (test-case "T1: 'complete does not match inside 'campaign-complete"
-    ;; only campaign-complete mentioned: 'complete must be reported missing
+  (test-case "T1: 'complete is not satisfied by 'campaign-complete"
+    ;; only campaign-complete mentioned: the kind field has no value
     (define result (grade-task 'T1 "code is 'campaign-complete, and q/x.rkt"))
     (check-equal? (verdict-of result) 'partial)
-    (define recorded (hash-ref result 'recorded))
-    (check-equal? (hash-ref recorded 'symbols-found) '("campaign-complete")))
+    (define wrong (hash-ref (hash-ref result 'recorded) 'wrong-fields))
+    (check-true (for/or ([reason (in-list wrong)]) (string-contains? reason "kind"))))
 
   ;; ---- T3 grading ----------------------------------------------------------------
 
@@ -251,10 +265,10 @@
        (check-true (not (equal? (hash-ref result 'mutated-exit) 0)))
        (check-equal? (hash-ref result 'failing-assertion)
                      "expected: '(review-infra . \"review infrastructure failure\")")
-       (check-equal? (hash-ref result 'baseline-cases) 1)
        (check-equal? (hash-ref result 'agent-cases) 2)
-       (check-true (hash-ref result 'new-test-case?))
-       (check-equal? (hash-ref result 'baseline-mutated-exit) 0)
+       (check-equal? (hash-ref result 'added-cases) 1)
+       (check-true (hash-ref (hash-ref result 'added-cases-isolation) 'passed-clean?))
+       (check-true (hash-ref (hash-ref result 'added-cases-isolation) 'detected?))
        ;; the tree is restored byte-identically
        (check-equal? (file->string module-path) module-text))
      (lambda () (delete-directory/files tree))))
@@ -294,10 +308,12 @@
                               #:exists 'truncate/replace)
        ;; Baseline ALREADY contains the detecting case: the agent added nothing
        ;; that changes detection power, so the oracle must not pass.
+       ;; No added case: the agent changed nothing the oracle can attribute, so
+       ;; the submission fails even though an older case would detect the bug.
        (define result (t2-verdict tree #:baseline-test-text detecting-case #:timeout-ms 120000))
        (check-equal? (hash-ref result 'verdict) 'fail)
-       (check-false (hash-ref result 'new-test-case?))
-       (check-true (not (equal? (hash-ref result 'baseline-mutated-exit) 0))))
+       (check-equal? (hash-ref result 'added-cases) 0)
+       (check-false (hash-ref result 'added-cases-isolation)))
      (lambda () (delete-directory/files tree))))
 
   ;; ---- T5 execution grader over a synthetic tree ------------------------------------

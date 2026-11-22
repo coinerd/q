@@ -311,7 +311,7 @@
 (define (series-metadata config arm #:host [host "unknown"] #:n [n 3] #:rotation [rotation '()])
   (define arm-cfg (arm-config config arm))
   (hash 'arm
-        arm
+        (symbol->string arm)
         'revision
         (hash-ref arm-cfg 'revision)
         'full-id

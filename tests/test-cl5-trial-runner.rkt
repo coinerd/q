@@ -54,6 +54,18 @@
     (define other (series-path-for 'intervention intervention-revision "docs/reports"))
     (check-not-equal? (path->string path) (path->string other)))
 
+  (test-case "first-correct-edit is claimed only when a single edit is attributable"
+    (define-values (ms basis) (first-correct-edit #t 1 4200))
+    (check-equal? ms 4200)
+    (check-equal? basis "single-in-scope-edit")
+    ;; Multiple edits: the final state passing does not prove the first was correct.
+    (check-equal? (call-with-values (lambda () (first-correct-edit #t 3 4200)) list)
+                  (list #f "unobserved-multiple-edits"))
+    (check-equal? (call-with-values (lambda () (first-correct-edit #t 0 #f)) list)
+                  (list #f "unobserved-no-edit"))
+    (check-equal? (call-with-values (lambda () (first-correct-edit #f 1 4200)) list)
+                  (list #f "not-correct")))
+
   (test-case "session discovery never falls back to a stale transcript"
     (define dir (make-temporary-file "cl5-sessions-~a" 'directory))
     (dynamic-wind
@@ -68,6 +80,57 @@
        (call-with-output-file fresh (lambda (out) (display "{}\n" out)) #:exists 'truncate/replace)
        (check-equal? (find-newest-session-file dir (list stale)) fresh)
        (check-false (find-newest-session-file dir (list stale fresh))))
+     (lambda () (delete-directory/files dir))))
+
+  (test-case "write-series! publishes atomically and leaves no temp file"
+    (define dir (make-temporary-file "cl5-atomic-~a" 'directory))
+    (dynamic-wind
+     void
+     (lambda ()
+       (define path (build-path dir "series.json"))
+       (define metadata (series-metadata config 'baseline #:host "host-a" #:n 1 #:rotation '(T1)))
+       (write-series! path metadata (list (hash 'task "T1" 'round 0)))
+       (check-true (file-exists? path))
+       (check-equal? (filter (lambda (name) (string-prefix? "." name))
+                             (map path->string (directory-list dir)))
+                     '()))
+     (lambda () (delete-directory/files dir))))
+
+  (test-case "an existing series refuses silent restart and resumes only on request"
+    (define dir (make-temporary-file "cl5-resume-~a" 'directory))
+    (dynamic-wind
+     void
+     (lambda ()
+       (define path (series-path-for 'baseline baseline-revision dir))
+       (define metadata (series-metadata config 'baseline #:host "host-a" #:n 1 #:rotation '(T1)))
+       (write-series! path metadata (list (hash 'task "T1" 'round 0 'arm "baseline")))
+       ;; Without #:resume? the runner refuses instead of duplicating trials.
+       (check-exn exn:fail?
+                  (lambda ()
+                    (run-series '(T1)
+                                dir
+                                #:config config
+                                #:arm 'baseline
+                                #:n 1
+                                #:session-dir dir
+                                #:out-dir dir
+                                #:models (list (cons "deepseek" "deepseek-flash"))
+                                #:cli-version "1.6.0" #:host "host-a")))
+       ;; With #:resume? #t the completed (round, task) pair is skipped, so no
+       ;; session is launched for the same workload.
+       (check-equal? (hash-ref (run-series '(T1)
+                                           dir
+                                           #:config config
+                                           #:arm 'baseline
+                                           #:n 1
+                                           #:session-dir dir
+                                           #:out-dir dir
+                                           #:models (list (cons "deepseek" "deepseek-flash"))
+                                           #:cli-version "1.6.0"
+                                           #:host "host-a"
+                                           #:resume? #t)
+                               'trial-count)
+                     1))
      (lambda () (delete-directory/files dir))))
 
   (test-case "write-series! checkpoints metadata and completed trials"

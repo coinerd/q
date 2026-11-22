@@ -28,6 +28,7 @@
 
 (require json
          racket/file
+         racket/path
          racket/list
          racket/port
          racket/string
@@ -97,8 +98,25 @@
 (define (grade-result task-id verdict reasons recorded)
   (hash 'task (symbol->string task-id) 'verdict verdict 'reasons reasons 'recorded recorded))
 
-;; T1: the five decision fields exactly 'complete 'none 'campaign-complete #f
-;; #f plus the decision/interpreter/writer module paths, order-insensitive.
+;; Field-value extraction for a "label: value" answer. The value is the token
+;; after the label, with punctuation and Racket quoting trimmed, so
+;; "wave-index #f", "wave-index: '#f" and "wave-index = #f" all read as #f.
+(define (field-value text label)
+  (define rx
+    (pregexp (string-append "(?i:" (regexp-quote label) ")\\s*(?:[:=]|-)?\\s*['`]?([A-Za-z0-9_#'+-]+)")))
+  (define match (regexp-match rx text))
+  (and match (string-downcase (list-ref match 1))))
+
+;; Normalize a decision value token: symbols may be quoted or bare.
+(define (decision-value-token value)
+  (and value
+       (let ([trimmed (string-trim value "'" #:left? #t #:right? #t)])
+         (string-downcase (car (regexp-match #px"^[A-Za-z0-9_#'+-]+" trimmed))))))
+
+;; T1: the five decision fields must each carry the frozen value, plus the
+;; decision/interpreter/writer module paths. Labels are checked with their
+;; values — "two #f tokens somewhere" is not evidence that wave-index and
+;; merge-sha are both #f.
 (define (grade-t1 answer-text answer-spec)
   (define paths (extract-answer-paths answer-text))
   (define required-paths
@@ -106,33 +124,28 @@
   (define writers (hash-ref answer-spec 'writer-modules))
   (define all-required (append required-paths writers))
   (define missing-paths (filter (lambda (p) (not (member p paths))) all-required))
-  (define symbols-found
-    (filter (lambda (s) (symbol-mentioned? answer-text s)) '("complete" "none" "campaign-complete")))
-  (define hash-false-count (length (regexp-match* #rx"#f" answer-text)))
-  ;; wave-index and merge-sha are BOTH #f in the frozen tuple, and CL0 requires
-  ;; every field to be reported. One #f plus the three keywords is not enough
-  ;; (it cannot pin two distinct fields), so both labels AND two #f occurrences
-  ;; are required for a pass.
-  (define wave-label? (regexp-match? #px"(?i:wave[-_ ]?index)" answer-text))
-  (define merge-label? (regexp-match? #px"(?i:merge[-_ ]?sha)" answer-text))
-  (define false-fields-ok? (and wave-label? merge-label? (>= hash-false-count 2)))
-  (define facts-ok?
-    (and (= (length symbols-found) 3) false-fields-ok? (null? missing-paths)))
+  (define expected
+    (list (cons "kind" "complete")
+          (cons "route" "none")
+          (cons "code" "campaign-complete")
+          (cons "wave-index" "#f")
+          (cons "merge-sha" "#f")))
+  (define observed
+    (for/list ([pair (in-list expected)])
+      (cons (car pair) (decision-value-token (field-value answer-text (car pair))))))
+  (define wrong-fields
+    (for/list ([pair (in-list observed)]
+               #:unless (equal? (cdr pair) (cdr (assoc (car pair) expected))))
+      (format "~a: expected ~a, observed ~a"
+              (car pair)
+              (cdr (assoc (car pair) expected))
+              (or (cdr pair) "nothing"))))
+  (define facts-ok? (and (null? wrong-fields) (null? missing-paths)))
   (define nothing-found?
-    (and (null? symbols-found) (zero? hash-false-count) (= (length missing-paths) 4)))
+    (and (for/and ([pair (in-list observed)]) (not (cdr pair))) (null? paths)))
   (define reasons
-    (append (for/list ([p (in-list missing-paths)])
-              (format "missing module path: ~a" p))
-            (for/list ([s (in-list '("complete" "none" "campaign-complete"))]
-                       #:unless (member s symbols-found))
-              (format "missing decision value: ~a" s))
-            (cond
-              [(not wave-label?) (list "wave-index field not reported")]
-              [(not merge-label?) (list "merge-sha field not reported")]
-              [(zero? hash-false-count) (list "missing #f for wave-index/merge-sha")]
-              [(= hash-false-count 1)
-               (list "only one #f seen; wave-index and merge-sha not independently confirmed")]
-              [else '()])))
+    (append (for/list ([p (in-list missing-paths)]) (format "missing module path: ~a" p))
+            wrong-fields))
   (grade-result 'T1
                 (cond
                   [facts-ok? 'pass]
@@ -141,12 +154,10 @@
                 reasons
                 (hash 'paths-found
                       paths
-                      'symbols-found
-                      symbols-found
-                      'hash-false-count
-                      hash-false-count
-                      'wave-index-label wave-label?
-                      'merge-sha-label merge-label?
+                      'fields-observed
+                      observed
+                      'wrong-fields
+                      wrong-fields
                       'missing-paths
                       missing-paths)))
 
@@ -379,12 +390,92 @@
         (string-trim line))
       #f))
 
-;; T2 verdict on a trial tree. The oracle has three parts and all must hold:
-;;   1. the agent's test file passes against the clean module;
-;;   2. the SAME run fails under M-STOP-1 (it detects the mutation);
-;;   3. the PRE-EXISTING suite (the file as checked out at the arm revision)
-;;      passes under M-STOP-1 — so the added case, not the old ones, is what
-;;      detects the mutation — and the case count strictly increased.
+;; ---- added-test-case isolation ------------------------------------------------
+
+;; Top-level `(test-case ...)` forms of a test file, as data.
+(define (test-case-forms text)
+  ;; `#lang racket` is a reader directive, not a datum: drop the first line so
+  ;; the remaining forms can be read with plain `read`.
+  (define body (regexp-replace #px"^#lang[^\n]*\n?" text ""))
+  (define in (open-input-string body))
+  (let loop ([forms '()])
+    (define datum (with-handlers ([exn:fail? (lambda (_) eof)]) (read in)))
+    (cond
+      [(eof-object? datum) (reverse forms)]
+      [(and (pair? datum) (eq? (car datum) 'test-case)) (loop (cons datum forms))]
+      [else (loop forms)])))
+
+(define (added-test-case-forms agent-text baseline-text)
+  (define baseline (test-case-forms baseline-text))
+  (for/list ([form (in-list (test-case-forms agent-text))]
+             #:unless (member form baseline))
+    form))
+
+;; Run ONLY the added cases, clean and under M-STOP-1, in a scratch module
+;; written next to the trial's test file so relative requires resolve. This is
+;; the independent new-test guarantee: the added cases must pass clean and fail
+;; under the mutation, regardless of whether older cases already detect it (the
+;; frozen CL0 corpus documents that one existing case does).
+(define (added-cases-verdict tree-path
+                             test-rel
+                             module-rel
+                             added-forms
+                             #:timeout-ms [timeout-ms 180000])
+  (define test-path (build-path tree-path test-rel))
+  (define module-path (build-path tree-path module-rel))
+  (define directory (path-only test-path))
+  (define scratch (build-path directory ".cl5-added-tests.rkt"))
+  (define original-module (file->string module-path))
+  (define module-relative (path->string (find-relative-path directory module-path)))
+  (define text
+    (string-append "#lang racket\n"
+                   (format "(require rackunit \"~a\")\n" module-relative)
+                   (string-join (map (lambda (form) (format "~s" form)) added-forms) "\n")
+                   "\n"))
+  (define (run)
+    (call-with-output-file scratch (lambda (out) (display text out)) #:exists 'truncate/replace)
+    (define-values (exit-code stdout stderr timed-out?)
+      (run-captured (list "raco" "test" (path->string scratch)) #:cwd tree-path #:timeout-ms timeout-ms))
+    (hash 'exit
+          exit-code
+          'timed-out
+          timed-out?
+          'summary
+          (suite-result-summary (string-append stdout "\n" stderr))
+          'output
+          (string-append stdout "\n" stderr)))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define clean (run))
+     (define mutated
+       (dynamic-wind
+        (lambda () (apply-m-stop-1 module-path))
+        run
+        (lambda ()
+          (call-with-output-file module-path
+                                 (lambda (out) (display original-module out))
+                                 #:exists 'truncate/replace))))
+     (hash 'clean-exit
+           (hash-ref clean 'exit)
+           'mutated-exit
+           (hash-ref mutated 'exit)
+           'passed-clean?
+           (equal? (hash-ref clean 'exit) 0)
+           'detected?
+           (not (equal? (hash-ref mutated 'exit) 0))
+           'clean-timed-out
+           (hash-ref clean 'timed-out)
+           'mutated-timed-out
+           (hash-ref mutated 'timed-out)))
+   (lambda ()
+     (when (file-exists? scratch) (delete-file scratch)))))
+
+;; T2 verdict on a trial tree. Three parts, all required:
+;;   1. the agent's suite passes against the clean module;
+;;   2. the same suite fails under M-STOP-1;
+;;   3. the cases the agent ADDED (diffed against the arm revision and run in
+;;      isolation) pass clean and fail under M-STOP-1.
 ;; The module and the test file are restored before returning.
 (define (t2-verdict tree-path
                     #:revision [revision #f]
@@ -394,18 +485,13 @@
                     #:timeout-ms [timeout-ms 180000])
   (define test-path (build-path tree-path test-rel))
   (define module-path (build-path tree-path module-rel))
-  (define original-module (file->string module-path))
   (define agent-test (file->string test-path))
-  ;; The pre-existing suite comes from the pinned revision, or from an explicit
-  ;; fixture in unit tests. One of them is required: without a baseline the
-  ;; "the added case detects the mutation" guarantee cannot be established.
+  (define original-module (file->string module-path))
   (define baseline-test
     (or baseline-test-text
         (and revision (file-at-revision tree-path revision test-rel #:timeout-ms timeout-ms))
         (raise-arguments-error 't2-verdict
                                "no baseline suite: pass #:revision or #:baseline-test-text")))
-  (define (write-text path text)
-    (call-with-output-file path (lambda (out) (display text out)) #:exists 'truncate/replace))
   (define (run-suite)
     (define-values (exit-code stdout stderr timed-out?)
       (run-captured (t2-test-command test-rel) #:cwd tree-path #:timeout-ms timeout-ms))
@@ -418,50 +504,49 @@
           'output
           (string-append stdout "\n" stderr)))
   (define clean-agent (run-suite))
-  ;; Pre-existing suite: clean, then under the mutation it must NOT detect.
-  (define baseline-clean (dynamic-wind void (lambda () (write-text test-path baseline-test) (run-suite)) void))
-  (define baseline-mutated
+  (define mutated-agent
     (dynamic-wind
-     (lambda () (write-text test-path baseline-test) (apply-m-stop-1 module-path))
+     (lambda () (apply-m-stop-1 module-path))
      run-suite
-     (lambda () (write-text module-path original-module) (write-text test-path agent-test))))
-  (define agent-mutated
-    (dynamic-wind (lambda () (apply-m-stop-1 module-path))
-                  run-suite
-                  (lambda () (write-text module-path original-module))))
-  (define agent-cases (and (hash-ref clean-agent 'summary) (hash-ref (hash-ref clean-agent 'summary) 'total)))
-  (define baseline-cases
-    (and (hash-ref baseline-clean 'summary) (hash-ref (hash-ref baseline-clean 'summary) 'total)))
-  (define new-case? (and agent-cases baseline-cases (> agent-cases baseline-cases)))
+     (lambda ()
+       (call-with-output-file module-path
+                              (lambda (out) (display original-module out))
+                              #:exists 'truncate/replace))))
+  (define added-forms (added-test-case-forms agent-test baseline-test))
+  (define isolation
+    (and (pair? added-forms)
+         (added-cases-verdict tree-path test-rel module-rel added-forms #:timeout-ms timeout-ms)))
+  (define agent-cases
+    (and (hash-ref clean-agent 'summary) (hash-ref (hash-ref clean-agent 'summary) 'total)))
   (define pass?
     (and (equal? (hash-ref clean-agent 'exit) 0)
          (not (hash-ref clean-agent 'timed-out))
-         (equal? (hash-ref baseline-clean 'exit) 0)
-         (equal? (hash-ref baseline-mutated 'exit) 0)
-         (not (hash-ref baseline-mutated 'timed-out))
-         (not (equal? (hash-ref agent-mutated 'exit) 0))
-         (not (hash-ref agent-mutated 'timed-out))
-         new-case?))
+         (not (equal? (hash-ref mutated-agent 'exit) 0))
+         (not (hash-ref mutated-agent 'timed-out))
+         (pair? added-forms)
+         (hash-ref isolation 'passed-clean?)
+         (hash-ref isolation 'detected?)))
   (hash 'verdict
         (if pass? 'pass 'fail)
         'clean-exit
         (hash-ref clean-agent 'exit)
         'mutated-exit
-        (hash-ref agent-mutated 'exit)
-        'baseline-mutated-exit
-        (hash-ref baseline-mutated 'exit)
+        (hash-ref mutated-agent 'exit)
         'agent-cases
         agent-cases
-        'baseline-cases
-        baseline-cases
-        'new-test-case?
-        new-case?
+        'added-cases
+        (length added-forms)
+        'added-cases-isolation
+        (if isolation
+            (hash 'clean-exit (hash-ref isolation 'clean-exit)
+                  'mutated-exit (hash-ref isolation 'mutated-exit)
+                  'passed-clean? (hash-ref isolation 'passed-clean?)
+                  'detected? (hash-ref isolation 'detected?))
+            #f)
         'failing-assertion
-        (extract-failing-assertion (hash-ref agent-mutated 'output))
+        (extract-failing-assertion (hash-ref mutated-agent 'output))
         'timed-out
-        (or (hash-ref clean-agent 'timed-out)
-            (hash-ref baseline-mutated 'timed-out)
-            (hash-ref agent-mutated 'timed-out))))
+        (or (hash-ref clean-agent 'timed-out) (hash-ref mutated-agent 'timed-out))))
 
 ;; ---- T5 execution grader ---------------------------------------------------------
 
@@ -562,8 +647,15 @@
   (define results
     (with-handlers ([exn:fail? (lambda (_) #f)]) (read (open-input-string stdout))))
   (define pairs (if (list? results) results '()))
+  (define expected-labels
+    '(a1-zero-budget a2-exact-fit a3-ascii-truncation a4-ansi-escape a5-unicode-width
+      a6-ellipsis-accounting))
   (define failing (for/first ([pair (in-list pairs)] #:unless (cdr pair)) (car pair)))
-  (define assertions-ok? (and (= (length pairs) 6) (andmap cdr pairs)))
+  ;; A passing assertion list is only meaningful if the grader itself ran to
+  ;; completion: exit 0, no timeout, and exactly the six expected labels.
+  (define labels-ok? (equal? (map car pairs) expected-labels))
+  (define assertions-ok?
+    (and (equal? exit-code 0) (not timed-out?) labels-ok? (andmap cdr pairs)))
   (define (run-cases)
     (define-values (suite-exit suite-out suite-err _t)
       (run-captured (t2-test-command test-rel) #:cwd tree-path #:timeout-ms timeout-ms))
@@ -603,6 +695,8 @@
         baseline-cases
         'new-test-case?
         new-case?
+        'labels-ok
+        labels-ok?
         'stderr
         stderr))
 

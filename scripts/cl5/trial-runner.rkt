@@ -18,6 +18,7 @@
          racket/file
          racket/list
          racket/path
+         racket/set
          racket/string
          "experiment-config.rkt"
          "oracle.rkt"
@@ -31,6 +32,7 @@
          find-newest-session-file
          last-assistant-text
          reset-worktree!
+         first-correct-edit
          write-series!
          available-models
          pi-version
@@ -210,6 +212,10 @@
                           (hash-ref spec 'ownership-set)
                           #:repo-root repo-root
                           #:owner-paths (hash-ref spec 'owner-location-paths)))
+  ;; Infrastructure failure (non-zero exit, timeout, quota abort, provider
+  ;; error) is NOT task incorrectness: nothing is graded, and the record says
+  ;; so explicitly so a series never reads a crash as a wrong answer.
+  (define infrastructure-ok? (and (equal? exit-code 0) (not timed-out?)))
   (define changed (changed-paths worktree arm-revision))
   (define constraint
     (and (eq? (hash-ref spec 'oracle) 'execution)
@@ -218,6 +224,13 @@
                           (hash-ref spec 'write-paths))))
   (define oracle-record
     (cond
+      [(not infrastructure-ok?)
+       (hash 'verdict
+             'infrastructure-failure
+             'reasons
+             (list (format "session did not complete: exit=~a timed-out=~a" exit-code timed-out?))
+             'recorded
+             (hash 'exit-code exit-code 'timed-out timed-out?))]
       [(eq? (hash-ref spec 'oracle) 'text) (grade-task task-id (last-assistant-text events))]
       [else
        (define execution
@@ -234,13 +247,10 @@
                       (list (format "diff constraint failed: stray=~a missing=~a"
                                     (hash-ref constraint 'stray)
                                     (hash-ref constraint 'missing)))))]))
-  ;; First-correct-edit: CL0 distinguishes the first in-scope edit from the
-  ;; first edit whose final state passes. This harness grades the final tree,
-  ;; so when the oracle passes the two coincide and the basis is recorded; a
-  ;; per-edit bisect is not performed (and is never implied).
-  (define first-edit-ms (and metrics (hash-ref metrics 'first-edit-ms #f)))
-  (define first-correct-edit-ms
-    (and (eq? (hash-ref oracle-record 'verdict) 'pass) first-edit-ms))
+  (define-values (first-correct-edit-ms first-correct-edit-basis)
+    (first-correct-edit (eq? (hash-ref oracle-record 'verdict) 'pass)
+                        (if metrics (hash-ref metrics 'in-scope-edit-count 0) 0)
+                        (and metrics (hash-ref metrics 'first-edit-ms #f))))
   (define record
     (hash 'task
           (symbol->string task-id)
@@ -271,13 +281,28 @@
           changed
           'first-correct-edit-ms
           first-correct-edit-ms
+          'trial-status
+          (if infrastructure-ok? 'graded 'infrastructure-failure)
           'first-correct-edit-basis
-          (if first-correct-edit-ms "final-oracle-pass" #f)
+          first-correct-edit-basis
           'metrics
           metrics
           'oracle
           oracle-record))
   record)
+
+;; First-correct-edit: CL0 distinguishes the first in-scope edit from the first
+;; edit whose final state passes. Final-state grading does NOT prove an earlier
+;; edit was already correct, so the metric is only claimed when the submission
+;; contains exactly ONE in-scope edit (that edit is then the correct one);
+;; otherwise it is reported as unobserved rather than inferred.
+;; -> (values milliseconds-or-#f basis-string)
+(define (first-correct-edit oracle-pass? edit-count first-edit-ms)
+  (cond
+    [(not oracle-pass?) (values #f "not-correct")]
+    [(and (= edit-count 1) first-edit-ms) (values first-edit-ms "single-in-scope-edit")]
+    [(> edit-count 1) (values #f "unobserved-multiple-edits")]
+    [else (values #f "unobserved-no-edit")]))
 
 ;; Restore the worktree to the arm revision: tracked edits, deletions and
 ;; untracked files (including compiled bytecode). This is a harness action on
@@ -332,12 +357,17 @@
 (define (write-series! path metadata trials)
   (define directory (path-only path))
   (when directory (make-directory* directory))
-  (call-with-output-file path
+  ;; Atomic publication: a crash mid-write can never leave a truncated series.
+  ;; The temp file lives in the same directory so rename is same-filesystem.
+  (define temp (build-path (or directory (current-directory))
+                           (format ".~a.tmp" (file-name-from-path path))))
+  (call-with-output-file temp
                          (lambda (out)
                            (write-string (jsexpr->string
                                           (hash-set (->jsexpr metadata) 'trials trials))
                                          out))
-                         #:exists 'truncate/replace))
+                         #:exists 'truncate/replace)
+  (rename-file-or-directory temp path #t))
 
 (define (run-series tasks
                     worktree
@@ -349,7 +379,9 @@
                     #:out-dir [out-dir "docs/reports"]
                     #:timeout-ms [timeout-ms 3600000]
                     #:models [models #f]
-                    #:cli-version [cli-version #f])
+                    #:cli-version [cli-version #f]
+                    #:resume? [resume? #f]
+                    #:host [host (current-host)])
   (define arm-cfg (arm-config config arm))
   (define arm-revision (hash-ref arm-cfg 'revision))
   ;; Fail closed before the first session, on both identities:
@@ -372,7 +404,7 @@
                            "running"
                            running-version))
   (define path (series-path-for arm arm-revision out-dir))
-  (define metadata (series-metadata config arm #:host (current-host) #:n n #:rotation rotation))
+  (define metadata (series-metadata config arm #:host host #:n n #:rotation rotation))
   (define existing
     (and (file-exists? path)
          (with-handlers ([exn:fail? (lambda (_) #f)])
@@ -384,7 +416,21 @@
                            (path->string path)))
   (when existing (check-series-metadata existing metadata))
   (define trials (if existing (hash-ref existing 'trials '()) '()))
-  (for* ([round (in-range n)] [task-id (in-list rotation)])
+  ;; Resuming is explicit. A series that already holds trials refuses to be
+  ;; restarted silently (which would duplicate them); with #:resume? #t the
+  ;; already-recorded (round, task) pairs are skipped instead of repeated.
+  (define completed
+    (for/set ([trial (in-list trials)])
+      (cons (hash-ref trial 'round #f) (hash-ref trial 'task #f))))
+  (when (and (pair? trials) (not resume?))
+    (raise-arguments-error 'run-series
+                           "series already holds trials; pass #:resume? #t to continue it"
+                           "series"
+                           (path->string path)
+                           "existing-trials"
+                           (length trials)))
+  (for* ([round (in-range n)] [task-id (in-list rotation)]
+         #:unless (set-member? completed (cons round (symbol->string task-id))))
     (define record
       (run-trial task-id
                  worktree
@@ -392,7 +438,7 @@
                  #:arm arm
                  #:session-dir session-dir
                  #:timeout-ms timeout-ms))
-    (set! trials (append trials (list (->jsexpr record))))
+    (set! trials (append trials (list (->jsexpr (hash-set* record 'round round)))))
     ;; Checkpoint: the completed trial is durable before the next one starts.
     (write-series! path metadata trials))
   (hash 'series-file (path->string path) 'trial-count (length trials)))
