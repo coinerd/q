@@ -29,6 +29,30 @@
   (define tail (member flag args))
   (and tail (pair? (cdr tail)) (second tail)))
 
+;; A throwaway git repo with one commit: the preflight requires a real
+;; checkout, so tests that reach run-series need one.
+(define (make-git-fixture)
+  (define repo (make-temporary-file "cl5-repo-~a" 'directory))
+  (define (git . args)
+    (define-values (exit-code _out _err _t)
+      (run-captured (append (list "git" "-c" "user.email=cl5@example.invalid"
+                                  "-c" "user.name=CL5")
+                            args)
+                    #:cwd repo
+                    #:timeout-ms 60000))
+    (unless (equal? exit-code 0) (error 'git "failed: ~a" args)))
+  (define (git-out . args)
+    (define-values (exit-code out _err _t)
+      (run-captured (append (list "git") args) #:cwd repo #:timeout-ms 60000))
+    (unless (equal? exit-code 0) (error 'git "failed: ~a" args))
+    (string-trim out))
+  (git "init" "-q")
+  (call-with-output-file (build-path repo "tracked.rkt")
+                         (lambda (out) (display "#lang racket/base\n" out)))
+  (git "add" "tracked.rkt")
+  (git "commit" "-q" "-m" "fixture")
+  (values repo (git-out "rev-parse" "HEAD") git git-out))
+
 (module+ test
   (test-case "both arms build commands from the same experiment config"
     (define baseline (trial-command 'T1 (arm-config config 'baseline) "/tmp/s" "/tmp/o"))
@@ -169,42 +193,78 @@
                      '()))
      (lambda () (delete-directory/files dir))))
 
-  (test-case "an existing series refuses silent restart and resumes only on request"
-    (define dir (make-temporary-file "cl5-resume-~a" 'directory))
+  (test-case "run-series refuses series output inside the disposable worktree"
+    (define-values (repo head _git git-out) (make-git-fixture))
     (dynamic-wind
      void
      (lambda ()
-       (define path (series-path-for 'baseline baseline-revision dir))
-       (define metadata (series-metadata config 'baseline #:host "host-a" #:n 1 #:rotation '(T1)))
-       (write-series! path metadata (list (hash 'task "T1" 'round 0 'arm "baseline")))
-       ;; Without #:resume? the runner refuses instead of duplicating trials.
-       (check-exn exn:fail?
+       (define outside (make-temporary-file "cl5-series-out-~a" 'directory))
+       (define config* (hash-set config 'baseline-revision head))
+       ;; Series output inside the checkout: refused before any session.
+       (check-exn #rx"inside the disposable worktree"
                   (lambda ()
                     (run-series '(T1)
-                                dir
-                                #:config config
+                                repo
+                                #:config config*
                                 #:arm 'baseline
                                 #:n 1
-                                #:session-dir dir
-                                #:out-dir dir
+                                #:session-dir (build-path outside "sessions")
+                                #:out-dir (build-path repo "reports")
                                 #:models (list (cons "deepseek" "deepseek-flash"))
-                                #:cli-version "1.6.0" #:host "host-a")))
+                                #:cli-version "1.6.0"
+                                #:host "host-a"
+                                #:allow-primary? #t)))
+       ;; The refusal did not launch pi, write a checkpoint, or dirty the tree.
+       (check-false (directory-exists? (build-path repo "reports")))
+       (check-equal? (git-out "status" "--porcelain") "")
+       ;; Session dir inside the checkout is refused the same way.
+       (check-exn #rx"inside the disposable worktree"
+                  (lambda ()
+                    (run-series '(T1)
+                                repo
+                                #:config config*
+                                #:arm 'baseline
+                                #:n 1
+                                #:session-dir (build-path repo "sessions")
+                                #:out-dir outside
+                                #:models (list (cons "deepseek" "deepseek-flash"))
+                                #:cli-version "1.6.0"
+                                #:host "host-a"
+                                #:allow-primary? #t)))
+       (check-false (directory-exists? (build-path repo "sessions"))))
+     (lambda () (delete-directory/files repo))))
+
+  (test-case "an existing series refuses silent restart and resumes only on request"
+    (define-values (repo head _git _git-out) (make-git-fixture))
+    (define outside (make-temporary-file "cl5-resume-out-~a" 'directory))
+    (dynamic-wind
+     void
+     (lambda ()
+       (define config* (hash-set config 'baseline-revision head))
+       (define metadata (series-metadata config* 'baseline #:host "host-a" #:n 1 #:rotation '(T1)))
+       (define path (series-path-for 'baseline head outside))
+       (write-series! path metadata (list (hash 'task "T1" 'round 0 'arm "baseline")))
+       (define (run #:resume? [resume? #f])
+         (run-series '(T1)
+                     repo
+                     #:config config*
+                     #:arm 'baseline
+                     #:n 1
+                     #:session-dir (build-path outside "sessions")
+                     #:out-dir outside
+                     #:models (list (cons "deepseek" "deepseek-flash"))
+                     #:cli-version "1.6.0"
+                     #:host "host-a"
+                     #:allow-primary? #t
+                     #:resume? resume?))
+       ;; Without #:resume? the runner refuses instead of duplicating trials.
+       (check-exn #rx"series already holds trials" (lambda () (run)))
        ;; With #:resume? #t the completed (round, task) pair is skipped, so no
        ;; session is launched for the same workload.
-       (check-equal? (hash-ref (run-series '(T1)
-                                           dir
-                                           #:config config
-                                           #:arm 'baseline
-                                           #:n 1
-                                           #:session-dir dir
-                                           #:out-dir dir
-                                           #:models (list (cons "deepseek" "deepseek-flash"))
-                                           #:cli-version "1.6.0"
-                                           #:host "host-a"
-                                           #:resume? #t)
-                               'trial-count)
-                     1))
-     (lambda () (delete-directory/files dir))))
+       (check-equal? (hash-ref (run #:resume? #t) 'trial-count) 1))
+     (lambda ()
+       (delete-directory/files repo)
+       (delete-directory/files outside))))
 
   (test-case "write-series! checkpoints metadata and completed trials"
     (define dir (make-temporary-file "cl5-series-~a" 'directory))

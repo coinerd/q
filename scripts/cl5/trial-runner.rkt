@@ -508,9 +508,23 @@
                     #:models [models #f]
                     #:cli-version [cli-version #f]
                     #:resume? [resume? #f]
-                    #:host [host (current-host)])
+                    #:host [host (current-host)]
+                    #:allow-primary? [allow-primary? #f])
   (define arm-cfg (arm-config config arm))
   (define arm-revision (hash-ref arm-cfg 'revision))
+  ;; Resolve both output paths ONCE, then validate and USE the same values:
+  ;; a relative default ("docs/reports") must never resolve inside the
+  ;; disposable checkout that later trials reset.
+  (define resolved-out-dir (path->complete-path (simplify-path out-dir)))
+  (define resolved-session-dir (path->complete-path (simplify-path session-dir)))
+  ;; FIRST: the disposable-worktree boundary, before any model call or session.
+  ;; Both the session directory and the series-output directory must live
+  ;; outside the tree; nothing is launched and nothing is written otherwise.
+  (worktree-preflight worktree
+                      arm-revision
+                      #:allow-primary? allow-primary?
+                      #:session-dir resolved-session-dir
+                      #:out-dir resolved-out-dir)
   ;; Fail closed before the first session, on both identities:
   ;;  * the provider must advertise the configured model (no fallback);
   ;;  * the pi version running now must equal the version stamped in the
@@ -530,7 +544,7 @@
                            stamped-version
                            "running"
                            running-version))
-  (define path (series-path-for arm arm-revision out-dir))
+  (define path (series-path-for arm arm-revision resolved-out-dir))
   (define metadata (series-metadata config arm #:host host #:n n #:rotation rotation))
   (define existing
     (and (file-exists? path)
@@ -563,7 +577,8 @@
                  worktree
                  #:config config
                  #:arm arm
-                 #:session-dir session-dir
+                 #:session-dir resolved-session-dir
+                 #:allow-primary? allow-primary?
                  #:timeout-ms timeout-ms))
     (set! trials (append trials (list (->jsexpr (hash-set* record 'round round)))))
     ;; Checkpoint: the completed trial is durable before the next one starts.

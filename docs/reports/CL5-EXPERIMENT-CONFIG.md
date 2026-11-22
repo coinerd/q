@@ -54,7 +54,7 @@ destructive `git reset --hard` / `git clean -fdx` cleanup:
 | it is a disposable linked worktree (`.git` is a file) | raises for a primary checkout unless `#:allow-primary? #t` is passed explicitly |
 | `git rev-parse HEAD` equals the configured arm revision | raises, naming both SHAs — the checkout is **not** reset |
 | `git status --porcelain` is empty | raises, listing the changes — the checkout is **not** reset |
-| session/series output is outside the tree | raises |
+| session **and** series-output directories are outside the tree (checked at the `run-series` entrypoint with the same resolved paths used for writing) | raises before any session; nothing is written |
 
 Cleanup repeats the disposable-checkout guard, so a primary checkout is never reset even if a
 caller bypassed preflight. Negative cases covered by tests: wrong HEAD, dirty worktree, primary
