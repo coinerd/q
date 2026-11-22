@@ -1,4 +1,8 @@
-# CL5 Wave 2 — Option A pilot: D5 with exact-SHA CI ground truth (#9982)
+# CL5 Wave 2 — Option A pilot: D5 comprehensive-only pass (#9982)
+
+> **Superseded by `CL5-W2-E2E-89dac02e.md`.** This first pilot validated the CI mechanism but did
+> not execute the shadow-selected set, so its `detected` label was premature. The end-to-end run
+> measured the selected surface and classified D5 as **missed**.
 
 Approved mechanism: a defect (or clean control) state is committed to a uniquely named scratch
 branch, CI is triggered with `workflow_dispatch` on that branch, and the run is located **by head

@@ -137,4 +137,27 @@
     (define plan (parse-explain-output text))
     (check-equal? (hash-ref plan 'selected) '("tests/test-a.rkt" "tests/test-b.rkt"))
     (check-equal? (length (hash-ref plan 'escalations)) 1)
-    (check-equal? (parse-explain-output "changed files: 0\n") (hash 'selected '() 'escalations '()))))
+    (check-equal? (parse-explain-output "changed files: 0\n") (hash 'selected '() 'escalations '())))
+  (test-case "selected-failures surfaces only failure lines, bounded"
+    (define text
+      (string-append "qt: quick passed: 3 files\n"
+                     "raco test: (submodule) test\n"
+                     "FAILURE\n"
+                     "name: check-equal?\n"
+                     "raco test: failed\n"))
+    (define failures (selected-failures text))
+    (check-equal? (length failures) 2)
+    (check-not-false (member "FAILURE" failures))
+    (check-equal? (length (selected-failures (apply string-append (make-list 60 "failed\n")))) 20))
+
+  (test-case "expected-scope-check reports a missing documented owner test"
+    (define case (hash 'expect-tests (list "tests/test-gsd-wave-status.rkt")))
+    (define covered (expected-scope-check case (list "tests/test-gsd-wave-status.rkt") '()))
+    (check-true (hash-ref covered 'covered?))
+    (check-equal? (hash-ref covered 'not-selected) '())
+    (check-false (hash-ref covered 'escalation-reported?))
+    (define missed (expected-scope-check case (list "tests/test-other.rkt") '()))
+    (check-false (hash-ref missed 'covered?))
+    (check-equal? (hash-ref missed 'not-selected) (list "tests/test-gsd-wave-status.rkt"))
+    (check-false (hash-ref (expected-scope-check (hash) '() '()) 'covered?)))
+)

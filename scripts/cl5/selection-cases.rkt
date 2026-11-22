@@ -33,6 +33,8 @@
 ;;   file          — the single file the substitution mutates
 ;;   from / to     — exact text substitution (must occur exactly once)
 ;;   expect        — 'detected (the selector must run the detecting owners)
+;;   expect-tests  — the corpus-documented detecting owner test files that the
+;;                   selected set must actually contain (scope assertion)
 ;;   note          — what the mutation simulates, in corpus terms
 (define selection-cases
   (list (hash 'id
@@ -57,6 +59,10 @@
                              "  (or (wave-status-canonical s) 'pending))")
               'expect
               'detected
+              'expect-tests
+              (list "tests/test-gsd-wave-status.rkt")
+              'escalation-expected
+              "consumer-contract escalation (vocabulary fan-in)"
               'note
               "unknown wave status silently read as 'pending instead of a typed rejection")
         (hash 'id
@@ -75,6 +81,10 @@
                              "  (and (exn:fail:network:timeout:stream? exn)")
               'expect
               'detected
+              'expect-tests
+              (list "tests/test-stream-liveness-classification.rkt")
+              'escalation-expected
+              "retry-classification escalation (timeout ownership)"
               'note
               "held-request (200 + SSE headers, zero chunks) treated as retryable")))
 

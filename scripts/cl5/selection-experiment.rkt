@@ -35,7 +35,12 @@
          current-case-runner
          run-case-ci
          run-experiment-ci
-         classify-ci-pair
+         classify-pair
+         expected-scope-check
+         measure-selected!
+         selected-state!
+         selected-failures
+         append-checkpoint!
          git!
          classify-run
          ->jsexpr)
@@ -279,11 +284,132 @@
                            (if (equal? stderr "") stdout stderr)))
   (string-trim stdout))
 
-;; Commit the requested state (defect: with the injection; control: unchanged)
-;; to a uniquely named scratch branch, push it, and return the exact commit SHA
-;; the CI run must match.
-(define (push-state! worktree revision case label branch)
+;; Lines that identify what a failing selected run actually reported.
+(define (selected-failures text)
+  (define lines
+    (for/list ([line (in-list (string-split text "\n"))]
+               #:when (regexp-match? #rx"(?i:(?:fail|failed|raco test:.*test failure))" line))
+      (string-trim line)))
+  (take lines (min (length lines) 20)))
+
+;; Run the SHIPPED selector on the current working tree. The plan is read from
+;; `--explain`, the execution from `--changed HEAD`; both see the same diff.
+;; A clean control has no diff, and the selector treats a zero selection as a
+;; failure, so the control runs the SAME selected set that the defect shipped
+;; against the clean source (same set, clean tree).
+(define (selected-state! worktree
+                        #:timeout-seconds [timeout-seconds 1800]
+                        #:files [files #f])
+  (define (verdict-of exit-code timed-out? refusal?)
+    (cond [timed-out? 'unavailable]
+          [refusal? 'unavailable]
+          [(equal? exit-code 0) 'pass]
+          [else 'fail]))
+  (define (run-file file)
+    (run-command (list "./qt" "full" "--file" file)
+                 #:cwd worktree
+                 #:timeout-seconds timeout-seconds))
+  (define (selected-files-result)
+    (define results
+      (for/list ([file (in-list files)])
+        (define-values (exit-code elapsed stdout stderr timed-out?) (run-file file))
+        (hash 'file
+              file
+              'exit
+              exit-code
+              'timed-out
+              timed-out?
+              'seconds
+              elapsed
+              'failures
+              (selected-failures (string-append stdout "\n" stderr)))))
+    (hash 'verdict
+          (cond
+            [(for/or ([r (in-list results)]) (hash-ref r 'timed-out)) 'unavailable]
+            [(for/or ([r (in-list results)]) (not (equal? (hash-ref r 'exit) 0))) 'fail]
+            [else 'pass])
+          'exit
+          (if (for/or ([r (in-list results)]) (not (equal? (hash-ref r 'exit) 0))) 1 0)
+          'timed-out
+          (for/or ([r (in-list results)]) (hash-ref r 'timed-out))
+          'refused
+          #f
+          'seconds
+          (for/sum ([r (in-list results)]) (hash-ref r 'seconds))
+          'selected
+          files
+          'escalations
+          '()
+          'plan-error
+          #f
+          'failures
+          (append* (map (lambda (r) (hash-ref r 'failures)) results))
+          'files
+          results))
+  (if files
+      (selected-files-result)
+      (let* ([plan
+              (with-handlers ([exn:fail? (lambda (e)
+                                           (hash 'selected '() 'escalations '() 'error (exn-message e)))])
+                (selected-plan worktree))]
+             [_ (void plan)])
+        (define-values (exit-code elapsed stdout stderr timed-out?)
+          (run-command (list "./qt" "quick" "--changed" "HEAD")
+                       #:cwd worktree
+                       #:timeout-seconds timeout-seconds))
+        (define refusal? (regexp-match? #rx"quick refuses" (string-append stdout stderr)))
+        (hash 'verdict
+              (verdict-of exit-code timed-out? refusal?)
+              'exit
+              exit-code
+              'timed-out
+              timed-out?
+              'refused
+              refusal?
+              'seconds
+              elapsed
+              'selected
+              (hash-ref plan 'selected '())
+              'escalations
+              (hash-ref plan 'escalations '())
+              'plan-error
+              (hash-ref plan 'error #f)
+              'failures
+              (selected-failures (string-append stdout "\n" stderr))))))
+
+;; Apply one state (defect injection for a defect state, untouched tree for the
+;; control), refresh the admission record, then measure the shadow-selected
+;; surface. The derived record is restored afterwards so the committed tree is
+;; exactly `revision` plus the case mutation.
+(define (measure-selected! worktree revision case label #:files [files #f])
+  (git! worktree "reset" "-q" "--hard" revision)
+  (git! worktree "clean" "-q" "-fd")
   (when (eq? label 'defect) (void (apply-case! worktree case)))
+  ;; The shipped selector refuses to run against a stale audited record, so the
+  ;; record is refreshed first — and then restored before committing so the CI
+  ;; tree carries only the behavioural mutation.
+  ((current-admission-refresh) worktree)
+  (define measured (selected-state! worktree #:files files))
+  (define tree-sha
+    (begin
+      (git! worktree "add" "-A")
+      (git! worktree "write-tree")))
+  (define record-identity
+    (for/list ([rel (in-list admission-files)])
+      (hash 'path rel 'sha (git! worktree "rev-parse" (format "HEAD:~a" rel)))))
+  ((current-derived-restore) worktree)
+  (define restored-sha
+    (begin
+      (git! worktree "add" "-A")
+      (git! worktree "write-tree")))
+  (hash 'selected measured
+        'measured-tree-sha tree-sha
+        'committed-tree-sha restored-sha
+        'record-at-revision record-identity))
+
+;; Commit whatever is staged in the worktree to a uniquely named scratch branch
+;; and push it; returns the exact commit SHA CI must match.
+(define (push-state! worktree revision case label branch)
   (git! worktree "checkout" "-q" "--detach" revision)
   (git! worktree "add" "-A")
   (git! worktree "commit" "-q" "--allow-empty" "-m"
@@ -292,45 +418,123 @@
   (git! worktree "push" "-q" "-f" "origin" (format "HEAD:refs/heads/~a" branch))
   sha)
 
-;; One CI-backed case state: prepare, dispatch, wait for the exact SHA, record
-;; the verdict, then restore the worktree and delete the scratch branch.
-(define (run-case-ci repo-root worktree revision case label nonce
-                     #:timeout-seconds [timeout-seconds 2400])
-  (define branch (scratch-branch-name (hash-ref case 'id) label nonce))
-  (define sha (push-state! worktree revision case label branch))
-  (define verdict
-    (ci-verdict-for-sha repo-root sha #:branch branch #:timeout-seconds timeout-seconds))
-  ;; Restore the worktree to the pinned revision and drop the scratch branch.
-  (git! worktree "reset" "-q" "--hard" revision)
-  (git! worktree "clean" "-q" "-fd")
+;; Restore the disposable worktree and remove the scratch branch, whatever
+;; happened during dispatch or job retrieval.
+(define (cleanup-state! worktree revision branch)
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (git! worktree "reset" "-q" "--hard" revision)
+    (git! worktree "clean" "-q" "-fd"))
   (with-handlers ([exn:fail? (lambda (_) (void))])
     (git! worktree "push" "-q" "origin" "--delete" branch))
-  (hash 'case
-        (hash-ref case 'id)
-        'label
-        label
-        'branch
-        branch
-        'head-sha
-        sha
-        'verdict
-        (hash-ref verdict 'verdict)
-        'run-id
-        (hash-ref verdict 'run-id #f)
-        'detecting
-        (hash-ref verdict 'detecting '())
-        'unavailable-reasons
-        (hash-ref verdict 'unavailable-reasons '())))
+  (with-handlers ([exn:fail? (lambda (_) (void))])
+    (git! worktree "branch" "-q" "-D" branch)
+    (void)))
 
-;; Pair classification for CI-backed evidence. Both states must be available
-;; and the control must pass, otherwise the case is 'unavailable — a defect
-;; "detected" against a red control proves nothing.
-(define (classify-ci-pair defect-verdict control-verdict)
-  (cond
-    [(or (eq? defect-verdict 'unavailable) (eq? control-verdict 'unavailable)) 'unavailable]
-    [(eq? control-verdict 'fail) 'unavailable]
-    [(eq? defect-verdict 'fail) 'detected]
-    [else 'not-detected-by-comprehensive]))
+;; One CI-backed case state: measure the shadow-selected surface on the exact
+;; injected tree, then commit that same tree, dispatch CI, and record the
+;; exact-SHA verdict. Cleanup is guaranteed by dynamic-wind.
+(define (run-case-ci repo-root
+                     worktree
+                     revision
+                     case
+                     label
+                     nonce
+                     #:timeout-seconds [timeout-seconds 2400]
+                     #:selected-timeout [selected-timeout 1800]
+                     #:selected-files [selected-files #f]
+                     #:ci-cache [ci-cache #f])
+  (define branch (scratch-branch-name (hash-ref case 'id) label nonce))
+  (dynamic-wind
+   void
+   (lambda ()
+     (define state
+       (measure-selected! worktree revision case label #:files selected-files))
+     ;; A cached verdict is keyed by the COMMITTED tree sha, so the same tree
+     ;; always carries the same CI evidence and no new run is dispatched.
+     (define tree-key (hash-ref state 'committed-tree-sha))
+     (define cached
+       (and ci-cache
+            (or (hash-ref ci-cache tree-key #f)
+                ;; read-json turns object keys into symbols
+                (hash-ref ci-cache (string->symbol tree-key) #f))))
+     (define-values (sha verdict source)
+       (if cached
+           (values #f cached 'cache)
+           (let* ([sha (push-state! worktree revision case label branch)]
+                  [verdict
+                   (with-handlers ([exn:fail?
+                                    (lambda (e)
+                                      (hash 'verdict 'unavailable
+                                            'unavailable-reasons (list (exn-message e))))])
+                     (ci-verdict-for-sha repo-root
+                                         sha
+                                         #:branch branch
+                                         #:timeout-seconds timeout-seconds))])
+             (values sha verdict 'live))))
+     (hash 'case
+           (hash-ref case 'id)
+           'label
+           label
+           'branch
+           (and sha branch)
+           'head-sha
+           sha
+           'ci-source
+           source
+           'selected
+           (hash-ref state 'selected)
+           'measured-tree-sha
+           (hash-ref state 'measured-tree-sha)
+           'committed-tree-sha
+           (hash-ref state 'committed-tree-sha)
+           'record-at-revision
+           (hash-ref state 'record-at-revision)
+           'ci-verdict
+           (hash-ref verdict 'verdict)
+           'ci-run-id
+           (hash-ref verdict 'run-id #f)
+           'detecting
+           (hash-ref verdict 'detecting '())
+           'missing-jobs
+           (hash-ref verdict 'missing-jobs '())
+           'unavailable-reasons
+           (hash-ref verdict 'unavailable-reasons '())))
+   (lambda () (cleanup-state! worktree revision branch))))
+
+;; Expected-scope assertions for a case: the documented detecting owner (from
+;; the frozen corpus) must be part of the selected set, and the documented
+;; escalation must be reported by the selector.
+(define (expected-scope-check case selected escalations)
+  (define expected (hash-ref case 'expect-tests '()))
+  (define missing
+    (for/list ([rel (in-list expected)] #:when (not (member rel selected))) rel))
+  (hash 'expected-tests
+        expected
+        'not-selected
+        missing
+        'covered?
+        (and (pair? expected) (null? missing))
+        'escalations
+        escalations
+        'escalation-reported?
+        (pair? escalations)))
+
+;; Pair classification: both surfaces must agree that the defect is real, the
+;; shadow-selected surface must actually have RUN (a refusal is unavailable,
+;; never a pass), and both clean controls must pass.
+(define (classify-pair defect-selected control-selected ci-defect ci-control)
+  (define (tag v)
+    (define raw (if (hash? v) (hash-ref v 'verdict) v))
+    ;; cached verdicts come back from JSON as strings
+    (if (string? raw) (string->symbol raw) raw))
+  (classify-case-evidence (tag defect-selected) (tag control-selected) (tag ci-defect) (tag ci-control)))
+
+;; Durable, append-only per-case checkpoints OUTSIDE the disposable worktree.
+(define (append-checkpoint! out-file record)
+  (make-directory* (path-only out-file))
+  (call-with-output-file out-file
+                         (lambda (out) (write-string (jsexpr->string (->jsexpr record)) out) (newline out))
+                         #:exists 'append))
 
 (define (run-experiment-ci repo-root
                            worktree
@@ -338,14 +542,52 @@
                            #:out-file out-file
                            #:cases [cases selection-cases]
                            #:nonce [nonce (number->string (current-seconds))]
-                           #:timeout-seconds [timeout-seconds 2400])
+                           #:timeout-seconds [timeout-seconds 2400]
+                           #:checkpoint-file [checkpoint-file #f]
+                           #:ci-cache [ci-cache #f])
   (preflight! worktree revision)
   (define records
     (for/list ([case (in-list cases)])
       (define defect
-        (run-case-ci repo-root worktree revision case 'defect nonce #:timeout-seconds timeout-seconds))
+        (run-case-ci repo-root
+                     worktree
+                     revision
+                     case
+                     'defect
+                     nonce
+                     #:timeout-seconds timeout-seconds
+                     #:ci-cache ci-cache))
+      (when checkpoint-file
+        (append-checkpoint! checkpoint-file (hash 'case (hash-ref case 'id) 'state defect)))
+      ;; The clean control runs the SAME selected set against the clean source;
+      ;; an empty selected set has nothing to control.
+      (define control-files (hash-ref (hash-ref defect 'selected) 'selected '()))
       (define control
-        (run-case-ci repo-root worktree revision case 'control nonce #:timeout-seconds timeout-seconds))
+        (if (null? control-files)
+            (hash 'case (hash-ref case 'id)
+                  'label
+                  'control
+                  'selected
+                  (hash 'verdict 'unavailable 'selected '() 'escalations '())
+                  'ci-verdict
+                  'unavailable
+                  'unavailable-reasons
+                  (list "the defect selected set is empty, so the control cannot be matched"))
+            (run-case-ci repo-root
+                         worktree
+                         revision
+                         case
+                         'control
+                         nonce
+                         #:timeout-seconds timeout-seconds
+                         #:selected-files control-files
+                         #:ci-cache ci-cache)))
+      (when checkpoint-file
+        (append-checkpoint! checkpoint-file (hash 'case (hash-ref case 'id) 'state control)))
+      (define scope
+        (expected-scope-check case
+                             (hash-ref (hash-ref defect 'selected) 'selected '())
+                             (hash-ref (hash-ref defect 'selected) 'escalations '())))
       (hash 'case
             (hash-ref case 'id)
             'category
@@ -354,12 +596,17 @@
             (hash-ref case 'note)
             'expect
             (hash-ref case 'expect)
+            'scope
+            scope
             'defect
             defect
             'control
             control
             'classification
-            (classify-ci-pair (hash-ref defect 'verdict) (hash-ref control 'verdict)))))
+            (classify-pair (hash-ref defect 'selected)
+                           (hash-ref control 'selected)
+                           (hash-ref defect 'ci-verdict)
+                           (hash-ref control 'ci-verdict)))))
   (define report
     (hash 'experiment "CL5 W2 shadow selection, CI ground truth (#9982)"
           'revision revision
@@ -427,12 +674,16 @@
   (define case-ids '())
   (define ci? #f)
   (define repo-root (path->string (build-path (current-directory) "..")))
+  (define checkpoint #f)
+  (define ci-cache-file #f)
   (command-line #:program "selection-experiment.rkt"
                 #:once-each ["--worktree" path "clean disposable checkout" (set! worktree path)]
                 ["--revision" sha "full SHA the worktree is pinned at" (set! revision sha)]
                 ["--out" path "JSON output file" (set! out-file path)]
    ["--ci" "use exact-SHA CI ground truth instead of local ./qt full" (set! ci? #t)]
    ["--repo-root" path "workspace root holding scripts/gh_helpers.py" (set! repo-root path)]
+   ["--checkpoint" path "append-only per-state checkpoint file (outside the worktree)" (set! checkpoint path)]
+   ["--ci-cache" path "JSON map tree-sha -> CI verdict; avoids re-dispatching identical trees" (set! ci-cache-file path)]
                 ["--case"
                  id
                  "case id (repeatable); default: every registered case"
@@ -449,6 +700,13 @@
                            (string->path worktree)
                            #:revision revision
                            #:out-file (string->path out-file)
+                           #:checkpoint-file (and checkpoint (string->path checkpoint))
+                           #:ci-cache (and ci-cache-file
+                                          (with-handlers ([exn:fail? (lambda (_) #f)])
+                                            (hash-ref (with-input-from-file ci-cache-file
+                                                        (lambda () (read-json)))
+                                                      'trees
+                                                      #f)))
                            #:cases cases)
         (run-experiment (string->path worktree)
                     #:revision revision

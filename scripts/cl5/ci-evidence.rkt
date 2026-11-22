@@ -28,6 +28,9 @@
 (provide classify-ci-run
          run-for-sha
          required-producers
+         expected-optional-jobs
+         expected-jobs
+         classify-case-evidence
          unavailable-conclusions
          workflow-dispatch!
          find-run-for-sha
@@ -39,18 +42,25 @@
 ;; Conclusions that mean "the comprehensive surface did not run".
 (define unavailable-conclusions '(cancelled timed_out action_required stale))
 
-;; The required test producers described in the review: the authoritative
-;; comprehensive surface for a CI run. Lint/audit jobs are recorded too, but a
-;; skipped lint job does not by itself invalidate detection evidence.
+;; The REQUIRED producers of the authoritative comprehensive surface. Every one
+;; of these must be PRESENT in the job list and conclude `success`; absent,
+;; duplicated, skipped, cancelled, in-progress or unknown is `unavailable`.
+;; (14 jobs, verified against an all-green main run.)
 (define required-producers
-  '("test (0)" "test (1)"
-               "test (2)"
-               "test-aggregate"
-               "security"
-               "test-platform"
-               "smoke (ubuntu-latest)"
-               "workflows (0)"
-               "workflows (1)"))
+  '("lint" "lint-quality" "security" "test-platform" "abstraction-audit"
+    "release-dry-run" "smoke (ubuntu-latest)" "test (0)" "test (1)" "test (2)"
+    "workflows (0)" "workflows (1)" "prepared-env-report" "test-aggregate"))
+
+;; Jobs that are part of the graph but legitimately skipped on a
+;; workflow_dispatch run of ci.yml: release-readiness is tag-only, fast-env is
+;; the self-hosted/push path, gsd-governance is push-only, and
+;; workflows-aggregate only runs on push. They must still APPEAR in the job
+;; list (a missing job means a truncated/incomplete graph), but a skip here is
+;; expected and is not counted as an unavailable producer.
+(define expected-optional-jobs
+  '("fast-env" "gsd-governance" "release-readiness" "workflows-aggregate"))
+
+(define expected-jobs (append required-producers expected-optional-jobs))
 
 (define (job-name job)
   (hash-ref job 'name ""))
@@ -65,27 +75,51 @@
     (for/list ([job (in-list jobs)])
       (hash 'name
             (job-name job)
+            'status
+            (hash-ref job 'status #f)
             'conclusion
             (hash-ref job 'conclusion #f)
             'failed-steps
             (for/list ([step (in-list (hash-ref job 'steps '()))]
                        #:when (equal? (hash-ref step 'conclusion #f) "failure"))
               (hash-ref step 'name "")))))
+  (define names (map (lambda (j) (hash-ref j 'name)) job-summaries))
+  ;; Duplicate job names mean the payload cannot be read as a complete graph.
+  (define duplicates
+    (for/list ([name (in-list (remove-duplicates names))]
+               #:when (> (count (lambda (n) (equal? n name)) names) 1))
+      name))
+  ;; Missing expected jobs: the comprehensive surface did not fully execute,
+  ;; even if every job that DID report was green.
+  (define missing
+    (for/list ([name (in-list expected-jobs)]
+               #:when (not (member name names)))
+      name))
+  (define summary-of
+    (lambda (name) (for/first ([j (in-list job-summaries)] #:when (equal? (hash-ref j 'name) name)) j)))
+  (define (non-success-conclusion? c)
+    (and c (memq (string->symbol c) '(skipped cancelled timed_out action_required neutral stale))))
+  (define bad-required
+    (for/list ([name (in-list required-producers)]
+               #:when (summary-of name)
+               #:do [(define j (summary-of name))]
+               #:when (and (not (equal? (hash-ref j 'conclusion) "success"))
+                           (not (equal? (hash-ref j 'conclusion) "failure"))))
+      (format "required producer ~a was ~a/~a"
+              name
+              (hash-ref j 'status)
+              (hash-ref j 'conclusion))))
   (define unavailable-reasons
-    (append
-     (cond
-       [(not (equal? status "completed")) (list (format "run status is ~a, not completed" status))]
-       [(memq (and conclusion (string->symbol conclusion)) unavailable-conclusions)
-        (list (format "run conclusion is ~a" conclusion))]
-       [else '()])
-     (for/list ([summary (in-list job-summaries)]
-                #:when (and (member (hash-ref summary 'name) required-producers)
-                            (memq (let ([c (hash-ref summary 'conclusion #f)])
-                                    (and (string? c) (string->symbol c)))
-                                  '(skipped cancelled timed_out action_required))))
-       (format "required producer ~a was ~a"
-               (hash-ref summary 'name)
-               (hash-ref summary 'conclusion)))))
+    (append (cond
+              [(not (equal? status "completed")) (list (format "run status is ~a, not completed" status))]
+              [(and conclusion (memq (string->symbol conclusion) unavailable-conclusions))
+               (list (format "run conclusion is ~a" conclusion))]
+              [else '()])
+            (for/list ([name (in-list duplicates)])
+              (format "duplicate job name ~a in the job list" name))
+            (for/list ([name (in-list missing)])
+              (format "expected job ~a is absent from the job list" name))
+            bad-required))
   (define failed
     (for/list ([summary (in-list job-summaries)]
                #:when (equal? (hash-ref summary 'conclusion) "failure"))
@@ -106,10 +140,43 @@
         (hash-ref run 'id #f)
         'jobs
         job-summaries
+        'missing-jobs
+        missing
+        'duplicate-jobs
+        duplicates
         'detecting
         failed
         'unavailable-reasons
         unavailable-reasons))
+
+;; Full evidence for one case state: the shadow-selected run AND the CI
+;; comprehensive verdict, plus the clean controls of both surfaces.
+;;
+;;   'detected   selected fails on the defect, comprehensive fails, and BOTH
+;;               clean controls pass
+;;   'missed     selected passes on the defect while comprehensive fails
+;;   'unavailable  anything incomplete: a control that did not pass, a timeout,
+;;               an unavailable CI run, or the two surfaces disagreeing in the
+;;               other direction (comprehensive green but selected red means the
+;;               injection did not reproduce the documented defect)
+;;   'not-detected neither surface fails — the injection is not a valid case
+(define (classify-case-evidence selected-defect selected-control comprehensive-defect
+                                comprehensive-control)
+  (define (unavailable? v) (eq? v 'unavailable))
+  (cond
+    [(or (unavailable? selected-defect)
+         (unavailable? selected-control)
+         (unavailable? comprehensive-defect)
+         (unavailable? comprehensive-control))
+     'unavailable]
+    [(or (eq? selected-control 'fail) (eq? comprehensive-control 'fail)) 'unavailable]
+    [(and (eq? selected-defect 'fail) (eq? comprehensive-defect 'fail)) 'detected]
+    [(and (eq? selected-defect 'pass) (eq? comprehensive-defect 'fail)) 'missed]
+    ;; The surfaces disagree the other way: the selector rejects a tree the
+    ;; comprehensive surface accepts, so the injection did not reproduce the
+    ;; documented defect. That is not a selection signal.
+    [(and (eq? selected-defect 'fail) (eq? comprehensive-defect 'pass)) 'unavailable]
+    [else 'not-detected]))
 
 ;; Pure filter: the CI run whose head SHA is exactly `sha`.
 (define (run-for-sha runs sha)
