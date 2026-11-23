@@ -40,9 +40,11 @@ make.
 | Code | When | Why |
 |---|---|---|
 | `unmapped-contract` | a changed module has ≥ `fan-in-threshold` dependents and no declaration | a shared contract without a consumer set is exactly the D5 blind spot |
+| **`partial-consumers`** | the declaration omits a **graph-known direct dependent** | an omitted consumer is untested surface; the set must escalate, never claim `covered` |
 | `stale-consumer` | a declared consumer does **not** require the module (checked against the forward requires graph) | declarations rot; a dead consumer silently shrinks the set |
-| `unknown-test` | a declared test path does not exist | a typo must not read as "test already covered" |
+| **`unknown-test`** | **any** test in the computed required set is absent — contract tests **and** consumer-inherited detectors | a missing consumer detector must not read as covered |
 | `no-coverage` | a declaration yields no contract test and no consumer detector | an empty declaration is not coverage |
+| **`attribution-unavailable`** | the coverage manifest is missing or corrupt | the declared-detector half of the set cannot be trusted |
 
 All four are validated mechanically from the repository's own graph and file system; none requires
 executing tests. The fan-in threshold (default 3) is a design parameter derived from the audit's
@@ -57,14 +59,18 @@ Seeded registry (two entries, both evidence-backed):
 | `extensions/gsd/wave-status.rkt` | vocabulary | archive, campaign-state, go-orchestrator, projection-kernel, wave-completion | `tests/test-gsd-wave-status.rkt` |
 | `util/error/errors.rkt` | shared-state | `agent/loop.rkt`, `runtime/agent-session.rkt` | `tests/test-browser-errors.rkt` |
 
-Results:
+Results (after the completion corrections):
 
-- **D5** → `covered`, **16 required tests**: the contract test plus 15 consumer detectors
-  (`test-gsd-campaign-state.rkt`, `test-gsd-go-orchestrator.rkt`, `test-gsd-archive.rkt`,
-  `test-gsd-wave-completion.rkt`, …). The declaration validates: every consumer transitively
-  requires `wave-status.rkt`, and the declared test exists.
-- `util/error/errors.rkt` → `covered`, required `tests/test-browser-errors.rkt`.
+- **D5** → `covered`, **23 required tests**: the contract test plus the detectors of all **eight**
+  graph-known direct dependents (`archive`, `campaign-state`, `command-handlers`, `go-orchestrator`,
+  `planning-artifact-validation`, `projection-kernel`, `wave-completion`, `wave-docs`). The seed now
+  declares every dependent; omitting one raises `partial-consumers`.
+- `util/error/errors.rkt` → **`escalate` / `partial-consumers`**: the audit shows 44 direct
+  dependents and the seed names two, so the prototype explicitly refuses a `covered` claim instead of
+  quietly shrinking the set. This is the honest state until that contract is fully reviewed.
 - A high-fan-in module with no declaration → `unmapped-contract`, naming the fan-in.
+- A missing consumer detector, a missing/corrupt manifest, a dead consumer, an empty declaration and
+  an omitted dependent each have a negative test.
 
 Note the deliberate difference from the guard: B says "these tests must run" (the comprehensive lane
 does run them); C says "the quick lane may not claim a green". B is coverage repair, C is the safety
@@ -93,8 +99,9 @@ A only where a pure-unit detector exists.
 
 - A contract set proves *attribution*, not detection: the required tests may still not detect a given
   mutation.
-- The registry is a hand-maintained surface; the validator catches dead consumers and missing tests,
-  not an omitted consumer (a declared set can be incomplete).
+- The registry is a hand-maintained surface. The validator now catches dead consumers, omitted
+  graph-known dependents, missing tests anywhere in the required set, and invalid attribution
+  metadata; it still cannot prove that a *complete* declared set is behaviourally right.
 - Fan-in is computed from static `require` edges; dynamic requires are invisible (the graph
   parse-failure signal from the guard covers the unparseable case, not dynamic edges).
 - No execution, no timing, no cost claims.

@@ -54,6 +54,10 @@
         "tests/test-cold.rkt"
         #t))
 
+(define two-dependents
+  (hash "extensions/gsd/wave-status.rkt" (list "extensions/gsd/campaign-state.rkt"
+                                                "extensions/gsd/go-orchestrator.rkt")))
+
 (define vocabulary-contract
   (hasheq 'module
           "extensions/gsd/wave-status.rkt"
@@ -77,6 +81,49 @@
     (check-equal? (hash-ref d 'escalations) '())
     (check-equal? (hash-ref d 'required)
                   (list "tests/test-gsd-campaign-state.rkt" "tests/test-gsd-wave-status.rkt")))
+
+  (test-case "omitting a graph-known dependent is partial, never covered"
+    (define d (contract-decision (list "extensions/gsd/wave-status.rkt")
+                                (list vocabulary-contract)
+                                declared-fixture
+                                two-dependents
+                                requires-fixture
+                                known-tests))
+    ;; The declaration names only campaign-state; go-orchestrator depends on the
+    ;; module too and is therefore an untested consumer.
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (define e (for/first ([x (in-list (hash-ref d 'escalations))]
+                          #:when (eq? (hash-ref x 'code) 'partial-consumers))
+                x))
+    (check-not-false e)
+    (check-equal? (hash-ref e 'tests) (list "extensions/gsd/go-orchestrator.rkt")))
+
+  (test-case "a consumer detector missing from disk escalates unknown-test"
+    ;; campaign-state's declared detector is not in known-tests.
+    (define d (contract-decision (list "extensions/gsd/wave-status.rkt")
+                                (list vocabulary-contract)
+                                declared-fixture
+                                dependents-fixture
+                                requires-fixture
+                                (hash "tests/test-gsd-wave-status.rkt" #t)))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'unknown-test
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t)))
+
+  (test-case "a missing or corrupt manifest blocks a complete-coverage claim"
+    (for ([status (in-list '(missing corrupt))])
+      (define d (contract-decision (list "extensions/gsd/wave-status.rkt")
+                                  (list vocabulary-contract)
+                                  declared-fixture
+                                  dependents-fixture
+                                  requires-fixture
+                                  known-tests
+                                  #:manifest-status status))
+      (check-equal? (hash-ref d 'verdict) 'escalate)
+      (check-true (and (memq 'attribution-unavailable
+                             (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                       #t))))
 
   (test-case "a high-fan-in module without a declaration escalates unmapped-contract"
     (define d
@@ -153,8 +200,16 @@
     (check-equal? (hash-ref d 'verdict) 'covered)
     (check-equal? (hash-ref d 'escalations) '())
     (check-true (and (member "tests/test-gsd-wave-status.rkt" (hash-ref d 'required)) #t))
-    ;; the consumer set is real: at least one consumer detector is required
     (check-true (> (length (hash-ref d 'required)) 1)))
+
+  (test-case "repository: a partially declared contract escalates instead of claiming cover"
+    ;; util/error/errors.rkt has 44 graph-known dependents; the seed names two.
+    (define d (evaluate-contract-changes (path->complete-path repo-root)
+                                         (list "util/error/errors.rkt")))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'partial-consumers
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t)))
 
   (test-case "a low-fan-in module with a detector is unaffected"
     (define d

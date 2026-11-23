@@ -22,10 +22,13 @@
 ;;   tests      tests that must run for a contract change (owner/boundary tests)
 ;;
 ;; Fail-closed rules (each is a named escalation, never a silent narrowing):
-;;   unmapped-contract  a changed module is high fan-in but has no declaration
-;;   stale-consumer     a declared consumer does not actually require the module
-;;   unknown-test       a declared test path does not exist
-;;   no-coverage        a declaration exists but yields no runnable test
+;;   unmapped-contract      a changed module is high fan-in but has no declaration
+;;   partial-consumers      the declaration omits graph-known dependents of the module
+;;   stale-consumer         a declared consumer does not actually require the module
+;;   unknown-test           any test in the computed required set does not exist
+;;   no-coverage            a declaration exists but yields no runnable test
+;;   attribution-unavailable the coverage manifest is missing or corrupt, so the
+;;                          declared-detector half of the set cannot be trusted
 ;;
 ;; `contract-decision` returns the required verification set; it does not run
 ;; it. A future lane may consume that set; this module makes no such change.
@@ -96,7 +99,8 @@
                            dependents
                            requires
                            known-tests
-                           #:fan-in-threshold [fan-in-threshold default-fan-in-threshold])
+                           #:fan-in-threshold [fan-in-threshold default-fan-in-threshold]
+                           #:manifest-status [manifest-status 'loaded])
   (define by-module
     (for/hash ([entry (in-list registry)])
       (values (hash-ref entry 'module) entry)))
@@ -129,6 +133,34 @@
                                     (declared-of consumer)))))))
      string<?))
 
+  ;; A declaration that omits graph-known dependents cannot be "covered": the
+  ;; omitted consumers are exactly the untested surface (review #7101425294).
+  (define partial
+    (append*
+     (for/list ([entry (in-list matched)])
+       (define module (hash-ref entry 'module))
+       (define declared-consumers (hash-ref entry 'consumers '()))
+       (define omitted
+         (for/list ([d (in-list (hash-ref dependents module '()))]
+                    #:unless (member d declared-consumers))
+           d))
+       (if (null? omitted)
+           '()
+           (list (escalation 'partial-consumers
+                             module
+                             (format "declaration omits ~a graph-known dependent(s)"
+                                     (length omitted))
+                             (sort omitted string<?)))))))
+
+  ;; Attribution metadata must be valid before any complete-coverage claim.
+  (define attribution-bad
+    (if (eq? manifest-status 'loaded)
+        '()
+        (list (escalation 'attribution-unavailable
+                          #f
+                          (format "coverage manifest status is ~a" manifest-status)
+                          '()))))
+
   (define unmapped
     (for/list ([m (in-list unmatched-high-fan-in)])
       (escalation 'unmapped-contract
@@ -146,7 +178,14 @@
                   "declaration yields no runnable test (no contract tests, no consumer detectors)"
                   '())))
 
-  (define escalations (append unmapped validation empty-coverage))
+  ;; EVERY test in the computed required set must exist, including the ones
+  ;; inherited from consumers.
+  (define unknown-required
+    (for/list ([test (in-list required)]
+               #:unless (hash-ref known-tests test #f))
+      (escalation 'unknown-test test "required test does not exist" (list test))))
+  (define escalations
+    (append attribution-bad unmapped partial validation empty-coverage unknown-required))
   (hasheq 'required
           required
           'matched
@@ -172,11 +211,17 @@
                 'kind
                 'vocabulary
                 'consumers
+                ;; Every direct dependent the impact graph reports for the
+                ;; module; omitting one would (correctly) raise
+                ;; partial-consumers.
                 (list "extensions/gsd/archive.rkt"
                       "extensions/gsd/campaign-state.rkt"
+                      "extensions/gsd/command-handlers.rkt"
                       "extensions/gsd/go-orchestrator.rkt"
+                      "extensions/gsd/planning-artifact-validation.rkt"
                       "extensions/gsd/projection-kernel.rkt"
-                      "extensions/gsd/wave-completion.rkt")
+                      "extensions/gsd/wave-completion.rkt"
+                      "extensions/gsd/wave-docs.rkt")
                 'tests
                 (list "tests/test-gsd-wave-status.rkt"))
         (hasheq 'module
@@ -207,6 +252,7 @@
   (hash 'declared (hash-ref projection 'declared)
         'dependents (hash-ref projection 'dependents)
         'requires (hash-ref projection 'requires)
+        'manifest-status (hash-ref projection 'manifest-status)
         'known-tests known-tests))
 
 ;; Evaluate contract-aware escalation for a real changed-file set on this tree.
@@ -217,7 +263,8 @@
                      (hash-ref inputs 'declared)
                      (hash-ref inputs 'dependents)
                      (hash-ref inputs 'requires)
-                     (hash-ref inputs 'known-tests)))
+                     (hash-ref inputs 'known-tests)
+                     #:manifest-status (hash-ref inputs 'manifest-status)))
 
 (define (contract-decision->jsexpr result)
   (hash 'verdict
