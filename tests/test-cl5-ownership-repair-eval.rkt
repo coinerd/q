@@ -24,22 +24,22 @@
 
 (module+ test
   (test-case "eligibility follows the admission contract"
-    (check-equal? (classify-candidate unit-fast '() 4 'rejected) 'eligible)
-    (check-equal? (classify-candidate unit-fast '() 4 'admitted) 'already-admitted)
-    (check-equal? (classify-candidate #f '() 4 'rejected) 'ineligible)
+    (check-equal? (classify-candidate unit-fast '() 4 'rejected #t) 'eligible)
+    (check-equal? (classify-candidate unit-fast '() 4 'admitted #t) 'already-admitted)
+    (check-equal? (classify-candidate #f '() 4 'rejected #t) 'ineligible)
     ;; integration boundary
-    (check-equal? (classify-candidate (hash 'boundary "integration" 'speed 'fast) '() 4 'rejected)
+    (check-equal? (classify-candidate (hash 'boundary "integration" 'speed 'fast) '() 4 'rejected #t)
                   'needs-review)
     ;; slow tier (metadata arrives as a symbol)
-    (check-equal? (classify-candidate (hash 'boundary "unit" 'speed 'slow) '() 4 'rejected)
+    (check-equal? (classify-candidate (hash 'boundary "unit" 'speed 'slow) '() 4 'rejected #t)
                   'needs-review)
     ;; capability hit in the reviewed closure
     (check-equal?
-     (classify-candidate unit-fast (list (hasheq 'file "x" 'capability 'subprocess)) 4 'rejected)
+     (classify-candidate unit-fast (list (hasheq 'file "x" 'capability 'subprocess)) 4 'rejected #t)
      'needs-review)
     ;; oversized reviewed closure
-    (check-equal? (classify-candidate unit-fast '() 40 'rejected) 'needs-review)
-    (check-equal? (classify-candidate unit-fast '() 2 'rejected) 'eligible))
+    (check-equal? (classify-candidate unit-fast '() 40 'rejected #t) 'needs-review)
+    (check-equal? (classify-candidate unit-fast '() 2 'rejected #t) 'eligible))
 
   (test-case "failed or unparseable dependency inspection is never eligible"
     ;; Unit + fast + a clean scan over an EMPTY closure would look eligible;
@@ -67,19 +67,19 @@
      (lambda () (delete-directory/files root))))
 
   (test-case "missing metadata keys are treated as ineligible, not eligible"
-    (check-equal? (classify-candidate (hash) '() 1 'rejected) 'needs-review)
-    (check-equal? (classify-candidate #f '() 1 'admitted) 'ineligible))
+    (check-equal? (classify-candidate (hash) '() 1 'rejected #t) 'needs-review)
+    (check-equal? (classify-candidate #f '() 1 'admitted #t) 'ineligible))
 
   (test-case "repository: the high-risk gaps evaluate to declared verdicts"
     (define rows (evaluate-candidates (path->complete-path repo-root) #:min-risk 5))
     (check-true (> (length rows) 0))
     (for ([row (in-list rows)])
       (check-true (and (memq (hash-ref row 'verdict)
-                                '(eligible needs-review ineligible already-admitted))
+                                '(eligible needs-review ineligible already-admitted evidence-unavailable))
                          #t))
       (check-true (> (length (hash-ref row 'candidates)) 0))
       (for ([c (in-list (hash-ref row 'candidates))])
         (check-true (and (memq (hash-ref c 'verdict)
-                               '(eligible needs-review ineligible already-admitted))
+                               '(eligible needs-review ineligible already-admitted evidence-unavailable))
                          #t)
                     (hash-ref c 'test))))))

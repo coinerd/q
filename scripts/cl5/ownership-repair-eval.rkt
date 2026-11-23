@@ -42,14 +42,16 @@
 ;; not an automatic rejection.
 (define max-reviewed-closure 12)
 
-;; classify-candidate : hash-or-#f (listof any) exact-nonnegative-integer symbol -> symbol
+;; classify-candidate : hash-or-#f (listof any) exact-nonnegative-integer symbol boolean -> symbol
+;; `closure-ok?` is REQUIRED: closure inspection results are evidence, so a
+;; caller cannot silently opt out of the fail-closed check by omitting it.
 ;; Metadata values are mixed: `@boundary` parses to a string, `@speed` to a
 ;; symbol. Compare through a string view so both shapes are handled.
 (define (meta-text meta key)
   (define v (hash-ref meta key #f))
   (and v (format "~a" v)))
 
-(define (classify-candidate meta scan-hits closure-size admission [closure-ok? #t])
+(define (classify-candidate meta scan-hits closure-size admission closure-ok?)
   (cond
     [(not meta) 'ineligible]
     [(eq? admission 'admitted) 'already-admitted]

@@ -23,8 +23,8 @@
 ;; machine-readable code and names the evidence that was missing.
 ;;
 ;; Codes: manifest-unavailable, graph-parse-failure, unadmitted-cover,
-;; uncovered-module, selection-unavailable, shipped-escalation-preserved,
-;; unselected-declared-cover, zero-selection.
+;; uncovered-module, selection-unavailable, shipped-evidence-inconsistent,
+;; shipped-escalation-preserved, unselected-declared-cover, zero-selection.
 ;;
 ;; This proves attribution + executability + admission freshness at most. It does
 ;; NOT prove that a detector detects the mutation, and a shared-contract edge can
@@ -138,6 +138,12 @@
                          #f
                          (format "shipped selection unavailable: ~a"
                                  (or shipped-error shipped-status))
+                         '()))]
+      [(and (eq? shipped-status 'ok) (not shipped-selected))
+       ;; 'ok with no set is contradictory: never read it as "nothing to check".
+       (list (escalation 'shipped-evidence-inconsistent
+                         #f
+                         "shipped selection reports success but carries no selected set"
                          '()))]
       [(pair? shipped-escalations)
        ;; Never downgrade a conservative fallback to a quick verdict.
