@@ -134,6 +134,33 @@
                            (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
                      #t)))
 
+  (test-case "an unparseable UNDECLARED dependent still blocks coverage"
+    ;; The reverse map is the completeness evidence. x.rkt would depend on the
+    ;; contract but fails to parse, so it is absent from `dependents`; the
+    ;; declaration looks complete and partial-consumers sees nothing.
+    (define contract (hasheq 'module
+                             "extensions/gsd/contract.rkt"
+                             'kind
+                             'vocabulary
+                             'consumers
+                             (list "extensions/gsd/declared.rkt")
+                             'tests
+                             (list "tests/test-contract.rkt")))
+    (define d (contract-decision (list "extensions/gsd/contract.rkt")
+                                (list contract)
+                                (hash "extensions/gsd/declared.rkt"
+                                      (list "tests/test-declared.rkt"))
+                                (hash "extensions/gsd/contract.rkt"
+                                      (list "extensions/gsd/declared.rkt"))
+                                (hash "extensions/gsd/declared.rkt"
+                                      (list "extensions/gsd/contract.rkt"))
+                                (hash "tests/test-contract.rkt" #t "tests/test-declared.rkt" #t)
+                                #:graph-failures (list "extensions/gsd/unparseable.rkt")))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'graph-unavailable
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t)))
+
   (test-case "an unparseable contract or consumer makes the graph evidence unavailable"
     (define d (contract-decision (list "extensions/gsd/wave-status.rkt")
                                 (list vocabulary-contract)
@@ -377,7 +404,12 @@
     ;; consumer (projection-kernel.rkt) has no @covers detector, so the contract
     ;; escalates instead of claiming complete coverage.
     (check-true (and (member "tests/test-gsd-wave-status.rkt" (hash-ref d 'required)) #t))
-    (check-true (> (length (hash-ref d 'required)) 1))
+    (check-equal? (length (hash-ref d 'required)) 23)
+    (for ([t (in-list '("tests/test-gsd-wave-status.rkt"
+                        "tests/test-gsd-campaign-state.rkt"
+                        "tests/test-gsd-wave-completion.rkt"
+                        "tests/test-gsd-archive.rkt"))])
+      (check-true (and (member t (hash-ref d 'required)) #t)))
     (check-equal? (hash-ref d 'verdict) 'escalate)
     (check-true (and (memq 'no-consumer-detector
                            (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))

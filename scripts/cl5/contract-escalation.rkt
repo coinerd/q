@@ -43,7 +43,6 @@
 (provide contract-selection
          contract-selection/fail-closed
          check-selection-instruction
-         instruction-vacuous?
          default-fan-in-threshold
          repo-inputs
          evaluate-contract-changes
@@ -194,6 +193,20 @@
                      (format "dependency graph could not parse ~a" m)
                      (list m))))))
 
+  ;; The reverse-dependency map IS the completeness evidence. A module that
+  ;; fails to parse contributes no reverse edges, so a would-be dependent can
+  ;; vanish from `dependents` and `partial-consumers` would see nothing missing.
+  ;; While the graph is incomplete, no matched contract may claim coverage.
+  (define graph-incomplete
+    (if (and (pair? matched) (pair? graph-failures))
+        (list (escalation 'graph-unavailable
+                          #f
+                          (format "dependency graph incomplete (~a module(s) failed to parse); every consumer set is unverifiable"
+                                  (length graph-failures))
+                          (sort (map (lambda (f) (if (string? f) f (format "~a" f))) graph-failures)
+                                string<?)))
+        '()))
+
   ;; Attribution metadata must be valid before any complete-coverage claim.
   (define attribution-bad
     (if (eq? manifest-status 'loaded)
@@ -248,6 +261,7 @@
     (append attribution-bad
             registry-bad
             graph-bad
+            graph-incomplete
             unmapped
             partial
             consumer-without-detector
@@ -281,11 +295,6 @@
 ;; 'run-comprehensive means: run the comprehensive set (union already applied).
 ;; 'run-required means: run exactly the computed required set.
 ;; 'run-all means: run every discovered test; the list could not be enumerated.
-
-(define (instruction-vacuous? instruction)
-  (define tests (hash-ref instruction 'tests))
-  (or (not (pair? tests))
-      (and (eq? (hash-ref instruction 'instruction) 'run-required) (null? tests))))
 
 (define (check-selection-instruction instruction)
   (define kind (hash-ref instruction 'instruction 'unset))

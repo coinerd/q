@@ -41,7 +41,7 @@ make.
 |---|---|---|
 | `unmapped-contract` | a changed module has ≥ `fan-in-threshold` dependents and no declaration | a shared contract without a consumer set is exactly the D5 blind spot |
 | **`no-consumer-detector`** | a declared consumer has no `@covers` detector | an untested consumer cannot be counted as covered |
-| **`graph-unavailable`** | the contract or one of its consumers cannot be parsed | dependency evidence is unknown, so completeness cannot be claimed |
+| **`graph-unavailable`** | the contract/consumer cannot be parsed, **or any module in the graph fails to parse** | a parse-failed undeclared dependent contributes no reverse edge, so the reverse map itself is incomplete |
 | **`no-required-tests`** | the change yields an empty required set | zero declared tests is unknown coverage, not coverage |
 | **`duplicate-contract`** | the registry declares a module twice | last-wins silently shrinks the required set |
 | **`invalid-contract`** | unknown `kind` / malformed entry | a typo must not read as a valid contract |
@@ -51,7 +51,7 @@ make.
 | `no-coverage` | a declaration yields no contract test and no consumer detector | an empty declaration is not coverage |
 | **`attribution-unavailable`** | the coverage manifest is missing or corrupt | the declared-detector half of the set cannot be trusted |
 
-All four are validated mechanically from the repository's own graph and file system; none requires
+Every code in the table is exercised mechanically from the repository's own graph and file system; none requires
 executing tests. The fan-in threshold (default 3) is a design parameter derived from the audit's
 fan-in distribution, **not** a policy.
 
@@ -61,21 +61,34 @@ Seeded registry (two entries, both evidence-backed):
 
 | Contract | Kind | Consumers (from the impact graph) | Contract tests |
 |---|---|---|---|
-| `extensions/gsd/wave-status.rkt` | vocabulary | archive, campaign-state, go-orchestrator, projection-kernel, wave-completion | `tests/test-gsd-wave-status.rkt` |
+| `extensions/gsd/wave-status.rkt` | vocabulary | archive, campaign-state, command-handlers, go-orchestrator, planning-artifact-validation, projection-kernel, wave-completion, wave-docs | `tests/test-gsd-wave-status.rkt` |
 | `util/error/errors.rkt` | shared-state | `agent/loop.rkt`, `runtime/agent-session.rkt` | `tests/test-browser-errors.rkt` |
 
 Results (after the completion and bypass corrections):
 
 - **D5** computes **23 required tests** (owner test + the detectors of its eight graph-known direct
-  dependents) but now **escalates** with **`no-consumer-detector`**: `extensions/gsd/projection-kernel.rkt`
-  is a real consumer of the vocabulary and has **no** `@covers` detector. That is a new finding from
+  dependents: `archive`, `campaign-state`, `command-handlers`, `go-orchestrator`,
+  `planning-artifact-validation`, `projection-kernel`, `wave-completion`, `wave-docs`) but now
+  **escalates** with **`no-consumer-detector`**: `extensions/gsd/projection-kernel.rkt` is a real
+  consumer of the vocabulary and has **no** `@covers` detector. That is a new finding from
   the fail-closed rule, not a regression — the contract is not claimed as covered while a consumer is
   undetected.
 - `util/error/errors.rkt` → **`escalate`**: `partial-consumers` (44 audit dependents, two declared)
   plus two `no-consumer-detector` rows for the two declared consumers with no detector.
 - `runtime/working-set.rkt` (12 dependents, no declaration) → `unmapped-contract` + `no-required-tests`.
 - A missing consumer detector, a missing/corrupt manifest, a dead consumer, an empty declaration, an
-  omitted dependent, an unparseable graph node and an empty required set each have a negative test.
+  omitted dependent, an unparseable graph node an empty required set, a duplicate/invalid declaration and an unparseable *undeclared* dependent each
+have a negative test.
+
+### Known scope limits (stated, not defended)
+
+- Completeness is checked against **direct** graph dependents only; a transitive-only dependent is not
+  added to the set (the declaration is the model's boundary, and the table above says "direct").
+- `covered` is **contract-scoped**: a change set that also touches modules outside any contract still
+  yields `covered` with only the contract's tests. The bridge handles this fail-closed (`no-required-tests`
+  when nothing is declared, `run-all` on an empty set), but a caller must not read `covered` as
+  "the whole change set is tested".
+- The prototype still validates *attribution*, never detection.
 
 Note the deliberate difference from the guard: B says "these tests must run" (the comprehensive lane
 does run them); C says "the quick lane may not claim a green". B is coverage repair, C is the safety
