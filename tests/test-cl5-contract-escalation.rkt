@@ -159,6 +159,68 @@
                            (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
                      #t)))
 
+  (test-case "duplicate or malformed contracts are metadata defects, not coverage"
+    (define dup (hasheq 'module
+                        "extensions/gsd/wave-status.rkt"
+                        'kind
+                        'vocabulary
+                        'consumers
+                        (list "extensions/gsd/campaign-state.rkt")
+                        'tests
+                        (list "tests/test-gsd-wave-status.rkt")))
+    (define d (contract-decision (list "extensions/gsd/wave-status.rkt")
+                                (list dup dup)
+                                declared-fixture
+                                dependents-fixture
+                                requires-fixture
+                                known-tests))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'duplicate-contract
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t))
+    (define bad-kind (hash-set dup 'kind 'assertion))
+    (define d2 (contract-decision (list "extensions/gsd/wave-status.rkt")
+                                 (list bad-kind)
+                                 declared-fixture
+                                 dependents-fixture
+                                 requires-fixture
+                                 known-tests))
+    (check-true (and (memq 'invalid-contract
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d2 'escalations)))
+                     #t)))
+
+  (test-case "an escalation can never shrink the required test set"
+    ;; Pure invariant: whatever the reason for escalating, the selection
+    ;; instruction is the comprehensive set (more tests), never fewer.
+    (define comprehensive (list "ALL"))
+    (define (sel-req d) (hash-ref (contract-selection d #:comprehensive comprehensive) 'tests))
+    (define covered (contract-decision (list "extensions/gsd/wave-status.rkt")
+                                      (list vocabulary-contract)
+                                      declared-fixture
+                                      dependents-fixture
+                                      requires-fixture
+                                      known-tests))
+    (check-equal? (hash-ref covered 'verdict) 'covered)
+    (check-equal? (hash-ref (contract-selection covered #:comprehensive comprehensive)
+                            'instruction)
+                  'run-required)
+    (check-equal? (sel-req covered) (hash-ref covered 'required))
+    (for ([case (in-list (list (hash 'manifest-status 'corrupt)
+                               (hash 'graph-failures (list "extensions/gsd/wave-status.rkt"))))])
+      (define d (contract-decision (list "extensions/gsd/wave-status.rkt")
+                                  (list vocabulary-contract)
+                                  declared-fixture
+                                  dependents-fixture
+                                  requires-fixture
+                                  known-tests
+                                  #:manifest-status (hash-ref case 'manifest-status 'loaded)
+                                  #:graph-failures (hash-ref case 'graph-failures '())))
+      (check-equal? (hash-ref d 'verdict) 'escalate)
+      (check-equal? (hash-ref (contract-selection d #:comprehensive comprehensive)
+                              'instruction)
+                    'run-comprehensive)
+      (check-equal? (sel-req d) comprehensive)))
+
   (test-case "a missing or corrupt manifest blocks a complete-coverage claim"
     (for ([status (in-list '(missing corrupt))])
       (define d (contract-decision (list "extensions/gsd/wave-status.rkt")

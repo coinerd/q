@@ -40,7 +40,8 @@
          racket/string
          "selection-guard.rkt")
 
-(provide default-fan-in-threshold
+(provide contract-selection
+         default-fan-in-threshold
          repo-inputs
          evaluate-contract-changes
          validate-contract
@@ -105,6 +106,18 @@
   (define by-module
     (for/hash ([entry (in-list registry)])
       (values (hash-ref entry 'module) entry)))
+  ;; A duplicated registry module silently keeps only one declaration, which can
+  ;; shrink the required set. Treat it as a metadata defect.
+  (define duplicate-contracts
+    (let loop ([entries registry] [seen (hash)] [acc '()])
+      (cond
+        [(null? entries) (reverse acc)]
+        [else
+         (define m (hash-ref (car entries) 'module))
+         (loop (cdr entries)
+               (hash-set seen m #t)
+               (if (hash-ref seen m #f) (cons m acc) acc))])))
+
   (define (declared-of m)
     (hash-ref declared m '()))
   (define (fan-in m)
@@ -217,8 +230,20 @@
                           "no contract declares a test for this change; coverage is unknown"
                           '()))
         '()))
+  (define registry-bad
+    (append
+     (for/list ([m (in-list (remove-duplicates duplicate-contracts))])
+       (escalation 'duplicate-contract m "contract declared more than once" '()))
+     (for/list ([entry (in-list registry)]
+                #:unless (member (hash-ref entry 'kind 'unset) '(vocabulary protocol policy shared-state)))
+       (escalation 'invalid-contract
+                   (hash-ref entry 'module)
+                   (format "unknown contract kind ~a" (hash-ref entry 'kind 'unset))
+                   '()))))
+
   (define escalations
     (append attribution-bad
+            registry-bad
             graph-bad
             unmapped
             partial
@@ -237,6 +262,20 @@
           escalations
           'verdict
           (if (pair? escalations) 'escalate 'covered)))
+
+;; ---- decision -> selection instruction (pure, evaluation only) -----------------
+;;
+;; An escalation must never produce FEWER tests than the certified set. The safe
+;; instruction when the contract cannot be certified is the comprehensive set;
+;; when it can, the required set is already an over-approximation of the
+;; contract's own tests plus every consumer detector.
+(define (contract-selection d #:comprehensive [comprehensive 'all])
+  (define required (hash-ref d 'required))
+  (define escalated? (eq? (hash-ref d 'verdict) 'escalate))
+  (hasheq 'instruction (if escalated? 'run-comprehensive 'run-required)
+          'tests (if escalated? comprehensive required)
+          'required required
+          'escalations (hash-ref d 'escalations)))
 
 ;; ---- a small, explicit seed registry (design example, not production data) ---------
 

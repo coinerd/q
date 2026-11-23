@@ -43,6 +43,8 @@ make.
 | **`no-consumer-detector`** | a declared consumer has no `@covers` detector | an untested consumer cannot be counted as covered |
 | **`graph-unavailable`** | the contract or one of its consumers cannot be parsed | dependency evidence is unknown, so completeness cannot be claimed |
 | **`no-required-tests`** | the change yields an empty required set | zero declared tests is unknown coverage, not coverage |
+| **`duplicate-contract`** | the registry declares a module twice | last-wins silently shrinks the required set |
+| **`invalid-contract`** | unknown `kind` / malformed entry | a typo must not read as a valid contract |
 | **`partial-consumers`** | the declaration omits a **graph-known direct dependent** | an omitted consumer is untested surface; the set must escalate, never claim `covered` |
 | `stale-consumer` | a declared consumer does **not** require the module (checked against the forward requires graph) | declarations rot; a dead consumer silently shrinks the set |
 | **`unknown-test`** | **any** test in the computed required set is absent — contract tests **and** consumer-inherited detectors | a missing consumer detector must not read as covered |
@@ -97,6 +99,19 @@ A only where a pure-unit detector exists.
 2. Add the 17 potential-gap modules one at a time, each with graph-validated consumers; `stale-consumer`
    fires automatically when a consumer stops requiring the contract.
 3. Only then consider feeding `required` into a lane — a separate issue, not this prototype.
+
+## Decision → selection (why escalation cannot shrink the set)
+
+`contract-selection` is the only bridge from a decision to a test instruction, and it is pure:
+
+| Verdict | Instruction | Tests |
+|---|---|---|
+| `covered` | `run-required` | exactly the computed required set |
+| `escalate` | `run-comprehensive` | the comprehensive set (strictly more) |
+
+The invariant is tested directly: every escalation code yields `run-comprehensive` with the
+comprehensive set, never a subset of the required set. This is the property that must survive
+integration with the production selector — an unknown contract has to mean *more* tests, not fewer.
 
 ## Limitations (explicit)
 
