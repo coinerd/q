@@ -106,6 +106,34 @@
   (check-equal? (cone-key "agent/a.rkt" (hash) #:dependents (hash) #:requires (hash))
                 "self:agent/a.rkt"))
 
+(test-case "a dependency cycle does not hang the transitive walk"
+  (define dependents
+    (hash "agent/a.rkt" (list "agent/b.rkt" "tools/d.rkt" "llm/c.rkt")))
+  (define requires
+    (hash "agent/a.rkt" (list "agent/b.rkt") "agent/b.rkt" (list "agent/a.rkt")))
+  (check-equal? (cone-key "agent/a.rkt" (hash) #:dependents dependents #:requires requires)
+                "gov:agent/a.rkt"))
+
+(test-case "fan-in ties break deterministically by name"
+  (define dependents
+    (hash "util/e.rkt" (list "agent/a.rkt" "agent/b.rkt" "tools/d.rkt")
+          "llm/c.rkt" (list "agent/a.rkt" "agent/b.rkt" "tools/d.rkt")))
+  (define requires (hash "agent/a.rkt" (list "util/e.rkt" "llm/c.rkt")))
+  ;; both have fan-in 3; the lexicographically smaller wins
+  (check-equal? (cone-key "agent/a.rkt" (hash) #:dependents dependents #:requires requires)
+                "gov:llm/c.rkt"))
+
+(test-case "a commit whose only production file is deleted is still a case"
+  (define r (classify-commit (commit #:files (list (file "agent/a.rkt" #:added 0 #:deleted 40))) ctx))
+  (check-eq? (hash-ref r 'kind) 'case)
+  (check-eq? (hash-ref r 'stratum) 'S1))
+
+(test-case "a binary production file stays JSON-serialisable through the manifest"
+  (define bin (hasheq 'path "agent/a.rkt" 'added 'binary 'deleted 'binary))
+  (define m (corpus-manifest "r" (list (classify-commit (commit #:files (list bin)) ctx)) '()))
+  (define text (with-output-to-string (lambda () (write-json m))))
+  (check-true (and (regexp-match #rx"\"binary\"" text) #t)))
+
 (test-case "the highest-fan-in governing contract wins"
   (define dependents
     (hash "util/e.rkt"

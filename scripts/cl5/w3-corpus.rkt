@@ -17,7 +17,8 @@
 ;;   merge-commit        more than one parent
 ;;   revert-commit       subject is a revert
 ;;   non-production      no changed file in the production universe
-;;   formatting-only     only whitespace/binary changes in production files
+;;   formatting-only     production files with exactly zero changed lines
+;;                       (binary changes are CASES, not exclusions)
 ;;
 ;; Strata (protocol): one changed production module = S1, two or more modules
 ;; sharing one contract cone = S2, two or more cones = S3. The cone key is the
@@ -168,9 +169,9 @@
              (hasheq 'path
                      (hash-ref f 'path)
                      'added
-                     (hash-ref f 'added 'binary)
+                     (json-count (hash-ref f 'added 'binary))
                      'deleted
-                     (hash-ref f 'deleted 'binary)))
+                     (json-count (hash-ref f 'deleted 'binary))))
            'ignored-files
            (- (length files) (length production-files)))]))
 
