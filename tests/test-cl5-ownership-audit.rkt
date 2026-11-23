@@ -206,6 +206,14 @@
                       (hash-remove (evidence) 'shipped-status)))
     (check-equal? (hash-ref implicit 'verdict) 'escalate))
 
+  (test-case "successful but empty shipped evidence is contradictory, not green"
+    (define d (guard-decision (list "extensions/gsd/campaign-decision.rkt")
+                              (evidence #:shipped #f #:shipped-status 'ok)))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'shipped-evidence-inconsistent
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t)))
+
   (test-case "an existing shipped escalation is preserved, never downgraded"
     (define d
       (guard-decision (list "extensions/gsd/campaign-decision.rkt")
