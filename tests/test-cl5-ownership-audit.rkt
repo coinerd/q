@@ -53,7 +53,10 @@
 (define (evidence #:admission [admission fresh-admission]
                   #:manifest [manifest 'loaded]
                   #:failures [failures '()]
-                  #:shipped [shipped '("tests/test-gsd-campaign-decision-pure.rkt")])
+                  #:shipped [shipped '("tests/test-gsd-campaign-decision-pure.rkt")]
+                  #:shipped-status [shipped-status 'ok]
+                  #:shipped-escalations [shipped-escalations '()]
+                  #:shipped-error [shipped-error #f])
   (hash 'declared
         declared-fixture
         'owners
@@ -68,6 +71,12 @@
         manifest
         'graph-parse-failures
         failures
+        'shipped-status
+        shipped-status
+        'shipped-escalations
+        shipped-escalations
+        'shipped-error
+        shipped-error
         'shipped-selected
         shipped))
 
@@ -179,6 +188,40 @@
     (check-true (and (memq 'unselected-declared-cover
                            (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
                      #t)))
+
+  (test-case "an unavailable shipped selection can never yield a green"
+    (define d (guard-decision (list "extensions/gsd/campaign-decision.rkt")
+                              (evidence #:shipped #f
+                                        #:shipped-status 'failed
+                                        #:shipped-error "compute-impact-selection: graph failure")))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-equal? (hash-ref d 'lane) 'comprehensive)
+    (define e (for/first ([x (in-list (hash-ref d 'escalations))]
+                          #:when (eq? (hash-ref x 'code) 'selection-unavailable))
+                x))
+    (check-not-false e)
+    (check-true (string-contains? (hash-ref e 'detail) "graph failure"))
+    (define implicit
+      (guard-decision (list "extensions/gsd/campaign-decision.rkt")
+                      (hash-remove (evidence) 'shipped-status)))
+    (check-equal? (hash-ref implicit 'verdict) 'escalate))
+
+  (test-case "an existing shipped escalation is preserved, never downgraded"
+    (define d
+      (guard-decision (list "extensions/gsd/campaign-decision.rkt")
+                      (evidence #:shipped-escalations
+                                (list (hash 'code
+                                            'source-escalation-scan
+                                            'changed-file
+                                            "extensions/gsd/campaign-decision.rkt")))))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-equal? (hash-ref d 'lane) 'comprehensive)
+    (define e (for/first ([x (in-list (hash-ref d 'escalations))]
+                          #:when (eq? (hash-ref x 'code) 'shipped-escalation-preserved))
+                x))
+    (check-not-false e)
+    (check-true (and (memq 'source-escalation-scan (hash-ref e 'tests)) #t))
+    (check-equal? (hash-ref d 'selected) (list "tests/test-gsd-campaign-decision-pure.rkt")))
 
   (test-case "repository controls: full denominator, gap row and covered row"
     (define snapshot (audit-snapshot (path->complete-path repo-root)))

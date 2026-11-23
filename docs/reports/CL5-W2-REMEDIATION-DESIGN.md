@@ -93,8 +93,11 @@ escalation, shipped selection `tests/test-gsd-campaign-decision-pure.rkt`.
 
 **What the guard itself refuses.** Stale per-owner admission (owner in the table, record not
 current), a missing or corrupt coverage manifest, a graph parse failure inside the changed modules'
-requires cone, a declared detector the shipped selection did not include, and an empty selection all
-escalate; each has its own regression test. The guard reports `claims:
+requires cone, an **unavailable shipped selection** (exception or missing result — reported as
+`selection-unavailable` with the original diagnostic, never a skipped check), an **existing shipped
+escalation** (preserved as `shipped-escalation-preserved`, never downgraded to a quick verdict), a
+declared detector the shipped selection did not include, and an empty selection. Each has its own
+regression test. The guard reports `claims:
 attribution-and-admission-only`, i.e. it never claims detection.
 
 **Evaluation.**

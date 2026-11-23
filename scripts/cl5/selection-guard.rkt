@@ -12,6 +12,10 @@
 ;;     cone (a parse failure makes the edge set unknown);
 ;;   * every changed module has at least one declared detector that is BOTH in
 ;;     the audited owner table AND freshly admitted (record current, scan clean);
+;;   * the shipped selector COMPLETED (a failure or exception is a named
+;;     `selection-unavailable` escalation, never a skipped check);
+;;   * the shipped selector did NOT escalate (a conservative fallback is
+;;     preserved, never downgraded to a quick verdict);
 ;;   * the shipped selector actually selected those detectors (attribution that
 ;;     never reaches the selected set is not evidence);
 ;;   * the resulting selection is non-empty.
@@ -19,7 +23,8 @@
 ;; machine-readable code and names the evidence that was missing.
 ;;
 ;; Codes: manifest-unavailable, graph-parse-failure, unadmitted-cover,
-;; uncovered-module, unselected-declared-cover, zero-selection.
+;; uncovered-module, selection-unavailable, shipped-escalation-preserved,
+;; unselected-declared-cover, zero-selection.
 ;;
 ;; This proves attribution + executability + admission freshness at most. It does
 ;; NOT prove that a detector detects the mutation, and a shared-contract edge can
@@ -61,6 +66,11 @@
   (define manifest-status (hash-ref evidence 'manifest-status 'missing))
   (define parse-failures (hash-ref evidence 'graph-parse-failures '()))
   (define shipped-selected (hash-ref evidence 'shipped-selected #f))
+  ;; Absent evidence is NOT "nothing to check": the shipped selector must have
+  ;; completed. 'ok must be supplied explicitly.
+  (define shipped-status (hash-ref evidence 'shipped-status 'failed))
+  (define shipped-escalations (hash-ref evidence 'shipped-escalations '()))
+  (define shipped-error (hash-ref evidence 'shipped-error #f))
 
   (define (declared-of m)
     (hash-ref declared m '()))
@@ -119,6 +129,25 @@
                           (hash-ref admission t 'missing)
                           'audited
                           (and (member t owners) #t))))))
+  ;; A missing/failed shipped computation can never yield a guard green: the
+  ;; selection check would otherwise be silently skipped (review #7088615109).
+  (define shipped-bad
+    (cond
+      [(not (eq? shipped-status 'ok))
+       (list (escalation 'selection-unavailable
+                         #f
+                         (format "shipped selection unavailable: ~a"
+                                 (or shipped-error shipped-status))
+                         '()))]
+      [(pair? shipped-escalations)
+       ;; Never downgrade a conservative fallback to a quick verdict.
+       (list (escalation 'shipped-escalation-preserved
+                         #f
+                         "the shipped selector escalated; the guard preserves that decision"
+                         (map (lambda (e)
+                                (if (hash? e) (hash-ref e 'code e) e))
+                              shipped-escalations)))]
+      [else '()]))
   ;; Attribution that the shipped selector did not actually run is not evidence.
   (define unshipped
     (if shipped-selected
@@ -157,7 +186,8 @@
                           "selection is empty; a zero-test green must never be reported"
                           '()))
         '()))
-  (define escalations (append manifest-bad graph-bad uncovered unadmitted unshipped zero))
+  (define escalations
+    (append manifest-bad graph-bad shipped-bad uncovered unadmitted unshipped zero))
   (hasheq 'verdict
           (if (pair? escalations) 'escalate 'selected)
           'selected
@@ -176,7 +206,11 @@
                   'graph-parse-failures
                   (length parse-failures)
                   'shipped-selected
-                  (and shipped-selected (length shipped-selected)))
+                  (and shipped-selected (length shipped-selected))
+                  'shipped-status
+                  shipped-status
+                  'shipped-escalations
+                  (length shipped-escalations))
           'lane
           (if (pair? escalations) 'comprehensive 'quick)
           'claims
@@ -229,14 +263,25 @@
 
 (define (guard-decide-repo root changed)
   (define projection (audit-projection root))
-  (define shipped
-    (with-handlers ([exn:fail? (lambda (_) #f)])
+  ;; Keep BOTH the selected set and the shipped selector's own escalations, and
+  ;; keep the failure diagnostic instead of discarding it.
+  (define computed
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (hash 'status 'failed 'error (exn-message e) 'selected #f 'escalations '()))])
       (let ([sel (compute-impact-selection root
                                            changed
                                            (hash-ref projection 'covers)
                                            (hash)
                                            (hash-ref projection 'owners))])
-        (selection-selected sel))))
+        (hash 'status
+              'ok
+              'error
+              #f
+              'selected
+              (selection-selected sel)
+              'escalations
+              (selection-escalations sel)))))
   (define evidence
     (hash 'declared
           (hash-ref projection 'declared)
@@ -252,8 +297,14 @@
           (hash-ref projection 'manifest-status)
           'graph-parse-failures
           (hash-ref projection 'graph-parse-failures)
+          'shipped-status
+          (hash-ref computed 'status)
+          'shipped-error
+          (hash-ref computed 'error)
+          'shipped-escalations
+          (hash-ref computed 'escalations)
           'shipped-selected
-          shipped))
+          (hash-ref computed 'selected)))
   (hash 'decision
         (guard-decision changed evidence)
         'owners
