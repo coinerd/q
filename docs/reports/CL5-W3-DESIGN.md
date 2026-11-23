@@ -1,207 +1,255 @@
 # CL5 Wave 3 — measurement design: does contract-aware selection protect regressions? (#9982)
 
-Status: **design only**. No trials have been run, no production selection/CI/admission/scheduler
-behaviour is changed by this wave, and the 40 % claim remains a hypothesis.
+Status: **design only, revision 2**. No trials have been run, no production selection/CI/admission or
+scheduler behaviour is changed by this wave, and the 40 % claim remains a hypothesis.
 
-Review gate: this design must be reviewed before any execution (W3.2 onwards).
+Revision 2 incorporates the independent design review: the historical corpus **cannot** supply safety
+evidence (a merged commit's tree is by definition one that passed comprehensive CI, so replaying it
+can only "fail" through flakiness, which is quarantined as `unavailable`). Safety evidence therefore
+moves to a pre-registered mutant corpus, and the decision gate moves after it.
+
+Review gate: this revision must be re-reviewed before any execution (W3.0 onwards).
 
 ## Why W3 exists
 
 W2 measured one case (D5) end-to-end and the answer was `missed`: the shipped selector passed a tree
-that comprehensive CI failed. The follow-up work added a fail-closed decision layer
-(`scripts/cl5/contract-escalation.rkt`, merged `4725b614`) and a guard
-(`scripts/cl5/selection-guard.rkt`), but neither proves anything about **real change sets**. Both
-prove structural properties: consumers accounted for, detectors declared and present, metadata
-parseable, instructions not reduced. Whether the selected tests actually *detect* the regressions
-comprehensive testing detects is empirical.
+that comprehensive CI failed. The contract layer merged afterwards (`scripts/cl5/contract-escalation.rkt`,
+`4725b614`) decides fail-closed between "run the reduced required set" and "run comprehensive /
+run-all", but proves only structural properties: consumers accounted for, detectors declared and
+present, metadata parseable, instructions never reduced. Whether selected tests *detect* the
+regressions comprehensive detects is empirical.
 
-W3 is that measurement. It answers two questions and nothing else:
+W3 has two questions with **different evidence sources**, and they are not interchangeable:
 
-| Id | Question | Formal target |
+| Id | Question | Evidence source |
 |---|---|---|
-| **Q-S** (safety) | Would the selected tests have detected the regressions comprehensive testing detected? | `missed = 0` over the corpus; any miss is a REJECT for that configuration |
-| **Q-E** (efficiency) | How much testing could realistically be avoided, including the cost of unnecessary escalations? | selected/comprehensive cost ratio on a matched host, escalation cost included |
+| **Q-S** (safety) | Would the reduced selected set have detected the regressions comprehensive detects? | **mutant corpus** (W3b) — history cannot answer this |
+| **Q-E** (efficiency) | How much testing is realistically avoided, including the cost of escalations? | **historical corpus** (W3a) |
 
-## Corpus frame (pre-registered before any trial)
+## Why the historical corpus is efficiency-only
 
-**Population.** Commits on `main` history that were CI-validated (the commit's own tree has a
-completed, successful comprehensive run) and that change at least one module in the production
-universe (`scripts/cl5/ownership-audit.rkt` production set).
+Population of the historical corpus = commits on `main` whose own tree has a completed, successful
+comprehensive run (otherwise the control baseline is unknown). Its defect tree **is** that green tree.
+Therefore comprehensive can only fail on it via flakiness, environment drift or nondeterminism — all
+of which this design quarantines as `unavailable`, never as detection. The expected number of
+`detected` cases is ~0 **by construction**, not merely skewed.
 
-**Stratification.** W3 requires a *multi-component* corpus, because D5 was single-module and that is
-where structural reasoning is easiest:
+Consequences, stated explicitly so no later reading can treat W3a as a safety result:
+
+- W3a reports **M3, M4a, M4b, M5, M6 and escalation behaviour**. It reports `out-of-scope` and
+  `unavailable` counts.
+- W3a **cannot** report M1/M2 or contribute to the GO safety denominator.
+- W3a **is** still valuable: the escalation rate on real change sets, and the cost model, are exactly
+  what Q-E needs, and D5's `missed` result proves the shipped selector does miss real regressions —
+  which is why safety must be measured where regressions are guaranteed to exist.
+
+An `out-of-scope`-dominated corpus is therefore the **expected** outcome of W3a, reported as a finding
+about how rarely merged changes are regressions, not hidden as a null result.
+
+## W3a — historical corpus (efficiency and escalation behaviour)
+
+### Population and strata
 
 | Stratum | Inclusion | Minimum cases |
 |---|---|---|
-| S1 single-module | exactly one production module, one contract cone | 0 (W2 covers it) |
+| S1 single-module | exactly one production module in one contract cone | 0 (W2 covers it) |
 | S2 multi-module | ≥ 2 production modules in the same contract cone | ≥ 20 |
 | S3 cross-contract | ≥ 2 production modules spanning ≥ 2 contract cones, or contract + non-contract | ≥ 20 |
 
-**Exclusions** (recorded, not silently dropped): merge commits, revert commits, docs-only,
-metadata-only (derived artifacts, manifests, metrics), formatting-only diffs, commits whose parent
-tree has no successful comprehensive run (baseline unknown ⇒ case is `unavailable`, not a pass), and
-commits whose diff touches only test files.
+**Exclusions** (recorded, never silently dropped): merge commits, revert commits, docs-only,
+metadata-only (derived artifacts, manifests, metrics), formatting-only diffs, test-only diffs, and
+commits whose parent tree has no successful comprehensive run (baseline unknown ⇒ `unavailable`).
+
+**Pre-registered detected minimums.** W3a reports per-stratum `out-of-scope`/`unavailable`/detected
+counts; there is **no** detected-case minimum here because none is attainable (see above). W3b carries
+the detected-case minimums.
 
 **No post-hoc selection.** The case list is materialised as a JSON manifest, committed before the
-first trial, and every subsequent run reports against that manifest. Adding a case requires a new
-manifest revision and is disclosed in the report.
+first trial; adding a case requires a new manifest revision, disclosed in the report.
 
-## Case construction
+### Case construction
 
 For a corpus commit `C` with parent `P`:
 
 | Surface | Tree | Meaning |
 |---|---|---|
-| defect | tree of `C` (parent + `C`'s diff) | the historical change, replayed as the "injected defect" |
-| control | tree of `P` | must pass comprehensively; a control that fails makes the case `unavailable` |
+| defect | tree of `C` | the historical change, replayed |
+| control | tree of `P` | must pass comprehensively; otherwise the case is `unavailable` |
 
-Both surfaces are keyed by **tree SHA**, never by commit or PR merge commit. The local selected run
-executes against the defect tree before any commit (W2 driver behaviour: staged refresh, measured on
-an isolated tree, provenance assertion, cleanup in `dynamic-wind`). The comprehensive run is located
-by exact head SHA via `workflow_dispatch` on a uniquely named scratch branch (Option A), classified
-from job/step payloads, not logs.
+Both surfaces are keyed by **tree SHA**, never by commit or PR merge commit. The reduced selected set
+is executed on the defect tree **unconditionally**, before any commit, even when the decision layer
+escalates — this shadow execution is what makes `safe-but-useless` (M4b) computable. The
+comprehensive run is located by exact head SHA via `workflow_dispatch` on a uniquely named scratch
+branch (Option A), classified from job/step payloads, never from logs.
 
-Detection requires **both** surfaces to fail on the defect tree and **both** controls to pass:
+### W3a reporting
 
-- comprehensive passes defect → not a regression; case does not count (and is reported as such);
-- comprehensive fails, selected passes → **`missed`** (Q-S failure);
-- selected fails, comprehensive passes → `unavailable` (inconsistent surfaces; investigate, do not
-  score as a win);
-- any incomplete/cancelled/timeout/missing required producer → `unavailable`, never a pass.
+Outcome counts, M3, M4a, M4b, M5, M6 (if and only if a matched-host comprehensive baseline exists),
+plus the escalation reasons (`unmapped-contract`, `partial-consumers`, `no-consumer-detector`, …)
+aggregated per stratum. **No safety claim of any kind.**
 
-## Fail-closed evidence rules (inherited, unchanged)
+## W3b — mutant corpus (the sole safety evidence)
 
-- Unavailable ≠ PASS. Cancelled, skipped, timed-out, action-required, incomplete, or a missing
-  required producer is `unavailable`.
-- A skipped required producer makes the run `unavailable`.
-- Provenance: the committed tree must change exactly the registered mutation; otherwise the driver
-  raises before dispatch and no evidence is recorded.
-- Timeouts are never detection evidence.
-- Append-only checkpoint records per case; the report is generated from records, never hand-edited.
+History cannot supply regressions, so they are constructed. W3b applies deliberate, behaviour-changing
+edits to pinned revisions and measures which surface detects them.
 
-## Outcome taxonomy (every case is classified; the three results are never merged)
+### Mutant sources
 
-A case is scored only after both surfaces and both controls are classified. Exactly one of these
-labels is assigned, and the report shows the counts side by side — a system that escalates
-constantly must not look safe merely because it never misses:
-
-| Outcome | Definition | Meaning for the hypothesis |
+| Source | Definition | Why |
 |---|---|---|
-| **correct-reduced** | decision `run-required`, selected fails on defect, control clean | the reduced set did the job |
-| **correct-escalation** | decision `run-comprehensive`/`run-all`, comprehensive fails on defect | the decision layer refused to certify and was right to |
-| **unsafe-reduced** | decision `run-required`, selected passes, comprehensive fails | **Q-S failure** — the only REJECT outcome |
-| **safe-but-useless** | decision escalates, selected set would also have detected the regression | safety without saving; counted separately because it is the failure mode that erases Q-E |
-| **out-of-scope** | comprehensive passes on the defect tree | not a regression in this corpus; reported, not scored |
-| **unavailable** | incomplete/cancelled/timeout/missing producer/inconsistent surfaces | never a pass, never a detection |
+| M-synthetic | one mutant per class per frozen contract cone: guard inversion, boundary shift, error-path removal, vocabulary keyword change | deterministic, covers the vocabulary/contract axis D5 failed on |
+| M-reintroduced | reverse-apply the **production-code only** part of a bug-fix commit to that fix's tree | real historical regressions with known causes, not invented ones |
 
-`safe-but-useless` is the counterweight to `correct-escalation`: it is measured as **M4b** (escalations
-whose selected set would also have detected the regression), so a strategy that always escalates is
-visible as M4b ≈ M3 with no saving, and cannot pass the cost gate.
+`M-reintroduced` construction is explicit: take fix commit `F` (identified by a fix reference and a
+test change in the same commit), take tree of `F`, and reverse-apply only the non-test hunks of `F`'s
+diff to the production files. Reversing the test hunks would delete the detector and make the mutant
+undetectable by construction.
 
-## Metrics (pre-registered; reported with counts and intervals)
+### Mutant manifest (frozen before any selection run)
 
-| Id | Metric | Definition |
-|---|---|---|
-| M1 | detection parity | cases where selected failed among comprehensive-detected cases |
-| M2 | misses | `comprehensive-detected ∧ selected-passed`, with the exact test list comprehensive failed |
-| M3 | escalation rate (all cases) | cases where the decision layer escalates (`run-comprehensive`/`run-all`) |
-| M4a | escalation rate on detected cases | `correct-escalation` / (`correct-reduced` + `correct-escalation` + `unsafe-reduced`) |
-| M4b | unnecessary escalation | `safe-but-useless` cases (escalated, though the reduced set would have detected it) |
-| M5 | selection size | selected test files executed / comprehensive test files, per case |
-| M6 | cost ratio | wall-clock selected / comprehensive **on the same host**, with escalation cost amortised by M3 |
-| M7 | decision-layer agreement | does `contract-escalation` escalate exactly the cases where the selector misses? (the value of the decision layer as a filter) |
-| M8 | escalation ceiling | share of **detected** cases that took the reduced path; a GO requires this to be non-trivial, otherwise safety is bought entirely with comprehensive runs |
+- Committed JSON manifest with: mutant id, source, base revision, affected module(s), the exact
+  reverse/forward patch, expected detector(s), and the stratification (S2/S3 cone).
+- **Pre-registered count: N ≥ 60 comprehensive-failing mutants**, with **≥ 20 per stratum** and
+  **≥ 12 per synthetic class**. Mutants where comprehensive passes are reported as
+  `comprehensive-inadequate` — a finding about comprehensive testing, not about selection — and do
+  not count toward N.
+- Selection is frozen for the mutation phase: every comprehensive-failing mutant in the manifest is
+  run; there is no per-mutant cherry-picking, and any revision of the manifest is disclosed with a new
+  hash.
 
-M6 is the only metric that may speak to the 40 % threshold, and only on a matched host. Local ~25 s
-versus CI 12–15 min is **not** a cost measurement and must never be reported as one.
+### W3b requirement
+
+For every comprehensive-failing mutant, the reduced selected set is executed. `missed` mutants (reduced
+set passes, comprehensive fails) are listed with the detector that should have caught them. W3b
+supplies the M1/M2/GO denominator.
+
+## Outcome taxonomy (mutually exclusive; reduced set always executed)
+
+Every case is assigned exactly one label. The decision layer's instruction is recorded separately from
+the shadow execution of the reduced set, so escalation and detection cannot be confused:
+
+| Outcome | Definition |
+|---|---|
+| **correct-reduced** | decision `run-required` ∧ comprehensive fails ∧ reduced set fails |
+| **correct-escalation** | decision `run-comprehensive`/`run-all` ∧ comprehensive fails ∧ reduced set **passes** |
+| **unsafe-reduced** | decision `run-required` ∧ reduced set passes ∧ comprehensive fails — **Q-S failure** |
+| **safe-but-useless** | decision escalates ∧ comprehensive fails ∧ reduced set **also fails** |
+| **comprehensive-inadequate** | comprehensive passes on a case the manifest declares a regression (W3b mutants only) |
+| **out-of-scope** | comprehensive passes on the defect tree (W3a history: the expected majority) |
+| **unavailable** | incomplete/cancelled/timeout/missing producer/inconsistent surfaces/control red |
+
+`correct-escalation` and `safe-but-useless` are disjoint by construction (reduced set fails vs passes).
+`safe-but-useless` is the counterweight that makes "escalate everything" visible as a costly strategy
+rather than a safe one.
+
+## Metrics
+
+| Id | Metric | Definition | Source |
+|---|---|---|---|
+| M1 | detection parity | comprehensive-failing cases where the reduced set also failed | W3b |
+| M2 | misses | `unsafe-reduced` cases, with the comprehensive-failing test list | W3b |
+| M3 | escalation rate | escalations / all classified cases | W3a + W3b |
+| M4a | escalation rate on detected cases | `correct-escalation` / (`correct-reduced` + `correct-escalation` + `unsafe-reduced`) | W3b |
+| M4b | unnecessary escalation | `safe-but-useless` / detected cases | W3b |
+| M5 | selection size | reduced test files executed / comprehensive test files, per case | W3a + W3b |
+| M6 | decision-layer cost ratio | `(M3 · C_comp + (1 − M3) · C_sel) / C_comp`, i.e. `(1 − M3) · (C_sel / C_comp) + M3` — see cost model below | W3a |
+| M7 | decision-layer agreement | does the contract layer escalate exactly the `unsafe-reduced` cases (and not the `correct-reduced` ones)? reported as a confusion matrix | W3b |
+| M8 | reduced-path share | (`correct-reduced` + `unsafe-reduced`) / detected cases; a GO needs this non-trivial, so "always comprehensive" cannot pass on safety alone | W3b |
+
+### Cost model (M6, pre-registered)
+
+Per change set, the strategy either runs the reduced set or, when the decision layer escalates, the
+comprehensive suite. Nothing runs both (shadow execution is a measurement device, not the deployed
+strategy). With `C_sel` = median wall-clock of the reduced set on the matched host and `C_comp` = median
+wall-clock of `./qt full` on the matched host:
+
+```
+M6 = (1 − M3) · (C_sel / C_comp) + M3
+```
+
+Both arms are measured **on the same host, same revision, same harness invocation**, three runs,
+median. `C_sel`/`C_comp` from different machines is not a measurement and must never be reported.
+
+**Matched host.** Same physical/virtual machine, same revision, same warm/cold state, sequential runs.
+If a matched-host `C_comp` cannot be completed (W2 measured that a local comprehensive run does not
+finish within the harness timeout on the dev host), M6 is **`unavailable`** and **no GO is possible**;
+CI-derived timings must not be substituted. Resolving this needs a bounded or CI-hosted selected-run
+surface, which is a separate issue with its own review — not part of W3.
 
 ## Statistical discipline
 
 - Pre-register N. With `missed = 0` in N detected cases, the rule-of-three upper 95 % bound is
-  ≈ `3/N`; the report must state it. 0/20 ⇒ ≤ 14 %; 0/60 ⇒ ≤ 5 %. A zero-miss claim from a small
-  corpus is a bound, not proof of parity.
-- Cases are not independent samples of "the distribution of regressions"; they are a purposive
-  historical corpus. Report counts, not p-values, and never extrapolate a rate to all changes.
-- Any change to the corpus, the metrics, or the decision thresholds after the first trial invalidates
-  the comparison and is disclosed in the report.
+  ≈ `3/N`: 0/20 ⇒ ≤ 14 %, 0/60 ⇒ ≤ 5 %. Report the bound; never claim the miss rate is zero.
+- The detected denominator is `unsafe-reduced + correct-reduced + correct-escalation +
+  safe-but-useless` from **W3b only**; `out-of-scope`, `comprehensive-inadequate` and `unavailable`
+  never enter it.
+- Report per stratum: ≥ 20 detected mutants in S2 and ≥ 20 in S3, or the pooled claim is not made.
+- Cases are a purposive corpus, not a random sample of "regressions". Report counts, bounds and the
+  confusion matrix; no p-values, no extrapolation to all changes.
+- Any change to corpus, mutant manifest, metrics or thresholds after the first trial invalidates the
+  comparison and is disclosed.
 
-## Decision rule (pre-registered, same three outcomes as W2)
+## Decision rule (pre-registered)
 
 | Outcome | Conditions |
 |---|---|
-| **GO** (advisory only) | M2 = 0 on S2 ∪ S3 with N ≥ 60 detected cases (upper bound ≤ 5 %), **and** M6 ≤ 0.60 on a matched host including escalation cost, **and** M8 ≥ 0.50 (at least half of detected cases resolved without escalation) |
-| **REVISE** | M2 = 0 but M6 > 0.60, or escalation cost (M3 × comprehensive) eats the saving |
-| **REJECT** | any `unsafe-reduced` case, or any case where the decision layer reported `covered` while comprehensive failed |
+| **GO** (advisory only) | `M2 = 0` on the W3b corpus with N ≥ 60 detected mutants (upper bound ≤ 5 %) and ≥ 20 per stratum, **and** `M6 ≤ 0.60` on a matched host, **and** `M8 ≥ 0.50` |
+| **REVISE** | `M2 = 0` but `M6 > 0.60`, `M6 = unavailable`, or `M8 < 0.50` |
+| **REJECT** | any `unsafe-reduced` mutant, or any case where the decision layer reported `covered` while comprehensive failed |
 
-The three outcomes are reported as a table, never collapsed into a single "safety" number: a
-configuration can be 100 % safe by escalating every case, and that is the exact outcome M6 and M8 are
-there to expose.
+The decision gate is **after** W3b. W3a cannot produce a GO: it supplies the escalation behaviour and
+the cost term only.
 
 GO never enables production selection by itself: it authorises an advisory rollout proposal, which
-needs its own review. No CI policy change is ever in scope for W3.
+needs its own review. No CI policy change is ever in scope.
 
-## W3b — mutation complement (why history alone is insufficient)
+## Wave plan (execution gated on this revision's review)
 
-Historical changes under-sample regressions: most merged commits were correct, so comprehensive may
-pass on many of them and there is nothing to detect. W3b therefore adds deliberate mutants:
+| Wave | Work | Gate |
+|---|---|---|
+| W3.0 | historical corpus extraction + manifest freeze (S2/S3 ≥ 40 cases) | manifest reviewed; exclusions listed |
+| W3.1 | single dry case end-to-end on a scratch branch | provenance + classification match W2's D5 behaviour |
+| W3.2 | S2 then S3 historical trials (efficiency/escalation) | all cases classified; none silently dropped |
+| W3.3 | mutant manifest freeze: ≥ 60 comprehensive-failing mutants, ≥ 20 per stratum | manifest hash committed before any selection run |
+| W3.4 | mutant trials (the safety measurement) + M7 confusion matrix | M1/M2/M8 reported with bounds; `missed` mutants listed |
+| W3.5 | report + decision | M1–M8 with intervals and the outcome table; decision stated |
 
-- **Target set**: contract modules and their declared consumer cones (the D5 vocabulary, `errors.rkt`
-  after it is fully declared, and the two eligible ownership-repair modules).
-- **Mutants**: small, behaviour-changing edits (guard inversion, boundary shift, error-path removal,
-  vocabulary keyword change) applied one at a time to a pinned revision.
-- **Requirement**: for every mutant where comprehensive fails, the selected set must also fail; the
-  `missed` mutants are listed with the detector that *should* have caught them.
-- **Value**: this is the only measurement that speaks to *behavioural* completeness of a contract's
-  detector set, which the structural validator explicitly does not claim.
+## Threats to validity (must appear in the final report)
 
-W3b runs only after W3a (historical) is reported, and reuses the same evidence machinery.
+- Flakiness and nondeterminism inflate "detected"; every comprehensive failure must be attributable to
+  a named job, and repeated failures are recorded.
+- Non-hermetic tests (network, time, environment) can fail either surface; such cases are `unavailable`.
+- **Parity, not correctness.** The experiment measures agreement with comprehensive testing. A
+  regression invisible to comprehensive (including a commit that weakened tests) is undetectable by
+  construction — `comprehensive-inadequate` quantifies part of this, but the limit stands.
+- History bias: merged commits passed CI, so W3a is structurally efficiency-only (see above).
+- Mutant bias: synthetic mutants are chosen by class; `M-reintroduced` mutants depend on the density of
+  fix commits in the window. Both are frozen in advance and reported with their construction counts.
+- Cache and warm-start effects on M6; only same-host, same-state comparisons count.
+- Escalation cost is real and is inside M6 by construction; a high M3 shows up as M6 → 1.
+- CI capacity/billing can make cases `unavailable`; a corpus below the pre-registered N yields no GO.
+
+## Artifacts
+
+- `docs/reports/CL5-W3-CORPUS-<manifest-sha>.json` — frozen historical corpus (pre-registered).
+- `docs/reports/CL5-W3-MUTANTS-<manifest-sha>.json` — frozen mutant corpus (pre-registered, W3.3).
+- `docs/reports/CL5-W3-VALIDATION-<sha>.md` / `.json` — final report generated from per-case records,
+  carrying the outcome table with counts.
+- Per-case checkpoints are append-only and never rewritten.
 
 ## Reuse (no new framework)
 
 | Need | Existing component |
 |---|---|
-| case execution, staging, provenance | `scripts/cl5/selection-experiment.rkt` (W2 driver) |
-| comprehensive ground truth | `scripts/cl5/ci-evidence.rkt` (Option A, exact SHA) |
+| case execution, staging, provenance, shadow selected run | `scripts/cl5/selection-experiment.rkt` |
+| comprehensive ground truth by exact SHA | `scripts/cl5/ci-evidence.rkt` |
 | grading | `scripts/cl5/oracle.rkt`, `task-spec.rkt` |
-| decision-layer agreement (M7) | `scripts/cl5/contract-escalation.rkt` (evaluation only, not wired) |
-| audit/guard context | `scripts/cl5/ownership-audit.rkt`, `selection-guard.rkt` |
+| decision layer (M7) | `scripts/cl5/contract-escalation.rkt` (evaluation only, never wired) |
+| cones, fan-in, detector attribution | `scripts/cl5/ownership-audit.rkt`, `selection-guard.rkt` |
 
-No test-runner, scheduler, admission, or CI-policy change is part of W3. If a metric needs a new
-execution surface, that is a separate issue with its own review.
-
-## Threats to validity (must appear in the final report)
-
-- Flakiness and nondeterminism inflate "detected"; every comprehensive-fail must be attributable to a
-  named job, and repeated failures are recorded.
-- Non-hermetic tests (network, time, environment) can fail either surface; such cases are
-  `unavailable`, not evidence.
-- History bias: merged commits passed CI, so the corpus skews to non-regressions; that is why W3b
-  exists.
-- Cache and warm-start effects on M6; only same-host, same-machine comparisons count.
-- Escalation cost is real: a high M3 can erase M5's saving, which is why M6 includes it.
-- CI capacity/billing can make the corpus partly `unavailable`; unavailable cases are reported, and a
-  corpus whose detected cases fall below the pre-registered N yields no decision.
-
-## Artifacts
-
-- `docs/reports/CL5-W3-CORPUS-<manifest-sha>.json` — frozen corpus manifest (pre-registered).
-- `docs/reports/CL5-W3-VALIDATION-<sha>.md` and `.json` — final report, generated from per-case
-  records; one record per case including surface verdicts, tree SHAs, run ids, and classification.
-- Per-case checkpoints are append-only and never rewritten.
-- The final report carries the outcome table (`correct-reduced` / `correct-escalation` /
-  `safe-but-useless` / `unsafe-reduced` / `out-of-scope` / `unavailable`) with counts, so a strategy
-  that escalates everything is visible as such rather than reading as "safe".
-
-## Wave plan (execution gated on this design's review)
-
-| Wave | Work | Gate |
-|---|---|---|
-| W3.0 | corpus extraction + manifest freeze (S2/S3 ≥ 40 cases) | manifest reviewed; exclusions listed |
-| W3.1 | single dry case end-to-end on a scratch branch | provenance + classification match W2's D5 behaviour |
-| W3.2 | S2 trials | all cases classified; no `unavailable` silently dropped |
-| W3.3 | S3 trials | same |
-| W3.4 | M7 decision-layer agreement + report | M1–M7 reported with intervals; decision stated |
-| W3b | mutation complement | mutant detection table |
+No test-runner, scheduler, admission, or CI-policy change is part of W3. A new execution surface
+(e.g. a bounded comprehensive run or CI-hosted selected run) would be a separate issue with its own
+review.
 
 ## Non-goals (explicit)
 
