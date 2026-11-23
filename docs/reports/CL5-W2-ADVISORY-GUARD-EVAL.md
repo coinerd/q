@@ -43,7 +43,8 @@ Interpretation:
 ## Claims and non-claims
 
 The guard claims `attribution-and-admission-only`: a green means a selectable detector existed and
-the shipped selector ran it — **not** that the detector detects a given mutation. The advisory
+the shipped **selection computation included** it — **not** that any test executed, and **not** that
+the detector detects a given mutation. The evaluation computes plans only; it runs no tests. The advisory
 cannot close the high-risk gap set; it converts silences into named escalations.
 
 ## Reproduction
