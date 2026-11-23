@@ -100,7 +100,8 @@
                            requires
                            known-tests
                            #:fan-in-threshold [fan-in-threshold default-fan-in-threshold]
-                           #:manifest-status [manifest-status 'loaded])
+                           #:manifest-status [manifest-status 'loaded]
+                           #:graph-failures [graph-failures '()])
   (define by-module
     (for/hash ([entry (in-list registry)])
       (values (hash-ref entry 'module) entry)))
@@ -152,6 +153,31 @@
                                      (length omitted))
                              (sort omitted string<?)))))))
 
+  ;; A consumer with no declared detector contributes nothing to the required
+  ;; set; calling that contract covered would hide the gap.
+  (define consumer-without-detector
+    (append*
+     (for/list ([entry (in-list matched)])
+       (for/list ([consumer (in-list (hash-ref entry 'consumers '()))]
+                  #:unless (pair? (declared-of consumer)))
+         (escalation 'no-consumer-detector
+                     (hash-ref entry 'module)
+                     (format "declared consumer ~a has no @covers detector" consumer)
+                     (list consumer))))))
+
+  ;; An unparseable contract or consumer makes the dependency evidence unknown.
+  (define graph-bad
+    (append*
+     (for/list ([entry (in-list matched)])
+       (define module (hash-ref entry 'module))
+       (define consumers (hash-ref entry 'consumers '()))
+       (for/list ([m (in-list (cons module consumers))]
+                  #:when (member m graph-failures))
+         (escalation 'graph-unavailable
+                     module
+                     (format "dependency graph could not parse ~a" m)
+                     (list m))))))
+
   ;; Attribution metadata must be valid before any complete-coverage claim.
   (define attribution-bad
     (if (eq? manifest-status 'loaded)
@@ -184,8 +210,23 @@
     (for/list ([test (in-list required)]
                #:unless (hash-ref known-tests test #f))
       (escalation 'unknown-test test "required test does not exist" (list test))))
+  (define empty-required
+    (if (and (pair? changed) (null? required))
+        (list (escalation 'no-required-tests
+                          #f
+                          "no contract declares a test for this change; coverage is unknown"
+                          '()))
+        '()))
   (define escalations
-    (append attribution-bad unmapped partial validation empty-coverage unknown-required))
+    (append attribution-bad
+            graph-bad
+            unmapped
+            partial
+            consumer-without-detector
+            validation
+            empty-coverage
+            unknown-required
+            empty-required))
   (hasheq 'required
           required
           'matched
@@ -253,6 +294,7 @@
         'dependents (hash-ref projection 'dependents)
         'requires (hash-ref projection 'requires)
         'manifest-status (hash-ref projection 'manifest-status)
+        'graph-failures (hash-ref projection 'graph-parse-failures)
         'known-tests known-tests))
 
 ;; Evaluate contract-aware escalation for a real changed-file set on this tree.
@@ -264,7 +306,8 @@
                      (hash-ref inputs 'dependents)
                      (hash-ref inputs 'requires)
                      (hash-ref inputs 'known-tests)
-                     #:manifest-status (hash-ref inputs 'manifest-status)))
+                     #:manifest-status (hash-ref inputs 'manifest-status)
+                     #:graph-failures (hash-ref inputs 'graph-failures)))
 
 (define (contract-decision->jsexpr result)
   (hash 'verdict

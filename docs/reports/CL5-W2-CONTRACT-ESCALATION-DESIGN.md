@@ -40,6 +40,9 @@ make.
 | Code | When | Why |
 |---|---|---|
 | `unmapped-contract` | a changed module has ≥ `fan-in-threshold` dependents and no declaration | a shared contract without a consumer set is exactly the D5 blind spot |
+| **`no-consumer-detector`** | a declared consumer has no `@covers` detector | an untested consumer cannot be counted as covered |
+| **`graph-unavailable`** | the contract or one of its consumers cannot be parsed | dependency evidence is unknown, so completeness cannot be claimed |
+| **`no-required-tests`** | the change yields an empty required set | zero declared tests is unknown coverage, not coverage |
 | **`partial-consumers`** | the declaration omits a **graph-known direct dependent** | an omitted consumer is untested surface; the set must escalate, never claim `covered` |
 | `stale-consumer` | a declared consumer does **not** require the module (checked against the forward requires graph) | declarations rot; a dead consumer silently shrinks the set |
 | **`unknown-test`** | **any** test in the computed required set is absent — contract tests **and** consumer-inherited detectors | a missing consumer detector must not read as covered |
@@ -59,18 +62,18 @@ Seeded registry (two entries, both evidence-backed):
 | `extensions/gsd/wave-status.rkt` | vocabulary | archive, campaign-state, go-orchestrator, projection-kernel, wave-completion | `tests/test-gsd-wave-status.rkt` |
 | `util/error/errors.rkt` | shared-state | `agent/loop.rkt`, `runtime/agent-session.rkt` | `tests/test-browser-errors.rkt` |
 
-Results (after the completion corrections):
+Results (after the completion and bypass corrections):
 
-- **D5** → `covered`, **23 required tests**: the contract test plus the detectors of all **eight**
-  graph-known direct dependents (`archive`, `campaign-state`, `command-handlers`, `go-orchestrator`,
-  `planning-artifact-validation`, `projection-kernel`, `wave-completion`, `wave-docs`). The seed now
-  declares every dependent; omitting one raises `partial-consumers`.
-- `util/error/errors.rkt` → **`escalate` / `partial-consumers`**: the audit shows 44 direct
-  dependents and the seed names two, so the prototype explicitly refuses a `covered` claim instead of
-  quietly shrinking the set. This is the honest state until that contract is fully reviewed.
-- A high-fan-in module with no declaration → `unmapped-contract`, naming the fan-in.
-- A missing consumer detector, a missing/corrupt manifest, a dead consumer, an empty declaration and
-  an omitted dependent each have a negative test.
+- **D5** computes **23 required tests** (owner test + the detectors of its eight graph-known direct
+  dependents) but now **escalates** with **`no-consumer-detector`**: `extensions/gsd/projection-kernel.rkt`
+  is a real consumer of the vocabulary and has **no** `@covers` detector. That is a new finding from
+  the fail-closed rule, not a regression — the contract is not claimed as covered while a consumer is
+  undetected.
+- `util/error/errors.rkt` → **`escalate`**: `partial-consumers` (44 audit dependents, two declared)
+  plus two `no-consumer-detector` rows for the two declared consumers with no detector.
+- `runtime/working-set.rkt` (12 dependents, no declaration) → `unmapped-contract` + `no-required-tests`.
+- A missing consumer detector, a missing/corrupt manifest, a dead consumer, an empty declaration, an
+  omitted dependent, an unparseable graph node and an empty required set each have a negative test.
 
 Note the deliberate difference from the guard: B says "these tests must run" (the comprehensive lane
 does run them); C says "the quick lane may not claim a green". B is coverage repair, C is the safety
@@ -97,8 +100,9 @@ A only where a pure-unit detector exists.
 
 ## Limitations (explicit)
 
-- A contract set proves *attribution*, not detection: the required tests may still not detect a given
-  mutation.
+- A contract set proves *structural* completeness at best — consumers and tests accounted for — and
+  never *behavioural* completeness: the required tests may still not detect a given mutation. A
+  complete list of inadequate tests is still inadequate protection.
 - The registry is a hand-maintained surface. The validator now catches dead consumers, omitted
   graph-known dependents, missing tests anywhere in the required set, and invalid attribution
   metadata; it still cannot prove that a *complete* declared set is behaviourally right.

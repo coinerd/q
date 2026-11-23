@@ -111,6 +111,54 @@
                            (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
                      #t)))
 
+  (test-case "a declared consumer with no detector is not silently ignored"
+    (define no-detector (hash "extensions/gsd/undetected.rkt" '()))
+    (define contract (hasheq 'module
+                             "extensions/gsd/wave-status.rkt"
+                             'kind
+                             'vocabulary
+                             'consumers
+                             (list "extensions/gsd/campaign-state.rkt" "extensions/gsd/undetected.rkt")
+                             'tests
+                             (list "tests/test-gsd-wave-status.rkt")))
+    (define d (contract-decision (list "extensions/gsd/wave-status.rkt")
+                                (list contract)
+                                no-detector
+                                (hash "extensions/gsd/wave-status.rkt"
+                                      (list "extensions/gsd/campaign-state.rkt"
+                                            "extensions/gsd/undetected.rkt"))
+                                requires-fixture
+                                (hash "tests/test-gsd-wave-status.rkt" #t)))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'no-consumer-detector
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t)))
+
+  (test-case "an unparseable contract or consumer makes the graph evidence unavailable"
+    (define d (contract-decision (list "extensions/gsd/wave-status.rkt")
+                                (list vocabulary-contract)
+                                declared-fixture
+                                dependents-fixture
+                                requires-fixture
+                                known-tests
+                                #:graph-failures (list "extensions/gsd/wave-status.rkt")))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'graph-unavailable
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t)))
+
+  (test-case "an empty required set is never coverage"
+    (define d (contract-decision (list "extensions/gsd/cold.rkt")
+                                '()
+                                (hash)
+                                dependents-fixture
+                                requires-fixture
+                                (hash)))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'no-required-tests
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t)))
+
   (test-case "a missing or corrupt manifest blocks a complete-coverage claim"
     (for ([status (in-list '(missing corrupt))])
       (define d (contract-decision (list "extensions/gsd/wave-status.rkt")
@@ -194,13 +242,18 @@
     (check-true
      (and (memq 'no-coverage (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations))) #t)))
 
-  (test-case "repository: the D5 vocabulary contract names its consumer verification set"
+  (test-case "repository: the D5 contract computes its set and flags the undetected consumer"
     (define d (evaluate-contract-changes (path->complete-path repo-root)
                                          (list "extensions/gsd/wave-status.rkt")))
-    (check-equal? (hash-ref d 'verdict) 'covered)
-    (check-equal? (hash-ref d 'escalations) '())
+    ;; The set is computed (owner test + consumer detectors), but one declared
+    ;; consumer (projection-kernel.rkt) has no @covers detector, so the contract
+    ;; escalates instead of claiming complete coverage.
     (check-true (and (member "tests/test-gsd-wave-status.rkt" (hash-ref d 'required)) #t))
-    (check-true (> (length (hash-ref d 'required)) 1)))
+    (check-true (> (length (hash-ref d 'required)) 1))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'no-consumer-detector
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t)))
 
   (test-case "repository: a partially declared contract escalates instead of claiming cover"
     ;; util/error/errors.rkt has 44 graph-known dependents; the seed names two.
@@ -211,7 +264,7 @@
                            (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
                      #t)))
 
-  (test-case "a low-fan-in module with a detector is unaffected"
+  (test-case "a change no contract covers reports no-required-tests, not covered"
     (define d
       (contract-decision (list "extensions/gsd/cold.rkt")
                          (list vocabulary-contract)
@@ -219,5 +272,7 @@
                          dependents-fixture
                          requires-fixture
                          known-tests))
-    (check-equal? (hash-ref d 'verdict) 'covered)
-    (check-equal? (hash-ref d 'escalations) '())))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'no-required-tests
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t))))
