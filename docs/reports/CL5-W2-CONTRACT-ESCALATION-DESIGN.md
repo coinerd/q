@@ -102,16 +102,32 @@ A only where a pure-unit detector exists.
 
 ## Decision → selection (why escalation cannot shrink the set)
 
-`contract-selection` is the only bridge from a decision to a test instruction, and it is pure:
+`contract-selection` is the only bridge from a decision to a test instruction, and it is pure.
 
 | Verdict | Instruction | Tests |
 |---|---|---|
 | `covered` | `run-required` | exactly the computed required set |
-| `escalate` | `run-comprehensive` | the comprehensive set (strictly more) |
+| `escalate` | `run-comprehensive` | **union** of the comprehensive set and the required set |
+| any exception / unknown verdict / unenumerable set | `run-all` | `unresolved` — the runner must run every discovered test |
 
-The invariant is tested directly: every escalation code yields `run-comprehensive` with the
-comprehensive set, never a subset of the required set. This is the property that must survive
-integration with the production selector — an unknown contract has to mean *more* tests, not fewer.
+The inclusion property `T_required ⊆ T_selected` holds **by construction**: the emitted list for the
+comprehensive path is `(sort (remove-duplicates (append required comprehensive)))`, so a caller that
+hands in a defective or hostile comprehensive set still cannot drop a required test. `check-selection-instruction`
+rejects any instruction that violates it (`run-required` with an empty or differing set,
+`run-comprehensive` missing a required test, unknown instruction names), and the bridge falls back to
+`run-all` if its own output fails that check.
+
+`contract-selection/fail-closed` wraps evaluation: any exception produces `run-all` with
+`selection-failed`, never an empty or reduced instruction.
+
+Tests cover: inclusion on the covered and escalated paths, a hostile comprehensive set that omits a
+required test, an unresolvable enumeration, an injected exception, an invented verdict symbol, and the
+instruction checker's four rejection cases.
+
+**Execution is not yet verified.** The bridge decides; no production runner honours it yet. That
+distinction (safe decision vs safe execution) is stated as an explicit open item, and the integration
+requirement is that every production selection path calls this bridge and `check-selection-instruction`
+before emitting a test list.
 
 ## Limitations (explicit)
 

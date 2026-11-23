@@ -192,7 +192,7 @@
   (test-case "an escalation can never shrink the required test set"
     ;; Pure invariant: whatever the reason for escalating, the selection
     ;; instruction is the comprehensive set (more tests), never fewer.
-    (define comprehensive (list "ALL"))
+    (define comprehensive (list "tests/test-aaa.rkt" "tests/test-zzz.rkt"))
     (define (sel-req d) (hash-ref (contract-selection d #:comprehensive comprehensive) 'tests))
     (define covered (contract-decision (list "extensions/gsd/wave-status.rkt")
                                       (list vocabulary-contract)
@@ -219,7 +219,73 @@
       (check-equal? (hash-ref (contract-selection d #:comprehensive comprehensive)
                               'instruction)
                     'run-comprehensive)
-      (check-equal? (sel-req d) comprehensive)))
+      ;; T_required subset of T_selected is guaranteed by construction, and the
+      ;; emitted list is the union (comprehensive ∪ required), not merely a
+      ;; differently-named larger set.
+      (check-true (subset? (hash-ref d 'required) (sel-req d)))
+      (check-true (subset? comprehensive (sel-req d)))
+      (check-equal? (check-selection-instruction
+                     (contract-selection d #:comprehensive comprehensive))
+                    '())))
+
+  (test-case "a comprehensive set that omits a required test cannot narrow the result"
+    (define escalated (contract-decision (list "extensions/gsd/wave-status.rkt")
+                                        (list vocabulary-contract)
+                                        declared-fixture
+                                        dependents-fixture
+                                        requires-fixture
+                                        known-tests
+                                        #:manifest-status 'corrupt))
+    ;; A hostile/defective caller passes a comprehensive set missing required
+    ;; tests; the bridge unions, so inclusion still holds.
+    (define sel (contract-selection escalated #:comprehensive (list "tests/test-other.rkt")))
+    (check-equal? (hash-ref sel 'instruction) 'run-comprehensive)
+    (check-true (subset? (hash-ref escalated 'required) (hash-ref sel 'tests)))
+    (check-true (subset? (list "tests/test-other.rkt") (hash-ref sel 'tests)))
+    ;; And an enumeration we could not obtain at all is run-all, never empty.
+    (define none (contract-selection escalated #:comprehensive 'unresolved))
+    (check-equal? (hash-ref none 'instruction) 'run-all)
+    (check-equal? (hash-ref none 'tests) 'unresolved))
+
+  (test-case "an exception or unexpected verdict falls back to run-all, never to fewer tests"
+    (define ex (contract-selection/fail-closed (lambda () (error "injected"))))
+    (check-equal? (hash-ref ex 'instruction) 'run-all)
+    (check-equal? (hash-ref ex 'tests) 'unresolved)
+    (check-equal? (check-selection-instruction ex) '())
+    (define weird (contract-selection (hasheq 'verdict 'maybe 'required (list "tests/test-a.rkt") 'escalations '())
+                                     #:comprehensive (list "tests/test-a.rkt" "tests/test-b.rkt")))
+    (check-equal? (hash-ref weird 'instruction) 'run-comprehensive)
+    (check-true (subset? (list "tests/test-a.rkt") (hash-ref weird 'tests))))
+
+  (test-case "the instruction checker rejects empty and reduced instructions"
+    (check-not-equal? (check-selection-instruction (hasheq 'instruction
+                                                           'run-required
+                                                           'tests
+                                                           '()
+                                                           'required
+                                                           '()))
+                      '())
+    (check-not-equal? (check-selection-instruction (hasheq 'instruction
+                                                           'run-required
+                                                           'tests
+                                                           (list "tests/test-a.rkt")
+                                                           'required
+                                                           (list "tests/test-a.rkt" "tests/test-b.rkt")))
+                      '())
+    (check-not-equal? (check-selection-instruction (hasheq 'instruction
+                                                           'run-comprehensive
+                                                           'tests
+                                                           (list "tests/test-other.rkt")
+                                                           'required
+                                                           (list "tests/test-a.rkt")))
+                      '())
+    (check-not-equal? (check-selection-instruction (hasheq 'instruction
+                                                           'invented
+                                                           'tests
+                                                           (list "tests/test-a.rkt")
+                                                           'required
+                                                           (list "tests/test-a.rkt")))
+                      '()))
 
   (test-case "a missing or corrupt manifest blocks a complete-coverage claim"
     (for ([status (in-list '(missing corrupt))])
@@ -316,6 +382,26 @@
     (check-true (and (memq 'no-consumer-detector
                            (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
                      #t)))
+
+  (test-case "repository: the D5 selection includes every required test in the comprehensive set"
+    (define inputs (repo-inputs (path->complete-path repo-root)))
+    (define all (hash-ref inputs 'all-tests))
+    (define d (evaluate-contract-changes (path->complete-path repo-root)
+                                         (list "extensions/gsd/wave-status.rkt")))
+    (define sel (contract-selection d #:comprehensive all))
+    (check-equal? (hash-ref sel 'instruction) 'run-comprehensive)
+    (check-true (subset? (hash-ref d 'required) (hash-ref sel 'tests)))
+    (check-true (subset? all (hash-ref sel 'tests)))
+    (check-equal? (check-selection-instruction sel) '())
+    ;; and the covered path emits exactly the required set
+    (define covered (contract-decision (list "extensions/gsd/wave-status.rkt")
+                                      (list vocabulary-contract)
+                                      declared-fixture
+                                      dependents-fixture
+                                      requires-fixture
+                                      known-tests))
+    (check-equal? (hash-ref (contract-selection covered #:comprehensive all) 'tests)
+                  (hash-ref covered 'required)))
 
   (test-case "repository: a partially declared contract escalates instead of claiming cover"
     ;; util/error/errors.rkt has 44 graph-known dependents; the seed names two.

@@ -41,6 +41,9 @@
          "selection-guard.rkt")
 
 (provide contract-selection
+         contract-selection/fail-closed
+         check-selection-instruction
+         instruction-vacuous?
          default-fan-in-threshold
          repo-inputs
          evaluate-contract-changes
@@ -265,17 +268,101 @@
 
 ;; ---- decision -> selection instruction (pure, evaluation only) -----------------
 ;;
-;; An escalation must never produce FEWER tests than the certified set. The safe
-;; instruction when the contract cannot be certified is the comprehensive set;
-;; when it can, the required set is already an over-approximation of the
-;; contract's own tests plus every consumer detector.
-(define (contract-selection d #:comprehensive [comprehensive 'all])
-  (define required (hash-ref d 'required))
-  (define escalated? (eq? (hash-ref d 'verdict) 'escalate))
-  (hasheq 'instruction (if escalated? 'run-comprehensive 'run-required)
-          'tests (if escalated? comprehensive required)
-          'required required
-          'escalations (hash-ref d 'escalations)))
+;; The bridge must guarantee T_required ⊆ T_selected by CONSTRUCTION, not by the
+;; naming of the two sets. Two properties are enforced here and tested:
+;;
+;;  1. inclusion: the emitted test list is always the union of the computed
+;;     required set and the comprehensive set, so a caller cannot hand in a
+;;     comprehensive set that happens to omit a required test.
+;;  2. fail-closed: an unknown verdict, missing data or an exception yields
+;;     'run-all (the runner must execute every discovered test) -- never an empty
+;;     or reduced instruction.
+;;
+;; 'run-comprehensive means: run the comprehensive set (union already applied).
+;; 'run-required means: run exactly the computed required set.
+;; 'run-all means: run every discovered test; the list could not be enumerated.
+
+(define (instruction-vacuous? instruction)
+  (define tests (hash-ref instruction 'tests))
+  (or (not (pair? tests))
+      (and (eq? (hash-ref instruction 'instruction) 'run-required) (null? tests))))
+
+(define (check-selection-instruction instruction)
+  (define kind (hash-ref instruction 'instruction 'unset))
+  (define tests (hash-ref instruction 'tests 'unset))
+  (define required (hash-ref instruction 'required 'unset))
+  (append
+   (cond
+     [(memq kind '(run-required run-comprehensive run-all)) '()]
+     [else (list (format "unknown instruction ~a" kind))])
+   (cond
+     [(eq? tests 'unresolved) (if (eq? kind 'run-all) '() (list "unresolved tests outside run-all"))]
+     [(not (list? tests)) (list "tests is not a list")]
+     [(and (eq? kind 'run-required) (null? tests)) (list "run-required with an empty test set")]
+     [(and (eq? kind 'run-required)
+           (not (equal? (sort (remove-duplicates tests) string<?) (sort required string<?))))
+      (list "run-required does not match the computed required set")]
+     [(and (eq? kind 'run-comprehensive) (not (subset? required tests)))
+      (list "run-comprehensive omits a required test")]
+     [else '()])))
+
+(define (contract-selection d #:comprehensive [comprehensive 'unresolved])
+  (define verdict (hash-ref d 'verdict 'unexpected))
+  (define required (hash-ref d 'required 'unresolved))
+  (define required-ok? (list? required))
+  (define comprehensive-ok? (list? comprehensive))
+  (define escalated?
+    (or (not (eq? verdict 'covered)) (not required-ok?) (not comprehensive-ok?)))
+  (define selected
+    (cond
+      [(not required-ok?) 'unresolved]
+      [escalated?
+       (if comprehensive-ok?
+           (sort (remove-duplicates (append required comprehensive)) string<?)
+           'unresolved)]
+      [else required]))
+  (define instruction
+    (hasheq 'instruction
+            (cond [escalated? (if (eq? selected 'unresolved) 'run-all 'run-comprehensive)]
+                  [else 'run-required])
+            'tests
+            (if escalated? selected (if (null? required) 'unresolved required))
+            'required
+            required
+            'escalations
+            (hash-ref d 'escalations '())))
+  ;; Last line of defence: an instruction that cannot be defended becomes run-all.
+  (if (and (pair? (check-selection-instruction instruction))
+           (not (eq? (hash-ref instruction 'instruction) 'run-all)))
+      (hasheq 'instruction
+              'run-all
+              'tests
+              'unresolved
+              'required
+              required
+              'escalations
+              (hash-ref d 'escalations '()))
+      instruction))
+
+(define (contract-selection/fail-closed thunk)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (hasheq 'instruction
+                             'run-all
+                             'tests
+                             'unresolved
+                             'required
+                             'unresolved
+                             'escalations
+                             (list (hasheq 'code
+                                           'selection-failed
+                                           'module
+                                           #f
+                                           'detail
+                                           (exn-message e)
+                                           'tests
+                                           '()))))])
+    (thunk)))
 
 ;; ---- a small, explicit seed registry (design example, not production data) ---------
 
@@ -315,6 +402,15 @@
 
 ;; ---- repository adapter (read-only; no execution) ------------------------------------
 
+;; Every test file the repository actually ships (evaluation-only helper): the
+;; comprehensive set the bridge unions against.
+(define (all-discovered-tests root)
+  (define dir (build-path root "tests"))
+  (sort (for/list ([name (in-list (directory-list dir))]
+                   #:when (regexp-match? #rx"[.]rkt$" (path->string name)))
+          (path->string (build-path "tests" name)))
+        string<?))
+
 (define (repo-inputs root)
   (define projection (audit-projection root))
   ;; known-tests must cover the declared detectors (values of module -> tests)
@@ -334,6 +430,7 @@
         'requires (hash-ref projection 'requires)
         'manifest-status (hash-ref projection 'manifest-status)
         'graph-failures (hash-ref projection 'graph-parse-failures)
+        'all-tests (all-discovered-tests root)
         'known-tests known-tests))
 
 ;; Evaluate contract-aware escalation for a real changed-file set on this tree.
