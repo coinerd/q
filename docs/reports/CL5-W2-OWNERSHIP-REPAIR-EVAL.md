@@ -17,9 +17,15 @@ detector is evaluated against the **existing** admission contract — not a new 
 | capability hits | `scan-file` over that closure, denylist v1 |
 | admission state | `owner-admission-state` (the shipped freshness check) |
 
-Verdicts: `eligible` (unit + fast + clean scan + closure ≤ 12), `needs-review` (integration
-boundary, slow tier, any capability hit, or oversized closure), `ineligible` (no usable metadata),
-`already-admitted`.
+Verdicts: `eligible` (unit + fast + clean scan + closure within the evaluation's screening size),
+`needs-review` (integration boundary, slow tier, any capability hit, or oversized closure),
+`evidence-unavailable` (dependency inspection failed, the closure is empty, or a member cannot be
+parsed), `ineligible` (no usable metadata), `already-admitted`.
+
+**Screening size vs admission contract.** The 12-file closure bound is an *evaluation screening
+choice* for keeping the review surface small. It is **not** enforced by the existing admission
+system, which has no closure-size limit; a candidate above it is simply kept out of this
+evaluation's `eligible` bucket for manual review.
 
 An `eligible` verdict is an admission *prerequisite*, not proof of detection: a reviewer must still
 confirm the test exercises the module's decision surface.
@@ -28,7 +34,7 @@ confirm the test exercises the module's decision surface.
 
 | Verdict | Modules |
 |---|---|
-| **eligible** | **2** — `runtime/iteration/retry-policy.rkt` (`tests/test-iteration-retry-policy.rkt`, closure 4, clean), `runtime/memory/policy.rkt` (`tests/memory/policy-boundary-test.rkt`, closure 6, clean) |
+| **eligible** (screening bound only; still requires manual admission review) | **2** — `runtime/iteration/retry-policy.rkt` (`tests/test-iteration-retry-policy.rkt`, closure 4, clean), `runtime/memory/policy.rkt` (`tests/memory/policy-boundary-test.rkt`, closure 6, clean) |
 | needs-review | **19** |
 | ineligible | 0 |
 
@@ -76,12 +82,15 @@ racket -e '(require (file "scripts/cl5/ownership-repair-eval.rkt")) (run-evaluat
 raco test tests/test-cl5-ownership-repair-eval.rkt
 ```
 
-3 tests: contract truth table (unit/fast/clean → eligible; integration, slow, capability hit,
-oversized closure → needs-review; already-admitted reported; missing metadata → ineligible), and a
+4 tests: contract truth table (unit/fast/clean → eligible; integration, slow, capability hit,
+oversized closure → needs-review; already-admitted reported; missing metadata → ineligible),
+unavailable evidence (empty closure; and a real fixture whose dependency cannot be parsed, which
+`closure-of` refuses — previously flattened to an empty clean closure and wrongly `eligible`), and a
 repository run asserting every high-risk gap and candidate evaluates to a declared verdict.
 
 ## Bounds
 
 Eligibility is metadata + static capability scanning; it does not execute tests, does not verify that
-a detector detects anything, and does not admit owners. The risk ranking comes from the audit's path
+a detector detects anything, and does not admit owners. The two `eligible` rows are **candidates for
+manual admission review**, not approved additions to the audited owner table. The risk ranking comes from the audit's path
 heuristic and is a prioritisation aid, not an audited security classification.

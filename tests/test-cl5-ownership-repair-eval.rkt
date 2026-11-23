@@ -13,6 +13,7 @@
 ;;     one of the declared values
 
 (require rackunit
+         racket/file
          racket/list
          racket/runtime-path
          (file "../scripts/cl5/ownership-repair-eval.rkt"))
@@ -39,6 +40,31 @@
     ;; oversized reviewed closure
     (check-equal? (classify-candidate unit-fast '() 40 'rejected) 'needs-review)
     (check-equal? (classify-candidate unit-fast '() 2 'rejected) 'eligible))
+
+  (test-case "failed or unparseable dependency inspection is never eligible"
+    ;; Unit + fast + a clean scan over an EMPTY closure would look eligible;
+    ;; unavailable closure evidence must block that.
+    (check-equal? (classify-candidate unit-fast '() 0 'rejected #f) 'evidence-unavailable)
+    ;; A real fixture: the candidate requires a module that cannot be parsed.
+    (define root (make-temporary-file "cl5-eval-~a" 'directory))
+    (dynamic-wind
+     void
+     (lambda ()
+       (make-directory* (build-path root "tests"))
+       (call-with-output-file (build-path root "broken.rkt")
+                              (lambda (out) (display "#lang racket/base\n(define (oops\n" out)))
+       (call-with-output-file (build-path root "tests/candidate.rkt")
+                              (lambda (out)
+                                (display "#lang racket/base\n(require \"../broken.rkt\")\n"
+                                         out)))
+       (define candidate (evaluate-candidate root "tests/candidate.rkt"))
+       (check-equal? (hash-ref candidate 'verdict) 'evidence-unavailable)
+       ;; closure-of refuses an unparseable member; the message is kept so the
+       ;; failure is inspectable instead of looking like a clean empty closure.
+       (define error (hash-ref candidate 'closure-error))
+       (check-not-false error)
+       (check-true (string-contains? error "does not parse")))
+     (lambda () (delete-directory/files root))))
 
   (test-case "missing metadata keys are treated as ineligible, not eligible"
     (check-equal? (classify-candidate (hash) '() 1 'rejected) 'needs-review)

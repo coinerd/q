@@ -26,10 +26,13 @@
          racket/list
          racket/path
          (only-in "../run-tests/classify.rkt" base-dir get-file-metadata)
+         (only-in "../testing/changed-selection.rkt" extract-requires)
          "../testing/quick-audit.rkt"
          "ownership-audit.rkt")
 
 (provide classify-candidate
+         evaluate-candidate
+         closure-evidence
          evaluate-candidates
          candidate->jsexpr
          run-evaluation
@@ -46,10 +49,14 @@
   (define v (hash-ref meta key #f))
   (and v (format "~a" v)))
 
-(define (classify-candidate meta scan-hits closure-size admission)
+(define (classify-candidate meta scan-hits closure-size admission [closure-ok? #t])
   (cond
     [(not meta) 'ineligible]
     [(eq? admission 'admitted) 'already-admitted]
+    ;; Missing/failed dependency inspection is UNAVAILABLE EVIDENCE, never
+    ;; eligibility: an empty or unparseable closure would scan zero files and
+    ;; look clean.
+    [(not closure-ok?) 'evidence-unavailable]
     [(not (equal? (meta-text meta 'boundary) "unit")) 'needs-review]
     [(not (equal? (meta-text meta 'speed) "fast")) 'needs-review]
     [(pair? scan-hits) 'needs-review]
@@ -63,9 +70,25 @@
     (define meta (get-file-metadata (path->complete-path (build-path root rel))))
     (and (hash? meta) (positive? (hash-count meta)) meta)))
 
-(define (safe-closure root rel)
-  (with-handlers ([exn:fail? (lambda (_) '())])
-    (closure-of root rel)))
+;; Closure evidence, fail-closed: an inspection failure, an empty closure or a
+;; member whose requires cannot be parsed leaves the closure UNKNOWN, and an
+;; unknown closure can never be 'eligible (review #7093968949).
+(define (closure-evidence root rel)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (hash 'ok? #f 'closure '() 'unparseable '() 'error (exn-message e)))])
+    (define closure (closure-of root rel))
+    (define unparseable
+      (for/list ([f (in-list closure)]
+                 #:when (with-handlers ([exn:fail? (lambda (_) #t)])
+                          (eq? (cdr (extract-requires root (build-path root f))) 'parse-error)))
+        f))
+    (hash 'ok? (and (pair? closure) (null? unparseable) #t)
+          'closure closure
+          'unparseable unparseable
+          'error (cond [(null? closure) "dependency closure is empty"]
+                       [(pair? unparseable) "a closure member cannot be parsed"]
+                       [else #f]))))
 
 (define (safe-scan root closure)
   (for/list ([f (in-list closure)]
@@ -77,7 +100,8 @@
 
 ;; One candidate test file for one confirmed gap.
 (define (evaluate-candidate root rel)
-  (define closure (safe-closure root rel))
+  (define evidence (closure-evidence root rel))
+  (define closure (hash-ref evidence 'closure))
   (define scan (safe-scan root closure))
   (define admission
     (with-handlers ([exn:fail? (lambda (_) 'unknown)])
@@ -86,7 +110,7 @@
   (hash 'test
         rel
         'verdict
-        (classify-candidate meta scan (length closure) admission)
+        (classify-candidate meta scan (length closure) admission (hash-ref evidence 'ok?))
         'admission
         admission
         'boundary
@@ -96,7 +120,11 @@
         'closure-size
         (length closure)
         'scan-hits
-        scan))
+        scan
+        'closure-unparseable
+        (hash-ref evidence 'unparseable)
+        'closure-error
+        (hash-ref evidence 'error)))
 
 (define (module-verdict candidates)
   (define verdicts (map (lambda (c) (hash-ref c 'verdict)) candidates))
@@ -104,6 +132,7 @@
     [(member 'eligible verdicts) 'eligible]
     [(member 'needs-review verdicts) 'needs-review]
     [(member 'already-admitted verdicts) 'already-admitted]
+    [(member 'evidence-unavailable verdicts) 'evidence-unavailable]
     [else 'ineligible]))
 
 ;; All confirmed gaps at or above `min-risk`, each with its declared detectors
@@ -147,7 +176,11 @@
         (hash-ref candidate 'closure-size)
         'scan-hits
         (for/list ([h (in-list (hash-ref candidate 'scan-hits))])
-          (hash 'file (hash-ref h 'file) 'capability (hash-ref h 'capability)))))
+          (hash 'file (hash-ref h 'file) 'capability (hash-ref h 'capability)))
+        'closure-unparseable
+        (hash-ref candidate 'closure-unparseable)
+        'closure-error
+        (or (hash-ref candidate 'closure-error) "")))
 
 (define (run-evaluation root #:min-risk [min-risk 5] #:json-out [json-out #f])
   (define rows (evaluate-candidates root #:min-risk min-risk))
