@@ -79,17 +79,38 @@ Detection requires **both** surfaces to fail on the defect tree and **both** con
 - Timeouts are never detection evidence.
 - Append-only checkpoint records per case; the report is generated from records, never hand-edited.
 
+## Outcome taxonomy (every case is classified; the three results are never merged)
+
+A case is scored only after both surfaces and both controls are classified. Exactly one of these
+labels is assigned, and the report shows the counts side by side — a system that escalates
+constantly must not look safe merely because it never misses:
+
+| Outcome | Definition | Meaning for the hypothesis |
+|---|---|---|
+| **correct-reduced** | decision `run-required`, selected fails on defect, control clean | the reduced set did the job |
+| **correct-escalation** | decision `run-comprehensive`/`run-all`, comprehensive fails on defect | the decision layer refused to certify and was right to |
+| **unsafe-reduced** | decision `run-required`, selected passes, comprehensive fails | **Q-S failure** — the only REJECT outcome |
+| **safe-but-useless** | decision escalates, selected set would also have detected the regression | safety without saving; counted separately because it is the failure mode that erases Q-E |
+| **out-of-scope** | comprehensive passes on the defect tree | not a regression in this corpus; reported, not scored |
+| **unavailable** | incomplete/cancelled/timeout/missing producer/inconsistent surfaces | never a pass, never a detection |
+
+`safe-but-useless` is the counterweight to `correct-escalation`: it is measured as **M4b** (escalations
+whose selected set would also have detected the regression), so a strategy that always escalates is
+visible as M4b ≈ M3 with no saving, and cannot pass the cost gate.
+
 ## Metrics (pre-registered; reported with counts and intervals)
 
 | Id | Metric | Definition |
 |---|---|---|
 | M1 | detection parity | cases where selected failed among comprehensive-detected cases |
 | M2 | misses | `comprehensive-detected ∧ selected-passed`, with the exact test list comprehensive failed |
-| M3 | escalation rate | cases where the decision layer escalates (`run-comprehensive`/`run-all`) |
-| M4 | unnecessary escalation | escalated cases whose selected set would also have detected the regression |
+| M3 | escalation rate (all cases) | cases where the decision layer escalates (`run-comprehensive`/`run-all`) |
+| M4a | escalation rate on detected cases | `correct-escalation` / (`correct-reduced` + `correct-escalation` + `unsafe-reduced`) |
+| M4b | unnecessary escalation | `safe-but-useless` cases (escalated, though the reduced set would have detected it) |
 | M5 | selection size | selected test files executed / comprehensive test files, per case |
 | M6 | cost ratio | wall-clock selected / comprehensive **on the same host**, with escalation cost amortised by M3 |
 | M7 | decision-layer agreement | does `contract-escalation` escalate exactly the cases where the selector misses? (the value of the decision layer as a filter) |
+| M8 | escalation ceiling | share of **detected** cases that took the reduced path; a GO requires this to be non-trivial, otherwise safety is bought entirely with comprehensive runs |
 
 M6 is the only metric that may speak to the 40 % threshold, and only on a matched host. Local ~25 s
 versus CI 12–15 min is **not** a cost measurement and must never be reported as one.
@@ -108,9 +129,13 @@ versus CI 12–15 min is **not** a cost measurement and must never be reported a
 
 | Outcome | Conditions |
 |---|---|
-| **GO** (advisory only) | M2 = 0 on S2 ∪ S3 with N ≥ 60 detected cases (upper bound ≤ 5 %), and M6 ≤ 0.60 on a matched host including escalation cost |
+| **GO** (advisory only) | M2 = 0 on S2 ∪ S3 with N ≥ 60 detected cases (upper bound ≤ 5 %), **and** M6 ≤ 0.60 on a matched host including escalation cost, **and** M8 ≥ 0.50 (at least half of detected cases resolved without escalation) |
 | **REVISE** | M2 = 0 but M6 > 0.60, or escalation cost (M3 × comprehensive) eats the saving |
-| **REJECT** | any M2 > 0, or any case where the decision layer reported `covered` while comprehensive failed |
+| **REJECT** | any `unsafe-reduced` case, or any case where the decision layer reported `covered` while comprehensive failed |
+
+The three outcomes are reported as a table, never collapsed into a single "safety" number: a
+configuration can be 100 % safe by escalating every case, and that is the exact outcome M6 and M8 are
+there to expose.
 
 GO never enables production selection by itself: it authorises an advisory rollout proposal, which
 needs its own review. No CI policy change is ever in scope for W3.
@@ -163,6 +188,9 @@ execution surface, that is a separate issue with its own review.
 - `docs/reports/CL5-W3-VALIDATION-<sha>.md` and `.json` — final report, generated from per-case
   records; one record per case including surface verdicts, tree SHAs, run ids, and classification.
 - Per-case checkpoints are append-only and never rewritten.
+- The final report carries the outcome table (`correct-reduced` / `correct-escalation` /
+  `safe-but-useless` / `unsafe-reduced` / `out-of-scope` / `unavailable`) with counts, so a strategy
+  that escalates everything is visible as such rather than reading as "safe".
 
 ## Wave plan (execution gated on this design's review)
 
