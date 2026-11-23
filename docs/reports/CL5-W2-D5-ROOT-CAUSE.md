@@ -107,14 +107,18 @@ Not established (and not claimed):
 ## Consequences for the acceptance criteria
 
 `./qt quick` is documented in code as "reproduction only, never a PR/CI claim". The D5 result shows
-that when it is used as a verdict (the CL5 hypothesis), a change to a covered-by-non-audited-tests
-module yields a **green with no detector**. That is the zero-missed-defects criterion failing, not a
-tuning problem: 176 of 202 covered modules are in this state today (see the coverage-gap audit).
+that when it is used as a verdict (the CL5 hypothesis), a change to a module whose declared detectors
+are unadmitted yields a **green with no detector for that module**. That is the zero-missed-defects
+criterion failing, not a tuning problem: at `a7e14a25`, 146 of the 170 declared-covered production
+modules are in this state, and a further 643 production modules declare no detector at all (813
+production modules total; see the coverage-gap audit).
 
 ## Exact conditions to treat W2 as resumable
 
 1. The guard (or an equivalent) refuses a "selected" verdict whenever a changed module has declared
-   coverage but no selectable detector.
+   coverage but no selectable detector — where "selectable" means audited **and** freshly admitted,
+   with a loaded manifest, a parseable graph in the changed cone, and the detector actually present
+   in the shipped selection.
 2. Ownership evidence for the changed module is verifiable (owner table + admission record fresh) or
    the selector escalates.
 3. A zero-test selection can never be reported as green.

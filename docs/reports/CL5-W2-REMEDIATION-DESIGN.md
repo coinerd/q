@@ -72,8 +72,10 @@ hand-maintained list, i.e. the same failure mode as the owner table, one level u
 closed:
 
 1. compute the selected set from audited owners (today's rule);
-2. for every changed module, verify that at least one **selectable** detector exists
-   (`declared ∩ owners ≠ ∅`), and that the admission record is fresh;
+2. for every changed module, verify that at least one **selectable** detector exists — audited **and**
+   freshly admitted (`owner-admission-state` = `admitted`), with the coverage manifest `loaded`, the
+   dependency graph parseable in the changed modules' requires cone, and the detector actually
+   present in the shipped selection;
 3. if not — or if the selection is empty — do not report green: report `escalate` with the named
    uncovered modules and unadmitted detectors, and route to the comprehensive lane;
 4. audited owners without `@covers` stop being unconditionally included; they run only when their
@@ -83,9 +85,17 @@ This is implemented as a pure decision function (`guard-decision`) over the same
 already loads; the prototype in `scripts/cl5/selection-guard.rkt` is 1 screen of rules and is not
 wired into `./qt`.
 
-**Effect on D5.** `wave-status.rkt` → `escalate` with
-`unadmitted-cover: tests/test-gsd-wave-status.rkt, tests/test-audit-v09945-w3-gsd.rkt` (verified by
-test). A clean change to an audited module (`campaign-decision.rkt`) → `selected`, no escalation.
+**Effect on D5 (repository data, offline).** `wave-status.rkt` →
+`escalate` with `unadmitted-cover`, naming
+`tests/test-gsd-wave-status.rkt` and `tests/test-audit-v09945-w3-gsd.rkt` and their admission states
+(both `missing`). A clean change to an audited module (`campaign-decision.rkt`) → `selected`, no
+escalation, shipped selection `tests/test-gsd-campaign-decision-pure.rkt`.
+
+**What the guard itself refuses.** Stale per-owner admission (owner in the table, record not
+current), a missing or corrupt coverage manifest, a graph parse failure inside the changed modules'
+requires cone, a declared detector the shipped selection did not include, and an empty selection all
+escalate; each has its own regression test. The guard reports `claims:
+attribution-and-admission-only`, i.e. it never claims detection.
 
 **Evaluation.**
 

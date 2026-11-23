@@ -22,18 +22,23 @@
 ;;   * for drift: `generate-covers-manifest-entries`, the committed manifest's
 ;;     own generator, recomputed in memory.
 ;;
-;; Classification (what the tool may and may not claim)
+;; Classification (what the tool may and may not claim). Rows cover the WHOLE
+;; production-module universe, not only modules that appear in the manifest.
 ;;   confirmed-gap  the module declares at least one covering test, and NONE of
-;;                  those tests is in the audited owner table. `./qt quick` can
-;;                  therefore never run a detector for this module: a change to
-;;                  it selects nothing for it. Confirmed by construction.
+;;                  those tests is in the audited owner table. There is **no
+;;                  directly selectable declared detector**: a change to the
+;;                  module selects nothing for it directly. A transitive
+;;                  consumer test may still run; that is not detection of this
+;;                  module's own behaviour.
 ;;   potential-gap  at least one covering test IS audited, but the module has
 ;;                  >= 3 production dependents AND no consumer-contract
 ;;                  escalation exists in the selector. Regression risk is real
 ;;                  but not proven by this data.
 ;;   covered        audited cover present, low fan-in.
-;;   unverified     no declared `@covers` at all: the tool cannot say whether a
-;;                  detector exists, so it must not claim coverage.
+;;   unverified     NO declared `@covers` at all. The tool cannot say whether a
+;;                  detector exists, so it must not claim coverage. This is the
+;;                  broadest risk category, and it is counted over the full
+;;                  production universe (it is not structurally zero).
 ;;
 ;; The audit is a REPORT. It never selects, never executes, never writes, and is
 ;; not wired into `./qt`, CI or admission.
@@ -195,19 +200,30 @@
 
 ;; ---- snapshot ---------------------------------------------------------------------
 
+;; How many rows per risk category (a prioritisation heuristic, not an audit).
+(define (risk-counts rows)
+  (for/fold ([acc (hash)]) ([row (in-list rows)])
+    (hash-update acc (or (hash-ref row 'risk) 'none) add1 0)))
+
 (define (audit-snapshot root)
   (define owners (append (current-admitted-owners) '()))
   (define-values (covers _sources status) (load-coverage-manifest root))
   (define inverted (invert-covers covers))
   (define prod (production-files root))
   (define-values (_graph rgraph parse-failures) (build-dependency-graph root prod))
-  ;; Only real modules: a `@covers` target may be a document or data file, and
-  ;; those cannot be 'selected' as tests either way.
-  (define module?
-    (lambda (m) (and (member (path-get-extension m) (list #".rkt" #".ss" #".rktl")) #t)))
+  ;; Rows are the COMPLETE production universe: a module with no declared cover
+  ;; must appear as 'unverified, otherwise `unverified = 0` would be a tautology
+  ;; of the input rather than a finding (review #7088040257).
   (define rows
-    (for/list ([module (in-list (sort (filter module? (hash-keys inverted)) string<?))])
-      (module-audit-row module (hash-ref inverted module) owners (hash-ref rgraph module '()))))
+    (for/list ([module (in-list prod)])
+      (module-audit-row module (hash-ref inverted module '()) owners (hash-ref rgraph module '()))))
+  ;; Declared `@covers` targets outside the production universe are reported,
+  ;; not silently dropped.
+  (define declared-outside-production
+    (sort (for/list ([m (in-hash-keys inverted)]
+                     #:unless (member m prod))
+            m)
+          string<?))
   (define by-class
     (for/fold ([acc (hash)]) ([row (in-list rows)])
       (hash-update acc (hash-ref row 'class) (lambda (l) (cons row l)) '())))
@@ -226,8 +242,13 @@
         (hash-count covers)
         'manifest-status
         status
-        'covered-modules
-        (length rows)
+        'production-modules
+        (length prod)
+        'declared-covered-modules
+        (length (filter (lambda (r) (pair? (hash-ref r 'declared-tests)))
+                        rows))
+        'declared-outside-production
+        declared-outside-production
         'classes
         (for/hash ([(k v) (in-hash by-class)])
           (values k (length v)))
@@ -290,14 +311,32 @@
         (hash-ref snapshot 'manifest-tests)
         'manifest-status
         (symbol->string (hash-ref snapshot 'manifest-status))
-        'covered-modules
-        (hash-ref snapshot 'covered-modules)
+        'production-modules
+        (hash-ref snapshot 'production-modules)
+        'declared-covered-modules
+        (hash-ref snapshot 'declared-covered-modules)
+        'declared-outside-production
+        (hash-ref snapshot 'declared-outside-production)
         'classes
         (for/hash ([(k v) (in-hash (hash-ref snapshot 'classes))]) (values k v))
         'confirmed-gaps
         (rows->jsexpr (hash-ref snapshot 'confirmed-gaps) #f)
+        'unverified-by-risk
+        (for/hash ([(k v) (in-hash (risk-counts (hash-ref snapshot 'unverified '())))])
+          (values k v))
         'potential-gaps
         (rows->jsexpr (hash-ref snapshot 'potential-gaps) #f)
+        'unverified-count
+        (length (hash-ref snapshot 'unverified '()))
+        'unverified
+        (rows->jsexpr (take (sort (hash-ref snapshot 'unverified '())
+                                  (lambda (a b)
+                                    (or (> (hash-ref a 'risk-rank) (hash-ref b 'risk-rank))
+                                        (and (= (hash-ref a 'risk-rank) (hash-ref b 'risk-rank))
+                                             (string<? (hash-ref a 'module)
+                                                       (hash-ref b 'module))))))
+                              (min 50 (length (hash-ref snapshot 'unverified '()))))
+                        #f)
         'owners-without-covers
         (hash-ref snapshot 'owners-without-covers)
         'graph-parse-failures
@@ -308,10 +347,13 @@
 (define (summary-lines snapshot)
   (define classes (hash-ref snapshot 'classes))
   (append (list (format "owners (selectable universe): ~a" (hash-ref snapshot 'owner-count))
-                (format "declared @covers tests: ~a (manifest ~a, graph modules ~a)"
+                (format "declared @covers tests: ~a (manifest ~a); production modules ~a, of which ~a declared-covered"
                         (hash-ref snapshot 'manifest-tests)
                         (symbol->string (hash-ref snapshot 'manifest-status))
-                        (hash-ref snapshot 'covered-modules))
+                        (hash-ref snapshot 'production-modules)
+                        (hash-ref snapshot 'declared-covered-modules))
+                (format "declared @covers targets outside the production universe: ~a"
+                        (length (hash-ref snapshot 'declared-outside-production)))
                 (format "confirmed gaps: ~a | potential gaps: ~a | covered: ~a | unverified: ~a"
                         (hash-ref classes 'confirmed-gap 0)
                         (hash-ref classes 'potential-gap 0)
@@ -344,7 +386,17 @@
                          (hash-ref row 'module)
                          (hash-ref row 'dependents-count)
                          (string-join (hash-ref row 'audited-tests) ", ")))
-               (list "audited owners with no @covers (included on every change):")
+               (list "unverified (no declared detector at all - broadest risk category, top 25 by risk):")
+    (for/list ([row (in-list (take (sort (hash-ref snapshot 'unverified '())
+                                        (lambda (a b)
+                                          (or (> (hash-ref a 'risk-rank) (hash-ref b 'risk-rank))
+                                              (and (= (hash-ref a 'risk-rank) (hash-ref b 'risk-rank))
+                                                   (string<? (hash-ref a 'module)
+                                                             (hash-ref b 'module))))))
+                                   (min 25 (length (hash-ref snapshot 'unverified '())))))])
+      (format "  P~a ~a  ~a" (hash-ref row 'risk-rank) (or (hash-ref row 'risk) 'any)
+              (hash-ref row 'module)))
+    (list "audited owners with no @covers (included on every change):")
                (for/list ([o (in-list (hash-ref snapshot 'owners-without-covers))])
                  (format "  ~a" o))
                (list "manifest drift (regenerated entries differing from the committed manifest):")

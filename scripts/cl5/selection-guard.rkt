@@ -3,27 +3,27 @@
 ;; scripts/cl5/selection-guard.rkt — ISOLATED, offline prototype of a
 ;; fail-closed selection guard (CL5 W2 remediation prototype, #9982).
 ;;
-;; This module is NOT wired into `./qt`, CI, admission or any workflow. It is a
-;; pure decision function plus a data adapter, used by the W2 follow-up tests to
-;; demonstrate — deterministically, without GitHub Actions — how a conservative
-;; selector would treat the frozen D5 corpus case and its clean control.
+;; NOT wired into `./qt`, CI, admission or any workflow. Pure decision + a
+;; read-only adapter, used by the W2 follow-up tests.
 ;;
-;; The guard answers one question: given a changed-file set and the repository's
-;; DECLARED coverage (@covers) and ADMITTED ownership (audited quick owners), can
-;; the selector honestly claim a meaningful green?
+;; FAIL-CLOSED CONTRACT (review #7088040257): 'selected is returned only when
+;;   * the coverage manifest loaded (`'loaded`, not missing/corrupt);
+;;   * the dependency graph parsed every module in the changed modules' requires
+;;     cone (a parse failure makes the edge set unknown);
+;;   * every changed module has at least one declared detector that is BOTH in
+;;     the audited owner table AND freshly admitted (record current, scan clean);
+;;   * the shipped selector actually selected those detectors (attribution that
+;;     never reaches the selected set is not evidence);
+;;   * the resulting selection is non-empty.
+;; Anything unknown, stale, missing, corrupt or unparseable escalates with a
+;; machine-readable code and names the evidence that was missing.
 ;;
-;; It escalates (refuses to claim) when:
-;;   unadmitted-cover  a changed module declares covering tests but NONE of them
-;;                     is selectable — `./qt quick` could run nothing for it.
-;;                     The unadmitted tests are named in the evidence.
-;;   uncovered-module  a changed module has no declared cover at all: nothing is
-;;                     known about who detects it.
-;;   zero-selection    the computed selected set is empty (no zero-test green).
-;;   admission-stale   declared coverage exists but the audited owner table is
-;;                     empty/unreadable, so no ownership evidence can be trusted.
+;; Codes: manifest-unavailable, graph-parse-failure, unadmitted-cover,
+;; uncovered-module, unselected-declared-cover, zero-selection.
 ;;
-;; Only when every changed module has at least one selectable detector does the
-;; guard return 'selected.
+;; This proves attribution + executability + admission freshness at most. It does
+;; NOT prove that a detector detects the mutation, and a shared-contract edge can
+;; still need conservative escalation even when one direct test is selectable.
 
 (require racket/list
          racket/path
@@ -39,43 +39,116 @@
 (define (escalation code module detail tests)
   (hasheq 'code code 'module module 'detail detail 'tests tests))
 
-(define (audited-member? rel owners)
-  (and (member rel owners) #t))
+(define (fresh? admission owner)
+  (eq? (hash-ref admission owner 'missing) 'admitted))
 
-;; guard-decision : (listof string) changed
-;;                  (hash module -> (listof test)) declared
-;;                  (listof string) owners
-;;                  (hash module -> (listof module)) dependents
-;;   -> hash 'verdict 'selected 'escalations 'lane 'changed
-(define (guard-decision changed declared owners dependents)
+;; guard-decision : (listof string) changed, hash evidence -> hash
+;;   evidence keys:
+;;     declared              hash module -> (listof test)
+;;     owners                (listof string) audited owner table
+;;     admission             hash owner -> 'admitted/'review-required/'rejected/'missing
+;;     dependents            hash module -> (listof module)
+;;     requires              hash module -> (listof module)
+;;     manifest-status       'loaded/'missing/'corrupt
+;;     graph-parse-failures  (listof string)
+;;     shipped-selected      (listof string) or #f when not measured
+(define (guard-decision changed evidence)
+  (define declared (hash-ref evidence 'declared (hash)))
+  (define owners (hash-ref evidence 'owners '()))
+  (define admission (hash-ref evidence 'admission (hash)))
+  (define dependents (hash-ref evidence 'dependents (hash)))
+  (define requires (hash-ref evidence 'requires (hash)))
+  (define manifest-status (hash-ref evidence 'manifest-status 'missing))
+  (define parse-failures (hash-ref evidence 'graph-parse-failures '()))
+  (define shipped-selected (hash-ref evidence 'shipped-selected #f))
+
   (define (declared-of m)
     (hash-ref declared m '()))
-  (define (audited-tests-of m)
-    (filter (lambda (t) (audited-member? t owners)) (declared-of m)))
-  (define unadmitted
-    (for/list ([m (in-list changed)]
-               #:when (let ([d (declared-of m)]) (and (pair? d) (null? (audited-tests-of m)))))
-      (escalation 'unadmitted-cover
-                  m
-                  "declared detectors exist but none is in the audited owner table"
-                  (declared-of m))))
+  (define (selectable-detectors m)
+    (filter (lambda (t) (and (member t owners) (fresh? admission t))) (declared-of m)))
+
+  ;; Any module in a changed module's requires cone (itself included) that the
+  ;; graph could not parse makes the selection untrustworthy.
+  (define (cone m)
+    (let loop ([frontier (list m)]
+               [seen '()])
+      (cond
+        [(null? frontier) seen]
+        [else
+         (define f (car frontier))
+         (if (member f seen)
+             (loop (cdr frontier) seen)
+             (loop (append (cdr frontier) (hash-ref requires f '())) (cons f seen)))])))
+  (define unparseable
+    (sort (remove-duplicates (for*/list ([m (in-list changed)]
+                                         [c (in-list (cone m))]
+                                         #:when (member c parse-failures))
+                                c))
+          string<?))
+
+  (define manifest-bad
+    (if (eq? manifest-status 'loaded)
+        '()
+        (list (escalation 'manifest-unavailable
+                          #f
+                          (format "coverage manifest status is ~a" manifest-status)
+                          '()))))
+  (define graph-bad
+    (if (null? unparseable)
+        '()
+        (list (escalation 'graph-parse-failure
+                          #f
+                          "dependency graph could not parse a module in the changed cone"
+                          unparseable))))
   (define uncovered
     (for/list ([m (in-list changed)]
                #:when (null? (declared-of m)))
       (escalation 'uncovered-module m "no @covers attribution reaches this module" '())))
-  (define admission-stale
-    (if (and (positive? (hash-count declared)) (null? owners))
-        (list (escalation 'admission-stale
-                          #f
-                          "audited owner table is empty; ownership evidence cannot be verified"
-                          '()))
+  ;; A declared detector that is audited but not fresh is stale evidence; one
+  ;; that is not audited is unadmitted. Both block a green.
+  (define unadmitted
+    (for/list ([m (in-list changed)]
+               #:when (and (pair? (declared-of m)) (null? (selectable-detectors m))))
+      (escalation 'unadmitted-cover
+                  m
+                  "declared detectors exist but none is both audited and freshly admitted"
+                  (for/list ([t (in-list (declared-of m))])
+                    (hash 'test
+                          t
+                          'admission
+                          (hash-ref admission t 'missing)
+                          'audited
+                          (and (member t owners) #t))))))
+  ;; Attribution that the shipped selector did not actually run is not evidence.
+  (define unshipped
+    (if shipped-selected
+        (for/list ([m (in-list changed)]
+                   #:when (let ([fresh-detectors (selectable-detectors m)])
+                            (and (pair? fresh-detectors)
+                                 (for/or ([t (in-list fresh-detectors)])
+                                   (not (member t shipped-selected))))))
+          (escalation 'unselected-declared-cover
+                      m
+                      "a fresh audited detector exists but the shipped selection did not include it"
+                      (selectable-detectors m)))
         '()))
+  ;; The shipped rule walks transitive dependents, so the guard must too.
+  (define (dependents-closure m)
+    (let loop ([frontier (list m)] [seen '()])
+      (cond
+        [(null? frontier) seen]
+        [else
+         (define f (car frontier))
+         (define next
+           (filter (lambda (d) (and (not (equal? d m)) (not (member d seen))))
+                   (hash-ref dependents f '())))
+         (loop (append (cdr frontier) next) (append next seen))])))
   (define required
     (sort (remove-duplicates
            (append* (for/list ([m (in-list changed)])
-                      (append (audited-tests-of m)
-                              (append* (for/list ([d (in-list (hash-ref dependents m '()))])
-                                         (audited-tests-of d)))))))
+                      (append (selectable-detectors m)
+                              (append* (for/list ([d (in-list (dependents-closure m))])
+                                         (selectable-detectors d)))))))
           string<?))
   (define zero
     (if (null? required)
@@ -84,10 +157,7 @@
                           "selection is empty; a zero-test green must never be reported"
                           '()))
         '()))
-  (define escalations
-    (if (pair? (append admission-stale unadmitted uncovered))
-        (append admission-stale unadmitted uncovered)
-        (append admission-stale zero)))
+  (define escalations (append manifest-bad graph-bad uncovered unadmitted unshipped zero))
   (hasheq 'verdict
           (if (pair? escalations) 'escalate 'selected)
           'selected
@@ -96,8 +166,21 @@
           (sort (remove-duplicates changed) string<?)
           'escalations
           escalations
+          'evidence
+          (hasheq 'manifest-status
+                  manifest-status
+                  'owners
+                  (length owners)
+                  'admission-checked
+                  (hash-count admission)
+                  'graph-parse-failures
+                  (length parse-failures)
+                  'shipped-selected
+                  (and shipped-selected (length shipped-selected)))
           'lane
-          (if (pair? escalations) 'comprehensive 'quick)))
+          (if (pair? escalations) 'comprehensive 'quick)
+          'claims
+          'attribution-and-admission-only))
 
 ;; ---- repository adapter (read-only) --------------------------------------------------
 
@@ -122,21 +205,63 @@
   (for ([(test modules) (in-hash covers)])
     (for ([m (in-list modules)])
       (hash-update! declared m (lambda (l) (sort (cons test l) string<?)) '())))
-  (define-values (_g rgraph _f) (build-dependency-graph root (repo-relative-files root)))
-  (hash 'owners owners 'manifest-status status 'declared declared 'dependents rgraph))
+  (define admission
+    (for/hash ([o (in-list owners)])
+      (values o (admission-state-status (owner-admission-state root o)))))
+  (define prod (repo-relative-files root))
+  (define-values (graph rgraph parse-failures) (build-dependency-graph root prod))
+  (hash 'owners
+        owners
+        'admission
+        admission
+        'manifest-status
+        status
+        'covers
+        covers
+        'declared
+        declared
+        'dependents
+        rgraph
+        'requires
+        graph
+        'graph-parse-failures
+        (sort (hash-keys parse-failures) string<?)))
 
-;; D5-shaped decision for a real changed-file set, from repository data only.
 (define (guard-decide-repo root changed)
   (define projection (audit-projection root))
+  (define shipped
+    (with-handlers ([exn:fail? (lambda (_) #f)])
+      (let ([sel (compute-impact-selection root
+                                           changed
+                                           (hash-ref projection 'covers)
+                                           (hash)
+                                           (hash-ref projection 'owners))])
+        (selection-selected sel))))
+  (define evidence
+    (hash 'declared
+          (hash-ref projection 'declared)
+          'owners
+          (hash-ref projection 'owners)
+          'admission
+          (hash-ref projection 'admission)
+          'dependents
+          (hash-ref projection 'dependents)
+          'requires
+          (hash-ref projection 'requires)
+          'manifest-status
+          (hash-ref projection 'manifest-status)
+          'graph-parse-failures
+          (hash-ref projection 'graph-parse-failures)
+          'shipped-selected
+          shipped))
   (hash 'decision
-        (guard-decision changed
-                        (hash-ref projection 'declared)
-                        (hash-ref projection 'owners)
-                        (hash-ref projection 'dependents))
+        (guard-decision changed evidence)
         'owners
         (length (hash-ref projection 'owners))
         'manifest-status
         (hash-ref projection 'manifest-status)
+        'admission
+        (hash-ref projection 'admission)
         'changed
         changed))
 
@@ -146,10 +271,15 @@
         (symbol->string (hash-ref d 'verdict))
         'lane
         (symbol->string (hash-ref d 'lane))
+        'claims
+        (symbol->string (hash-ref d 'claims))
         'changed
         (hash-ref d 'changed)
         'selected
         (hash-ref d 'selected)
+        'evidence
+        (for/hash ([(k v) (in-hash (hash-ref d 'evidence))])
+          (values k v))
         'escalations
         (for/list ([e (in-list (hash-ref d 'escalations))])
           (hash 'code

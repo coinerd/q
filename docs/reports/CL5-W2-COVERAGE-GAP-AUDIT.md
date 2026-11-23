@@ -18,31 +18,58 @@ impact graph (`build-dependency-graph`). No second source of truth is introduced
 
 ## Result at `a7e14a25`
 
+Rows are the **complete production-module universe**, not only modules that appear in the manifest. A
+module with no declared detector is `unverified` — the broadest risk category — so it can no longer be
+structurally zero (review #7088040257).
+
 | Class | Count | Meaning |
 |---|---|---|
 | audited owners (selectable universe) | 23 | what `./qt quick` can run |
 | declared `@covers` tests | 226 | what the repository claims detects what |
-| covered modules | 202 | modules with at least one declared detector |
-| **confirmed gaps** | **176** | declared detectors exist, **none is selectable** |
+| **production modules (denominator)** | **813** | every `.rkt`/`.ss`/`.rktl` outside `tests/`, `scripts/`, `docs/`, `artifacts/`, `.github/` |
+| declared-covered production modules | 170 | at least one declared detector (directly or transitively) |
+| **confirmed gaps** | **146** | declared detectors exist, **none is directly selectable** |
 | potential gaps | 17 | audited detector exists, ≥ 3 production dependents, no consumer escalation |
-| covered | 8 | audited detector, low fan-in |
-| unverified | 0 | modules with no declared detector at all |
+| covered | 7 | audited detector, low fan-in |
+| **unverified** | **643** | **no declared detector at all** — the tool cannot say who detects this module |
+| declared `@covers` targets outside production | 32 | docs/scripts/tests targets, listed rather than silently dropped |
 | audited owners without `@covers` | 2 | always included on every change (fail-open noise) |
 | graph parse failures | 0 | dependency metadata is parseable |
 | manifest drift | 0 missing, 0 stale, 0 extra | the manifest is fresh, so this is not staleness |
 
-### Confirmed gaps by risk area
+Definitions are deliberate: a **confirmed gap** means *no directly selectable declared detector* — a
+transitive consumer test may still run, but that is not detection of this module's own behaviour.
+`unverified` means *no declaration exists*, not that the module is untested.
 
-| Risk | Count | Examples |
+### Confirmed gaps by risk area (21 at risk ≥ 5)
+
+| Risk | Confirmed gaps | Examples |
 |---|---|---|
 | authorization | 10 | `runtime/credentials/protocol.rkt`, `runtime/context-selection/authority.rkt`, `extensions/gsd/policy.rkt`, `runtime/memory/policy.rkt` |
-| security | 4 | `sandbox/subprocess.rkt`, `extensions/gsd/review-audit-format.rkt`, `scripts/gsd-gates/owned-audit.rkt` |
+| security | 3 | `sandbox/subprocess.rkt`, `extensions/gsd/review-audit-format.rkt` |
 | persistence | 4 | `runtime/session/session-store.rkt`, `runtime/session/session-store-goal-task.rkt`, `extensions/gsd/plan-snapshot.rkt` |
-| recovery | 4 | `extensions/gsd/delivery-recovery.rkt`, `runtime/task-memory/replay.rkt`, `extensions/gsd/tracker-resume.rkt` |
+| recovery | 4 | `extensions/gsd/delivery-recovery.rkt`, `runtime/task-memory/replay.rkt` |
 | provider | 6 | `llm/model.rkt`, `runtime/context-assembly/*` |
-| ordering | 4 | `extensions/gsd/events.rkt`, `runtime/session/session-events.rkt`, `tools/scheduler-execution.rkt` |
-| shared state | 6 | `extensions/gsd/campaign-state.rkt`, `agent/state.rkt`-adjacent modules, `tui/state.rkt` |
-| none of the above | 138 | ordinary modules |
+| ordering | 4 | `extensions/gsd/events.rkt`, `runtime/session/session-events.rkt` |
+| shared state | 6 | `extensions/gsd/campaign-state.rkt`, `tui/state.rkt` |
+| none of the above | 109 | ordinary modules |
+
+### Unverified modules by risk area (643 total)
+
+| Risk (path heuristic) | Count |
+|---|---|
+| authorization | 32 |
+| security | 17 |
+| persistence | 10 |
+| recovery | 6 |
+| provider | 62 |
+| ordering | 44 |
+| shared state | 34 |
+| none of the above | 438 |
+
+The risk classifier is a **path-substring heuristic for prioritisation only**; it is not an audited
+security classification. The 21 risk≥5 confirmed gaps must be reviewed manually before any ownership
+repair, and the 49 authorization/security `unverified` modules are the first manual-review queue.
 
 112 confirmed gaps have exactly **one** declared cover. Two gaps exist because their only cover, the
 archival audit owner `tests/test-audit-v09945-w3-gsd.rkt`, was retired from the selectable table in
@@ -59,7 +86,9 @@ archival audit owner `tests/test-audit-v09945-w3-gsd.rkt`, was retired from the 
 Proven (mechanically, from the repository's own metadata):
 
 - a changed module in the confirmed-gap class has declared detectors that `./qt quick` cannot run,
-  so a change to it can produce a selection with no detector for that module;
+  so a change to it can produce a selection with no detector for that module (146 modules, 21 at
+  risk≥5);
+- 643 production modules declare no detector at all, so ownership evidence for them is simply absent;
 - the escalation rule cannot see this state (it inspects declared covers, not selectable ones);
 - audited owners without `@covers` are included on every change, adding unrelated tests.
 
@@ -75,10 +104,12 @@ Not proven:
 ## Verification
 
 `tests/test-cl5-ownership-audit.rkt` pins the classification rule, the risk ordering, the cover
-inversion, and both repository-level controls:
+inversion, the full-denominator arithmetic (`unverified + declared-covered = production`), and both
+repository-level controls:
 
 - **negative control**: `extensions/gsd/wave-status.rkt` is a confirmed gap whose covering tests
-  include `tests/test-gsd-wave-status.rkt` (D5);
+  include `tests/test-gsd-wave-status.rkt` (D5); the guard escalates on it with `unadmitted-cover`
+  and names that test;
 - **positive control**: `extensions/gsd/campaign-decision.rkt` is not a confirmed gap and its
   audited detector is present.
 

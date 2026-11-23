@@ -6,31 +6,33 @@
 ;; tests/test-cl5-ownership-audit.rkt — offline coverage-gap audit and the
 ;; ISOLATED fail-closed selection guard (CL5 W2 follow-up, #9982).
 ;;
-;; These tests never touch the production selector, never execute the test
-;; suite under audit, and need no GitHub Actions:
-;;   1. classification is exactly the declared rule (confirmed / potential /
-;;      covered / unverified)
+;; No production selector, no GitHub Actions, and the audited tests are never
+;; executed. Coverage:
+;;   1. module classification over the full production universe (including the
+;;      unverified case the first audit could not produce)
 ;;   2. risk ranking is deterministic and ordered
 ;;   3. covers inversion is module -> tests
-;;   4. guard: the frozen D5 change escalates and NAMES the unadmitted detector
-;;   5. guard: a clean control with an audited detector is selected
-;;   6. guard: an uncovered module escalates; a zero selection can never be green
-;;   7. guard: empty ownership evidence escalates (never silently under-selects)
-;;   8. repository-level negative control: extensions/gsd/wave-status.rkt is a
-;;      confirmed gap whose covering tests include tests/test-gsd-wave-status.rkt
-;;   9. repository-level positive control: a module with an audited detector is
-;;      selected, not escalated
+;;   4. guard: D5 change escalates and NAMES the unadmitted detector
+;;   5. guard: clean control (audited + fresh + shipped) is selected
+;;   6. guard: uncovered module and empty selection escalate
+;;   7. guard: STALE admission (owner present, record not current) escalates
+;;   8. guard: missing/corrupt manifest escalates
+;;   9. guard: graph parse failure in the changed cone escalates
+;;  10. guard: declared detector that the shipped selection did not run escalates
+;;  11. repository controls: full denominator, unverified > 0, D5 gap row
 
 (require rackunit
          racket/list
          racket/runtime-path
-         racket/string
          (file "../scripts/cl5/ownership-audit.rkt")
          (file "../scripts/cl5/selection-guard.rkt"))
 
 (define-runtime-path repo-root "..")
 
 (define owners (list "tests/test-gsd-campaign-decision-pure.rkt" "tests/test-agent-state.rkt"))
+
+(define fresh-admission
+  (hash "tests/test-gsd-campaign-decision-pure.rkt" 'admitted "tests/test-agent-state.rkt" 'admitted))
 
 (define declared-fixture
   (hash "extensions/gsd/wave-status.rkt"
@@ -48,13 +50,35 @@
         "runtime/new-module.rkt"
         '()))
 
+(define (evidence #:admission [admission fresh-admission]
+                  #:manifest [manifest 'loaded]
+                  #:failures [failures '()]
+                  #:shipped [shipped '("tests/test-gsd-campaign-decision-pure.rkt")])
+  (hash 'declared
+        declared-fixture
+        'owners
+        owners
+        'admission
+        admission
+        'dependents
+        dependents-fixture
+        'requires
+        (hash)
+        'manifest-status
+        manifest
+        'graph-parse-failures
+        failures
+        'shipped-selected
+        shipped))
+
 (module+ test
-  (test-case "module classification follows the declared rule"
+  (test-case "module classification covers the full production universe"
     (check-equal? (classify-module "m" '() owners 0) 'unverified)
     (check-equal? (classify-module "m" (list "tests/unaudited.rkt") owners 0) 'confirmed-gap)
     (check-equal? (classify-module "m" (list "tests/test-agent-state.rkt") owners 0) 'covered)
     (check-equal? (classify-module "m" (list "tests/test-agent-state.rkt") owners 3) 'potential-gap)
-    (check-equal? (classify-module "m" (list "tests/test-agent-state.rkt") owners 2) 'covered))
+    (check-equal? (classify-module "m" (list "tests/test-agent-state.rkt") owners 2) 'covered)
+    (check-not-eq? (classify-module "m" '() owners 10) 'covered))
 
   (test-case "risk categories are deterministic and safety-first"
     (check-equal? (risk-category "runtime/credentials/protocol.rkt") 'authorization)
@@ -76,88 +100,107 @@
     (check-equal? (hash-ref inverted "z.rkt" '()) '()))
 
   (test-case "the frozen D5 change escalates and names the unadmitted detector"
-    (define d
-      (guard-decision (list "extensions/gsd/wave-status.rkt")
-                      declared-fixture
-                      owners
-                      dependents-fixture))
+    (define d (guard-decision (list "extensions/gsd/wave-status.rkt") (evidence)))
     (check-equal? (hash-ref d 'verdict) 'escalate)
     (check-equal? (hash-ref d 'lane) 'comprehensive)
-    (define codes (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
-    (check-true (and (memq 'unadmitted-cover codes) #t))
+    (check-equal? (hash-ref d 'claims) 'attribution-and-admission-only)
     (define e
       (for/first ([x (in-list (hash-ref d 'escalations))]
                   #:when (eq? (hash-ref x 'code) 'unadmitted-cover))
         x))
+    (check-not-false e)
     (check-equal? (hash-ref e 'module) "extensions/gsd/wave-status.rkt")
-    (check-true (and (member "tests/test-gsd-wave-status.rkt" (hash-ref e 'tests)) #t)))
+    (check-true (and (member "tests/test-gsd-wave-status.rkt"
+                             (map (lambda (t) (hash-ref t 'test)) (hash-ref e 'tests)))
+                     #t)))
 
-  (test-case "a clean control with an audited detector is selected, not escalated"
-    (define d
-      (guard-decision (list "extensions/gsd/campaign-decision.rkt")
-                      declared-fixture
-                      owners
-                      dependents-fixture))
+  (test-case "a clean control with audited, fresh, shipped evidence is selected"
+    (define d (guard-decision (list "extensions/gsd/campaign-decision.rkt") (evidence)))
     (check-equal? (hash-ref d 'verdict) 'selected)
     (check-equal? (hash-ref d 'lane) 'quick)
     (check-equal? (hash-ref d 'selected) (list "tests/test-gsd-campaign-decision-pure.rkt"))
     (check-equal? (hash-ref d 'escalations) '()))
 
-  (test-case "an uncovered module escalates and a zero selection is never green"
-    (define d
-      (guard-decision (list "runtime/new-module.rkt") declared-fixture owners dependents-fixture))
+  (test-case "an uncovered module escalates and an empty change never reports green"
+    (define d (guard-decision (list "runtime/new-module.rkt") (evidence)))
     (check-equal? (hash-ref d 'verdict) 'escalate)
-    (define codes (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
-    (check-true (and (memq 'uncovered-module codes) #t))
-    (check-equal? (hash-ref d 'selected) '()))
-  (test-case "an empty change selects nothing and escalates instead of a zero-test green"
-    (define d (guard-decision '() declared-fixture owners dependents-fixture))
-    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'uncovered-module
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t))
+    (check-equal? (hash-ref d 'selected) '())
+    (define empty-d (guard-decision '() (evidence)))
+    (check-equal? (hash-ref empty-d 'verdict) 'escalate)
     (check-true (and (memq 'zero-selection
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref empty-d 'escalations)))
+                     #t)))
+
+  (test-case "stale per-owner admission blocks a green even though the table is nonempty"
+    (define stale
+      (hash "tests/test-gsd-campaign-decision-pure.rkt"
+            'review-required
+            "tests/test-agent-state.rkt"
+            'admitted))
+    (define d
+      (guard-decision (list "extensions/gsd/campaign-decision.rkt") (evidence #:admission stale)))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'unadmitted-cover
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t))
+    (check-equal? (hash-ref d 'selected) '())
+    (define d2
+      (guard-decision (list "extensions/gsd/campaign-decision.rkt") (evidence #:admission (hash))))
+    (check-equal? (hash-ref d2 'verdict) 'escalate))
+
+  (test-case "a missing or corrupt manifest blocks every green"
+    (for ([status (in-list '(missing corrupt))])
+      (define d
+        (guard-decision (list "extensions/gsd/campaign-decision.rkt") (evidence #:manifest status)))
+      (check-equal? (hash-ref d 'verdict) 'escalate)
+      (check-true (and (memq 'manifest-unavailable
+                             (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                       #t))))
+
+  (test-case "a graph parse failure in the changed cone blocks a green"
+    (define d
+      (guard-decision (list "extensions/gsd/wave-status.rkt")
+                      (evidence #:failures (list "extensions/gsd/wave-status.rkt"))))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'graph-parse-failure
+                           (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
+                     #t))
+    (define ok
+      (guard-decision (list "extensions/gsd/campaign-decision.rkt")
+                      (evidence #:failures (list "unrelated/broken.rkt"))))
+    (check-equal? (hash-ref ok 'verdict) 'selected))
+
+  (test-case "attribution the shipped selector did not run is not evidence"
+    (define d (guard-decision (list "extensions/gsd/campaign-decision.rkt") (evidence #:shipped '())))
+    (check-equal? (hash-ref d 'verdict) 'escalate)
+    (check-true (and (memq 'unselected-declared-cover
                            (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
                      #t)))
 
-  (test-case "empty ownership evidence escalates instead of under-selecting"
-    (define d
-      (guard-decision (list "extensions/gsd/campaign-decision.rkt")
-                      declared-fixture
-                      '()
-                      dependents-fixture))
-    (check-equal? (hash-ref d 'verdict) 'escalate)
-    (define codes (map (lambda (e) (hash-ref e 'code)) (hash-ref d 'escalations)))
-    (check-true (and (memq 'admission-stale codes) #t))
-    (check-true (and (memq 'unadmitted-cover codes) #t)))
-
-  (test-case "repository negative control: wave-status is a confirmed gap"
+  (test-case "repository controls: full denominator, gap row and covered row"
     (define snapshot (audit-snapshot (path->complete-path repo-root)))
+    (check-true (> (hash-ref snapshot 'production-modules) 700))
+    (check-equal? (hash-ref snapshot 'declared-covered-modules)
+                  (length (filter (lambda (r) (pair? (hash-ref r 'declared-tests)))
+                                  (hash-ref snapshot 'rows))))
+    (define unverified (hash-ref snapshot 'unverified '()))
+    (check-true (> (length unverified) 0))
+    (check-equal? (+ (length unverified) (hash-ref snapshot 'declared-covered-modules))
+                  (hash-ref snapshot 'production-modules))
     (define row
-      (for/first ([r (in-list (append (hash-ref snapshot 'confirmed-gaps)
-                                      (hash-ref snapshot 'potential-gaps)))]
+      (for/first ([r (in-list (hash-ref snapshot 'rows))]
                   #:when (equal? (hash-ref r 'module) "extensions/gsd/wave-status.rkt"))
         r))
     (check-not-false row)
     (check-equal? (hash-ref row 'class) 'confirmed-gap)
     (check-true (and (member "tests/test-gsd-wave-status.rkt" (hash-ref row 'unadmitted-tests)) #t))
-    (check-equal? (hash-ref row 'audited-tests) '()))
-
-  (test-case "repository positive control: an audited module is covered, not a gap"
-    (define snapshot (audit-snapshot (path->complete-path repo-root)))
-    (define row
+    (check-equal? (hash-ref row 'audited-tests) '())
+    (define covered-row
       (for/first ([r (in-list (hash-ref snapshot 'rows))]
                   #:when (equal? (hash-ref r 'module) "extensions/gsd/campaign-decision.rkt"))
         r))
-    (check-not-false row)
-    (check-not-eq? (hash-ref row 'class) 'confirmed-gap)
-    (check-true (and (member "tests/test-gsd-campaign-decision-pure.rkt"
-                             (hash-ref row 'audited-tests))
-                     #t)))
-
-  (test-case "repository guard escalates the frozen D5 changed file"
-    (define result (guard-decide-repo (path->complete-path repo-root) (list "extensions/gsd/wave-status.rkt")))
-    (check-equal? (hash-ref (hash-ref result 'decision) 'verdict) 'escalate)
-    (define e
-      (for/first ([x (in-list (hash-ref (hash-ref result 'decision) 'escalations))]
-                  #:when (eq? (hash-ref x 'code) 'unadmitted-cover))
-        x))
-    (check-not-false e)
-    (check-true (and (member "tests/test-gsd-wave-status.rkt" (hash-ref e 'tests)) #t))))
+    (check-not-false covered-row)
+    (check-not-eq? (hash-ref covered-row 'class) 'confirmed-gap)))
