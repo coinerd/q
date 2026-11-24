@@ -133,6 +133,10 @@ durations) and honestly reports that the 40 % cost hypothesis is still unmeasure
 1597-file local suite is not the CI surface either: the CI comprehensive surface is the producer
 union above (1 394 files). Neither is claimed as `C_comp`.
 
+`9.08 s` is **one** run, recorded as a mechanism check, not a cost estimate: W3.2 must take n ≥ 3
+per state on the same host and report the median (the protocol's measurement rule), and a single
+sample must never be promoted into M6.
+
 ## Contract-layer revision (companion, offline — not part of the dry-run classification)
 
 At `89dac02e` the contract layer does not exist, which is why the dry-run instruction is
