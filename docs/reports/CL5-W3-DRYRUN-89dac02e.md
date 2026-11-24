@@ -130,7 +130,7 @@ recorded verdicts and raises if either label is edited.
 
 So the dry run validates the *timing mechanism* (one host, one method, explicit refusal of CI
 durations) and honestly reports that the 40 % cost hypothesis is still unmeasured. `./qt full`'s
-1597-file local suite is not the CI surface either: the CI comprehensive surface is the producer
+1 590-file local suite at this revision is not the CI surface either: the CI comprehensive surface is the producer
 union above (1 394 files). Neither is claimed as `C_comp`.
 
 `9.08 s` is **one** run, recorded as a mechanism check, not a cost estimate: W3.2 must take n ≥ 3
