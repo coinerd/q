@@ -39,7 +39,11 @@
          ci-verdict-for-sha
          scratch-branch-name
          infrastructure-step?
-         failure-kind)
+         failure-kind
+         ;; effect helpers reused by the F2 baseline collector (the PAT stays in
+         ;; scripts/gh_helpers.py; these only run it and decode the result)
+         capture
+         gh-json)
 
 ;; Conclusions that mean "the comprehensive surface did not run".
 (define unavailable-conclusions '(cancelled timed_out action_required stale))
