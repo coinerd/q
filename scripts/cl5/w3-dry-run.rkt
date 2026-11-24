@@ -864,6 +864,9 @@
           'decision-verified?
           #t))
   (write-record! out-file record)
+  ;; Leave the disposable worktree as found so a re-run is reproducible.
+  (git! worktree "reset" "-q" "--hard" revision)
+  (git! worktree "clean" "-q" "-fd")
   record)
 
 (define (verify-decision-record record)

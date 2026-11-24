@@ -496,15 +496,23 @@
      (unless (equal? (hash-ref layer 'contract-revision #f) (hash-ref layer 'evaluated-revision #f))
        (problem! "a historical evaluation must use the evaluated revision's own layer"))
      (unless (hash-ref layer 'layer-present-at-evaluated-revision? #f)
-       (problem! "a historical evaluation must record that the layer exists at the revision"))]
+       (problem! "a historical evaluation must record that the layer exists at the revision"))
+     (unless (eq? (as-symbol (hash-ref layer 'mode 'unrecognized)) 'historical)
+       (problem! "a historical evaluation must be recorded with mode historical"))
+     (when (hash-ref layer 'counterfactual? #f)
+       (problem! "a historical evaluation must not claim counterfactual?"))]
     [(counterfactual)
      (when (equal? (hash-ref layer 'contract-revision #f) (hash-ref layer 'evaluated-revision #f))
        (problem! "a counterfactual evaluation must name a different contract revision"))
      (unless (eq? (as-symbol (hash-ref layer 'mode 'unrecognized)) 'counterfactual)
-       (problem! "a counterfactual evaluation must be labelled as such"))]
+       (problem! "a counterfactual evaluation must be labelled as such"))
+     (unless (hash-ref layer 'counterfactual? #f)
+       (problem! "a counterfactual evaluation must record counterfactual? #t"))]
     [(absent-at-revision)
      (unless (eq? status 'absent)
-       (problem! "an absent contract layer must have status 'absent"))]
+       (problem! "an absent contract layer must have status 'absent"))
+     (when (hash-ref layer 'counterfactual? #f)
+       (problem! "an absent contract layer cannot be counterfactual"))]
     [else (void)]))
 
 (define (check-evaluated-layer layer comprehensive-files problem!)
@@ -520,6 +528,13 @@
   (define instruction (as-symbol (hash-ref selection 'instruction 'unrecognized)))
   (define required (hash-ref selection 'required 'unresolved))
   (define tests (hash-ref selection 'tests 'unresolved))
+  (define decision-required (hash-ref decision 'required 'missing))
+  (unless (and (list? decision-required) (andmap string? decision-required))
+    (problem! "recorded decision required set is not a list of paths"))
+  (when (and (list? required)
+             (list? decision-required)
+             (not (equal? (sorted-unique required) (sorted-unique decision-required))))
+    (problem! "recorded selection required set differs from the recorded decision's"))
   (unless (memq verdict '(covered escalate))
     (problem! (format "unknown recorded verdict ~a" verdict)))
   (unless (list? escalations)

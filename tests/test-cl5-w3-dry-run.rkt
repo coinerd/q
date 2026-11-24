@@ -9,6 +9,7 @@
 ;; @boundary unit
 
 (require rackunit
+         (file "../scripts/cl5/contract-layer.rkt")
          racket/list
          "../scripts/cl5/w3-dry-run.rkt")
 
@@ -126,8 +127,7 @@
   (check-eq? (decision-instruction (hash 'state 'present 'instruction 'run-comprehensive))
              'run-comprehensive)
   (check-eq? (decision-instruction (hash 'state 'present)) 'unavailable)
-  (check-eq? (decision-instruction (hash 'state 'present 'status 'invalid
-                                        'problems (list "x")))
+  (check-eq? (decision-instruction (hash 'state 'present 'status 'invalid 'problems (list "x")))
              'unavailable)
   (check-eq? (decision-instruction (hash 'state 'unexpected)) 'unavailable))
 
@@ -178,10 +178,22 @@
 (define comprehensive-files (list "tests/test-a.rkt" "tests/test-b.rkt" "tests/test-c.rkt"))
 
 (define producers
-  (list (hash 'name "test (0)" 'declared 2 'files-count 2
-              'digest (enumeration-digest (list "tests/test-a.rkt" "tests/test-b.rkt")))
-        (hash 'name "security" 'declared 1 'files-count 1
-              'digest (enumeration-digest (list "tests/test-c.rkt")))))
+  (list (hash 'name
+              "test (0)"
+              'declared
+              2
+              'files-count
+              2
+              'digest
+              (enumeration-digest (list "tests/test-a.rkt" "tests/test-b.rkt")))
+        (hash 'name
+              "security"
+              'declared
+              1
+              'files-count
+              1
+              'digest
+              (enumeration-digest (list "tests/test-c.rkt")))))
 
 (define (producers-digest-of producers)
   (enumeration-digest
@@ -211,9 +223,12 @@
                  'escalations
                  (list (hash 'code "no-consumer-detector" 'module "m.rkt" 'detail "d" 'tests '())))
            'selection
-           (hash 'instruction 'run-comprehensive
-                 'required (list "tests/test-a.rkt")
-                 'tests comprehensive-files))]
+           (hash 'instruction
+                 'run-comprehensive
+                 'required
+                 (list "tests/test-a.rkt")
+                 'tests
+                 comprehensive-files))]
     [(unavailable)
      (hash 'state
            'present
@@ -356,15 +371,13 @@
 (test-case "a producer digest edit is caught by the aggregate producer digest"
   (define r (record))
   (define ci (hash-ref r 'comprehensive-input))
-  (define tampered (hash-set ci 'producers
-                             (list (hash 'name "test (0)" 'declared 2 'files-count 2
-                                         'digest "0000"))))
+  (define tampered
+    (hash-set ci 'producers (list (hash 'name "test (0)" 'declared 2 'files-count 2 'digest "0000"))))
   (check-exn exn:fail? (lambda () (verify-record (hash-set r 'comprehensive-input tampered)))))
 
 (test-case "a CI-sourced comprehensive timing is caught even without the boolean flag"
   (check-exn exn:fail?
-             (lambda ()
-               (verify-record (record #:comprehensive-source 'ci #:selected-seconds 9.5)))))
+             (lambda () (verify-record (record #:comprehensive-source 'ci #:selected-seconds 9.5)))))
 
 (test-case "unavailable comprehensive timing must carry no value"
   (define r (record))
@@ -377,8 +390,7 @@
   (check-exn exn:fail? (lambda () (verify-record (hash-set r 'timing timing)))))
 
 (test-case "same-host cannot be claimed without a comprehensive timing"
-  (check-exn exn:fail?
-             (lambda () (verify-record (record #:same-host #t)))))
+  (check-exn exn:fail? (lambda () (verify-record (record #:same-host #t)))))
 
 ;; ---- decision records (F3) ---------------------------------------------------------
 
@@ -415,12 +427,7 @@
         'measured-tree-sha
         "tree-1"
         'comprehensive
-        (hash 'files
-              decision-files
-              'union-count
-              1
-              'digest
-              (enumeration-digest decision-files))
+        (hash 'files decision-files 'union-count 1 'digest (enumeration-digest decision-files))
         'contract-layer
         (decision-layer)
         'decision-verified?
@@ -432,9 +439,7 @@
 (test-case "a decision record whose tree or revision was edited is refused"
   (check-exn exn:fail?
              (lambda ()
-               (verify-decision-record (hash-set (decision-record)
-                                                'measured-tree-sha
-                                                "tree-2"))))
+               (verify-decision-record (hash-set (decision-record) 'measured-tree-sha "tree-2"))))
   (check-exn exn:fail?
              (lambda () (verify-decision-record (hash-set (decision-record) 'revision "rev-2")))))
 
@@ -446,8 +451,31 @@
 
 (test-case "a decision record must claim and carry a valid layer block"
   (check-exn exn:fail?
-             (lambda ()
-               (verify-decision-record (hash-set (decision-record) 'decision-verified? #f))))
+             (lambda () (verify-decision-record (hash-set (decision-record) 'decision-verified? #f))))
   (define layer (hash-set (decision-layer) 'status 'invalid))
   (check-exn exn:fail?
              (lambda () (verify-decision-record (hash-set (decision-record) 'contract-layer layer)))))
+
+(test-case "a case record whose classification mode disagrees with its layer is refused"
+  (define r (record #:instruction 'run-comprehensive #:w3 'correct-escalation))
+  (define layer
+    (hash-set (hash-set (hash-set (hash-set (hash-ref r 'contract-layer) 'state 'counterfactual)
+                                  'mode
+                                  'counterfactual)
+                        'counterfactual?
+                        #t)
+              'contract-revision
+              "rev-other"))
+  ;; the layer itself is now a well-formed counterfactual ...
+  (check-equal? (validate-layer-record layer comprehensive-files) '())
+  ;; ... so only the classification-mode agreement can catch the mismatch.
+  ;; Consistent labelling verifies; a disagreement is refused.
+  (check-true (verify-record
+               (hash-set (hash-set r 'contract-layer layer)
+                         'classification
+                         (hash-set (hash-ref r 'classification) 'mode 'counterfactual))))
+  (check-exn exn:fail?
+             (lambda ()
+               (verify-record (hash-set (hash-set r 'contract-layer layer)
+                                        'classification
+                                        (hash-set (hash-ref r 'classification) 'mode 'historical))))))

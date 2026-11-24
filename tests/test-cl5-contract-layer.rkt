@@ -175,6 +175,8 @@
         (if (eq? state 'counterfactual) "rev-contract" "rev-evaluated")
         'layer-present-at-evaluated-revision?
         (not (eq? state 'counterfactual))
+        'counterfactual?
+        (eq? state 'counterfactual)
         'decision
         (hash 'verdict verdict 'required required 'escalations (list (escalation "x")))
         'selection
@@ -182,6 +184,35 @@
 
 (test-case "a well-formed evaluated record verifies"
   (check-equal? (validate-layer-record (evaluated-record) comprehensive) '()))
+
+(test-case "a recorded selection may not shrink the decision's required set"
+  ;; Only the decision.required cross-check catches this: the union invariant
+  ;; still holds because the dropped test is in the comprehensive enumeration.
+  (define layer
+    (hash-set
+     (evaluated-record)
+     'decision
+     (hash-set (hash-ref (evaluated-record) 'decision) 'required (list "tests/a.rkt" "tests/b.rkt"))))
+  (check-pair? (validate-layer-record layer comprehensive)))
+
+(test-case "a historical evaluation may not be relabelled counterfactual"
+  (check-pair? (validate-layer-record (hash-set (evaluated-record) 'mode 'counterfactual)
+                                      comprehensive))
+  (check-pair? (validate-layer-record (hash-set (evaluated-record) 'counterfactual? #t)
+                                      comprehensive))
+  ;; and a counterfactual must say so
+  (check-pair?
+   (validate-layer-record
+    (hash-set (evaluated-record #:state 'counterfactual #:mode 'counterfactual) 'counterfactual? #f)
+    comprehensive)))
+
+(test-case "the frozen W3.1 shape is accepted only as absence"
+  (check-equal? (validate-layer-record (hash 'state 'absent-at-revision 'instruction 'run-required)
+                                       '())
+                '())
+  (check-pair? (validate-layer-record (hash 'state 'present 'instruction 'run-required) '()))
+  (check-pair?
+   (validate-layer-record (hash 'state 'absent-at-revision 'instruction 'run-comprehensive) '())))
 
 (test-case "a counterfactual evaluation may not be recorded as historical"
   (check-pair? (validate-layer-record (evaluated-record #:state 'counterfactual) comprehensive))
@@ -216,6 +247,10 @@
         "rev-evaluated"
         'layer-present-at-evaluated-revision?
         #t
+        'mode
+        'historical
+        'counterfactual?
+        #f
         'problems
         problems))
 
