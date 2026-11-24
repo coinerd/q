@@ -167,6 +167,17 @@
 (define selected-files (list "tests/test-a.rkt" "tests/test-b.rkt"))
 (define comprehensive-files (list "tests/test-a.rkt" "tests/test-b.rkt" "tests/test-c.rkt"))
 
+(define producers
+  (list (hash 'name "test (0)" 'declared 2 'files-count 2
+              'digest (enumeration-digest (list "tests/test-a.rkt" "tests/test-b.rkt")))
+        (hash 'name "security" 'declared 1 'files-count 1
+              'digest (enumeration-digest (list "tests/test-c.rkt")))))
+
+(define (producers-digest-of producers)
+  (enumeration-digest
+   (for/list ([p (in-list producers)])
+     (format "~a:~a:~a" (hash-ref p 'name) (hash-ref p 'declared) (hash-ref p 'digest)))))
+
 (define (record #:w2 [w2 'missed]
                 #:w3 [w3 'unsafe-reduced]
                 #:instruction [instruction 'run-required]
@@ -174,11 +185,21 @@
                 #:control-selected [control-selected 'pass]
                 #:defect-comp [defect-comp 'fail]
                 #:control-comp [control-comp 'pass]
-                #:ci-substituted [ci-substituted #f])
+                #:ci-substituted [ci-substituted #f]
+                #:comprehensive-source [comprehensive-source 'unavailable]
+                #:same-host [same-host 'unavailable]
+                #:selected-seconds [selected-seconds 9.5])
   (hash 'selection-input
         (hash 'files selected-files 'digest (enumeration-digest selected-files))
         'comprehensive-input
-        (hash 'files comprehensive-files 'digest (enumeration-digest comprehensive-files))
+        (hash 'files
+              comprehensive-files
+              'digest
+              (enumeration-digest comprehensive-files)
+              'producers
+              producers
+              'producers-digest
+              (producers-digest-of producers))
         'provenance
         (hash 'provenance-ok?
               #t
@@ -197,7 +218,7 @@
               'selected
               (hash 'verdict defect-selected 'selected selected-files)
               'strategy
-              (hash 'verdict defect-selected 'selected selected-files))
+              (hash 'verdict defect-selected 'selected selected-files 'seconds selected-seconds))
         'control
         (hash 'comprehensive-verdict
               control-comp
@@ -206,7 +227,16 @@
         'classification
         (hash 'w2 w2 'w3-outcome w3)
         'timing
-        (hash 'ci-timing-substituted? ci-substituted)))
+        (hash 'ci-timing-substituted?
+              ci-substituted
+              'comprehensive-source
+              comprehensive-source
+              'comprehensive-seconds
+              (if (eq? comprehensive-source 'unavailable) 'unavailable 90)
+              'same-host
+              same-host
+              'selected-seconds
+              selected-seconds)))
 
 (test-case "a faithful record re-derives its own classification"
   (check-true (verify-record (record))))
@@ -268,3 +298,30 @@
 (test-case "the W2 label stays the shadow-behaviour label when the layer escalates"
   ;; same shadow facts (reduced passes, comprehensive fails), different decision
   (check-true (verify-record (record #:instruction 'run-comprehensive #:w3 'correct-escalation))))
+
+(test-case "a producer digest edit is caught by the aggregate producer digest"
+  (define r (record))
+  (define ci (hash-ref r 'comprehensive-input))
+  (define tampered (hash-set ci 'producers
+                             (list (hash 'name "test (0)" 'declared 2 'files-count 2
+                                         'digest "0000"))))
+  (check-exn exn:fail? (lambda () (verify-record (hash-set r 'comprehensive-input tampered)))))
+
+(test-case "a CI-sourced comprehensive timing is caught even without the boolean flag"
+  (check-exn exn:fail?
+             (lambda ()
+               (verify-record (record #:comprehensive-source 'ci #:selected-seconds 9.5)))))
+
+(test-case "unavailable comprehensive timing must carry no value"
+  (define r (record))
+  (define timing (hash-set (hash-ref r 'timing) 'comprehensive-seconds 90))
+  (check-exn exn:fail? (lambda () (verify-record (hash-set r 'timing timing)))))
+
+(test-case "selected timing must be the deployed strategy's own measurement"
+  (define r (record))
+  (define timing (hash-set (hash-ref r 'timing) 'selected-seconds 1.0))
+  (check-exn exn:fail? (lambda () (verify-record (hash-set r 'timing timing)))))
+
+(test-case "same-host cannot be claimed without a comprehensive timing"
+  (check-exn exn:fail?
+             (lambda () (verify-record (record #:same-host #t)))))

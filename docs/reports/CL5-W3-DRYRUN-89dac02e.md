@@ -32,7 +32,7 @@ The current revision is **not** usable for this gate yet: its comprehensive cont
 | exact reproducibility: tree SHA, contract revision, selection input | `provenance` + `selection-input` + `contract-layer` blocks; committed tree re-derived from the mutation | **PASS** |
 | explicit test attribution (selected and comprehensive enumerated, not inferred) | selected: shipped `--explain` plan (3 files); comprehensive: 8 CI producers' `--explain` plans (1 394 files) | **PASS** |
 | classification follows the frozen W3 protocol and matches W2 D5 | W2 `missed`; W3 `unsafe-reduced`; both re-derived by `verify-record` | **PASS** |
-| reliable timing: same host, no CI substitution | strategy run 9.08 s on this host; `C_comp` recorded `unavailable`, M6 `unavailable`; CI-source timing **refused** by the driver | **PASS (bounded)** |
+| reliable timing: same host, no CI substitution | strategy run 9.76 s on this host; `C_comp` recorded `unavailable`, M6 `unavailable`; CI-source timing **refused** by the driver | **PASS (bounded)** |
 | independent reproducibility | `racket scripts/cl5/w3-dry-run.rkt --verify <json>`; independent agent re-derivation (§ below) | **PASS** |
 
 ## Provenance chain
@@ -93,8 +93,8 @@ record keeps every producer's digest alongside the union.
 
 | Axis | Defect | Clean control |
 |---|---|---|
-| enumerated execution (3 files) | **pass** (21.9 s total, per-file) | pass (same 3 files) |
-| deployed strategy (`./qt quick --changed HEAD`) | **pass** (9.08 s) | not run: zero selection on a clean tree is a failure by design |
+| enumerated execution (3 files) | **pass** (22.10 s total, per-file) | pass (same 3 files) |
+| deployed strategy (`./qt quick --changed HEAD`) | **pass** (9.76 s) | not run: zero selection on a clean tree is a failure by design |
 | comprehensive (exact-SHA CI, reused by tree key) | **fail** — run `45043919793`, head `48c08c1d…`, tree `24f225d4…` | **pass** — run `45063731406`, head `642c84d9…`, tree `aaf60973…` |
 | failed jobs (defect) | `lint-quality`, `test (0)`, `test (1)`, `test (2)`, `test-aggregate` | — |
 | behavioural detectors (defect) | `test (0)`, `test (1)`, `test (2)`, `test-aggregate` | — |
@@ -121,19 +121,19 @@ recorded verdicts and raises if either label is edited.
 | Quantity | Value |
 |---|---|
 | host | `vps2402959.fastwebserver.de`, 4 CPUs, Racket 8.10, Linux |
-| `C_sel` (deployed strategy, one process) | **9.08 s** |
-| per-file enumerated execution (diagnostic only) | 21.9 s — three separate process startups; **not** `C_sel` |
+| `C_sel` (deployed strategy, one process) | **9.76 s** |
+| per-file enumerated execution (diagnostic only) | 22.10 s — three separate process startups; **not** `C_sel` |
 | `C_comp` (local `./qt full`, same host) | **unavailable** — W2 measured that a local comprehensive run does not finish within the harness bound (two attempts ≥ 90 min); it is not re-attempted here |
 | `M6` | **unavailable** (needs corpus-level M3 and a matched-host `C_comp`) |
 | CI timing substituted? | **no** — `timing-record` raises on `#:comprehensive-source 'ci` |
 | `same-host` | `unavailable` (no comprehensive timing exists to compare against) |
 
 So the dry run validates the *timing mechanism* (one host, one method, explicit refusal of CI
-durations) and honestly reports that the 40 % cost hypothesis is still unmeasured. `./qt full`'s
-1 590-file local suite at this revision is not the CI surface either: the CI comprehensive surface is the producer
+durations) and honestly reports that the 40 % cost hypothesis is still unmeasured. `./qt full --explain` at
+this revision reports 1 590 files; that local suite is not the CI surface either: the CI comprehensive surface is the producer
 union above (1 394 files). Neither is claimed as `C_comp`.
 
-`9.08 s` is **one** run, recorded as a mechanism check, not a cost estimate: W3.2 must take n ≥ 3
+`9.76 s` is **one** run, recorded as a mechanism check, not a cost estimate: W3.2 must take n ≥ 3
 per state on the same host and report the median (the protocol's measurement rule), and a single
 sample must never be promoted into M6.
 
@@ -180,10 +180,18 @@ observation — are unchanged.
    racket scripts/cl5/w3-dry-run.rkt --verify docs/reports/CL5-W3-DRYRUN-89dac02e.json
    ```
 
-   It re-derives: enumeration digests from the explicit file lists; the executed set and the deployed
-   strategy's set against the enumeration; the provenance assertion; the W2 and W3 labels from the
-   recorded verdicts; and the timing-substitution rule. Editing a label, a file list or a digest
-   raises.
+   It re-derives: enumeration digests from the explicit file lists; the producer aggregate digest;
+   the executed set and the deployed strategy's set against the enumeration; the provenance
+   assertion; the W2 and W3 labels from the recorded verdicts; and the timing rules (selected seconds
+   must equal the deployed strategy's own measurement; an `unavailable` comprehensive timing must
+   carry no value; a `ci` source, a substituted-timing flag, or a `same-host` claim without a
+   comparable measurement are rejected). Editing a label, a file list, a producer row, a timing
+   field or a digest raises.
+
+   What `--verify` cannot do: it cannot detect a *consistent* forgery of the verdicts themselves,
+   because those verdicts are the trust anchor. The external anchors are the git tree SHAs and the
+   CI runs keyed by tree SHA (§ Provenance chain); an independent verifier must check those against
+   GitHub, not only the record.
 3. The underlying CI verdicts are public and keyed by tree SHA, not by this record:
    `gh run view 45043919793` / `45063731406` (both `workflow_dispatch`, heads `48c08c1d…` /
    `642c84d9…`).
@@ -250,8 +258,8 @@ its revision. Until then, a `present`-layer case has no W3 label from this drive
 
 ### F4 — enumeration and timing must not be conflated
 
-The first version of this driver timed the per-file enumerated execution (21.9 s) as `C_sel`; that
-measures three process startups, not the deployed strategy (9.08 s). The record now separates
+The first version of this driver timed the per-file enumerated execution as `C_sel`; that
+measures three process startups, not the deployed strategy. The record now separates
 `selected` (enumerated, diagnostic) from `strategy` (deployed, timed) and refuses to time the former
 as the latter. This matters for M6, where `C_sel` must be the strategy actually deployed.
 

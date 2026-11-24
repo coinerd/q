@@ -198,16 +198,26 @@
   (check-shards-partition records)
   (define union
     (sort (remove-duplicates (append* (map (lambda (r) (hash-ref r 'files)) records))) string<?))
+  (define producers
+    (for/list ([record (in-list records)])
+      (hash 'name
+            (hash-ref record 'name)
+            'declared
+            (hash-ref record 'declared)
+            'files-count
+            (length (hash-ref record 'files))
+            'digest
+            (enumeration-digest (hash-ref record 'files)))))
+  ;; The per-producer file lists are not stored (they are mostly the union), so
+  ;; their digests are inputs, not re-derivations. An aggregate digest makes an
+  ;; edited producer row detectable the same way the list digests are: integrity
+  ;; against corruption/editing, not a signature.
   (hash 'producers
-        (for/list ([record (in-list records)])
-          (hash 'name
-                (hash-ref record 'name)
-                'declared
-                (hash-ref record 'declared)
-                'files-count
-                (length (hash-ref record 'files))
-                'digest
-                (enumeration-digest (hash-ref record 'files))))
+        producers
+        'producers-digest
+        (enumeration-digest
+         (for/list ([p (in-list producers)])
+           (format "~a:~a:~a" (hash-ref p 'name) (hash-ref p 'declared) (hash-ref p 'digest))))
         'files
         union
         'union-count
@@ -328,6 +338,12 @@
 
 ;; Re-derive every claim that can be re-derived from the record alone. This is
 ;; the mechanism an independent agent uses: it must not trust the stored label.
+;;
+;; What this CANNOT do: it cannot detect a *consistent* forgery of the recorded
+;; verdicts, because the verdicts are the trust anchor. The external anchors are
+;; the git tree SHAs (the committed tree is re-derived from the frozen mutation
+;; at run time) and the CI runs keyed by tree SHA; a verifier must check those
+;; against GitHub, not only this record.
 (define (verify-record record)
   (define problems '())
   (define (problem! message)
@@ -378,9 +394,34 @@
                             control-comprehensive))
   (unless (eq? expected-w2 (as-symbol (hash-ref (hash-ref record 'classification) 'w2)))
     (problem! (format "W2 classification re-derives to ~a" expected-w2)))
-  ;; 5. no crossed-machine timing and no CI-derived C_comp
-  (when (hash-ref (hash-ref record 'timing) 'ci-timing-substituted?)
+  ;; 5. producer accounting and its aggregate digest
+  (define producers (hash-ref comprehensive-input 'producers))
+  (when (hash-ref comprehensive-input 'producers-digest #f)
+    (unless (equal?
+             (hash-ref comprehensive-input 'producers-digest)
+             (enumeration-digest
+              (for/list ([p (in-list producers)])
+                (format "~a:~a:~a" (hash-ref p 'name) (hash-ref p 'declared) (hash-ref p 'digest)))))
+      (problem! "the producer aggregate digest does not match the producer rows")))
+  (for ([p (in-list producers)])
+    (unless (= (hash-ref p 'declared) (hash-ref p 'files-count))
+      (problem! (format "producer ~a's count and declared total disagree" (hash-ref p 'name)))))
+  ;; 6. timing consistency: a single host, no CI substitution, and the timed
+  ;; value is the deployed strategy's own measurement.
+  (define timing (hash-ref record 'timing))
+  (define source (as-symbol (hash-ref timing 'comprehensive-source)))
+  (define comprehensive-seconds (hash-ref timing 'comprehensive-seconds))
+  (when (hash-ref timing 'ci-timing-substituted?)
     (problem! "CI timing was substituted into the record"))
+  (when (eq? source 'ci)
+    (problem! "comprehensive timing was sourced from CI"))
+  (when (and (eq? source 'unavailable) (not (eq? (as-symbol comprehensive-seconds) 'unavailable)))
+    (problem! "comprehensive timing is declared unavailable but carries a value"))
+  (unless (= (hash-ref timing 'selected-seconds) (hash-ref (hash-ref defect 'strategy) 'seconds))
+    (problem! "selected timing is not the deployed strategy's measured seconds"))
+  (define same-host (as-symbol (hash-ref timing 'same-host)))
+  (when (and (eq? source 'unavailable) (not (eq? same-host 'unavailable)))
+    (problem! "same-host is claimed without a comprehensive timing to compare"))
   (if (null? problems)
       #t
       (raise-arguments-error 'verify-record
