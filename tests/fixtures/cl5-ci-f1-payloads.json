@@ -1,0 +1,168 @@
+{
+ "security-setup-timeout-45280459705": {
+  "conclusion": "failure",
+  "name": "security",
+  "status": "completed",
+  "steps": [
+   {
+    "conclusion": "success",
+    "name": "Set up job"
+   },
+   {
+    "conclusion": "success",
+    "name": "Run actions/checkout@v7"
+   },
+   {
+    "conclusion": "success",
+    "name": "Cache Racket packages"
+   },
+   {
+    "conclusion": "failure",
+    "name": "Run ./.github/actions/setup-racket"
+   },
+   {
+    "conclusion": "skipped",
+    "name": "Clear stale bytecode"
+   },
+   {
+    "conclusion": "skipped",
+    "name": "Run security test suite (parallel)"
+   },
+   {
+    "conclusion": "success",
+    "name": "Test results summary"
+   },
+   {
+    "conclusion": "success",
+    "name": "Upload security test log"
+   },
+   {
+    "conclusion": "success",
+    "name": "Upload test results JSON"
+   },
+   {
+    "conclusion": "success",
+    "name": "Post Run ./.github/actions/setup-racket"
+   },
+   {
+    "conclusion": "skipped",
+    "name": "Post Cache Racket packages"
+   },
+   {
+    "conclusion": "success",
+    "name": "Post Run actions/checkout@v7"
+   },
+   {
+    "conclusion": "success",
+    "name": "Complete job"
+   }
+  ]
+ },
+ "shard-assertion-failure-45043919793": {
+  "conclusion": "failure",
+  "name": "test (0)",
+  "status": "completed",
+  "steps": [
+   {
+    "conclusion": "success",
+    "name": "Set up job"
+   },
+   {
+    "conclusion": "success",
+    "name": "Run actions/checkout@v7"
+   },
+   {
+    "conclusion": "success",
+    "name": "Cache Racket packages"
+   },
+   {
+    "conclusion": "success",
+    "name": "Run ./.github/actions/setup-racket"
+   },
+   {
+    "conclusion": "skipped",
+    "name": "Resolve the verified compiled root (W4 activation)"
+   },
+   {
+    "conclusion": "skipped",
+    "name": "Stamp the observed producer manifest binding (trial evidence)"
+   },
+   {
+    "conclusion": "success",
+    "name": "Export prepared-environment telemetry contract"
+   },
+   {
+    "conclusion": "success",
+    "name": "Clear stale bytecode (belt; shared purge lives in setup-racket)"
+   },
+   {
+    "conclusion": "success",
+    "name": "Eager gate start stamp"
+   },
+   {
+    "conclusion": "success",
+    "name": "Compile gate (one bounded eager compile)"
+   },
+   {
+    "conclusion": "success",
+    "name": "Eager gate stop stamp"
+   },
+   {
+    "conclusion": "success",
+    "name": "Emit prepared-environment restore record"
+   },
+   {
+    "conclusion": "success",
+    "name": "Upload prepared-environment restore records"
+   },
+   {
+    "conclusion": "failure",
+    "name": "Run test shard 0/3"
+   },
+   {
+    "conclusion": "success",
+    "name": "Upload compiled-root resolution telemetry"
+   },
+   {
+    "conclusion": "success",
+    "name": "Upload compiled-root install map"
+   },
+   {
+    "conclusion": "success",
+    "name": "Stamp shard run SHA (shard-side attestation)"
+   },
+   {
+    "conclusion": "success",
+    "name": "Test results summary"
+   },
+   {
+    "conclusion": "success",
+    "name": "Test failure summary"
+   },
+   {
+    "conclusion": "success",
+    "name": "Upload test log"
+   },
+   {
+    "conclusion": "success",
+    "name": "Upload test results JSON"
+   },
+   {
+    "conclusion": "success",
+    "name": "Post Run ./.github/actions/setup-racket"
+   },
+   {
+    "conclusion": "skipped",
+    "name": "Post Cache Racket packages"
+   },
+   {
+    "conclusion": "success",
+    "name": "Post Run actions/checkout@v7"
+   },
+   {
+    "conclusion": "success",
+    "name": "Complete job"
+   }
+  ]
+ }
+}

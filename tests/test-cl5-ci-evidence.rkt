@@ -21,8 +21,20 @@
 ;;  12. case classification separates the selected and comprehensive axes
 
 (require rackunit
+         json
+         racket/file
          racket/list
+         racket/runtime-path
          (file "../scripts/cl5/ci-evidence.rkt"))
+
+(define-runtime-path f1-fixture "fixtures/cl5-ci-f1-payloads.json")
+
+;; Real recorded job payloads (steps only): the shape that produced the W3.1
+;; F1 finding, pinned so a future refactor cannot silently reclassify it.
+(define (f1-payload key)
+  (define payloads (with-input-from-file f1-fixture (lambda () (read-json))))
+  ;; read-json turns JSON object keys into symbols
+  (hash-ref payloads (string->symbol key)))
 
 (define (job name conclusion [failed-steps '()])
   (hash 'name
@@ -152,3 +164,95 @@
     (check-equal? (classify-case-evidence 'unavailable 'pass 'fail 'pass) 'unavailable)
     (check-equal? (classify-case-evidence 'fail 'fail 'fail 'pass) 'unavailable)
     (check-equal? (classify-case-evidence 'fail 'pass 'fail 'fail) 'unavailable)))
+
+(test-case "F1: a setup-action failure is infrastructure, not a detection"
+  ;; Recorded payload: security job 138065565620 of run 45280459705. The
+  ;; setup-racket action timed out; the lane step never ran.
+  (define verdict (f1-payload "security-setup-timeout-45280459705"))
+  (define jobs
+    (for/list ([j (in-list (green-jobs))])
+      (if (equal? (hash-ref j 'name) "security") verdict j)))
+  (define result (classify-ci-run (run #:conclusion "failure") jobs))
+  (check-eq? (hash-ref result 'verdict) 'unavailable)
+  (check-equal? (hash-ref result 'detecting) '())
+  (check-equal? (map (lambda (j) (hash-ref j 'name)) (hash-ref result 'infrastructure-failures))
+                (list "security"))
+  (check-true (for/or ([reason (in-list (hash-ref result 'unavailable-reasons))])
+                (string-contains? reason "tests did not execute"))))
+
+(test-case "F1: a real test step failure is still a named detection"
+  ;; Recorded payload: shard test (0) of run 45043919793 (D5 defect).
+  (define verdict (f1-payload "shard-assertion-failure-45043919793"))
+  (define jobs
+    (for/list ([j (in-list (green-jobs))])
+      (if (equal? (hash-ref j 'name) "test (0)") verdict j)))
+  (define result (classify-ci-run (run #:conclusion "failure") jobs))
+  (check-eq? (hash-ref result 'verdict) 'fail)
+  (check-equal? (map (lambda (j) (hash-ref j 'name)) (hash-ref result 'detecting)) (list "test (0)"))
+  (check-equal? (hash-ref (first (hash-ref result 'detecting)) 'failed-steps)
+                (list "Run test shard 0/3"))
+  (check-equal? (hash-ref result 'infrastructure-failures) '()))
+
+(test-case "F1: only setup/action step names are infrastructure"
+  (for ([name (in-list (list "Set up job"
+                             "Run actions/checkout@v7"
+                             "Cache Racket packages"
+                             "Run ./.github/actions/setup-racket"
+                             "Restore verified installer archive"
+                             "Install Racket"))])
+    (check-true (infrastructure-step? name) name))
+  (for ([name (in-list (list "Run security test suite (parallel)"
+                             "Run test shard 0/3"
+                             "Run fast test shard 1/3"
+                             "Run all lint checks"
+                             "Clear stale bytecode"
+                             "Test results summary"))])
+    (check-false (infrastructure-step? name) name)))
+
+(test-case "F1: a failed job with no step evidence is unattributable, not a detection"
+  (define jobs
+    (for/list ([j (in-list (green-jobs))])
+      (if (equal? (hash-ref j 'name) "test (2)")
+          (hash 'name "test (2)" 'status "completed" 'conclusion "failure" 'steps '())
+          j)))
+  (define result (classify-ci-run (run #:conclusion "failure") jobs))
+  (check-eq? (hash-ref result 'verdict) 'unavailable)
+  (check-equal? (hash-ref result 'detecting) '())
+  (check-true (for/or ([reason (in-list (hash-ref result 'unavailable-reasons))])
+                (string-contains? reason "no step evidence"))))
+
+(test-case "F1: infrastructure + behavioural failures together are unavailable evidence"
+  (define setup-failed (f1-payload "security-setup-timeout-45280459705"))
+  (define shard-failed (f1-payload "shard-assertion-failure-45043919793"))
+  (define jobs
+    (for/list ([j (in-list (green-jobs))])
+      (cond
+        [(equal? (hash-ref j 'name) "security") setup-failed]
+        [(equal? (hash-ref j 'name) "test (0)") shard-failed]
+        [else j])))
+  (define result (classify-ci-run (run #:conclusion "failure") jobs))
+  (check-eq? (hash-ref result 'verdict) 'unavailable)
+  ;; the behavioural failure is still recorded, never promoted past the missing producer
+  (check-equal? (map (lambda (j) (hash-ref j 'name)) (hash-ref result 'detecting)) (list "test (0)")))
+
+(test-case "F1: an optional job's infrastructure failure stays red but names no detector"
+  ;; Optional producers do not make the comprehensive surface unavailable, but
+  ;; their infrastructure failure must still be recorded, never left a bare fail.
+  (define jobs
+    (for/list ([j (in-list (green-jobs))])
+      (if (equal? (hash-ref j 'name) "fast-env")
+          (hash 'name
+                "fast-env"
+                'status
+                "completed"
+                'conclusion
+                "failure"
+                'steps
+                (list (hash 'name "Run actions/checkout@v7" 'conclusion "failure")
+                      (hash 'name "Run the suite" 'conclusion "skipped")))
+          j)))
+  (define result (classify-ci-run (run #:conclusion "failure") jobs))
+  (check-eq? (hash-ref result 'verdict) 'fail)
+  (check-equal? (hash-ref result 'detecting) '())
+  (check-equal? (map (lambda (j) (hash-ref j 'name)) (hash-ref result 'infrastructure-failures))
+                (list "fast-env")))

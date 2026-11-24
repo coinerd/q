@@ -37,19 +37,76 @@
          wait-for-run
          jobs-for-run
          ci-verdict-for-sha
-         scratch-branch-name)
+         scratch-branch-name
+         infrastructure-step?
+         failure-kind)
 
 ;; Conclusions that mean "the comprehensive surface did not run".
 (define unavailable-conclusions '(cancelled timed_out action_required stale))
+
+;; ---- F1: infrastructure failure vs behavioural detection (pre-registered) ----------
+;;
+;; A job can fail without its tests ever executing: a setup action times out on
+;; the network, an installer or a cache restore dies, or the job stops before its
+;; lane runs. Counting such a job as a behavioural detection would fabricate the
+;; very evidence the W3 protocol needs, and reading it as a "security failure"
+;; would misreport a check that never ran.
+;;
+;; Pre-registered rule (2026-11-24, applies to evidence classified after this
+;; revision; earlier cached verdicts are NEVER rewritten):
+;;
+;;   A failed job is an INFRASTRUCTURE failure when every step that failed is a
+;;   setup/action step (the pre-registered name patterns below). Its tests did
+;;   not execute, so it is 'unavailable' for that required producer, never
+;;   'fail' and never a detector.
+;;
+;;   A failed job with no step evidence is UNATTRIBUTABLE and is also
+;;   'unavailable' (fail closed: never turn missing evidence into a detection).
+;;
+;;   Any failing step that is not a setup/action step is BEHAVIOURAL: the job's
+;;   own command ran and failed, so it remains a named detector.
+;;
+;; The patterns are deliberately narrow and observable. They describe steps that
+;; prepare an environment (GitHub-provided actions and this repository's own
+;; `./.github/actions/*` setup actions), not test, lint or aggregation steps.
+(define infrastructure-step-patterns
+  (list #px"^Set up job$"
+        #px"^Run actions/"
+        #px"^Run \\./\\.github/actions/"
+        #px"^(Cache|Restore|Install|Set up) "))
+
+(define (infrastructure-step? name)
+  (for/or ([pattern (in-list infrastructure-step-patterns)])
+    (and (regexp-match? pattern name) #t)))
+
+;; 'none / 'behavioural / 'infrastructure / 'unattributable
+(define (failure-kind conclusion failed-steps)
+  (cond
+    [(not (equal? conclusion "failure")) 'none]
+    [(null? failed-steps) 'unattributable]
+    [(for/and ([step (in-list failed-steps)])
+       (infrastructure-step? step))
+     'infrastructure]
+    [else 'behavioural]))
 
 ;; The REQUIRED producers of the authoritative comprehensive surface. Every one
 ;; of these must be PRESENT in the job list and conclude `success`; absent,
 ;; duplicated, skipped, cancelled, in-progress or unknown is `unavailable`.
 ;; (14 jobs, verified against an all-green main run.)
 (define required-producers
-  '("lint" "lint-quality" "security" "test-platform" "abstraction-audit"
-    "release-dry-run" "smoke (ubuntu-latest)" "test (0)" "test (1)" "test (2)"
-    "workflows (0)" "workflows (1)" "prepared-env-report" "test-aggregate"))
+  '("lint" "lint-quality"
+           "security"
+           "test-platform"
+           "abstraction-audit"
+           "release-dry-run"
+           "smoke (ubuntu-latest)"
+           "test (0)"
+           "test (1)"
+           "test (2)"
+           "workflows (0)"
+           "workflows (1)"
+           "prepared-env-report"
+           "test-aggregate"))
 
 ;; Jobs that are part of the graph but legitimately skipped on a
 ;; workflow_dispatch run of ci.yml: release-readiness is tag-only, fast-env is
@@ -73,6 +130,10 @@
   (define conclusion (hash-ref run 'conclusion #f))
   (define job-summaries
     (for/list ([job (in-list jobs)])
+      (define failed-steps
+        (for/list ([step (in-list (hash-ref job 'steps '()))]
+                   #:when (equal? (hash-ref step 'conclusion #f) "failure"))
+          (hash-ref step 'name "")))
       (hash 'name
             (job-name job)
             'status
@@ -80,9 +141,9 @@
             'conclusion
             (hash-ref job 'conclusion #f)
             'failed-steps
-            (for/list ([step (in-list (hash-ref job 'steps '()))]
-                       #:when (equal? (hash-ref step 'conclusion #f) "failure"))
-              (hash-ref step 'name "")))))
+            failed-steps
+            'failure-kind
+            (failure-kind (hash-ref job 'conclusion #f) failed-steps))))
   (define names (map (lambda (j) (hash-ref j 'name)) job-summaries))
   ;; Duplicate job names mean the payload cannot be read as a complete graph.
   (define duplicates
@@ -96,7 +157,10 @@
                #:when (not (member name names)))
       name))
   (define summary-of
-    (lambda (name) (for/first ([j (in-list job-summaries)] #:when (equal? (hash-ref j 'name) name)) j)))
+    (lambda (name)
+      (for/first ([j (in-list job-summaries)]
+                  #:when (equal? (hash-ref j 'name) name))
+        j)))
   (define (non-success-conclusion? c)
     (and c (memq (string->symbol c) '(skipped cancelled timed_out action_required neutral stale))))
   (define bad-required
@@ -105,28 +169,51 @@
                #:do [(define j (summary-of name))]
                #:when (and (not (equal? (hash-ref j 'conclusion) "success"))
                            (not (equal? (hash-ref j 'conclusion) "failure"))))
-      (format "required producer ~a was ~a/~a"
-              name
-              (hash-ref j 'status)
-              (hash-ref j 'conclusion))))
+      (format "required producer ~a was ~a/~a" name (hash-ref j 'status) (hash-ref j 'conclusion))))
   (define unavailable-reasons
-    (append (cond
-              [(not (equal? status "completed")) (list (format "run status is ~a, not completed" status))]
-              [(and conclusion (memq (string->symbol conclusion) unavailable-conclusions))
-               (list (format "run conclusion is ~a" conclusion))]
-              [else '()])
-            (for/list ([name (in-list duplicates)])
-              (format "duplicate job name ~a in the job list" name))
-            (for/list ([name (in-list missing)])
-              (format "expected job ~a is absent from the job list" name))
-            bad-required))
+    (append
+     (cond
+       [(not (equal? status "completed")) (list (format "run status is ~a, not completed" status))]
+       [(and conclusion (memq (string->symbol conclusion) unavailable-conclusions))
+        (list (format "run conclusion is ~a" conclusion))]
+       [else '()])
+     (for/list ([name (in-list duplicates)])
+       (format "duplicate job name ~a in the job list" name))
+     (for/list ([name (in-list missing)])
+       (format "expected job ~a is absent from the job list" name))
+     bad-required))
   (define failed
     (for/list ([summary (in-list job-summaries)]
                #:when (equal? (hash-ref summary 'conclusion) "failure"))
       summary))
+  ;; F1: a job whose steps never reached its own command did not execute its
+  ;; work. Every such failure is RECORDED with its cause; only a REQUIRED
+  ;; producer makes the comprehensive surface unavailable. An optional job's
+  ;; infrastructure failure still leaves the run red (fail) but never names a
+  ;; detector, so the verdict cannot be mistaken for a behavioural detection.
+  (define infrastructure-failures
+    (for/list ([summary (in-list failed)]
+               #:when (memq (hash-ref summary 'failure-kind) '(infrastructure unattributable)))
+      summary))
+  (define (infrastructure-reason summary)
+    (format "required producer ~a ~a (failed steps: ~a); its tests did not execute"
+            (hash-ref summary 'name)
+            (if (eq? (hash-ref summary 'failure-kind) 'infrastructure)
+                "failed in setup/action steps"
+                "failed with no step evidence")
+            (string-join (hash-ref summary 'failed-steps) ", ")))
+  (define infrastructure-reasons
+    (for/list ([summary (in-list infrastructure-failures)]
+               #:when (member (hash-ref summary 'name) required-producers))
+      (infrastructure-reason summary)))
+  (define detecting
+    (for/list ([summary (in-list failed)]
+               #:when (eq? (hash-ref summary 'failure-kind) 'behavioural))
+      summary))
+  (define all-unavailable-reasons (append unavailable-reasons infrastructure-reasons))
   (hash 'verdict
         (cond
-          [(pair? unavailable-reasons) 'unavailable]
+          [(pair? all-unavailable-reasons) 'unavailable]
           [(pair? failed) 'fail]
           [(equal? conclusion "success") 'pass]
           [else 'unavailable])
@@ -145,9 +232,11 @@
         'duplicate-jobs
         duplicates
         'detecting
-        failed
+        detecting
+        'infrastructure-failures
+        infrastructure-failures
         'unavailable-reasons
-        unavailable-reasons))
+        all-unavailable-reasons))
 
 ;; Full evidence for one case state: the shadow-selected run AND the CI
 ;; comprehensive verdict, plus the clean controls of both surfaces.
@@ -160,9 +249,12 @@
 ;;               other direction (comprehensive green but selected red means the
 ;;               injection did not reproduce the documented defect)
 ;;   'not-detected neither surface fails — the injection is not a valid case
-(define (classify-case-evidence selected-defect selected-control comprehensive-defect
+(define (classify-case-evidence selected-defect
+                                selected-control
+                                comprehensive-defect
                                 comprehensive-control)
-  (define (unavailable? v) (eq? v 'unavailable))
+  (define (unavailable? v)
+    (eq? v 'unavailable))
   (cond
     [(or (unavailable? selected-defect)
          (unavailable? selected-control)
@@ -222,7 +314,13 @@
   (define-values (status stdout stderr)
     (capture repo-root
              python
-             (list "-c" code method path (if data (jsexpr->string data) ""))))
+             (list "-c"
+                   code
+                   method
+                   path
+                   (if data
+                       (jsexpr->string data)
+                       ""))))
   (unless (equal? status 0)
     (raise-arguments-error 'gh-json
                            "gh_helpers call failed"
@@ -233,9 +331,11 @@
                            "stderr"
                            stderr))
   ;; h.init() prints a short banner; the JSON body is the last non-empty line.
-  (define lines (filter (lambda (line) (not (equal? (string-trim line) "")))
-                        (string-split stdout "\n")))
-  (string->jsexpr (if (pair? lines) (last lines) "null")))
+  (define lines
+    (filter (lambda (line) (not (equal? (string-trim line) ""))) (string-split stdout "\n")))
+  (string->jsexpr (if (pair? lines)
+                      (last lines)
+                      "null")))
 
 ;; Trigger CI on a branch via workflow_dispatch (the approved mechanism: a
 ;; plain push to a non-main branch does NOT start the workflow).
