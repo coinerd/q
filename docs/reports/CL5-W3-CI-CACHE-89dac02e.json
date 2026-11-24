@@ -1,0 +1,4 @@
+{"trees": {
+  "24f225d459cf90bd24561ba4fcd76a243fa421a4": {"verdict": "fail", "run-id": 45043919793, "head-sha": "48c08c1d950e846b54765288f9d5c81336a3843d", "detecting": ["lint-quality", "test (0)", "test (1)", "test (2)", "test-aggregate"], "behavioural-detecting": ["test (0)", "test (1)", "test (2)", "test-aggregate"], "failed-jobs": ["lint-quality", "test (0)", "test (1)", "test (2)", "test-aggregate"], "detecting-note": "detecting = every failed job, as ci-evidence.classify-ci-run reports; lint-quality is derived-metadata enforcement, not a behavioural detector (see behavioural-detecting)", "missing-jobs": [], "unavailable-reasons": []},
+  "aaf6097317a8489de7947b16f4f79b425c08547f": {"verdict": "pass", "run-id": 45063731406, "head-sha": "642c84d97746f0468d676153175a8950dce1b941", "detecting": [], "failed-jobs": [], "missing-jobs": [], "unavailable-reasons": []}
+}}

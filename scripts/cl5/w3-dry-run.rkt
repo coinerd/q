@@ -1,0 +1,776 @@
+#lang racket/base
+
+;; w3-dry-run.rkt — CL5 W3.1: single-case dry run (machinery validation only).
+;;
+;; Purpose. W3.1 is NOT a measurement result and cannot support a GO decision.
+;; It validates that the W3 machinery can, for one frozen case:
+;;   1. bind every number to an exact revision, tree SHA, contract revision and
+;;      selection input (no floating refs, no re-extraction);
+;;   2. enumerate the selected set and the comprehensive set EXPLICITLY from the
+;;      shipped tools' own plans (`--explain`), never from filename inference;
+;;   3. classify through the frozen W3 taxonomy and cross-check the W2 result;
+;;   4. record timing that is measured on this host, and refuse CI-derived
+;;      timing instead of substituting it;
+;;   5. be re-derived from the record alone (`verify-record`), so an independent
+;;      agent can reproduce the classification from frozen inputs.
+;;
+;; The selected set is executed EXACTLY as enumerated (`./qt full --file ...`
+;; per enumerated file): enumeration and execution cannot drift. The clean
+;; control runs that same enumerated set against the unmodified revision.
+;;
+;; No production selector, scheduler, admission record or CI policy is changed.
+
+(require file/sha1
+         json
+         racket/file
+         racket/cmdline
+         racket/format
+         racket/list
+         racket/match
+         racket/path
+         racket/place
+         racket/string
+         "ci-evidence.rkt"
+         "selection-cases.rkt"
+         "selection-experiment.rkt")
+
+(provide parse-explain-files
+         parse-selected-explain
+         enumeration-digest
+         comprehensive-producers
+         combine-enumerations
+         decision-instruction
+         w3-outcome
+         timing-record
+         host-fingerprint
+         verify-record
+         run-dry-case)
+
+;; ---- explicit plan parsing ---------------------------------------------------------
+
+(define (truncate-text text)
+  (if (> (string-length text) 400)
+      (substring text 0 400)
+      text))
+
+;; The shipped `--explain` plans declare `selection: N files` and then list
+;; exactly N repo-relative paths, one per line, at the end of the output. Both
+;; sides must agree: a header/payload mismatch is refused, never repaired.
+(define (parse-explain-files text)
+  (define declared
+    (match (regexp-match #px"selection: ([0-9]+) files" text)
+      [(list _ n) (string->number n)]
+      [#f
+       (raise-arguments-error 'parse-explain-files
+                              "no 'selection: N files' header in the plan"
+                              "output"
+                              (truncate-text text))]))
+  (define lines
+    (for/list ([line (in-list (string-split text "\n"))]
+               #:unless (string=? (string-trim line) ""))
+      (string-trim line)))
+  ;; The plan block is the contiguous run of repo-relative paths. The output
+  ;; continues with an explicit "NOT PROVIDED" footer after it, so the block is
+  ;; located by structure and its length must equal the declared count exactly:
+  ;; a shorter block and an extra path are both refused.
+  (define path-like?
+    (lambda (line)
+      (and (string-suffix? line ".rkt")
+           (string-contains? line "/")
+           (not (regexp-match? #px"\\s" line)))))
+  (define indexed
+    (for/list ([line (in-list lines)]
+               [index (in-naturals)]
+               #:when (path-like? line))
+      (cons index line)))
+  (define start (and (pair? indexed) (caar indexed)))
+  ;; the block is the maximal run of consecutive indices starting at `start`
+  (define consecutive
+    (if start
+        (let loop ([entries indexed]
+                   [next start]
+                   [acc '()])
+          (cond
+            [(null? entries) (reverse acc)]
+            [(= (caar entries) next) (loop (cdr entries) (add1 next) (cons (cdar entries) acc))]
+            [else (reverse acc)]))
+        '()))
+  (when (null? consecutive)
+    (raise-arguments-error 'parse-explain-files
+                           "the plan lists no repo-relative Racket paths"
+                           "declared"
+                           declared))
+  (unless (= declared (length consecutive))
+    (raise-arguments-error 'parse-explain-files
+                           "the plan's payload does not match its declared count"
+                           "declared"
+                           declared
+                           "payload"
+                           (length consecutive)))
+  (hash 'declared declared 'files (sort consecutive string<?)))
+
+;; The selected plan carries two views of the same set: `included:` lines and a
+;; trailing bare-path list. They must agree; a disagreement is a plan-parsing
+;; defect, not something to pick a winner from.
+(define (parse-selected-explain text)
+  (define included
+    (for/list ([line (in-list (string-split text "\n"))]
+               #:when (string-prefix? (string-trim line) "included:"))
+      (car (string-split (string-trim (substring (string-trim line) (string-length "included:")))
+                         " "))))
+  (define trailing
+    (for/list ([line (in-list (string-split text "\n"))]
+               #:when (let ([trimmed (string-trim line)])
+                        (and (string-suffix? trimmed ".rkt")
+                             (string-contains? trimmed "/")
+                             (not (regexp-match? #px"\\s" trimmed)))))
+      (string-trim line)))
+  (unless (equal? (sort (remove-duplicates included) string<?)
+                  (sort (remove-duplicates trailing) string<?))
+    (raise-arguments-error 'parse-selected-explain
+                           "the selected plan's two views disagree"
+                           "included"
+                           (sort (remove-duplicates included) string<?)
+                           "trailing"
+                           (sort (remove-duplicates trailing) string<?)))
+  (hash 'files
+        (sort (remove-duplicates included) string<?)
+        'escalations
+        (for/list ([line (in-list (string-split text "\n"))]
+                   #:when (string-prefix? (string-trim line) "escalation:"))
+          (string-trim line))))
+
+;; ---- digests -----------------------------------------------------------------------
+
+;; SHA-1 is used as an identity digest for provenance (list equality), never as
+;; a security hash. The algorithm is recorded with every digest so no reader can
+;; mistake it for a signature.
+(define (enumeration-digest files)
+  (bytes->hex-string (sha1-bytes (string->bytes/utf-8
+                                  (string-append (string-join (sort files string<?) "\n") "\n")))))
+
+(define (bytes->hex-string bytes)
+  (apply string-append
+         (for/list ([byte (in-bytes bytes)])
+           (~r byte #:min-width 2 #:pad-string "0" #:base 16))))
+
+;; ---- comprehensive enumeration -----------------------------------------------------
+
+;; The authoritative comprehensive surface is the required CI producer set. Each
+;; producer's executed test files are enumerated by the SAME lane/shard spec CI
+;; passes (ci.yml): fast shards 0..2, platform, security, workflows shards 0..1,
+;; smoke. No producer is inferred, and an unknown producer is not silently added.
+(define (comprehensive-producers)
+  (list (hash 'name "test (0)" 'lane "fast" 'shard-index 0 'shard-total 3)
+        (hash 'name "test (1)" 'lane "fast" 'shard-index 1 'shard-total 3)
+        (hash 'name "test (2)" 'lane "fast" 'shard-index 2 'shard-total 3)
+        (hash 'name "test-platform" 'lane "platform" 'shard-index #f 'shard-total #f)
+        (hash 'name "security" 'lane "security" 'shard-index #f 'shard-total #f)
+        (hash 'name "workflows (0)" 'lane "workflows" 'shard-index 0 'shard-total 2)
+        (hash 'name "workflows (1)" 'lane "workflows" 'shard-index 1 'shard-total 2)
+        (hash 'name "smoke (ubuntu-latest)" 'lane "smoke" 'shard-index #f 'shard-total #f)))
+
+(define (producer-command producer)
+  (append (list "./qt" "--lane" (hash-ref producer 'lane))
+          (if (hash-ref producer 'shard-index)
+              (list "--shard-index"
+                    (number->string (hash-ref producer 'shard-index))
+                    "--shard-total"
+                    (number->string (hash-ref producer 'shard-total)))
+              '())
+          (list "--explain")))
+
+;; producer records come in as (name, declared, files). Shards of one lane must
+;; partition that lane (duplicates would double-count and hide a plan change).
+(define (combine-enumerations records)
+  (for ([record (in-list records)])
+    (define declared (hash-ref record 'declared))
+    (define files (hash-ref record 'files))
+    (unless (= declared (length files))
+      (raise-arguments-error 'combine-enumerations
+                             "a producer's declared count does not match its file list"
+                             "producer"
+                             (hash-ref record 'name)
+                             "declared"
+                             declared
+                             "listed"
+                             (length files))))
+  (check-shards-partition records)
+  (define union
+    (sort (remove-duplicates (append* (map (lambda (r) (hash-ref r 'files)) records))) string<?))
+  (define producers
+    (for/list ([record (in-list records)])
+      (hash 'name
+            (hash-ref record 'name)
+            'declared
+            (hash-ref record 'declared)
+            'files-count
+            (length (hash-ref record 'files))
+            'digest
+            (enumeration-digest (hash-ref record 'files)))))
+  ;; The per-producer file lists are not stored (they are mostly the union), so
+  ;; their digests are inputs, not re-derivations. An aggregate digest makes an
+  ;; edited producer row detectable the same way the list digests are: integrity
+  ;; against corruption/editing, not a signature.
+  (hash 'producers
+        producers
+        'producers-digest
+        (enumeration-digest
+         (for/list ([p (in-list producers)])
+           (format "~a:~a:~a" (hash-ref p 'name) (hash-ref p 'declared) (hash-ref p 'digest))))
+        'files
+        union
+        'union-count
+        (length union)
+        'digest
+        (enumeration-digest union)
+        'digest-algorithm
+        "sha1"))
+
+(define (check-shards-partition records)
+  (for ([lane (in-list (remove-duplicates (map (lambda (r) (hash-ref r 'lane)) records)))])
+    (define group (filter (lambda (r) (equal? (hash-ref r 'lane) lane)) records))
+    (define total (hash-ref (car group) 'shard-total #f))
+    (when total
+      (define listed (append* (map (lambda (r) (hash-ref r 'files)) group)))
+      (unless (= (length listed) (length (remove-duplicates listed)))
+        (raise-arguments-error 'combine-enumerations
+                               "shard plans overlap; the lane partition is not explicit"
+                               "lane"
+                               lane)))))
+
+;; ---- classification ----------------------------------------------------------------
+
+;; A JSON round-trip turns symbols into strings; a verifier must accept the
+;; recorded form or it could never re-check a committed record.
+(define (as-symbol value)
+  (if (string? value)
+      (string->symbol value)
+      value))
+
+;; The deployed decision layer's instruction. A revision without the contract
+;; layer has no escalation path: its instruction is exactly the shipped
+;; selector's, i.e. run the reduced set (`run-required`).
+(define (decision-instruction contract-layer)
+  (case (as-symbol (hash-ref contract-layer 'state))
+    [(absent-at-revision) 'run-required]
+    [(present) (as-symbol (hash-ref contract-layer 'instruction 'run-all))]
+    [else 'run-all]))
+
+;; W3 outcome taxonomy (frozen in docs/reports/CL5-W3-DESIGN.md), applied to the
+;; shadow execution + the decision layer's instruction. The reduced set is always
+;; executed for measurement; the instruction only labels the case.
+(define (w3-outcome instruction comprehensive reduced control)
+  (define instruction* (as-symbol instruction))
+  (define comprehensive* (as-symbol comprehensive))
+  (define reduced* (as-symbol reduced))
+  (define control* (as-symbol control))
+  (cond
+    [(eq? control* 'unavailable) 'unavailable]
+    [(eq? control* 'fail) 'unavailable]
+    [(eq? comprehensive* 'unavailable) 'unavailable]
+    [(eq? reduced* 'unavailable) 'unavailable]
+    [(eq? comprehensive* 'pass) 'out-of-scope]
+    [(eq? comprehensive* 'fail)
+     (if (eq? instruction* 'run-required)
+         (if (eq? reduced* 'fail) 'correct-reduced 'unsafe-reduced)
+         (if (eq? reduced* 'fail) 'safe-but-useless 'correct-escalation))]
+    [else 'unavailable]))
+
+;; ---- timing -------------------------------------------------------------------------
+
+(define (hostname)
+  (define from-file
+    (and (file-exists? "/etc/hostname")
+         (let ([text (string-trim (file->string "/etc/hostname"))])
+           (and (not (equal? text "")) text))))
+  (or from-file (getenv "HOSTNAME") "unknown"))
+
+(define (host-fingerprint)
+  (hash 'hostname
+        (hostname)
+        'processor-count
+        (processor-count)
+        'os
+        (symbol->string (system-type 'os))
+        'racket-version
+        (version)))
+
+;; Timing that decides a cost comparison must be measured on this host under the
+;; same conditions as the other arm. CI durations are never a substitute: the
+;; record refuses them rather than reporting a crossed-machine comparison.
+(define (timing-record #:host host
+                       #:selected-seconds selected-seconds
+                       #:comprehensive-source comprehensive-source
+                       #:comprehensive-seconds comprehensive-seconds)
+  (when (eq? comprehensive-source 'ci)
+    (raise-arguments-error 'timing-record
+                           "CI-derived comprehensive timing may not be substituted"
+                           "source"
+                           comprehensive-source))
+  ;; "same host" is only claimable when BOTH timings exist on this machine. A
+  ;; missing comprehensive timing leaves the comparison unavailable, never true.
+  (define same-host?
+    (cond
+      [(not (eq? comprehensive-source 'local)) 'unavailable]
+      [(and (hash? host) (not (equal? (hash-ref host 'hostname "unknown") "unknown"))) #t]
+      [else 'unverified]))
+  (hash 'host
+        host
+        'selected-seconds
+        selected-seconds
+        'comprehensive-seconds
+        comprehensive-seconds
+        'comprehensive-source
+        comprehensive-source
+        'same-host
+        same-host?
+        'ci-timing-substituted?
+        #f
+        'm6
+        'unavailable
+        'm6-basis
+        (string-append "M6 is a corpus-level cost ratio: it needs the escalation rate M3 and a "
+                       "matched-host comprehensive median C_comp. One dry case supplies neither, "
+                       "and no CI duration may be substituted for C_comp.")))
+
+;; ---- record verification ------------------------------------------------------------
+
+;; Re-derive every claim that can be re-derived from the record alone. This is
+;; the mechanism an independent agent uses: it must not trust the stored label.
+;;
+;; What this CANNOT do: it cannot detect a *consistent* forgery of the recorded
+;; verdicts, because the verdicts are the trust anchor. The external anchors are
+;; the git tree SHAs (the committed tree is re-derived from the frozen mutation
+;; at run time) and the CI runs keyed by tree SHA; a verifier must check those
+;; against GitHub, not only this record.
+(define (verify-record record)
+  (define problems '())
+  (define (problem! message)
+    (set! problems (cons message problems)))
+  (define selection-input (hash-ref record 'selection-input))
+  (define comprehensive-input (hash-ref record 'comprehensive-input))
+  (define provenance (hash-ref record 'provenance))
+  (define contract-layer (hash-ref record 'contract-layer))
+  (define defect (hash-ref record 'defect))
+  (define control (hash-ref record 'control))
+  ;; 1. explicit enumerations are internally consistent and digest-bound
+  (for ([entry (in-list (list (cons "selected" selection-input)
+                              (cons "comprehensive" comprehensive-input)))])
+    (define files (hash-ref (cdr entry) 'files))
+    (unless (equal? (hash-ref (cdr entry) 'digest) (enumeration-digest files))
+      (problem! (format "~a digest does not match its file list" (car entry))))
+    (unless (equal? (sort files string<?) (hash-ref (cdr entry) 'files))
+      (problem! (format "~a file list is not sorted" (car entry)))))
+  ;; 2. the executed set is exactly the enumerated set
+  (define enumerated (hash-ref selection-input 'files))
+  (define (same-set? files)
+    (equal? (sort files string<?) enumerated))
+  (unless (same-set? (hash-ref (hash-ref defect 'selected) 'selected))
+    (problem! "the defect execution's file list is not the enumerated selection"))
+  (unless (same-set? (hash-ref (hash-ref control 'selected) 'selected))
+    (problem! "the control execution's file list is not the enumerated selection"))
+  (unless (same-set? (hash-ref (hash-ref defect 'strategy) 'selected))
+    (problem! "the deployed strategy's selected set is not the enumerated selection"))
+  ;; 3. provenance: the committed tree changes exactly the declared files
+  (unless (hash-ref provenance 'provenance-ok?)
+    (problem! "provenance is not ok"))
+  (unless (equal? (sort (hash-ref provenance 'committed-changes) string<?)
+                  (sort (hash-ref provenance 'declared-changes) string<?))
+    (problem! "committed changes differ from the declared mutation"))
+  ;; 4. classification re-derives from the recorded verdicts
+  (define instruction (decision-instruction contract-layer))
+  (define defect-verdict (as-symbol (hash-ref (hash-ref defect 'selected) 'verdict)))
+  (define control-verdict (as-symbol (hash-ref (hash-ref control 'selected) 'verdict)))
+  (define defect-comprehensive (as-symbol (hash-ref defect 'comprehensive-verdict)))
+  (define control-comprehensive (as-symbol (hash-ref control 'comprehensive-verdict)))
+  (define expected-w3 (w3-outcome instruction defect-comprehensive defect-verdict control-verdict))
+  (unless (eq? expected-w3 (as-symbol (hash-ref (hash-ref record 'classification) 'w3-outcome)))
+    (problem! (format "w3 outcome re-derives to ~a" expected-w3)))
+  (define expected-w2
+    (classify-case-evidence defect-verdict
+                            control-verdict
+                            defect-comprehensive
+                            control-comprehensive))
+  (unless (eq? expected-w2 (as-symbol (hash-ref (hash-ref record 'classification) 'w2)))
+    (problem! (format "W2 classification re-derives to ~a" expected-w2)))
+  ;; 5. producer accounting and its aggregate digest
+  (define producers (hash-ref comprehensive-input 'producers))
+  (when (hash-ref comprehensive-input 'producers-digest #f)
+    (unless (equal?
+             (hash-ref comprehensive-input 'producers-digest)
+             (enumeration-digest
+              (for/list ([p (in-list producers)])
+                (format "~a:~a:~a" (hash-ref p 'name) (hash-ref p 'declared) (hash-ref p 'digest)))))
+      (problem! "the producer aggregate digest does not match the producer rows")))
+  (for ([p (in-list producers)])
+    (unless (= (hash-ref p 'declared) (hash-ref p 'files-count))
+      (problem! (format "producer ~a's count and declared total disagree" (hash-ref p 'name)))))
+  ;; 6. timing consistency: a single host, no CI substitution, and the timed
+  ;; value is the deployed strategy's own measurement.
+  (define timing (hash-ref record 'timing))
+  (define source (as-symbol (hash-ref timing 'comprehensive-source)))
+  (define comprehensive-seconds (hash-ref timing 'comprehensive-seconds))
+  (when (hash-ref timing 'ci-timing-substituted?)
+    (problem! "CI timing was substituted into the record"))
+  (when (eq? source 'ci)
+    (problem! "comprehensive timing was sourced from CI"))
+  (when (and (eq? source 'unavailable) (not (eq? (as-symbol comprehensive-seconds) 'unavailable)))
+    (problem! "comprehensive timing is declared unavailable but carries a value"))
+  (unless (= (hash-ref timing 'selected-seconds) (hash-ref (hash-ref defect 'strategy) 'seconds))
+    (problem! "selected timing is not the deployed strategy's measured seconds"))
+  (define same-host (as-symbol (hash-ref timing 'same-host)))
+  (when (and (eq? source 'unavailable) (not (eq? same-host 'unavailable)))
+    (problem! "same-host is claimed without a comprehensive timing to compare"))
+  (if (null? problems)
+      #t
+      (raise-arguments-error 'verify-record
+                             "record verification failed"
+                             "problems"
+                             (reverse problems))))
+
+;; ---- execution ---------------------------------------------------------------------
+
+(define (refuse-inside! worktree out-file)
+  (define wt (path->string (simplify-path (path->complete-path worktree))))
+  (define out (path->string (simplify-path (path->complete-path out-file))))
+  (when (string-prefix? out (string-append wt "/"))
+    (raise-arguments-error 'run-dry-case
+                           "the output path must live outside the disposable worktree"
+                           "out"
+                           out)))
+
+(define (preflight! worktree revision)
+  (define head (git! worktree "rev-parse" "HEAD"))
+  (unless (equal? (string-trim head) revision)
+    (raise-arguments-error 'run-dry-case
+                           "worktree HEAD is not the pinned revision"
+                           "head"
+                           (string-trim head)
+                           "revision"
+                           revision))
+  (define status (string-trim (git! worktree "status" "--porcelain")))
+  (unless (equal? status "")
+    (raise-arguments-error 'run-dry-case "worktree is not clean" "status" status))
+  (define git-dir (string-trim (git! worktree "rev-parse" "--git-dir")))
+  (when (member git-dir '(".git" "./.git"))
+    (raise-arguments-error 'run-dry-case
+                           "the measurement worktree must be a disposable linked worktree"
+                           "git-dir"
+                           git-dir)))
+
+(define (explain! worktree command #:timeout [timeout 600])
+  (define-values (exit-code _elapsed stdout stderr timed-out?)
+    (run-command command #:cwd worktree #:timeout-seconds timeout))
+  (when (or timed-out? (not (equal? exit-code 0)))
+    (raise-arguments-error 'run-dry-case
+                           "the shipped tool's plan enumeration failed"
+                           "command"
+                           command))
+  stdout)
+
+(define (enumerate-selected! worktree)
+  (define text (explain! worktree (list "./qt" "quick" "--changed" "HEAD" "--explain")))
+  (parse-selected-explain text))
+
+(define (enumerate-comprehensive! worktree)
+  (define records
+    (for/list ([producer (in-list (comprehensive-producers))])
+      (define text (explain! worktree (producer-command producer)))
+      (define plan (parse-explain-files text))
+      (hash 'name
+            (hash-ref producer 'name)
+            'lane
+            (hash-ref producer 'lane)
+            'shard-total
+            (hash-ref producer 'shard-total)
+            'declared
+            (hash-ref plan 'declared)
+            'files
+            (hash-ref plan 'files))))
+  (combine-enumerations records))
+
+(define (tree-sha! worktree)
+  (git! worktree "add" "-A")
+  (git! worktree "write-tree"))
+
+(define (derived-record-at-revision worktree revision)
+  (for/list ([rel (in-list (list "tests/.quick-admission.rktd" "tests/.coverage-manifest.json"))])
+    (hash 'path rel 'sha (string-trim (git! worktree "rev-parse" (format "~a:~a" revision rel))))))
+
+(define (contract-layer worktree revision)
+  (define-values (exit _elapsed _out _err _timed)
+    (run-command
+     (list "git" "cat-file" "-e" (format "~a:scripts/cl5/contract-escalation.rkt" revision))
+     #:cwd worktree
+     #:timeout-seconds 60))
+  (if (equal? exit 0)
+      (hash
+       'state
+       'present
+       'revision
+       (string-trim
+        (git! worktree "log" "-1" "--format=%H" revision "--" "scripts/cl5/contract-escalation.rkt"))
+       'instruction
+       ;; The dry-run driver does not evaluate a present contract layer; the
+       ;; record must not invent an instruction for it.
+       'not-evaluated)
+      (hash 'state 'absent-at-revision 'revision #f 'instruction 'run-required)))
+
+(define (ci-verdict-for-cache cache tree-sha)
+  (define lookup (or (hash-ref cache tree-sha #f) (hash-ref cache (string->symbol tree-sha) #f)))
+  (if lookup
+      (hash 'verdict
+            (string->symbol (hash-ref lookup 'verdict))
+            'source
+            'cache
+            'run-id
+            (hash-ref lookup 'run-id #f)
+            'head-sha
+            (hash-ref lookup 'head-sha #f)
+            'detecting
+            (hash-ref lookup 'detecting '())
+            'behavioural-detecting
+            (hash-ref lookup 'behavioural-detecting '())
+            'detecting-note
+            (hash-ref lookup 'detecting-note #f)
+            'missing-jobs
+            (hash-ref lookup 'missing-jobs '())
+            'unavailable-reasons
+            (hash-ref lookup 'unavailable-reasons '()))
+      (hash 'verdict
+            'unavailable
+            'source
+            'absent
+            'run-id
+            #f
+            'head-sha
+            #f
+            'detecting
+            '()
+            'missing-jobs
+            '()
+            'unavailable-reasons
+            (list (format "no comprehensive verdict cached for tree ~a" tree-sha)))))
+
+(define (run-dry-case worktree revision case #:ci-cache cache #:out-file out-file)
+  (refuse-inside! worktree out-file)
+  (preflight! worktree revision)
+  ;; ---- defect state: enumerate, then execute exactly the enumeration ----
+  (git! worktree "reset" "-q" "--hard" revision)
+  (git! worktree "clean" "-q" "-fd")
+  (void (apply-case! worktree case))
+  ((current-admission-refresh) worktree)
+  (define selected-plan (enumerate-selected! worktree))
+  (define selected-files (hash-ref selected-plan 'files))
+  (unless (pair? selected-files)
+    (raise-arguments-error 'run-dry-case "the selected enumeration is empty"))
+  (define comprehensive (enumerate-comprehensive! worktree))
+  ;; (a) execute EXACTLY the enumerated list, file by file: this proves the
+  ;; enumerated set is the set that runs, and is the diagnostic execution.
+  (define defect-selected (selected-state! worktree #:files selected-files))
+  ;; (b) run the DEPLOYED strategy once (`./qt quick --changed HEAD`) and time
+  ;; it: C_sel is the strategy's cost, not N separate process startups. The
+  ;; strategy's own plan must equal the enumeration or the case is refused.
+  (define defect-strategy (selected-state! worktree))
+  (unless (equal? (sort (hash-ref defect-strategy 'selected) string<?) selected-files)
+    (raise-arguments-error 'run-dry-case
+                           "the deployed strategy selected a different set than the enumeration"
+                           "enumerated"
+                           selected-files
+                           "strategy"
+                           (hash-ref defect-strategy 'selected)))
+  (define measured-tree (string-trim (tree-sha! worktree)))
+  (define derived (derived-record-at-revision worktree revision))
+  (define record-changed?
+    (for/or ([entry (in-list derived)])
+      (not (equal? (string-trim (git! worktree "hash-object" (hash-ref entry 'path)))
+                   (hash-ref entry 'sha)))))
+  ((current-derived-restore) worktree revision)
+  (define committed-tree (string-trim (tree-sha! worktree)))
+  (define revision-tree (string-trim (git! worktree "rev-parse" (format "~a^{tree}" revision))))
+  (define committed-changes
+    (filter (lambda (p) (not (equal? p "")))
+            (for/list ([p (in-list (changed-paths worktree revision-tree committed-tree))])
+              (string-trim p))))
+  (define declared-changes (hash-ref case 'changed))
+  (define provenance-ok?
+    (and (equal? (sort committed-changes string<?) (sort declared-changes string<?))))
+  (unless provenance-ok?
+    (raise-arguments-error 'run-dry-case
+                           "the committed state does not match the registered mutation"
+                           "declared"
+                           declared-changes
+                           "committed"
+                           committed-changes))
+  ;; ---- clean control: the SAME enumerated set on the unmodified revision ----
+  (git! worktree "reset" "-q" "--hard" revision)
+  (git! worktree "clean" "-q" "-fd")
+  (define control-selected (selected-state! worktree #:files selected-files))
+  (define control-tree (string-trim (tree-sha! worktree)))
+  (unless (equal? control-tree revision-tree)
+    (raise-arguments-error 'run-dry-case
+                           "the clean control tree is not the revision tree"
+                           "control-tree"
+                           control-tree
+                           "revision-tree"
+                           revision-tree))
+  ;; ---- comprehensive ground truth from the frozen cache, keyed by tree ----
+  (define defect-ci (ci-verdict-for-cache cache committed-tree))
+  (define control-ci (ci-verdict-for-cache cache revision-tree))
+  (define layer (contract-layer worktree revision))
+  (when (eq? (hash-ref layer 'state) 'present)
+    (raise-arguments-error 'run-dry-case
+                           "this dry-run driver does not evaluate a present contract layer"
+                           "contract-revision"
+                           (hash-ref layer 'revision)
+                           "requirement"
+                           "W3.2 must supply the decision-layer instruction explicitly"))
+  (define instruction (decision-instruction layer))
+  (define w3
+    (w3-outcome instruction
+                (hash-ref defect-ci 'verdict)
+                (hash-ref defect-selected 'verdict)
+                (hash-ref control-selected 'verdict)))
+  (define w2
+    (classify-case-evidence (hash-ref defect-selected 'verdict)
+                            (hash-ref control-selected 'verdict)
+                            (hash-ref defect-ci 'verdict)
+                            (hash-ref control-ci 'verdict)))
+  (define timing
+    (timing-record #:host (host-fingerprint)
+                   #:selected-seconds (hash-ref defect-strategy 'seconds)
+                   #:comprehensive-source 'unavailable
+                   #:comprehensive-seconds 'unavailable))
+  (define record
+    (hash 'experiment
+          "CL5 W3.1 single-case dry run (#9982)"
+          'protocol
+          "docs/reports/CL5-W3-DESIGN.md"
+          'generated-by
+          "scripts/cl5/w3-dry-run.rkt"
+          'arm
+          (hash 'revision
+                revision
+                'revision-tree
+                revision-tree
+                'worktree
+                (path->string (simplify-path (path->complete-path worktree))))
+          'case
+          (hash 'id
+                (hash-ref case 'id)
+                'category
+                (hash-ref case 'category)
+                'note
+                (hash-ref case 'note)
+                'declared-changes
+                declared-changes)
+          'selection-input
+          (hash 'command
+                "./qt quick --changed HEAD --explain"
+                'changed
+                declared-changes
+                'files
+                selected-files
+                'digest
+                (enumeration-digest selected-files)
+                'digest-algorithm
+                "sha1"
+                'escalations
+                (hash-ref selected-plan 'escalations)
+                'derived-at-revision
+                derived
+                'record-changed-by-refresh?
+                record-changed?)
+          'comprehensive-input
+          comprehensive
+          'provenance
+          (hash 'measured-tree-sha
+                measured-tree
+                'committed-tree-sha
+                committed-tree
+                'revision-tree-sha
+                revision-tree
+                'committed-changes
+                committed-changes
+                'declared-changes
+                declared-changes
+                'provenance-ok?
+                provenance-ok?
+                'derived-at-revision
+                derived
+                'record-changed-by-refresh?
+                record-changed?)
+          'contract-layer
+          layer
+          'defect
+          (hash 'selected
+                defect-selected
+                'strategy
+                defect-strategy
+                'comprehensive-verdict
+                (hash-ref defect-ci 'verdict)
+                'comprehensive
+                defect-ci)
+          'control
+          (hash 'selected
+                control-selected
+                'comprehensive-verdict
+                (hash-ref control-ci 'verdict)
+                'comprehensive
+                control-ci
+                'tree-sha
+                control-tree)
+          'timing
+          timing
+          'classification
+          (hash 'instruction instruction 'w2 w2 'w3-outcome w3)))
+  (define verified
+    (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
+      (verify-record record)))
+  (unless (eq? verified #t)
+    (raise-arguments-error 'run-dry-case "record failed self-verification" "reason" verified))
+  (make-directory* (path-only out-file))
+  (define tmp (string->path (string-append (path->string out-file) ".tmp")))
+  (call-with-output-file tmp
+                         (lambda (out) (write-string (jsexpr->string (->jsexpr record)) out))
+                         #:exists 'truncate/replace)
+  (rename-file-or-directory tmp out-file #t)
+  record)
+
+(module+ main
+  (define worktree #f)
+  (define revision #f)
+  (define out-file #f)
+  (define cache-file #f)
+  (define case-id 'D5)
+  (define verify-file #f)
+  (command-line
+   #:program "w3-dry-run.rkt"
+   #:once-each ["--worktree" path "clean disposable linked worktree" (set! worktree path)]
+   ["--revision" sha "full SHA the worktree is pinned at" (set! revision sha)]
+   ["--out" path "JSON record to write" (set! out-file path)]
+   ["--ci-cache" path "frozen JSON map tree-sha -> CI verdict" (set! cache-file path)]
+   ["--case" id "frozen case id (default D5)" (set! case-id (string->symbol id))]
+   ["--verify" path "re-derive and verify an existing record; launch nothing" (set! verify-file path)]
+   #:args ()
+   (cond
+     [verify-file
+      (define record (with-input-from-file verify-file (lambda () (read-json))))
+      (verify-record record)
+      (printf "verified ~a\n" verify-file)]
+     [else
+      (unless (and worktree revision out-file cache-file)
+        (raise-user-error 'w3-dry-run "--worktree, --revision, --out and --ci-cache are required"))
+      (define cache (with-input-from-file cache-file (lambda () (read-json))))
+      (define trees (hash-ref cache 'trees cache))
+      (define record
+        (run-dry-case (string->path worktree)
+                      revision
+                      (selection-case case-id)
+                      #:ci-cache trees
+                      #:out-file (string->path out-file)))
+      (printf "wrote ~a: w2=~a w3=~a\n"
+              out-file
+              (hash-ref (hash-ref record 'classification) 'w2)
+              (hash-ref (hash-ref record 'classification) 'w3-outcome))])))
