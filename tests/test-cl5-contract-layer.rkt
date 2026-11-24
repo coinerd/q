@@ -271,7 +271,13 @@
 (define layer-added
   (string-trim
    (git! repo "log" "--diff-filter=A" "--format=%H" "-1" "--" "scripts/cl5/contract-escalation.rkt")))
-(define before-layer (rev-parse (string-append layer-added "^")))
+(define before-layer
+  ;; In a shallow checkout (CI) `git log` cannot see the pre-layer revision; the
+  ;; history-dependent case is then skipped rather than failing the file.
+  (and (not (equal? layer-added ""))
+       (with-handlers ([exn:fail? (lambda (_) #f)])
+         (define candidate (rev-parse (string-append layer-added "^")))
+         (and (not (equal? candidate layer-added)) candidate))))
 (define d5-change (list "extensions/gsd/wave-status.rkt"))
 
 (test-case "the shipped layer escalates D5 on this checkout and names its consumers' detector"
@@ -300,22 +306,57 @@
                       string<?))
   (check-equal? (validate-layer-record layer (list "tests/test-gsd-wave-status.rkt")) '()))
 
-(test-case "a historical revision without the layer plus a later layer is counterfactual"
-  ;; `before-layer` has no contract layer; the checkout does. Evaluating the
-  ;; historical revision with today's layer must be labelled counterfactual --
-  ;; never a historical execution.
+(when before-layer
+  ;; A shallow checkout (CI) has no revision before the layer was added; the
+  ;; fixture case below covers the same branch without relying on history.
+  (test-case "a historical revision without the layer plus a later layer is counterfactual"
+    ;; `before-layer` has no contract layer; the checkout does. Evaluating the
+    ;; historical revision with today's layer must be labelled counterfactual --
+    ;; never a historical execution.
+    (define layer
+      (evaluate-layer #:root repo
+                      #:changed d5-change
+                      #:comprehensive (list "tests/test-gsd-wave-status.rkt")
+                      #:evaluated-revision before-layer
+                      #:evaluated-tree (rev-parse (string-append before-layer "^{tree}"))
+                      #:contract-worktree repo
+                      #:contract-revision git-head))
+    (check-eq? (hash-ref layer 'state) 'counterfactual)
+    (check-eq? (hash-ref layer 'mode) 'counterfactual)
+    (check-true (hash-ref layer 'counterfactual?))
+    (check-false (hash-ref layer 'layer-present-at-evaluated-revision?))
+    (check-eq? (layer-instruction layer) 'run-comprehensive)
+    (check-equal? (validate-layer-record layer (list "tests/test-gsd-wave-status.rkt")) '())))
+
+(test-case "a revision that has no layer while the contract worktree does is counterfactual"
+  ;; Independent of this repository's history: the evaluated revision is a
+  ;; commit from a throwaway repository, so the layer cannot be at that revision,
+  ;; while the contract worktree supplies today's layer.
+  (define fixture (make-temporary-file "cl5-fixture-~a" 'directory))
+  (define git (find-executable-path "git"))
+  (define (run . args)
+    (define code (apply system*/exit-code git "-C" (path->string fixture) args))
+    (unless (and (number? code) (zero? code))
+      (error 'fixture "git failed: ~a" args)))
+  (run "init" "-q")
+  (run "config" "user.email" "fixture@example.invalid")
+  (run "config" "user.name" "fixture")
+  (call-with-output-file (build-path fixture "README.md")
+                         (lambda (out) (display "fixture\n" out))
+                         #:exists 'truncate/replace)
+  (run "add" "README.md")
+  (run "commit" "-q" "-m" "fixture")
   (define layer
     (evaluate-layer #:root repo
                     #:changed d5-change
                     #:comprehensive (list "tests/test-gsd-wave-status.rkt")
-                    #:evaluated-revision before-layer
-                    #:evaluated-tree (rev-parse (string-append before-layer "^{tree}"))
+                    #:evaluated-revision (string-trim (git! fixture "rev-parse" "HEAD"))
+                    #:evaluated-tree git-tree
                     #:contract-worktree repo
                     #:contract-revision git-head))
   (check-eq? (hash-ref layer 'state) 'counterfactual)
   (check-eq? (hash-ref layer 'mode) 'counterfactual)
   (check-true (hash-ref layer 'counterfactual?))
-  (check-false (hash-ref layer 'layer-present-at-evaluated-revision?))
   (check-eq? (layer-instruction layer) 'run-comprehensive)
   (check-equal? (validate-layer-record layer (list "tests/test-gsd-wave-status.rkt")) '()))
 
