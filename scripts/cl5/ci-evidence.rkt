@@ -186,22 +186,26 @@
     (for/list ([summary (in-list job-summaries)]
                #:when (equal? (hash-ref summary 'conclusion) "failure"))
       summary))
-  ;; F1: a required producer whose steps never reached its own command did not
-  ;; execute the comprehensive surface. That is unavailable evidence, not a
-  ;; detection; the reason names the producer and the failing step(s).
+  ;; F1: a job whose steps never reached its own command did not execute its
+  ;; work. Every such failure is RECORDED with its cause; only a REQUIRED
+  ;; producer makes the comprehensive surface unavailable. An optional job's
+  ;; infrastructure failure still leaves the run red (fail) but never names a
+  ;; detector, so the verdict cannot be mistaken for a behavioural detection.
   (define infrastructure-failures
     (for/list ([summary (in-list failed)]
-               #:when (memq (hash-ref summary 'failure-kind) '(infrastructure unattributable))
-               #:when (member (hash-ref summary 'name) required-producers))
+               #:when (memq (hash-ref summary 'failure-kind) '(infrastructure unattributable)))
       summary))
+  (define (infrastructure-reason summary)
+    (format "required producer ~a ~a (failed steps: ~a); its tests did not execute"
+            (hash-ref summary 'name)
+            (if (eq? (hash-ref summary 'failure-kind) 'infrastructure)
+                "failed in setup/action steps"
+                "failed with no step evidence")
+            (string-join (hash-ref summary 'failed-steps) ", ")))
   (define infrastructure-reasons
-    (for/list ([summary (in-list infrastructure-failures)])
-      (format "required producer ~a ~a (failed steps: ~a); its tests did not execute"
-              (hash-ref summary 'name)
-              (if (eq? (hash-ref summary 'failure-kind) 'infrastructure)
-                  "failed in setup/action steps"
-                  "failed with no step evidence")
-              (string-join (hash-ref summary 'failed-steps) ", "))))
+    (for/list ([summary (in-list infrastructure-failures)]
+               #:when (member (hash-ref summary 'name) required-producers))
+      (infrastructure-reason summary)))
   (define detecting
     (for/list ([summary (in-list failed)]
                #:when (eq? (hash-ref summary 'failure-kind) 'behavioural))

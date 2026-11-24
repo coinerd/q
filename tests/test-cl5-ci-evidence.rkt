@@ -234,3 +234,25 @@
   (check-eq? (hash-ref result 'verdict) 'unavailable)
   ;; the behavioural failure is still recorded, never promoted past the missing producer
   (check-equal? (map (lambda (j) (hash-ref j 'name)) (hash-ref result 'detecting)) (list "test (0)")))
+
+(test-case "F1: an optional job's infrastructure failure stays red but names no detector"
+  ;; Optional producers do not make the comprehensive surface unavailable, but
+  ;; their infrastructure failure must still be recorded, never left a bare fail.
+  (define jobs
+    (for/list ([j (in-list (green-jobs))])
+      (if (equal? (hash-ref j 'name) "fast-env")
+          (hash 'name
+                "fast-env"
+                'status
+                "completed"
+                'conclusion
+                "failure"
+                'steps
+                (list (hash 'name "Run actions/checkout@v7" 'conclusion "failure")
+                      (hash 'name "Run the suite" 'conclusion "skipped")))
+          j)))
+  (define result (classify-ci-run (run #:conclusion "failure") jobs))
+  (check-eq? (hash-ref result 'verdict) 'fail)
+  (check-equal? (hash-ref result 'detecting) '())
+  (check-equal? (map (lambda (j) (hash-ref j 'name)) (hash-ref result 'infrastructure-failures))
+                (list "fast-env")))

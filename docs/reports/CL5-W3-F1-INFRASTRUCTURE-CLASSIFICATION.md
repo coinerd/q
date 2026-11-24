@@ -60,6 +60,11 @@ run remains `unavailable` (the comprehensive surface did not fully execute) whil
 failure is still recorded in `detecting`. Missing evidence is never promoted into a detection, and a
 missing producer is never promoted into a pass.
 
+An **optional** producer's infrastructure failure does not make the comprehensive surface
+unavailable, so the run stays `fail` (the job is still red) but `detecting` is empty and
+`infrastructure-failures` names the job and its failing setup step. A `fail` with an empty detector
+list therefore always has a recorded cause in `infrastructure-failures`; it is never a bare red.
+
 ## Non-retroactivity and unchanged cases
 
 - W3.1 dry case: both cached runs (`45043919793` defect, `45063731406` control) have `security`
@@ -79,15 +84,21 @@ missing producer is never promoted into a pass.
   look like setup is the risk direction to watch in review, which is why the real payloads for the
   timeout and for a shard assertion failure are pinned in
   `tests/fixtures/cl5-ci-f1-payloads.json`.
-- A run that is red *only* because of an infrastructure failure becomes `unavailable`, not `pass`.
-  That is deliberate: it neither fabricates a detection nor claims the surface ran.
+- A run whose required producer is red only because of an infrastructure failure becomes
+  `unavailable`, not `pass`. That is deliberate: it neither fabricates a detection nor claims the
+  surface ran.
+- Post/cleanup and upload step failures do not match the setup patterns, so they remain behavioural
+  and name the job (conservative direction). The one direction that can hide a real failure is a test
+  step renamed to look like setup; that is a reviewable workflow event, and the two real payloads are
+  pinned so such a rename is visible in the diff of a future test update.
 - This rule cannot tell a flaky test from a real regression; repeated-failure attribution remains a
   separate W3 requirement.
 
 ## Verification
 
-- `raco test tests/test-cl5-ci-evidence.rkt` — 17 tests, including the two recorded payloads
+- `raco test tests/test-cl5-ci-evidence.rkt` — 18 tests, including the two recorded payloads
   (`security` setup timeout ⇒ `unavailable`, no detector; shard assertion failure ⇒ `fail`,
-  `test (0)` with `Run test shard 0/3`), the setup-name predicate, unattributable failures, and
-  infrastructure + behavioural together.
+  `test (0)` with `Run test shard 0/3`), the setup-name predicate, unattributable failures,
+  infrastructure + behavioural together, and an optional producer's infrastructure failure
+  (`fail`, no detector, cause recorded).
 - Re-running the W3.1 record's `--verify` is unaffected (record and cache untouched).
