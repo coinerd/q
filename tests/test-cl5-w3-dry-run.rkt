@@ -9,6 +9,7 @@
 ;; @boundary unit
 
 (require rackunit
+         (file "../scripts/cl5/contract-layer.rkt")
          racket/list
          "../scripts/cl5/w3-dry-run.rkt")
 
@@ -121,9 +122,14 @@
   (check-eq? (decision-instruction (hash 'state 'absent-at-revision)) 'run-required))
 
 (test-case "a present contract layer's instruction is used; unknown is fail-closed"
+  ;; F3: an unresolvable instruction is unavailable -- never quietly treated as
+  ;; an escalation, because no execution could be labelled from it.
   (check-eq? (decision-instruction (hash 'state 'present 'instruction 'run-comprehensive))
              'run-comprehensive)
-  (check-eq? (decision-instruction (hash 'state 'present)) 'run-all))
+  (check-eq? (decision-instruction (hash 'state 'present)) 'unavailable)
+  (check-eq? (decision-instruction (hash 'state 'present 'status 'invalid 'problems (list "x")))
+             'unavailable)
+  (check-eq? (decision-instruction (hash 'state 'unexpected)) 'unavailable))
 
 (test-case "the W3 taxonomy is exhaustive over verdict combinations"
   ;; unavailable control or surfaces never become a detection
@@ -137,7 +143,11 @@
   (check-eq? (w3-outcome 'run-required 'fail 'fail 'pass) 'correct-reduced)
   (check-eq? (w3-outcome 'run-required 'fail 'pass 'pass) 'unsafe-reduced)
   (check-eq? (w3-outcome 'run-comprehensive 'fail 'pass 'pass) 'correct-escalation)
-  (check-eq? (w3-outcome 'run-comprehensive 'fail 'fail 'pass) 'safe-but-useless))
+  (check-eq? (w3-outcome 'run-comprehensive 'fail 'fail 'pass) 'safe-but-useless)
+  ;; F3: an instruction that could not be resolved to a measurable set is
+  ;; unavailable; it is never labelled as an escalation outcome.
+  (check-eq? (w3-outcome 'unavailable 'fail 'pass 'pass) 'unavailable)
+  (check-eq? (w3-outcome 'run-all 'fail 'fail 'pass) 'unavailable))
 
 ;; ---- timing ------------------------------------------------------------------------
 
@@ -168,15 +178,77 @@
 (define comprehensive-files (list "tests/test-a.rkt" "tests/test-b.rkt" "tests/test-c.rkt"))
 
 (define producers
-  (list (hash 'name "test (0)" 'declared 2 'files-count 2
-              'digest (enumeration-digest (list "tests/test-a.rkt" "tests/test-b.rkt")))
-        (hash 'name "security" 'declared 1 'files-count 1
-              'digest (enumeration-digest (list "tests/test-c.rkt")))))
+  (list (hash 'name
+              "test (0)"
+              'declared
+              2
+              'files-count
+              2
+              'digest
+              (enumeration-digest (list "tests/test-a.rkt" "tests/test-b.rkt")))
+        (hash 'name
+              "security"
+              'declared
+              1
+              'files-count
+              1
+              'digest
+              (enumeration-digest (list "tests/test-c.rkt")))))
 
 (define (producers-digest-of producers)
   (enumeration-digest
    (for/list ([p (in-list producers)])
      (format "~a:~a:~a" (hash-ref p 'name) (hash-ref p 'declared) (hash-ref p 'digest)))))
+
+(define (contract-block instruction)
+  (case instruction
+    [(run-comprehensive)
+     (hash 'state
+           'present
+           'mode
+           'historical
+           'status
+           'evaluated
+           'evaluated-revision
+           "rev-1"
+           'contract-revision
+           "rev-1"
+           'layer-present-at-evaluated-revision?
+           #t
+           'decision
+           (hash 'verdict
+                 'escalate
+                 'required
+                 (list "tests/test-a.rkt")
+                 'escalations
+                 (list (hash 'code "no-consumer-detector" 'module "m.rkt" 'detail "d" 'tests '())))
+           'selection
+           (hash 'instruction
+                 'run-comprehensive
+                 'required
+                 (list "tests/test-a.rkt")
+                 'tests
+                 comprehensive-files))]
+    [(unavailable)
+     (hash 'state
+           'present
+           'mode
+           'historical
+           'status
+           'invalid
+           'evaluated-revision
+           "rev-1"
+           'contract-revision
+           "rev-1"
+           'layer-present-at-evaluated-revision?
+           #t
+           'problems
+           (list "unknown instruction")
+           'decision
+           #f
+           'selection
+           #f)]
+    [else (hash 'state 'absent-at-revision 'instruction 'run-required)]))
 
 (define (record #:w2 [w2 'missed]
                 #:w3 [w3 'unsafe-reduced]
@@ -208,10 +280,7 @@
               'declared-changes
               (list "extensions/gsd/wave-status.rkt"))
         'contract-layer
-        (hash 'state
-              (if (eq? instruction 'run-required) 'absent-at-revision 'present)
-              'instruction
-              instruction)
+        (contract-block instruction)
         'defect
         (hash 'comprehensive-verdict
               defect-comp
@@ -225,7 +294,7 @@
               'selected
               (hash 'verdict control-selected 'selected selected-files))
         'classification
-        (hash 'w2 w2 'w3-outcome w3)
+        (hash 'w2 w2 'w3-outcome w3 'mode 'historical)
         'timing
         (hash 'ci-timing-substituted?
               ci-substituted
@@ -302,15 +371,13 @@
 (test-case "a producer digest edit is caught by the aggregate producer digest"
   (define r (record))
   (define ci (hash-ref r 'comprehensive-input))
-  (define tampered (hash-set ci 'producers
-                             (list (hash 'name "test (0)" 'declared 2 'files-count 2
-                                         'digest "0000"))))
+  (define tampered
+    (hash-set ci 'producers (list (hash 'name "test (0)" 'declared 2 'files-count 2 'digest "0000"))))
   (check-exn exn:fail? (lambda () (verify-record (hash-set r 'comprehensive-input tampered)))))
 
 (test-case "a CI-sourced comprehensive timing is caught even without the boolean flag"
   (check-exn exn:fail?
-             (lambda ()
-               (verify-record (record #:comprehensive-source 'ci #:selected-seconds 9.5)))))
+             (lambda () (verify-record (record #:comprehensive-source 'ci #:selected-seconds 9.5)))))
 
 (test-case "unavailable comprehensive timing must carry no value"
   (define r (record))
@@ -323,5 +390,92 @@
   (check-exn exn:fail? (lambda () (verify-record (hash-set r 'timing timing)))))
 
 (test-case "same-host cannot be claimed without a comprehensive timing"
+  (check-exn exn:fail? (lambda () (verify-record (record #:same-host #t)))))
+
+;; ---- decision records (F3) ---------------------------------------------------------
+
+(define decision-files (list "tests/test-a.rkt"))
+
+(define (decision-layer #:tree [tree "tree-1"] #:revision [revision "rev-1"])
+  (hash 'state
+        'present
+        'mode
+        'historical
+        'status
+        'evaluated
+        'evaluated-revision
+        revision
+        'contract-revision
+        revision
+        'evaluated-tree
+        tree
+        'layer-present-at-evaluated-revision?
+        #t
+        'decision
+        (hash 'verdict
+              'escalate
+              'required
+              decision-files
+              'escalations
+              (list (hash 'code "no-consumer-detector" 'module "m.rkt" 'detail "d" 'tests '())))
+        'selection
+        (hash 'instruction 'run-comprehensive 'required decision-files 'tests decision-files)))
+
+(define (decision-record)
+  (hash 'revision
+        "rev-1"
+        'measured-tree-sha
+        "tree-1"
+        'comprehensive
+        (hash 'files decision-files 'union-count 1 'digest (enumeration-digest decision-files))
+        'contract-layer
+        (decision-layer)
+        'decision-verified?
+        #t))
+
+(test-case "a decision record binds the decision to its tree and revision"
+  (check-true (verify-decision-record (decision-record))))
+
+(test-case "a decision record whose tree or revision was edited is refused"
   (check-exn exn:fail?
-             (lambda () (verify-record (record #:same-host #t)))))
+             (lambda ()
+               (verify-decision-record (hash-set (decision-record) 'measured-tree-sha "tree-2"))))
+  (check-exn exn:fail?
+             (lambda () (verify-decision-record (hash-set (decision-record) 'revision "rev-2")))))
+
+(test-case "a decision record with a tampered comprehensive list is refused"
+  (define r (decision-record))
+  (define comprehensive (hash-set (hash-ref r 'comprehensive) 'union-count 2))
+  (check-exn exn:fail?
+             (lambda () (verify-decision-record (hash-set r 'comprehensive comprehensive)))))
+
+(test-case "a decision record must claim and carry a valid layer block"
+  (check-exn exn:fail?
+             (lambda () (verify-decision-record (hash-set (decision-record) 'decision-verified? #f))))
+  (define layer (hash-set (decision-layer) 'status 'invalid))
+  (check-exn exn:fail?
+             (lambda () (verify-decision-record (hash-set (decision-record) 'contract-layer layer)))))
+
+(test-case "a case record whose classification mode disagrees with its layer is refused"
+  (define r (record #:instruction 'run-comprehensive #:w3 'correct-escalation))
+  (define layer
+    (hash-set (hash-set (hash-set (hash-set (hash-ref r 'contract-layer) 'state 'counterfactual)
+                                  'mode
+                                  'counterfactual)
+                        'counterfactual?
+                        #t)
+              'contract-revision
+              "rev-other"))
+  ;; the layer itself is now a well-formed counterfactual ...
+  (check-equal? (validate-layer-record layer comprehensive-files) '())
+  ;; ... so only the classification-mode agreement can catch the mismatch.
+  ;; Consistent labelling verifies; a disagreement is refused.
+  (check-true (verify-record
+               (hash-set (hash-set r 'contract-layer layer)
+                         'classification
+                         (hash-set (hash-ref r 'classification) 'mode 'counterfactual))))
+  (check-exn exn:fail?
+             (lambda ()
+               (verify-record (hash-set (hash-set r 'contract-layer layer)
+                                        'classification
+                                        (hash-set (hash-ref r 'classification) 'mode 'historical))))))
