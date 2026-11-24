@@ -155,6 +155,20 @@ observation — are unchanged.
 
 ## Independent reproducibility
 
+0. Re-run the case from scratch (disposable detached worktree, nothing written inside it):
+
+   ```
+   git worktree add --detach ../wt-cl5-w3-dry-case 89dac02e17683f1f964b0499ddbff851fc5e2d64
+   racket scripts/cl5/w3-dry-run.rkt \
+     --worktree ../wt-cl5-w3-dry-case \
+     --revision 89dac02e17683f1f964b0499ddbff851fc5e2d64 \
+     --out docs/reports/CL5-W3-DRYRUN-89dac02e.json \
+     --ci-cache docs/reports/CL5-W3-CI-CACHE-89dac02e.json \
+     --case D5
+   ```
+
+   The CI verdicts are reused from the frozen cache keyed by tree SHA; no dispatch is needed and
+   none is permitted to be substituted for a missing key (the case becomes `unavailable`).
 1. The record self-verifies before it is written (any mismatch aborts the run).
 2. Anyone can re-check a committed record without executing anything:
 
