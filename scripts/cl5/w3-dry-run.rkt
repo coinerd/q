@@ -31,6 +31,7 @@
          racket/place
          racket/string
          "ci-evidence.rkt"
+         "contract-layer.rkt"
          "selection-cases.rkt"
          "selection-experiment.rkt")
 
@@ -44,7 +45,9 @@
          timing-record
          host-fingerprint
          verify-record
-         run-dry-case)
+         verify-decision-record
+         run-dry-case
+         run-decision-case)
 
 ;; ---- explicit plan parsing ---------------------------------------------------------
 
@@ -248,14 +251,22 @@
       (string->symbol value)
       value))
 
-;; The deployed decision layer's instruction. A revision without the contract
-;; layer has no escalation path: its instruction is exactly the shipped
-;; selector's, i.e. run the reduced set (`run-required`).
-(define (decision-instruction contract-layer)
-  (case (as-symbol (hash-ref contract-layer 'state))
-    [(absent-at-revision) 'run-required]
-    [(present) (as-symbol (hash-ref contract-layer 'instruction 'run-all))]
-    [else 'run-all]))
+;; The deployed decision layer's instruction. F3 evaluates the tree's own
+;; contract layer (see contract-layer.rkt) and records its decision; the
+;; instruction below is the layer's, never invented. A revision without the
+;; contract layer has no escalation path: its instruction is exactly the shipped
+;; selector's, i.e. run the reduced set (`run-required`). An instruction that
+;; cannot be resolved to a measurable set is `unavailable`, never `run-all`
+;; quietly treated as an escalation.
+(define (decision-instruction layer)
+  (cond
+    [(hash-has-key? layer 'status) (layer-instruction layer)]
+    ;; Frozen W3.1 record shape: absence was the only representable state.
+    [else
+     (case (as-symbol (hash-ref layer 'state 'unavailable))
+       [(absent-at-revision) 'run-required]
+       [(present) (as-symbol (hash-ref layer 'instruction 'unavailable))]
+       [else 'unavailable])]))
 
 ;; W3 outcome taxonomy (frozen in docs/reports/CL5-W3-DESIGN.md), applied to the
 ;; shadow execution + the decision layer's instruction. The reduced set is always
@@ -266,6 +277,7 @@
   (define reduced* (as-symbol reduced))
   (define control* (as-symbol control))
   (cond
+    [(memq instruction* '(unavailable run-all)) 'unavailable]
     [(eq? control* 'unavailable) 'unavailable]
     [(eq? control* 'fail) 'unavailable]
     [(eq? comprehensive* 'unavailable) 'unavailable]
@@ -385,6 +397,15 @@
   (define defect-comprehensive (as-symbol (hash-ref defect 'comprehensive-verdict)))
   (define control-comprehensive (as-symbol (hash-ref control 'comprehensive-verdict)))
   (define expected-w3 (w3-outcome instruction defect-comprehensive defect-verdict control-verdict))
+  ;; 4b. the contract block is structurally sound and its instruction follows
+  ;; from its own recorded decision (F3). A counterfactual evaluation may never
+  ;; be recorded as a historical one.
+  (define layer-problems (validate-layer-record contract-layer (hash-ref comprehensive-input 'files)))
+  (when (pair? layer-problems)
+    (problem! (format "contract layer record: ~a" (string-join layer-problems "; "))))
+  (define recorded-mode (as-symbol (hash-ref (hash-ref record 'classification) 'mode 'historical)))
+  (unless (eq? recorded-mode (as-symbol (hash-ref contract-layer 'mode 'historical)))
+    (problem! "classification mode disagrees with the contract layer mode"))
   (unless (eq? expected-w3 (as-symbol (hash-ref (hash-ref record 'classification) 'w3-outcome)))
     (problem! (format "w3 outcome re-derives to ~a" expected-w3)))
   (define expected-w2
@@ -498,24 +519,18 @@
   (for/list ([rel (in-list (list "tests/.quick-admission.rktd" "tests/.coverage-manifest.json"))])
     (hash 'path rel 'sha (string-trim (git! worktree "rev-parse" (format "~a:~a" revision rel))))))
 
-(define (contract-layer worktree revision)
-  (define-values (exit _elapsed _out _err _timed)
-    (run-command
-     (list "git" "cat-file" "-e" (format "~a:scripts/cl5/contract-escalation.rkt" revision))
-     #:cwd worktree
-     #:timeout-seconds 60))
-  (if (equal? exit 0)
-      (hash
-       'state
-       'present
-       'revision
-       (string-trim
-        (git! worktree "log" "-1" "--format=%H" revision "--" "scripts/cl5/contract-escalation.rkt"))
-       'instruction
-       ;; The dry-run driver does not evaluate a present contract layer; the
-       ;; record must not invent an instruction for it.
-       'not-evaluated)
-      (hash 'state 'absent-at-revision 'revision #f 'instruction 'run-required)))
+(define (preflight-contract! contract-worktree contract-revision)
+  (define head (string-trim (git! contract-worktree "rev-parse" "HEAD")))
+  (unless (equal? head contract-revision)
+    (raise-arguments-error 'run-dry-case
+                           "the contract worktree is not at the contract revision"
+                           "head"
+                           head
+                           "contract-revision"
+                           contract-revision))
+  (define status (string-trim (git! contract-worktree "status" "--porcelain")))
+  (unless (equal? status "")
+    (raise-arguments-error 'run-dry-case "the contract worktree is not clean" "status" status)))
 
 (define (ci-verdict-for-cache cache tree-sha)
   (define lookup (or (hash-ref cache tree-sha #f) (hash-ref cache (string->symbol tree-sha) #f)))
@@ -553,9 +568,24 @@
             'unavailable-reasons
             (list (format "no comprehensive verdict cached for tree ~a" tree-sha)))))
 
-(define (run-dry-case worktree revision case #:ci-cache cache #:out-file out-file)
+(define (run-dry-case worktree
+                      revision
+                      case
+                      #:ci-cache cache
+                      #:out-file out-file
+                      #:contract-worktree [contract-worktree #f]
+                      #:contract-revision [contract-revision #f])
   (refuse-inside! worktree out-file)
   (preflight! worktree revision)
+  (define layer-worktree (or contract-worktree worktree))
+  (define layer-revision (or contract-revision revision))
+  (when (and contract-worktree (not contract-revision))
+    (raise-arguments-error 'run-dry-case "--contract-worktree requires --contract-revision"))
+  (when (and contract-revision (not contract-worktree))
+    (raise-arguments-error 'run-dry-case "--contract-revision requires --contract-worktree"))
+  (when contract-worktree
+    (preflight-contract! layer-worktree layer-revision))
+  (define revision-tree (string-trim (git! worktree "rev-parse" (format "~a^{tree}" revision))))
   ;; ---- defect state: enumerate, then execute exactly the enumeration ----
   (git! worktree "reset" "-q" "--hard" revision)
   (git! worktree "clean" "-q" "-fd")
@@ -588,7 +618,6 @@
                    (hash-ref entry 'sha)))))
   ((current-derived-restore) worktree revision)
   (define committed-tree (string-trim (tree-sha! worktree)))
-  (define revision-tree (string-trim (git! worktree "rev-parse" (format "~a^{tree}" revision))))
   (define committed-changes
     (filter (lambda (p) (not (equal? p "")))
             (for/list ([p (in-list (changed-paths worktree revision-tree committed-tree))])
@@ -603,6 +632,18 @@
                            declared-changes
                            "committed"
                            committed-changes))
+  ;; ---- contract-aware decision, evaluated on the recorded tree ----
+  ;; The layer runs against the same tree the provenance just recorded (mutation
+  ;; applied, derived files restored), so the decision and the tree SHA name the
+  ;; same input. It is evaluation-only: no test set is chosen by it.
+  (define layer
+    (evaluate-layer #:root worktree
+                    #:changed declared-changes
+                    #:comprehensive (hash-ref comprehensive 'files)
+                    #:evaluated-revision revision
+                    #:evaluated-tree committed-tree
+                    #:contract-worktree layer-worktree
+                    #:contract-revision layer-revision))
   ;; ---- clean control: the SAME enumerated set on the unmodified revision ----
   (git! worktree "reset" "-q" "--hard" revision)
   (git! worktree "clean" "-q" "-fd")
@@ -618,14 +659,6 @@
   ;; ---- comprehensive ground truth from the frozen cache, keyed by tree ----
   (define defect-ci (ci-verdict-for-cache cache committed-tree))
   (define control-ci (ci-verdict-for-cache cache revision-tree))
-  (define layer (contract-layer worktree revision))
-  (when (eq? (hash-ref layer 'state) 'present)
-    (raise-arguments-error 'run-dry-case
-                           "this dry-run driver does not evaluate a present contract layer"
-                           "contract-revision"
-                           (hash-ref layer 'revision)
-                           "requirement"
-                           "W3.2 must supply the decision-layer instruction explicitly"))
   (define instruction (decision-instruction layer))
   (define w3
     (w3-outcome instruction
@@ -644,7 +677,7 @@
                    #:comprehensive-seconds 'unavailable))
   (define record
     (hash 'experiment
-          "CL5 W3.1 single-case dry run (#9982)"
+          "CL5 W3 dry run (#9982, F3 contract-aware)"
           'protocol
           "docs/reports/CL5-W3-DESIGN.md"
           'generated-by
@@ -724,7 +757,7 @@
           'timing
           timing
           'classification
-          (hash 'instruction instruction 'w2 w2 'w3-outcome w3)))
+          (hash 'instruction instruction 'w2 w2 'w3-outcome w3 'mode (hash-ref layer 'mode))))
   (define verified
     (with-handlers ([exn:fail? (lambda (e) (exn-message e))])
       (verify-record record)))
@@ -738,6 +771,125 @@
   (rename-file-or-directory tmp out-file #t)
   record)
 
+;; ---- decision-only record (F3) -----------------------------------------------------
+;;
+;; A decision record binds the contract decision to one tree and one case without
+;; executing any test. It is the artifact F4 consumes and the cheapest way to
+;; check the integration against a pinned revision.
+
+(define (write-record! out-file record)
+  (make-directory* (path-only out-file))
+  (define tmp (string->path (string-append (path->string out-file) ".tmp")))
+  (call-with-output-file tmp
+                         (lambda (out) (write-string (jsexpr->string (->jsexpr record)) out))
+                         #:exists 'truncate/replace)
+  (rename-file-or-directory tmp out-file #t))
+
+(define (run-decision-case worktree
+                           revision
+                           case
+                           #:out-file out-file
+                           #:contract-worktree [contract-worktree #f]
+                           #:contract-revision [contract-revision #f])
+  (refuse-inside! worktree out-file)
+  (preflight! worktree revision)
+  (when (and contract-worktree (not contract-revision))
+    (raise-arguments-error 'run-decision-case "--contract-worktree requires --contract-revision"))
+  (when (and contract-revision (not contract-worktree))
+    (raise-arguments-error 'run-decision-case "--contract-revision requires --contract-worktree"))
+  (define layer-worktree (or contract-worktree worktree))
+  (define layer-revision (or contract-revision revision))
+  (when contract-worktree
+    (preflight-contract! layer-worktree layer-revision))
+  (define revision-tree (string-trim (git! worktree "rev-parse" (format "~a^{tree}" revision))))
+  (git! worktree "reset" "-q" "--hard" revision)
+  (git! worktree "clean" "-q" "-fd")
+  (void (apply-case! worktree case))
+  ((current-admission-refresh) worktree)
+  (define comprehensive (enumerate-comprehensive! worktree))
+  ((current-derived-restore) worktree revision)
+  (define mutated-tree (string-trim (tree-sha! worktree)))
+  (define declared-changes (hash-ref case 'changed))
+  (define committed-changes
+    (filter (lambda (p) (not (equal? p "")))
+            (for/list ([p (in-list (changed-paths worktree revision-tree mutated-tree))])
+              (string-trim p))))
+  (unless (equal? (sort committed-changes string<?) (sort declared-changes string<?))
+    (raise-arguments-error 'run-decision-case
+                           "the measured state does not match the registered mutation"
+                           "declared"
+                           declared-changes
+                           "committed"
+                           committed-changes))
+  (define layer
+    (evaluate-layer #:root worktree
+                    #:changed declared-changes
+                    #:comprehensive (hash-ref comprehensive 'files)
+                    #:evaluated-revision revision
+                    #:evaluated-tree mutated-tree
+                    #:contract-worktree layer-worktree
+                    #:contract-revision layer-revision))
+  (define layer-problems (validate-layer-record layer (hash-ref comprehensive 'files)))
+  (when (pair? layer-problems)
+    (raise-arguments-error 'run-decision-case
+                           "the contract decision record is not structurally sound"
+                           "problems"
+                           layer-problems))
+  (define record
+    (hash 'experiment
+          "CL5 W3 F3 contract decision (#9982)"
+          'protocol
+          "docs/reports/CL5-W3-DESIGN.md"
+          'generated-by
+          "scripts/cl5/w3-dry-run.rkt"
+          'revision
+          revision
+          'revision-tree
+          revision-tree
+          'measured-tree-sha
+          mutated-tree
+          'case
+          (hash 'id
+                (hash-ref case 'id)
+                'category
+                (hash-ref case 'category)
+                'note
+                (hash-ref case 'note)
+                'declared-changes
+                declared-changes)
+          'comprehensive
+          comprehensive
+          'contract-layer
+          layer
+          'decision-verified?
+          #t))
+  (write-record! out-file record)
+  record)
+
+(define (verify-decision-record record)
+  (define layer (hash-ref record 'contract-layer))
+  (define comprehensive (hash-ref record 'comprehensive))
+  (define files (hash-ref comprehensive 'files))
+  (define problems (validate-layer-record layer files))
+  (define (problem! message)
+    (set! problems (cons message problems)))
+  (unless (equal? (hash-ref comprehensive 'digest) (enumeration-digest files))
+    (problem! "comprehensive digest does not match its file list"))
+  (unless (= (hash-ref comprehensive 'union-count) (length files))
+    (problem! "comprehensive union count does not match its file list"))
+  (unless (equal? (hash-ref layer 'evaluated-revision) (hash-ref record 'revision))
+    (problem! "the contract decision was not evaluated at the recorded revision"))
+  (unless (equal? (hash-ref layer 'evaluated-tree) (hash-ref record 'measured-tree-sha))
+    (problem! "the contract decision was not evaluated on the recorded tree"))
+  (unless (hash-ref record 'decision-verified? #f)
+    (problem! "the record does not claim a verified decision"))
+  (if (null? problems)
+      #t
+      (raise-arguments-error 'verify-decision-record
+                             "decision record verification failed"
+                             "problems"
+                             (reverse problems))))
+
 (module+ main
   (define worktree #f)
   (define revision #f)
@@ -745,6 +897,10 @@
   (define cache-file #f)
   (define case-id 'D5)
   (define verify-file #f)
+  (define layer-worktree #f)
+  (define layer-revision #f)
+  (define decide-only? #f)
+  (define verify-decision-file #f)
   (command-line
    #:program "w3-dry-run.rkt"
    #:once-each ["--worktree" path "clean disposable linked worktree" (set! worktree path)]
@@ -752,13 +908,48 @@
    ["--out" path "JSON record to write" (set! out-file path)]
    ["--ci-cache" path "frozen JSON map tree-sha -> CI verdict" (set! cache-file path)]
    ["--case" id "frozen case id (default D5)" (set! case-id (string->symbol id))]
+   ["--contract-worktree"
+    path
+    "clean worktree holding the contract layer (default: --worktree); a different revision is a counterfactual"
+    (set! layer-worktree path)]
+   ["--contract-revision" sha "revision of the contract layer worktree" (set! layer-revision sha)]
+   ["--decide-only"
+    "record the contract decision for the case; run no test and need no CI cache"
+    (set! decide-only? #t)]
    ["--verify" path "re-derive and verify an existing record; launch nothing" (set! verify-file path)]
+   ["--verify-decision"
+    path
+    "re-derive and verify an existing decision record; launch nothing"
+    (set! verify-decision-file path)]
    #:args ()
    (cond
      [verify-file
       (define record (with-input-from-file verify-file (lambda () (read-json))))
       (verify-record record)
       (printf "verified ~a\n" verify-file)]
+     [verify-decision-file
+      (define record (with-input-from-file verify-decision-file (lambda () (read-json))))
+      (verify-decision-record record)
+      (printf "verified decision ~a\n" verify-decision-file)]
+     [decide-only?
+      (unless (and worktree revision out-file)
+        (raise-user-error 'w3-dry-run "--decide-only needs --worktree, --revision and --out"))
+      (define record
+        (run-decision-case (string->path worktree)
+                           revision
+                           (selection-case case-id)
+                           #:out-file (string->path out-file)
+                           #:contract-worktree (and layer-worktree (string->path layer-worktree))
+                           #:contract-revision layer-revision))
+      (printf "wrote ~a: verdict=~a instruction=~a required=~a mode=~a\n"
+              out-file
+              (let ([d (hash-ref (hash-ref record 'contract-layer) 'decision #f)])
+                (if d
+                    (hash-ref d 'verdict 'unknown)
+                    'no-decision))
+              (layer-instruction (hash-ref record 'contract-layer))
+              (length (hash-ref (hash-ref record 'contract-layer) 'required '()))
+              (hash-ref (hash-ref record 'contract-layer) 'mode))]
      [else
       (unless (and worktree revision out-file cache-file)
         (raise-user-error 'w3-dry-run "--worktree, --revision, --out and --ci-cache are required"))
@@ -769,8 +960,11 @@
                       revision
                       (selection-case case-id)
                       #:ci-cache trees
-                      #:out-file (string->path out-file)))
-      (printf "wrote ~a: w2=~a w3=~a\n"
+                      #:out-file (string->path out-file)
+                      #:contract-worktree (and layer-worktree (string->path layer-worktree))
+                      #:contract-revision layer-revision))
+      (printf "wrote ~a: w2=~a w3=~a mode=~a\n"
               out-file
               (hash-ref (hash-ref record 'classification) 'w2)
-              (hash-ref (hash-ref record 'classification) 'w3-outcome))])))
+              (hash-ref (hash-ref record 'classification) 'w3-outcome)
+              (hash-ref (hash-ref record 'classification) 'mode))])))
