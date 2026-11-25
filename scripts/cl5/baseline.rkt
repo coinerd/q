@@ -43,6 +43,7 @@
          racket/string
          racket/system
          "ci-evidence.rkt"
+         "ci-producers.rkt"
          "selection-experiment.rkt"
          "w3-dry-run.rkt")
 
@@ -53,79 +54,6 @@
          complete?
          run-baseline
          verify-baseline-record)
-
-;; ---- pre-registered producer registry -----------------------------------------------
-
-(define (lane-shard name lane index total artifact step)
-  (hash 'name
-        name
-        'kind
-        'lane-shard
-        'lane
-        lane
-        'shard-index
-        index
-        'shard-total
-        total
-        'artifact
-        artifact
-        'step-pattern
-        step))
-
-(define (lane-single name lane artifact step)
-  (hash 'name
-        name
-        'kind
-        'lane-single
-        'lane
-        lane
-        'shard-index
-        0
-        'shard-total
-        1
-        'artifact
-        artifact
-        'step-pattern
-        step))
-
-(define smoke-command "raco test tests/test-provider-smoke.rkt")
-(define smoke-files (list "tests/test-provider-smoke.rkt"))
-
-(define baseline-producers
-  (list
-   (lane-shard "test (0)" "fast" 0 3 "test-results-fast-0" #px"^Run test shard 0/3$")
-   (lane-shard "test (1)" "fast" 1 3 "test-results-fast-1" #px"^Run test shard 1/3$")
-   (lane-shard "test (2)" "fast" 2 3 "test-results-fast-2" #px"^Run test shard 2/3$")
-   (lane-single "test-platform" "platform" "test-results-platform" #px"^Run platform-cross suite$")
-   (lane-single "security"
-                "security"
-                "test-results-security"
-                #px"^Run security test suite \\(parallel\\)$")
-   (lane-shard "workflows (0)"
-               "workflows"
-               0
-               2
-               "test-results-workflows-0"
-               #px"^Workflow integration suite shard 0/2$")
-   (lane-shard "workflows (1)"
-               "workflows"
-               1
-               2
-               "test-results-workflows-1"
-               #px"^Workflow integration suite shard 1/2$")
-   (hash 'name
-         "smoke (ubuntu-latest)"
-         'kind
-         'declared-command
-         'command
-         smoke-command
-         'files
-         smoke-files
-         'step-pattern
-         #px"^Provider compilation smoke tests$")))
-
-(define (lane-producer? spec)
-  (memq (hash-ref spec 'kind) '(lane-shard lane-single)))
 
 ;; ---- plans (shipped tool output, never inferred) ------------------------------------
 
@@ -351,40 +279,6 @@
   (hash-ref report 'complete? #f))
 
 ;; ---- effects ------------------------------------------------------------------------
-
-(define (download-artifact-once! repo-root artifact-id dest-file)
-  (define code
-    (string-append "import sys;sys.path.insert(0,'scripts');import gh_helpers as h;"
-                   "print(h.download_artifact(int(sys.argv[1]),sys.argv[2]))"))
-  (define-values (status stdout stderr)
-    (capture repo-root
-             (or (find-executable-path "python3") "python3")
-             (list "-c" code (number->string artifact-id) (path->string dest-file))))
-  (unless (equal? status 0)
-    (raise-arguments-error 'download-artifact-once!
-                           "artifact download failed"
-                           "artifact-id"
-                           artifact-id
-                           "stdout"
-                           stdout
-                           "stderr"
-                           stderr))
-  (string-trim stdout))
-
-(define (artifact-json! repo-root artifact-id zip-file)
-  (download-artifact-once! repo-root artifact-id zip-file)
-  (define code
-    (string-append
-     "import sys,zipfile;z=zipfile.ZipFile(sys.argv[1]);"
-     "name='test-results.json' if 'test-results.json' in z.namelist() else z.namelist()[0];"
-     "sys.stdout.write(z.read(name).decode('utf-8'))"))
-  (define-values (status stdout stderr)
-    (capture repo-root
-             (or (find-executable-path "python3") "python3")
-             (list "-c" code (path->string zip-file))))
-  (unless (equal? status 0)
-    (raise-arguments-error 'artifact-json! "artifact unzip failed" "stderr" stderr))
-  (string->jsexpr stdout))
 
 (define (enumerate! worktree command)
   (define-values (status _elapsed stdout stderr timed-out?)

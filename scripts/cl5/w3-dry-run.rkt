@@ -31,6 +31,7 @@
          racket/place
          racket/string
          "ci-evidence.rkt"
+         "ci-producers.rkt"
          "contract-layer.rkt"
          "selection-cases.rkt"
          "selection-experiment.rkt")
@@ -46,8 +47,10 @@
          host-fingerprint
          verify-record
          verify-decision-record
+         verify-replay-record
          run-dry-case
-         run-decision-case)
+         run-decision-case
+         run-replay-case)
 
 ;; ---- explicit plan parsing ---------------------------------------------------------
 
@@ -159,29 +162,15 @@
 
 ;; ---- comprehensive enumeration -----------------------------------------------------
 
-;; The authoritative comprehensive surface is the required CI producer set. Each
-;; producer's executed test files are enumerated by the SAME lane/shard spec CI
-;; passes (ci.yml): fast shards 0..2, platform, security, workflows shards 0..1,
-;; smoke. No producer is inferred, and an unknown producer is not silently added.
+;; The authoritative comprehensive surface is the required CI producer set, from
+;; the ONE registry the F2 baseline verifier uses (ci-producers.rkt): fast shards
+;; 0..2, platform, security, workflows shards 0..1, and smoke. Each lane producer
+;; is enumerated by the shipped `--explain` under the same lane/shard spec CI
+;; passes; smoke has no artifact and its executed set is the workflow-declared
+;; command file -- never an inferred `--lane smoke` list (W3.1 overcounted smoke
+;; by 18 files, disclosed in the F2 report).
 (define (comprehensive-producers)
-  (list (hash 'name "test (0)" 'lane "fast" 'shard-index 0 'shard-total 3)
-        (hash 'name "test (1)" 'lane "fast" 'shard-index 1 'shard-total 3)
-        (hash 'name "test (2)" 'lane "fast" 'shard-index 2 'shard-total 3)
-        (hash 'name "test-platform" 'lane "platform" 'shard-index #f 'shard-total #f)
-        (hash 'name "security" 'lane "security" 'shard-index #f 'shard-total #f)
-        (hash 'name "workflows (0)" 'lane "workflows" 'shard-index 0 'shard-total 2)
-        (hash 'name "workflows (1)" 'lane "workflows" 'shard-index 1 'shard-total 2)
-        (hash 'name "smoke (ubuntu-latest)" 'lane "smoke" 'shard-index #f 'shard-total #f)))
-
-(define (producer-command producer)
-  (append (list "./qt" "--lane" (hash-ref producer 'lane))
-          (if (hash-ref producer 'shard-index)
-              (list "--shard-index"
-                    (number->string (hash-ref producer 'shard-index))
-                    "--shard-total"
-                    (number->string (hash-ref producer 'shard-total)))
-              '())
-          (list "--explain")))
+  baseline-producers)
 
 ;; producer records come in as (name, declared, files). Shards of one lane must
 ;; partition that lane (duplicates would double-count and hide a plan change).
@@ -497,18 +486,33 @@
 (define (enumerate-comprehensive! worktree)
   (define records
     (for/list ([producer (in-list (comprehensive-producers))])
-      (define text (explain! worktree (producer-command producer)))
-      (define plan (parse-explain-files text))
-      (hash 'name
-            (hash-ref producer 'name)
-            'lane
-            (hash-ref producer 'lane)
-            'shard-total
-            (hash-ref producer 'shard-total)
-            'declared
-            (hash-ref plan 'declared)
-            'files
-            (hash-ref plan 'files))))
+      (cond
+        [(lane-producer? producer)
+         (define text (explain! worktree (producer-plan-command producer)))
+         (define plan (parse-explain-files text))
+         (hash 'name
+               (hash-ref producer 'name)
+               'lane
+               (hash-ref producer 'lane)
+               'shard-total
+               (hash-ref producer 'shard-total)
+               'declared
+               (hash-ref plan 'declared)
+               'files
+               (hash-ref plan 'files))]
+        [else
+         ;; A declared-command producer (smoke): the workflow names the files.
+         (define files (hash-ref producer 'files))
+         (hash 'name
+               (hash-ref producer 'name)
+               'lane
+               "smoke"
+               'shard-total
+               #f
+               'declared
+               (length files)
+               'files
+               files)])))
   (combine-enumerations records))
 
 (define (tree-sha! worktree)
@@ -893,6 +897,331 @@
                              "problems"
                              (reverse problems))))
 
+;; ---- D5 replay (F4) ----------------------------------------------------------------
+;;
+;; Reconstructs the historical defect and control trees, evaluates the contract
+;; layer (from a separately pinned revision) as an explicit counterfactual, and
+;; executes the escalated required set on both trees. The claim is derived, never
+;; assumed: "prevented" needs a required file that fails on the defect tree and
+;; passes on the control tree, and is "attributed" only when that file is among
+;; the historical run's own failed files.
+
+(define (common a b)
+  (filter (lambda (value) (member value b)) a))
+
+(define (execution-verdicts execution)
+  (for/hash ([row (in-list (hash-ref execution 'files '()))])
+    (values (hash-ref row 'file)
+            (cond
+              [(hash-ref row 'timed-out #f) 'unavailable]
+              [(equal? (hash-ref row 'exit) 0) 'pass]
+              [else 'fail]))))
+
+(define (run-replay-case defect-worktree
+                         control-worktree
+                         revision
+                         case
+                         #:out-file out-file
+                         #:contract-worktree contract-worktree
+                         #:contract-revision contract-revision
+                         #:ci-cache cache
+                         #:repo-root repo-root
+                         #:expect-defect-tree expect-defect-tree
+                         #:expect-revision-tree expect-revision-tree
+                         #:timeout [timeout 2400])
+  (refuse-inside! defect-worktree out-file)
+  (preflight! defect-worktree revision)
+  (preflight! control-worktree revision)
+  (unless (and contract-worktree contract-revision)
+    (raise-arguments-error 'run-replay-case "the replay needs a pinned contract layer"))
+  (preflight-contract! contract-worktree contract-revision)
+  (define revision-tree
+    (string-trim (git! defect-worktree "rev-parse" (format "~a^{tree}" revision))))
+  (unless (equal? revision-tree expect-revision-tree)
+    (raise-arguments-error 'run-replay-case
+                           "the revision tree is not the expected historical tree"
+                           "expected"
+                           expect-revision-tree
+                           "actual"
+                           revision-tree))
+  ;; control: the untouched revision tree
+  (git! control-worktree "reset" "-q" "--hard" revision)
+  (git! control-worktree "clean" "-q" "-fd")
+  (define control-tree (string-trim (tree-sha! control-worktree)))
+  (unless (equal? control-tree expect-revision-tree)
+    (raise-arguments-error 'run-replay-case
+                           "the control worktree is not the revision tree"
+                           "expected"
+                           expect-revision-tree
+                           "actual"
+                           control-tree))
+  ;; defect: the registered mutation
+  (git! defect-worktree "reset" "-q" "--hard" revision)
+  (git! defect-worktree "clean" "-q" "-fd")
+  (void (apply-case! defect-worktree case))
+  ((current-admission-refresh) defect-worktree)
+  (define selected-plan (enumerate-selected! defect-worktree))
+  (define selected-files (hash-ref selected-plan 'files))
+  (define comprehensive (enumerate-comprehensive! defect-worktree))
+  (define deployed-strategy (selected-state! defect-worktree #:timeout-seconds timeout))
+  (unless (equal? (sort (hash-ref deployed-strategy 'selected) string<?) selected-files)
+    (raise-arguments-error 'run-replay-case
+                           "the deployed strategy selected a different set than the enumeration"
+                           "enumerated"
+                           selected-files
+                           "strategy"
+                           (hash-ref deployed-strategy 'selected)))
+  (define derived (derived-record-at-revision defect-worktree revision))
+  ((current-derived-restore) defect-worktree revision)
+  (define defect-tree (string-trim (tree-sha! defect-worktree)))
+  (unless (equal? defect-tree expect-defect-tree)
+    (raise-arguments-error 'run-replay-case
+                           "the reconstructed defect tree is not the historical defect tree"
+                           "expected"
+                           expect-defect-tree
+                           "actual"
+                           defect-tree))
+  ;; counterfactual contract decision on the defect tree
+  (define layer
+    (evaluate-layer #:root defect-worktree
+                    #:changed (hash-ref case 'changed)
+                    #:comprehensive (hash-ref comprehensive 'files)
+                    #:evaluated-revision revision
+                    #:evaluated-tree defect-tree
+                    #:contract-worktree contract-worktree
+                    #:contract-revision contract-revision))
+  (define decision (hash-ref layer 'decision #f))
+  (define required
+    (let ([value (hash-ref layer 'required 'unresolved)])
+      (if (list? value)
+          value
+          '())))
+  (define selected-tests
+    (let ([selection (hash-ref layer 'selection #f)])
+      (if (and selection (list? (hash-ref selection 'tests 'unresolved)))
+          (hash-ref selection 'tests)
+          '())))
+  (define required-subset?
+    (and (pair? required) (= (length required) (length (common required selected-tests)))))
+  (define decision-ok?
+    (and (eq? (hash-ref layer 'status) 'evaluated)
+         (eq? (as-symbol (hash-ref layer 'mode 'unrecognized)) 'counterfactual)
+         (and decision (eq? (as-symbol (hash-ref decision 'verdict 'unrecognized)) 'escalate))
+         (eq? (layer-instruction layer) 'run-comprehensive)
+         (and (member "tests/test-gsd-wave-status.rkt" required) #t)
+         required-subset?))
+  ;; historical evidence for the defect tree, from that run's own artifacts
+  (define defect-ci (ci-verdict-for-cache cache defect-tree))
+  (define control-ci (ci-verdict-for-cache cache revision-tree))
+  (define run-id (hash-ref defect-ci 'run-id #f))
+  (define historical (and run-id (failed-tests-in-run repo-root run-id)))
+  (define ci-failed
+    (if historical
+        (hash-ref historical 'failed-files)
+        '()))
+  (define overlap (common required ci-failed))
+  ;; Behavioural evidence tied to the trees, bounded and pre-registered: the
+  ;; required files that the historical run itself failed, executed on the
+  ;; reconstructed defect tree and on the control tree. The rule is evidence-
+  ;; based (historical failures), never chosen after seeing the defect result.
+  (define execution-set (sort overlap string<?))
+  (define defect-execution
+    (selected-state! defect-worktree #:files execution-set #:timeout-seconds 300))
+  (define control-execution
+    (selected-state! control-worktree #:files execution-set #:timeout-seconds 300))
+  (define defect-verdicts (execution-verdicts defect-execution))
+  (define control-verdicts (execution-verdicts control-execution))
+  (define attributed
+    (sort (for/list ([file (in-list execution-set)]
+                     #:when (and (eq? (hash-ref defect-verdicts file 'unavailable) 'fail)
+                                 (eq? (hash-ref control-verdicts file 'unavailable) 'pass)))
+            file)
+          string<?))
+  (define attributed-overlap (common attributed ci-failed))
+  (define behavioural? (pair? attributed))
+  (define claim
+    (cond
+      [(not decision-ok?) 'no-escalation]
+      [(and behavioural? (pair? attributed-overlap)) 'prevented-attributed]
+      [behavioural? 'prevented-unattributed]
+      [else 'decision-level]))
+  (define record
+    (hash
+     'experiment
+     "CL5 W3 F4 D5 replay (#9982)"
+     'protocol
+     "docs/reports/CL5-W3-F4-PROTOCOL.md"
+     'generated-by
+     "scripts/cl5/w3-dry-run.rkt"
+     'revision
+     revision
+     'revision-tree
+     revision-tree
+     'case
+     (hash 'id
+           (hash-ref case 'id)
+           'category
+           (hash-ref case 'category)
+           'note
+           (hash-ref case 'note)
+           'declared-changes
+           (hash-ref case 'changed))
+     'expected-trees
+     (hash 'defect expect-defect-tree 'control expect-revision-tree)
+     'trees
+     (hash 'defect defect-tree 'control control-tree)
+     'selection
+     (hash 'command
+           "./qt quick --changed HEAD --explain"
+           'files
+           selected-files
+           'digest
+           (enumeration-digest selected-files))
+     'deployed-strategy
+     (hash 'command
+           "./qt quick --changed HEAD"
+           'verdict
+           (hash-ref deployed-strategy 'verdict)
+           'selected
+           (hash-ref deployed-strategy 'selected)
+           'seconds
+           (hash-ref deployed-strategy 'seconds)
+           'failures
+           (hash-ref deployed-strategy 'failures))
+     'comprehensive
+     comprehensive
+     'contract-layer
+     layer
+     'escalation
+     (hash 'decision-ok?
+           decision-ok?
+           'required
+           required
+           'selected
+           selected-tests
+           'required-count
+           (length required)
+           'selected-count
+           (length selected-tests)
+           'required-subset-of-selected?
+           required-subset?)
+     'required-execution
+     (hash 'defect
+           defect-execution
+           'control
+           control-execution
+           'rule
+           "required ∩ historical failed files"
+           'files
+           execution-set)
+     'historical
+     (hash 'run-id
+           run-id
+           'head-sha
+           (and historical (hash-ref historical 'head-sha))
+           'comprehensive-verdict
+           (hash-ref defect-ci 'verdict)
+           'control-comprehensive-verdict
+           (hash-ref control-ci 'verdict)
+           'failed-files
+           ci-failed
+           'overlap
+           overlap
+           'attributed-overlap
+           attributed-overlap
+           'producers
+           (and historical (hash-ref historical 'producers)))
+     'classification
+     (hash 'decision-level decision-ok? 'behavioural behavioural? 'attributed attributed 'claim claim)
+     'derived-at-revision
+     derived))
+  (write-record! out-file record)
+  (git! defect-worktree "reset" "-q" "--hard" revision)
+  (git! defect-worktree "clean" "-q" "-fd")
+  (git! control-worktree "reset" "-q" "--hard" revision)
+  (git! control-worktree "clean" "-q" "-fd")
+  record)
+
+(define (verify-replay-record record)
+  (define problems '())
+  (define (problem! message)
+    (set! problems (cons message problems)))
+  (define layer (hash-ref record 'contract-layer))
+  (define comprehensive (hash-ref record 'comprehensive))
+  (define files (hash-ref comprehensive 'files))
+  (set! problems (append (reverse (validate-layer-record layer files)) problems))
+  (define trees (hash-ref record 'trees))
+  (define expected (hash-ref record 'expected-trees))
+  (unless (equal? (hash-ref trees 'defect) (hash-ref expected 'defect))
+    (problem! "the recorded defect tree is not the expected historical tree"))
+  (unless (equal? (hash-ref trees 'control) (hash-ref expected 'control))
+    (problem! "the recorded control tree is not the expected revision tree"))
+  (define revision-tree (hash-ref record 'revision-tree))
+  (unless (equal? (hash-ref trees 'control) revision-tree)
+    (problem! "the control tree is not the recorded revision tree"))
+  (define selection (hash-ref record 'selection))
+  (unless (equal? (hash-ref selection 'digest) (enumeration-digest (hash-ref selection 'files)))
+    (problem! "the selected enumeration digest does not match its list"))
+  (unless (equal? (hash-ref comprehensive 'digest) (enumeration-digest files))
+    (problem! "the comprehensive digest does not match its file list"))
+  (unless (= (hash-ref comprehensive 'union-count) (length files))
+    (problem! "the comprehensive union count does not match its file list"))
+  ;; the decision follows from the recorded layer block
+  (define decision (hash-ref layer 'decision #f))
+  (define escalation (hash-ref record 'escalation))
+  (define required (hash-ref escalation 'required))
+  (define selected (hash-ref escalation 'selected))
+  (define decision-ok?
+    (and (eq? (as-symbol (hash-ref layer 'status 'unrecognized)) 'evaluated)
+         (eq? (as-symbol (hash-ref layer 'mode 'unrecognized)) 'counterfactual)
+         (and decision (eq? (as-symbol (hash-ref decision 'verdict 'unrecognized)) 'escalate))
+         (eq? (layer-instruction layer) 'run-comprehensive)
+         (and (member "tests/test-gsd-wave-status.rkt" required) #t)
+         (pair? required)
+         (= (length required) (length (common required selected)))))
+  (unless (eq? decision-ok? (hash-ref escalation 'decision-ok? #f))
+    (problem! "decision-ok? does not follow from the recorded layer block"))
+  ;; behavioural attribution is sound for every attributed file, and the executed
+  ;; set is the pre-registered rule: required ∩ the historical failed files
+  (define execution (hash-ref record 'required-execution))
+  (define execution-set (hash-ref execution 'files '()))
+  (unless (equal? (sort execution-set string<?)
+                  (sort (common required (hash-ref (hash-ref record 'historical) 'failed-files))
+                        string<?))
+    (problem! "the executed set is not required ∩ historical failed files"))
+  (define defect-verdicts (execution-verdicts (hash-ref execution 'defect)))
+  (define control-verdicts
+    (execution-verdicts (hash-ref (hash-ref record 'required-execution) 'control)))
+  (for ([file (in-list (hash-ref (hash-ref record 'classification) 'attributed '()))])
+    (unless (member file required)
+      (problem! (format "attributed file ~a is not in the required set" file)))
+    (unless (eq? (hash-ref defect-verdicts file 'unavailable) 'fail)
+      (problem! (format "attributed file ~a did not fail on the defect tree" file)))
+    (unless (eq? (hash-ref control-verdicts file 'unavailable) 'pass)
+      (problem! (format "attributed file ~a did not pass on the control tree" file))))
+  ;; the historical overlap follows from the recorded failed files
+  (define historical (hash-ref record 'historical))
+  (define recorded-overlap (hash-ref historical 'overlap))
+  (unless (equal? (sort (common required (hash-ref historical 'failed-files)) string<?)
+                  (sort recorded-overlap string<?))
+    (problem! "the recorded historical overlap does not follow from the failed files"))
+  (define attributed (hash-ref (hash-ref record 'classification) 'attributed '()))
+  (define attributed-overlap (common attributed (hash-ref historical 'failed-files)))
+  (define expected-claim
+    (cond
+      [(not decision-ok?) 'no-escalation]
+      [(and (pair? attributed) (pair? attributed-overlap)) 'prevented-attributed]
+      [(pair? attributed) 'prevented-unattributed]
+      [else 'decision-level]))
+  (unless (eq? expected-claim (as-symbol (hash-ref (hash-ref record 'classification) 'claim 'x)))
+    (problem! (format "the recorded claim does not follow from the evidence (~a)" expected-claim)))
+  (if (null? problems)
+      #t
+      (raise-arguments-error 'verify-replay-record
+                             "replay record verification failed"
+                             "problems"
+                             (reverse problems))))
+
 (module+ main
   (define worktree #f)
   (define revision #f)
@@ -904,6 +1233,12 @@
   (define layer-revision #f)
   (define decide-only? #f)
   (define verify-decision-file #f)
+  (define control-worktree #f)
+  (define replay? #f)
+  (define expect-defect-tree #f)
+  (define expect-revision-tree #f)
+  (define repo-root #f)
+  (define verify-replay-file #f)
   (command-line
    #:program "w3-dry-run.rkt"
    #:once-each ["--worktree" path "clean disposable linked worktree" (set! worktree path)]
@@ -924,6 +1259,26 @@
     path
     "re-derive and verify an existing decision record; launch nothing"
     (set! verify-decision-file path)]
+   ["--replay"
+    "D5 replay: evaluate the pinned layer as a counterfactual and execute the required set on both trees"
+    (set! replay? #t)]
+   ["--control-worktree"
+    path
+    "clean worktree at the evaluated revision (control)"
+    (set! control-worktree path)]
+   ["--expect-defect-tree"
+    sha
+    "expected historical defect tree SHA (refuse otherwise)"
+    (set! expect-defect-tree sha)]
+   ["--expect-revision-tree"
+    sha
+    "expected revision tree SHA (refuse otherwise)"
+    (set! expect-revision-tree sha)]
+   ["--repo-root" path "workspace root containing scripts/gh_helpers.py" (set! repo-root path)]
+   ["--verify-replay"
+    path
+    "re-derive and verify an existing replay record; launch nothing"
+    (set! verify-replay-file path)]
    #:args ()
    (cond
      [verify-file
@@ -934,6 +1289,45 @@
       (define record (with-input-from-file verify-decision-file (lambda () (read-json))))
       (verify-decision-record record)
       (printf "verified decision ~a\n" verify-decision-file)]
+     [verify-replay-file
+      (define record (with-input-from-file verify-replay-file (lambda () (read-json))))
+      (verify-replay-record record)
+      (printf "verified replay ~a\n" verify-replay-file)]
+     [replay?
+      (unless (and worktree
+                   control-worktree
+                   revision
+                   out-file
+                   cache-file
+                   layer-worktree
+                   layer-revision
+                   repo-root
+                   expect-defect-tree
+                   expect-revision-tree)
+        (raise-user-error
+         'w3-dry-run
+         (string-append "--replay needs --worktree, --control-worktree, --revision, "
+                        "--contract-worktree, --contract-revision, --ci-cache, --repo-root, "
+                        "--expect-defect-tree, --expect-revision-tree and --out")))
+      (define cache (with-input-from-file cache-file (lambda () (read-json))))
+      (define trees (hash-ref cache 'trees cache))
+      (define record
+        (run-replay-case (string->path worktree)
+                         (string->path control-worktree)
+                         revision
+                         (selection-case case-id)
+                         #:out-file (string->path out-file)
+                         #:contract-worktree (string->path layer-worktree)
+                         #:contract-revision layer-revision
+                         #:ci-cache trees
+                         #:repo-root (string->path repo-root)
+                         #:expect-defect-tree expect-defect-tree
+                         #:expect-revision-tree expect-revision-tree))
+      (printf "wrote ~a: claim=~a required=~a attributed=~a\n"
+              out-file
+              (hash-ref (hash-ref record 'classification) 'claim)
+              (hash-ref (hash-ref record 'escalation) 'required-count)
+              (length (hash-ref (hash-ref record 'classification) 'attributed)))]
      [decide-only?
       (unless (and worktree revision out-file)
         (raise-user-error 'w3-dry-run "--decide-only needs --worktree, --revision and --out"))

@@ -288,3 +288,14 @@
   (define r (record))
   (define totals (hash-set (hash-ref r 'totals) 'executed-union-count 999))
   (check-exn exn:fail? (lambda () (verify-baseline-record (hash-set r 'totals totals)))))
+
+(test-case "the W3 driver enumerates the same comprehensive producers as the baseline"
+  ;; One registry, two consumers: a drift here would let the evaluation driver
+  ;; enumerate a different comprehensive set than the verified baseline.
+  (check-equal? (comprehensive-producers) baseline-producers)
+  (define smoke
+    (for/first ([p (in-list baseline-producers)]
+                #:when (equal? (hash-ref p 'name "") "smoke (ubuntu-latest)"))
+      p))
+  (check-eq? (hash-ref smoke 'kind) 'declared-command)
+  (check-equal? (hash-ref smoke 'files) (list "tests/test-provider-smoke.rkt")))
