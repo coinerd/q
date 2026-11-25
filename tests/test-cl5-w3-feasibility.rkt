@@ -168,3 +168,38 @@
   (check-equal? (length (hash-ref record 'measurable-cases)) 3)
   ;; the audit never rewrites the corpus
   (check-equal? (hash-ref record 'corpus-sha) "deadbeef"))
+
+;; ---- CI run lookup ---------------------------------------------------------------
+
+(test-case "CI lookup pages past a full first page of other workflows"
+  ;; A busy commit can have more workflow_run entries than one page; the push CI
+  ;; run may be on page 2. Dropping it would misreport eligibility.
+  (define pages
+    (hash "page-1"
+          (hash 'total_count
+                12
+                'workflow_runs
+                (for/list ([i (in-range 10)])
+                  (hash 'name "Shard plan telemetry" 'id i 'conclusion "success")))
+          "page-2"
+          (hash 'total_count
+                12
+                'workflow_runs
+                (list (hash 'name "pr-latency-guard" 'id 10 'conclusion "failure")
+                      (hash 'name "CI" 'id 11 'conclusion "success" 'event "push")))))
+  (define (fake-fetch path)
+    (define page (if (regexp-match? #rx"[?&]page=1$" path) "page-1" "page-2"))
+    (hash-ref pages page))
+  (define rows (ci-rows "." (list (hash 'sha "abc")) #:fetch fake-fetch))
+  (check-equal? (length rows) 1)
+  (check-equal? (hash-ref (car rows) 'ci-run-id) 11)
+  (check-true (hash-ref (car rows) 'eligible?)))
+
+(test-case "a commit with no CI workflow run is not eligible"
+  (define (fake-fetch path)
+    (hash 'total_count
+          1
+          'workflow_runs
+          (list (hash 'name "pr-latency-guard" 'id 1 'conclusion "failure"))))
+  (define rows (ci-rows "." (list (hash 'sha "abc")) #:fetch fake-fetch))
+  (check-false (hash-ref (car rows) 'eligible?)))

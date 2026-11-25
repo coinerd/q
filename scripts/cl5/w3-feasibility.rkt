@@ -32,7 +32,9 @@
          "ci-evidence.rkt"
          "selection-experiment.rkt")
 
-(provide classify-case
+(provide all-runs
+         ci-rows
+         classify-case
          feasible?
          measurable-cases
          strata-summary
@@ -156,14 +158,29 @@
 
 ;; Optional: does the case's own commit have a completed successful CI run? The
 ;; corpus population rule assumed it; the audit checks the measurable subset.
-(define (ci-rows repo-root measurable)
+;; Pagination is not optional: the runs endpoint returns newest-first, and a busy
+;; commit can have more than one page of workflow_run entries, which would hide
+;; the CI push run behind them. Fetch every page (bounded) and filter by workflow.
+(define (all-runs fetch sha)
+  (let loop ([page 1]
+             [acc '()])
+    (define payload
+      (with-handlers ([exn:fail? (lambda (_) (hash 'total_count 0 'workflow_runs '()))])
+        (fetch (format "actions/runs?head_sha=~a&per_page=100&page=~a" sha page))))
+    (define runs (hash-ref payload 'workflow_runs '()))
+    (define total (hash-ref payload 'total_count (length runs)))
+    (define acc* (append acc runs))
+    (cond
+      [(null? runs) acc*]
+      [(>= (length acc*) total) acc*]
+      [(>= page 10) acc*]
+      [else (loop (add1 page) acc*)])))
+
+(define (ci-rows workspace measurable #:fetch [fetch #f])
+  (define fetch* (or fetch (lambda (path) (gh-json workspace "GET" path))))
   (for/list ([case (in-list measurable)])
     (define sha (hash-ref case 'sha))
-    (define runs
-      (with-handlers ([exn:fail? (lambda (_) '())])
-        (hash-ref (gh-json repo-root "GET" (format "actions/runs?head_sha=~a&per_page=10" sha))
-                  'workflow_runs
-                  '())))
+    (define runs (all-runs fetch* sha))
     (define ci
       (for/first ([run (in-list runs)]
                   #:when (equal? (hash-ref run 'name "") "CI"))

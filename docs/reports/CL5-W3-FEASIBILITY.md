@@ -31,22 +31,27 @@ The selection engine was introduced by `707bf3bf` (2026-11-15, #9913). The corpu
 population rule only required a green comprehensive CI run, which says nothing about whether the
 tools the measurement invokes exist at that tree.
 
-Of the six engine-bearing cases, five have a successful push CI run for their head SHA
-(`2ca8d0bb`, `5a6dd759`, `ec88d463`, `f264b06d`, `fde734da`); `707bf3bf` has no `CI` workflow run at
-all (only `workflow_run` workflows), so under the protocol's own population rule it is `unavailable`
-as well. **Eligible cases: 5.**
+All six engine-bearing cases have a successful push `CI` run for their head SHA (`2ca8d0bb`,
+`5a6dd759`, `707bf3bf`, `ec88d463`, `f264b06d`, `fde734da`), so all six pass the protocol's
+population rule. **Eligible cases: 6** — and the gate still fails on stratum coverage
+(S2 = 0, S3 = 3).
+
+*Correction during review:* an earlier draft of this report said 5 eligible because the CI lookup
+fetched a single page of 10 runs; `707bf3bf` is a busy commit whose push `CI` run sat behind ten
+`workflow_run` entries. The lookup now paginates (`all-runs`), the audit JSON is regenerated, and a
+test pins the page-2 case. The population conclusion is unchanged.
 
 ### A2 — the engine-era history is 66 commits, so no re-frozen historical corpus can meet the minima either
 
-`git rev-list --no-merges --count 707bf3bf..HEAD` = **66** (60 of them inside the frozen window,
-yielding the 5 eligible cases above). At the frozen corpus's S2 share (59/928 ≈ 6 %), a re-freeze over
+`git rev-list --no-merges --count 707bf3bf..431b491d` = **60** inside the frozen window (67 to
+`HEAD` when this report was last revised; the projection does not depend on the exact tip). At the frozen corpus's S2 share (59/928 ≈ 6 %), a re-freeze over
 the whole engine era would yield roughly 3–4 S2 cases, against the pre-registered minimum of 20 per
 stratum for S2 and S3. The pre-registered population minima therefore cannot be met by *any* slice
 of this repository's history: the engine has not existed long enough.
 
 ### A3 — a matched-host comprehensive run does not complete in the time box
 
-On this host, `./qt full` on an engine-bearing corpus case tree (`2ca8d0bb`, 1 601 files) was killed
+On this host, `./qt full` on an engine-bearing corpus case tree (`2ca8d0bb`, 1 679 test files) was killed
 by a 3 600 s timeout (elapsed 3 733 s, `exit=124`, still inside `run-files`). The protocol is explicit:
 if a matched-host `C_comp` cannot be completed, **M6 is `unavailable` and no GO is possible**, and
 CI-derived timings must not be substituted. This is independent of population: the cost arm has no
@@ -106,4 +111,4 @@ cd /tmp/wt-ccomp && time timeout 3600 ./qt full    # exit=124 after 3733 s
 ```
 
 Machine-readable result: `docs/reports/CL5-W3-FEASIBILITY-431b491d.json`
-(`population-feasible? = false`, reasons S2 = 0 and S3 = 3 against a minimum of 20).
+(`population-feasible? = false`, reasons S2 = 0 and S3 = 3 against a minimum of 20; `ci-eligible = 6`).
