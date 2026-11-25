@@ -479,3 +479,156 @@
                (verify-record (hash-set (hash-set r 'contract-layer layer)
                                         'classification
                                         (hash-set (hash-ref r 'classification) 'mode 'historical))))))
+
+;; ---- replay records (F4) -----------------------------------------------------------
+
+(define replay-comprehensive (list "tests/test-gsd-wave-status.rkt" "tests/test-other.rkt"))
+(define replay-required (list "tests/test-gsd-wave-status.rkt"))
+
+(define (replay-layer)
+  (hash 'state
+        'counterfactual
+        'mode
+        'counterfactual
+        'status
+        'evaluated
+        'evaluated-revision
+        "rev-1"
+        'contract-revision
+        "rev-2"
+        'counterfactual?
+        #t
+        'layer-present-at-evaluated-revision?
+        #f
+        'evaluated-tree
+        "defect-tree"
+        'decision
+        (hash 'verdict
+              'escalate
+              'required
+              replay-required
+              'escalations
+              (list (hash 'code "no-consumer-detector" 'module "m.rkt" 'detail "d" 'tests '())))
+        'selection
+        (hash 'instruction 'run-comprehensive 'required replay-required 'tests replay-comprehensive)))
+
+(define (exec-row file exit timed-out?)
+  (hash 'file file 'exit exit 'timed-out timed-out? 'seconds 0.1 'failures '()))
+
+(define (replay-record)
+  (hash
+   'revision
+   "rev-1"
+   'revision-tree
+   "control-tree"
+   'case
+   (hash 'id 'D5 'category "c" 'note "n" 'declared-changes (list "extensions/gsd/wave-status.rkt"))
+   'expected-trees
+   (hash 'defect "defect-tree" 'control "control-tree")
+   'trees
+   (hash 'defect "defect-tree" 'control "control-tree")
+   'selection
+   (hash 'command
+         "./qt quick --changed HEAD --explain"
+         'files
+         (list "tests/test-gsd-wave-status.rkt")
+         'digest
+         (enumeration-digest (list "tests/test-gsd-wave-status.rkt")))
+   'deployed-strategy
+   (hash 'command "./qt quick --changed HEAD" 'verdict 'pass 'selected '() 'seconds 1 'failures '())
+   'comprehensive
+   (hash 'files
+         replay-comprehensive
+         'union-count
+         2
+         'digest
+         (enumeration-digest replay-comprehensive)
+         'producers
+         '()
+         'producers-digest
+         "0")
+   'contract-layer
+   (replay-layer)
+   'escalation
+   (hash 'decision-ok?
+         #t
+         'required
+         replay-required
+         'selected
+         replay-comprehensive
+         'required-count
+         1
+         'selected-count
+         2
+         'required-subset-of-selected?
+         #t)
+   'required-execution
+   (hash 'defect
+         (hash 'files (list (exec-row "tests/test-gsd-wave-status.rkt" 1 #f)))
+         'control
+         (hash 'files (list (exec-row "tests/test-gsd-wave-status.rkt" 0 #f)))
+         'rule
+         "required ∩ historical failed files"
+         'files
+         (list "tests/test-gsd-wave-status.rkt"))
+   'historical
+   (hash 'run-id
+         1
+         'head-sha
+         "head"
+         'comprehensive-verdict
+         'fail
+         'control-comprehensive-verdict
+         'pass
+         'failed-files
+         (list "tests/test-gsd-wave-status.rkt")
+         'overlap
+         (list "tests/test-gsd-wave-status.rkt")
+         'attributed-overlap
+         (list "tests/test-gsd-wave-status.rkt")
+         'producers
+         '())
+   'classification
+   (hash 'decision-level
+         #t
+         'behavioural
+         #t
+         'attributed
+         (list "tests/test-gsd-wave-status.rkt")
+         'claim
+         'prevented-attributed)
+   'derived-at-revision
+   '()))
+
+(test-case "a replay record that attributes the historical detector verifies"
+  (check-true (verify-replay-record (replay-record))))
+
+(test-case "a replay record whose reconstructed tree was swapped is refused"
+  (define trees (hash-set (hash-ref (replay-record) 'trees) 'defect "other-tree"))
+  (check-exn exn:fail? (lambda () (verify-replay-record (hash-set (replay-record) 'trees trees)))))
+
+(test-case "a replay claim that the evidence does not support is refused"
+  ;; no attributed file -> claim may not be prevented-attributed
+  (define r (replay-record))
+  (define classification (hash-set (hash-ref r 'classification) 'attributed '()))
+  (check-exn exn:fail? (lambda () (verify-replay-record (hash-set r 'classification classification))))
+  ;; an attributed file that passed on the defect tree is not a detector
+  (define execution (hash-ref r 'required-execution))
+  (define defect
+    (hash-set (hash-ref execution 'defect)
+              'files
+              (list (exec-row "tests/test-gsd-wave-status.rkt" 0 #f))))
+  (check-exn exn:fail?
+             (lambda ()
+               (verify-replay-record
+                (hash-set r 'required-execution (hash-set execution 'defect defect))))))
+
+(test-case "a replay overlap that does not follow from the failed files is refused"
+  (define r (replay-record))
+  (define historical (hash-set (hash-ref r 'historical) 'failed-files '()))
+  (check-exn exn:fail? (lambda () (verify-replay-record (hash-set r 'historical historical)))))
+
+(test-case "the replay's decision must be the counterfactual escalation it claims"
+  (define r (replay-record))
+  (define layer (hash-set (hash-ref r 'contract-layer) 'mode 'historical))
+  (check-exn exn:fail? (lambda () (verify-replay-record (hash-set r 'contract-layer layer)))))
