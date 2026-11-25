@@ -114,13 +114,45 @@
         (for/list ([p (in-list producers)])
           (producer->jsexpr p))
         'comprehensive
-        (hash 'wall_s (record-comprehensive-wall producers) 'producer_count (length producers))
+        (hash 'wall_s
+              (record-comprehensive-wall producers)
+              'producer_count
+              (length producers)
+              'slot_count
+              (for/sum ([p (in-list producers)]) (length (record-producer-files p)))
+              'unique_files
+              (length (remove-duplicates
+                       (append* (map (lambda (p)
+                                       (map (lambda (f) (hash-ref f 'path))
+                                            (record-producer-files p)))
+                                     producers))))
+              'status
+              (comprehensive-status producers)
+              'status_reasons
+              (comprehensive-status-reasons producers))
         'notes
         (for/list ([n (in-list notes)])
           (format "~a" n))))
 
 (define (record-comprehensive-wall producers)
   (for/sum ([p (in-list producers)]) (record-producer-wall-s p)))
+
+;; A comprehensive run is only `ok` when every producer finished green with no
+;; timeout. The status is derived, never declared: a record cannot call itself
+;; ok while its own evidence shows a timeout or a non-pass producer.
+(define (comprehensive-status-reasons producers)
+  (append*
+   (for/list ([p (in-list producers)])
+     (define fs (record-producer-files p))
+     (append (if (positive? (timeout-count fs))
+                 (list (format "~a: ~a timeout(s)" (record-producer-name p) (timeout-count fs)))
+                 '())
+             (if (equal? (record-producer-verdict p) "pass")
+                 '()
+                 (list (format "~a: verdict ~a" (record-producer-name p) (record-producer-verdict p))))))))
+
+(define (comprehensive-status producers)
+  (if (null? (comprehensive-status-reasons producers)) "ok" "degraded"))
 
 (define (producer->jsexpr p)
   (define files (record-producer-files p))
@@ -198,7 +230,34 @@
   (define declared-wall (hash-ref (hash-ref rec 'comprehensive (hash)) 'wall_s #f))
   (unless (and (real? declared-wall) (real? derived-wall) (= declared-wall derived-wall))
     (refuse "comprehensive wall ~s != sum of producer walls ~s" declared-wall derived-wall))
-  (define count-declared (hash-ref (hash-ref rec 'comprehensive) 'producer_count #f))
+  (define comprehensive (hash-ref rec 'comprehensive))
+  (define slot-count (for/sum ([p (in-list producers)]) (hash-ref p 'file_count)))
+  (define unique-files
+    (length (remove-duplicates (append* (map (lambda (p)
+                                               (map (lambda (f) (hash-ref f 'path))
+                                                    (producer-files p)))
+                                             producers)))))
+  (define reasons
+    (append*
+     (for/list ([p (in-list producers)])
+       (define files (producer-files p))
+       (append (if (positive? (timeout-count files))
+                   (list (format "~a: ~a timeout(s)" (hash-ref p 'name) (timeout-count files)))
+                   '())
+               (if (equal? (hash-ref p 'verdict #f) "pass")
+                   '()
+                   (list (format "~a: verdict ~a" (hash-ref p 'name) (hash-ref p 'verdict #f))))))))
+  (define status (if (null? reasons) "ok" "degraded"))
+  (unless (equal? (hash-ref comprehensive 'slot_count #f) slot-count)
+    (refuse "comprehensive slot_count ~s != ~s" (hash-ref comprehensive 'slot_count #f) slot-count))
+  (unless (equal? (hash-ref comprehensive 'unique_files #f) unique-files)
+    (refuse "comprehensive unique_files ~s != ~s" (hash-ref comprehensive 'unique_files #f) unique-files))
+  (unless (equal? (hash-ref comprehensive 'status #f) status)
+    (refuse "comprehensive status ~s != re-derived ~s" (hash-ref comprehensive 'status #f) status))
+  (unless (equal? (hash-ref comprehensive 'status_reasons '()) reasons)
+    (refuse "comprehensive status_reasons ~s != re-derived ~s"
+            (hash-ref comprehensive 'status_reasons '()) reasons))
+  (define count-declared (hash-ref comprehensive 'producer_count #f))
   (unless (equal? count-declared (length producers))
     (refuse "comprehensive producer_count ~s != ~s recorded" count-declared (length producers)))
   (hash 'schema
@@ -209,6 +268,8 @@
         (length producers)
         'comprehensive-wall-s
         derived-wall
+        'status
+        status
         'files
         (for/sum ([p (in-list producers)]) (hash-ref p 'file_count))
         'serial-ms

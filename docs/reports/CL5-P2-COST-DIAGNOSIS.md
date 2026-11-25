@@ -58,13 +58,18 @@ invocation each:
 | smoke | 1 | 1.5 | — | 2 | 2 | 1.00 / 1 | pass |
 | **Σ = C_comp** | **1 397 unique / 1 492 slots** | **4 501.4** | 424.5 | 10 668 | — | — | **degraded** |
 
-Two files timed out at the harness default 120 s on this host (`tests/test-gsd-executor-ergonomics-prompt.rkt`,
-`tests/test-gsd-evidence-repair-production-contract.rkt`). CI passes both; on this host they exceed
-120 s. They are recorded as `incomplete`, never as passes, and they make C_comp **degraded** for this
-record: the wall time is a measurement of the surface, but the surface did not fully pass here.
+Two files timed out on this host, through two different mechanisms: `tests/test-gsd-executor-ergonomics-prompt.rkt`
+hit the harness default of 120 s, and `tests/test-gsd-evidence-repair-production-contract.rkt` hit its
+own declared `@timeout 210` (elapsed 210 062 ms). CI passes both. They are recorded as `incomplete`,
+never as passes, and the record's comprehensive block therefore carries a **derived**
+`status: "degraded"` with machine-readable reasons (`fast-0: 1 timeout(s)`, `fast-2: 1 timeout(s)`) —
+the wall time is a measurement of the surface, but the surface did not fully pass here.
 
 Per-file evidence (1 492 entries: path, elapsed ms, status) and every derived aggregate are in
-`docs/reports/CL5-P2-COST-dad0a9b9.json`, re-derivable by `scripts/cl5/cost-record.rkt --verify`.
+`docs/reports/CL5-P2-COST-dad0a9b9.json`, re-derivable by `scripts/cl5/cost-record-cli.rkt --verify`.
+The record also re-derives the surface shape it measured — `unique_files = 1397`, `slot_count = 1492`,
+the 95 duplicated slots, `status = degraded` and its reasons — so the surface claims in §1 are
+checkable against the record itself, not only against a re-run of `--explain`.
 
 ## 4. Answering the question directly
 

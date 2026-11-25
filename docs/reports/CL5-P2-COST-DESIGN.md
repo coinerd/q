@@ -46,7 +46,9 @@ for C in a safety or efficiency argument.
 1. Per-file timeouts are the harness's existing policy: declared `@timeout` metadata, else 120 s.
    A measurement does not invent its own cap.
 2. A file that hits its timeout is `timeout`/`incomplete`. A producer with any timeout is never
-   `pass`; the record's comprehensive block is marked `degraded`.
+   `pass`; the record's comprehensive block carries a **derived** `status` (`ok` | `degraded`) plus
+   `status_reasons`. The status is computed from the record's own evidence and re-checked by the
+   verifier, so a record cannot call itself `ok` while a producer timed out.
 3. **A `degraded` C_comp may be reported but may not support a GO** until either (a) the timeouts are
    resolved on the reference host, or (b) the failing files are pre-registered as out-of-surface for
    the experiment — which is a protocol change, not a measurement convenience.

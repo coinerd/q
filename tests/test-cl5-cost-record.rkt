@@ -129,6 +129,36 @@
   (check-exn #rx"duplicate producer names"
              (lambda () (record #:producers (list (producer) (producer))))))
 
+(test-case "the comprehensive status is derived: a timeout makes it degraded"
+  (define ok (rec->json-hash (record #:producers (list (producer)))))
+  (check-equal? (hash-ref (hash-ref ok 'comprehensive) 'status) "ok")
+  (define degraded
+    (rec->json-hash (record #:producers
+                            (list (producer #:elapsed (list (list "tests/a.rkt" 120000 "timeout"))
+                                            #:timeout 1
+                                            #:verdict "incomplete")))))
+  (check-equal? (hash-ref (hash-ref degraded 'comprehensive) 'status) "degraded")
+  (check-true (pair? (hash-ref (hash-ref degraded 'comprehensive) 'status_reasons))))
+
+(test-case "a record that calls itself ok while a producer timed out is refused"
+  (define j
+    (rec->json-hash (record #:producers
+                            (list (producer #:elapsed (list (list "tests/a.rkt" 120000 "timeout"))
+                                            #:timeout 1
+                                            #:verdict "incomplete")))))
+  (define j2 (hash-set j 'comprehensive (hash-set (hash-ref j 'comprehensive) 'status "ok")))
+  (check-exn #rx"comprehensive status" (lambda () (verify-record j2))))
+
+(test-case "slot_count and unique_files must re-derive from the recorded files"
+  (define j (rec->json-hash (record #:producers (list (producer) (producer #:name "fast-1")))))
+  (define c (hash-ref j 'comprehensive))
+  (check-equal? (hash-ref c 'slot_count) 4)
+  (check-equal? (hash-ref c 'unique_files) 2)
+  (check-exn #rx"slot_count"
+             (lambda () (verify-record (hash-set j 'comprehensive (hash-set c 'slot_count 99)))))
+  (check-exn #rx"unique_files"
+             (lambda () (verify-record (hash-set j 'comprehensive (hash-set c 'unique_files 99))))))
+
 (test-case "a record with a missing host descriptor is refused"
   (define j (hash-set (rec->json-hash (record #:producers (list (producer)))) 'host (hash)))
   (check-exn #rx"host descriptor" (lambda () (verify-record j))))

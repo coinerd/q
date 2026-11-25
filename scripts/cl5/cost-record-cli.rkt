@@ -107,9 +107,10 @@
                                    (eprintf "~a~n" (exn-message e))
                                    (exit 1))])
         (verify-record (read-json-file (verify-path)))))
-    (printf "record verified: ~a producers, comprehensive ~a s, ~a file slots, ~a timeouts~n"
+    (printf "record verified: ~a producers, comprehensive ~a s (~a), ~a file slots, ~a timeouts~n"
             (hash-ref summary 'producers)
             (hash-ref summary 'comprehensive-wall-s)
+            (hash-ref summary 'status)
             (hash-ref summary 'files)
             (hash-ref summary 'timeouts))]
    [(spec-path)
