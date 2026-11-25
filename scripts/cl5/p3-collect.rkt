@@ -485,9 +485,24 @@
               [else
                (with-handlers ([exn:fail? (lambda (e)
                                             (eprintf "error: ~a~n" (exn-message e))
-                                            (unless (getenv "P3_NO_CATCH")
-                                              (raise e))
-                                            #f)])
+                                            ;; Fail closed: an unexpected failure is recorded as
+                                            ;; unavailable with its message, never dropped and never
+                                            ;; turned into a silent skip.
+                                            (case-record sha
+                                                         #f
+                                                         (timestamp)
+                                                         (cohort)
+                                                         (git-line root "log" "-1" "--format=%s" sha)
+                                                         '()
+                                                         #f
+                                                         (hash)
+                                                         #f
+                                                         (hash)
+                                                         (hash)
+                                                         (hash)
+                                                         "unavailable"
+                                                         "collection-error"
+                                                         (exn-message e)))])
                  (collect-one #:root root
                               #:worktree base
                               #:sha sha
