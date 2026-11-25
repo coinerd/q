@@ -1,108 +1,124 @@
-# CL5 P2-B — comprehensive cost measurement: design for review
+# CL5 P2-B — comprehensive cost measurement: design, revision 2
 
-Status: **proposal, not in force.** Nothing in this document changes what CI runs or what
-"comprehensive" means. Its approval is a prerequisite for using any cost number in a decision.
-P2-A (`CL5-P2-COST-DIAGNOSIS.md`) supplies the evidence this design is built on.
+Status: **rev 2 incorporates the owner's five decisions and two amendments (2026-11-25).** Nothing
+here changes what CI runs or what "comprehensive" means; the surfaces stay exactly the ones that
+exist today. Rev 2 is the document submitted for independent approval. Evidence: P2-A
+(`CL5-P2-COST-DIAGNOSIS.md`, record `CL5-P2-COST-dad0a9b9.json`) and the timeout resolution
+(`CL5-P2-TIMEOUT-RESOLUTION.md`).
 
-## 1. Two questions, two surfaces
+Changes from rev 1 are marked **[rev2]**.
 
-The owner's split is adopted literally: PR-CI latency and developer-facing local verification are
-different workloads and must not be merged into one number.
+## 1. Surfaces (unchanged)
 
-| Surface | Question it answers | Definition | Producer |
+| Surface | Question | Definition | Producer |
 |---|---|---|---|
-| **C** (comprehensive / CI) | "What does full verification cost before a push?" | Union of the CI test producers at revision *r*: fast 0–2, platform, security, workflows 0–1, smoke | `./qt --lane …`, CI's own flags, plus the smoke step's declared command |
-| **L** (local full) | "What does a developer's `./qt full` cost?" | `./qt full`'s own selection at *r* (a superset of C) | `./qt full --jobs n` |
+| **C** | "What does full verification cost before a push?" | Union of the CI producers at revision *r*: fast 0–2, platform, security, workflows 0–1, smoke | `./qt --lane …` with CI's own flags, plus the smoke step's declared command |
+| **L** | "What does a developer's `./qt full` cost?" | `./qt full`'s selection at *r* (superset of C) | `./qt full --jobs n` |
 
-`C_comp(r)` is defined as the sum of the per-producer wall clocks when each producer is executed once
-by the production runner on the reference host — because that is what CI does, one job per producer.
-`C_full(r)` is one `./qt full` invocation. They are never mixed, and a claim must name its surface.
+At `dad0a9b9`: C = 1 397 unique files / 1 492 producer executions; L = 1 602 files.
 
-Explicitly rejected: defining a "bounded comprehensive" suite with fewer files. If such a suite is
-ever wanted, it is a separate proposal with a coverage analysis, and it may not silently substitute
-for C in a safety or efficiency argument.
+## 2. Metrics **[rev2]**
 
-## 2. Measurement conditions (all required, all recorded)
+Two metrics, never substituted for one another:
 
-1. **Matched host.** All arms of one comparison run on the same physical host inside one session.
-   The record carries `nproc`, total RAM, kernel, and the load average before/after each invocation.
-   Cross-host comparison is invalid; CI durations are never substituted for a local measurement.
-2. **Workers fixed by surface.** C uses CI's own `--jobs` (fast/platform/security 4, workflows 2);
-   L uses the developer default unless the hypothesis names another value. A comparison between two
-   arms must use identical `--jobs`.
-3. **Cache label.** `cold` = no compiled cache for the tree; `warm` = a preparation step has already
-   run. Both arms of a comparison share the label. Cold cost is reported separately (preparation
-   phase) and never mixed into a warm number.
-4. **Phase decomposition.** Every record keeps `preparation_ms` (the runner's bulk compile) separate
-   from per-file `elapsed_ms`. Preparation is reported, not hidden.
-5. **Selection overhead included.** For a selected arm, the time to compute the selection
-   (`--explain`/planning) is part of that arm's cost, so the comparison charges the selector for its
-   decision.
-6. **Quiet host.** No other measurement, build or test suite runs concurrently. Load before each
-   invocation is recorded; a run started above a pre-registered load ceiling is repeated.
+1. **Primary — elapsed wall time of one complete CI-equivalent execution schedule.**
+   *Schedule* = a single invocation of the production adapter over the exact surface, on the
+   measurement host: `racket scripts/run-tests/runner.rkt <exact file list> --jobs <n>` (or the
+   `./qt` lane form where the lane *is* the surface). `n` = `nproc` unless a hypothesis fixes another
+   value, and the same `n` is used for both arms. The reportable number is the wall clock of that one
+   invocation, with its `preparation` phase reported separately.
+2. **Secondary — resource cost.** `C_comp_resource = Σ per-producer wall` (the 8-producer record:
+   4 501.4 s at `dad0a9b9`). This is a cost-accounting figure, **not** a substitute for elapsed time
+   and never reported as one.
 
-## 3. Timeouts and overrun policy (the part the owner asked to be explicit)
+**Slot accounting [rev2].** Work and cost accounting count **1 492 executions**; coverage accounting
+counts **1 397 unique files**. Every report states both, labelled. Overlapping files are charged
+twice because CI pays them twice; they are counted once in coverage.
 
-1. Per-file timeouts are the harness's existing policy: declared `@timeout` metadata, else 120 s.
-   A measurement does not invent its own cap.
-2. A file that hits its timeout is `timeout`/`incomplete`. A producer with any timeout is never
+**Smoke [rev2].** The measured smoke step is the **exact command declared by the workflow**, verified
+against the pinned workflow definition by
+`tests/test-cl5-baseline.rkt` ("smoke is the file named by ci.yml's own command"). The broader
+`--lane smoke` selection is **not** used for measurement; it selects more files than CI runs.
+
+## 3. Matched-host and cache conditions **[rev2]**
+
+1. **Comparability precondition.** A wall-time speedup claim requires the comprehensive and selected
+   workloads to be executed on the same host, in the same session, with the same adapter, the same
+   `--jobs`, the same cache label and the same timeout policy. If those conditions cannot be met, the
+   result is **resource cost only** — no wall-time speedup claim is made from it.
+2. **Paired measurements [rev2].** Arms are measured as pairs in one session, in alternating order
+   across repeats (A,B then B,A), so drift affects both arms. Every individual timing is reported;
+   nothing is averaged across a spread above the tolerance.
+3. **Cache [rev2].** **Warm cache is the primary incremental-verification metric.** Cold-start
+   preparation and cold total cost are reported separately. A warm selected run is **never** compared
+   with a cold comprehensive run.
+4. **Quiet host.** No other measurement, build or suite runs concurrently; load average before and
+   after each invocation is recorded, and a run started above the pre-registered load ceiling is
+   repeated.
+5. **Selection overhead charged.** The selected arm includes the cost of computing its selection
+   (`--explain`/planning), so the selector pays for its own decision.
+
+## 4. Timeouts and censorship **[rev2]**
+
+1. Per-file timeouts are the harness's existing policy: declared `@timeout`, else 120 s. No
+   measurement invents its own cap.
+2. A file that hits its timeout is `timeout`/`incomplete`; a producer with any timeout is never
    `pass`; the record's comprehensive block carries a **derived** `status` (`ok` | `degraded`) plus
-   `status_reasons`. The status is computed from the record's own evidence and re-checked by the
-   verifier, so a record cannot call itself `ok` while a producer timed out.
-3. **A `degraded` C_comp may be reported but may not support a GO** until either (a) the timeouts are
-   resolved on the reference host, or (b) the failing files are pre-registered as out-of-surface for
-   the experiment — which is a protocol change, not a measurement convenience.
-4. Per-producer wall-clock cap: pre-registered at **7 200 s** for C producers and **14 400 s** for L.
-   Exceeding the cap ⇒ the producer is `unavailable` with the phase reached and the number of files
-   completed. No extrapolation, no partial-sum-as-total, no substitution from another host.
-5. A run killed by an external timeout (the operator's `timeout` command) is **not a measurement**
-   and cannot be recorded as one; only the harness's own verdict counts.
+   `status_reasons`, re-checked by the verifier.
+3. **Censoring rule [rev2].** Caps: **7 200 s per C producer**, **14 400 s for L**. A run that exceeds
+   its cap is **censored**: recorded as `unavailable` with the phase reached and the file count
+   completed. A censored run is **not a completed measurement** and **cannot support a GO decision**;
+   it may be reported as evidence about cost.
+4. A run killed by an operator timeout is not a measurement at all.
+5. **Timeout resolution [rev2].** Before any cost-based GO, the timeouts observed on the reference
+   host must be resolved: reproducible and passing under the official surface's declared limits, or
+   the affected surface is `degraded` and therefore inadmissible for a GO. Tests are not removed,
+   timeouts are not silently extended, and the comprehensive set is not redefined to obtain a green
+   measurement. Any timeout-policy change is a separate, reviewed change
+   (`CL5-P2-TIMEOUT-RESOLUTION.md` records the reproducibility investigation).
 
-## 4. Evidence format and verification
+## 5. Evidence and verification (unchanged mechanics, rev2 acceptance)
 
-- One JSON record per measurement session: `docs/reports/CL5-P2-COST-<rev8>.json`, schema
-  `cl5-cost/1`, plus the spec that produced it (`CL5-P2-COST-SPEC-<rev8>.json`).
-- The record embeds per-file evidence (path, elapsed_ms, status) for every producer, its wall clock,
-  preparation time, and the host/cache descriptors.
-- `racket scripts/cl5/cost-record-cli.rkt --verify REC` re-derives, fail-closed: declared file counts,
-  Σ per-file, max per-file, timeout counts, the comprehensive sum, duplicate entries, and the
-  no-pass-with-timeout rule. A record that does not re-derive is refused, not corrected.
-- Committed revision and tree SHAs identify the workload; a record whose selection does not match the
-  revision's own producers is refused (the producer file lists are the evidence).
-
-## 5. Acceptance criteria for a usable C_comp
-
-1. The record verifies.
-2. **Two invocations per producer**, same session, same cache label; both are reported. The GO arm
-   uses the **slower** of the two walls; a spread above 15 % is reported as instability and triggers a
-   third run rather than an average.
-3. Host and cache descriptors present; load ceiling respected.
-4. `degraded` status disclosed next to the number wherever the number is used.
-5. The record is reproducible from the committed spec (same commands, same flags).
+- One record per session: `docs/reports/CL5-P2-COST-<rev8>.json`, schema `cl5-cost/1`, plus the spec
+  (`CL5-P2-COST-SPEC-<rev8>.json`). Per-file evidence embedded; every aggregate re-derived by
+  `racket scripts/cl5/cost-record-cli.rkt --verify REC` (fail-closed: counts, serial, max, timeouts,
+  slot/unique counts, comprehensive sum, derived status, no-pass-with-timeout).
+- Acceptance **[rev2]**: verifier passes; **two paired invocations minimum**; a spread above **15 %**
+  triggers a **third** run rather than an average; the GO arm uses the **slower** wall of its
+  accepted runs, applied to **both** arms consistently; all individual timings, the load record and
+  the cache label are reported; a `degraded` or censored result is disclosed next to any number it
+  qualifies.
+- A record whose selection does not match the revision's own producer file lists is refused.
 
 ## 6. What this design does not authorise
 
-- No change to CI: the producer set, workflows and gate semantics stay as they are.
+- No CI change (producer set, workflows, gate semantics).
 - No production selector, scheduler or admission change.
-- No efficiency or GO claim: P2 supplies an instrument and a first measurement. The population comes
-  from P3, and the comparison still requires a selected arm measured under §2.
+- No bounded substitute suite. If one is ever proposed it needs its own review plus a coverage
+  analysis, and it may not silently replace C in a safety or efficiency argument.
+- No efficiency or GO claim from P2 alone: P2 supplies the instrument. A GO additionally needs the P3
+  population, a selected arm measured under §3, and the timeout resolution in §4.5.
 - No reuse of W3a's historical corpus, and no reuse of mutant timings as evidence about ordinary
   development changes.
 
-## 7. Open questions for the reviewer
+## 7. Decisions taken (was: open questions) — rev 2
 
-1. **Aggregate choice.** Is `C_comp = Σ per-producer wall` (CI's structure) the right reference, or
-   should the reference be one unsharded `--lane fast`-style invocation? The sum overstates the wall
-   clock a single developer would wait but matches what CI actually spends across jobs; the design
-   picks the sum because the selector's savings apply to the whole pre-push verification, and
-   because sharding exists for CI parallelism, not as a property of the workload.
-2. **Overlap.** The C union is 1 397 files but 1 492 producer slots (95 files run in more than one
-   producer). Charging the slots is intentional (CI pays them twice); should the record also carry a
-   de-duplicated "unique-file cost" view? Proposal: yes, as a derived field, never as the headline.
-3. **Smoke.** It is a 1.5 s workflow step with no JSON artifact; it is modelled as an inline
-   single-file producer. Is that acceptable, or should smoke be excluded from C_comp as negligible?
-4. **Surface L cap.** L's 17 long-tail files (up to 4 h) make a per-file cap necessary. Is the
-   proposed 14 400 s operator cap the right instrument, or should L exclude ≥ 1200 s files by
-   pre-registration and state that exclusion in every L number?
-5. **Warm vs cold as the headline.** CI shards are cold per job; a developer's second run is warm.
-   Proposal: report both labels and never compare across them — confirmation wanted.
+| Rev-1 question | Decision (owner) | Implementation |
+|---|---|---|
+| Σ-producers vs single invocation | **Elapsed wall of a complete CI-equivalent schedule is primary; Σ is resource cost** | §2.1 / §2.2 |
+| 1 492 slots vs 1 397 unique | **Both, labelled**: slots for work/cost, unique for coverage | §2 "Slot accounting" |
+| Smoke | **Exact CI-declared command**, pinned against the workflow | §2 "Smoke" |
+| L long tail | **Keep caps 14 400 s (L) / 7 200 s (C)**; censored ⇒ not a completed measurement, no GO | §4.3 |
+| Warm vs cold | **Warm primary** for incremental verification; cold reported separately; never mixed | §3.3 |
+| *(amendment)* comparability | No wall-time speedup claim unless both arms run under comparable host/concurrency | §3.1 |
+| *(amendment)* paired runs | Paired, alternating order, individual timings, consistent slower-time rule, variance shown | §3.2 / §5 |
+
+## 8. Residual risks
+
+1. One host class (4 vCPU / 7 GB); no claim transfers to another machine.
+2. Warm-cache numbers depend on the preparation step having run in the same session; the record
+   states the label and the preparation time.
+3. The two observed timeouts make the current C record `degraded`; §4.5 governs resolution.
+4. Execution-infrastructure improvements (cold-start preparation, scheduling, long-tail tests) are a
+   **separate** concern. They must not be folded into a selection-speedup claim, and no full-suite
+   optimisation is undertaken before representative selected-arm measurements exist.
