@@ -296,7 +296,8 @@
 (define job-count (make-parameter 4))
 (define allowed-paths
   (make-parameter (list "tests/test-gsd-executor-ergonomics-prompt.rkt"
-                        "tests/test-gsd-evidence-repair-production-contract.rkt")))
+                        "tests/test-gsd-evidence-repair-production-contract.rkt"
+                        "tests/test-gsd-branch-delivery-verification.rkt")))
 
 (define (policy-hash)
   (hasheq 'formula
