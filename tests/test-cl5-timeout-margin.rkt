@@ -77,8 +77,7 @@
                   'rounding_s
                   30)
           'allowed_paths
-          (list "tests/test-gsd-executor-ergonomics-prompt.rkt"
-                "tests/test-gsd-evidence-repair-production-contract.rkt")
+          default-allowed-paths
           'entries
           entries))
 
@@ -90,6 +89,20 @@
              (lambda ()
                (verify-registry (registry #:entries
                                           (list (entry #:path "tests/test-settings.rkt")))))))
+
+(test-case "a registry may not widen its own allow-list"
+  ;; The authoritative list lives in the module; a registry that adds a path is
+  ;; refused, so the policy cannot authorise itself to cover another file.
+  (check-exn #rx"differs from the authoritative one"
+             (lambda ()
+               (verify-registry (hash-set (registry)
+                                          'allowed_paths
+                                          (cons "tests/test-settings.rkt" default-allowed-paths))))))
+
+(test-case "a margin that does not match the numbers is refused"
+  (define e (hash-set (entry) 'margin 99.0))
+  (check-exn #rx"margin 99.0 does not match"
+             (lambda () (verify-registry (registry #:entries (list e))))))
 
 (test-case "too few samples are refused (sparse data cannot derive a limit)"
   (check-exn #rx"too sparse"

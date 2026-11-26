@@ -1,6 +1,6 @@
 # CL5 P2-D — concurrency-aware timeout policy: measurement and applied limits
 
-Status: **applied.** Three `@timeout` declarations changed, both on the owner-approved formula and both
+Status: **applied.** Three `@timeout` declarations changed, each on the owner-approved formula and each
 visible in a committed registry that a test pins to the declarations. Nothing else changed: no test
 body, no fixture, no production code, no CI definition. Fail-closed behaviour is untouched (a timeout
 is still `incomplete`, an incomplete producer still derives `degraded`, and a degraded record still
@@ -33,11 +33,18 @@ the substitution.
 | `tests/test-gsd-evidence-repair-production-contract.rkt` | 210 s | ~202 s | **350 756 ms** | 335 654 / 350 756 / 337 712 / 339 936 / 342 990 | **540 s** | 1.54× |
 | `tests/test-gsd-branch-delivery-verification.rkt` | 120 s (default) | — | **166 636 ms** | 166 636 / 164 171 / 161 857 / 165 152 / 155 190 | **270 s** | 1.62× |
 
-Warm-ups (recorded, not samples): 211 832 ms and 147 696 ms.
+Warm-ups (recorded, not samples): 211 832 ms, 147 696 ms and 160 074 ms.
 
-**Concurrency inflates both files by ~1.7–3×.** Standalone timings were never a sound basis for these
-limits: the ergonomics file is 71 s alone and 215 s alongside three real tests, and the evidence-repair
-file is ~200 s alone and ~350 s in the same conditions.
+**Concurrency inflates all three files by ~1.4–3×.** Standalone timings were never a sound basis for
+these limits: the ergonomics file is 71 s alone and 215 s alongside three real tests, the evidence-repair
+file is ~200 s alone and ~350 s in the same conditions, and the branch-delivery file is ~120 s in a
+451-file shard and ~167 s beside three heavy tests.
+
+**About the two kinds of sample.** The probe (`target + 3 fast-lane fillers`) is a deliberately *worst
+case*: the target always has three heavy neighbours, which a random slot in a 451-file shard does not
+guarantee. It therefore yields a larger p95 than the shard passes (167 s vs 118–120 s for the branch
+file) — conservative for a limit, but it is a **different surface** and is labelled as such rather than
+presented as the shard's own number.
 
 ### The third file: found by the baseline itself
 
@@ -71,14 +78,23 @@ extended deliberately, so the third file could not slip in unnoticed.
 Registry: `docs/reports/CL5-P2D-TIMEOUT-MARGIN.json` (`cl5-slow-tests/1`), verified by
 `racket scripts/cl5/timeout-margin.rkt --verify` and pinned to the declarations by
 `tests/test-cl5-timeout-margin.rkt` — that test fails if a declaration and its evidence drift apart,
-and it also fails if the allow-list grows beyond the two measured files.
+and it also fails if the allow-list grows beyond the three measured files. `--verify` additionally
+refuses a registry whose allow-list differs from the module's authoritative list, and re-derives each
+margin from the numbers, so a registry cannot authorise itself to cover a fourth file or declare a
+margin its own p95 does not support.
 
 ## What this does and does not fix
 
-- **Fixes:** both files can now finish under the measured surface. The comprehensive record can become
-  `ok` instead of `degraded`, which is the precondition for P2-E.
-- **Does not fix:** the wall time itself. A shard containing these files can now spend up to 330 s or
-  540 s on one file in the worst case instead of failing at 120 s or 210 s. The typical case is
+- **Fixes:** all three files can now finish under the measured surface. The comprehensive record can
+  become `ok` instead of `degraded`, which is the precondition for P2-E.
+
+**Not yet a baseline.** These are *limits derived from measurements*, not a comprehensive cost
+measurement. Each p95 is the maximum of five samples, so it is a **lower bound** on the true p95, and
+the derived limits inherit that uncertainty. The P2-E baseline must be re-measured on the remediated
+surface (warm-up + two paired passes + the CI-equivalent single-schedule runs for `C_comp` wall) before
+any number from it is used.
+- **Does not fix:** the wall time itself. A shard containing these files can now spend up to 330 s,
+  540 s or 270 s on one file in the worst case instead of failing at 120 s or 210 s. The typical case is
   unchanged (the file takes what it takes); only the tail bound moves.
 - **Deliberately not done:** no timeout was raised anywhere else, no cap was changed (7 200 s per C
   producer and 14 400 s for L remain), no test body was touched, and no CI definition changed.
