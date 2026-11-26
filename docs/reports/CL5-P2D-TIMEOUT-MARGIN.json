@@ -1,0 +1,52 @@
+{
+ "schema": "cl5-slow-tests/1",
+ "policy": {
+  "formula": "max(existing_limit_s, ceil_30s(1.5 * p95_job_count))",
+  "confidence": 0.95,
+  "rounding_s": 30,
+  "min_samples": 5,
+  "applied_by": "test-file @timeout declarations",
+  "measurement": "real surface invocation: target + 3 fast-lane fillers, --jobs 4, uncensored, one recorded warm-up"
+ },
+ "allowed_paths": [
+  "tests/test-gsd-executor-ergonomics-prompt.rkt",
+  "tests/test-gsd-evidence-repair-production-contract.rkt"
+ ],
+ "entries": [
+  {
+   "path": "tests/test-gsd-evidence-repair-production-contract.rkt",
+   "existing_limit_s": 210,
+   "job_count": 4,
+   "samples_ms": [
+    335654,
+    350756,
+    337712,
+    339936,
+    342990
+   ],
+   "sample_count": 5,
+   "p95_ms": 350756,
+   "limit_s": 540,
+   "margin": 1.5395317542679243,
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count p95 equals the maximum sample, so it is a lower bound. Measured in a REAL 4-file surface run (target + 3 fast-lane tests, --jobs 4, uncensored), after one recorded warm-up.",
+   "note": "SAMPLES MEASURED ON AN IDENTICAL-BODY PROBE COPY: the adapter honours a declared @timeout over --timeout, so the 210 s declaration censored the measurement at 210 s. The probe differs from this file ONLY in the timeout declaration (raised to 1800 s for the measurement); the body is byte-identical."
+  },
+  {
+   "path": "tests/test-gsd-executor-ergonomics-prompt.rkt",
+   "existing_limit_s": 120,
+   "job_count": 4,
+   "samples_ms": [
+    215357,
+    206331,
+    204706,
+    207432,
+    209433
+   ],
+   "sample_count": 5,
+   "p95_ms": 215357,
+   "limit_s": 330,
+   "margin": 1.5323393249348756,
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count p95 equals the maximum sample, so it is a lower bound. Measured in a REAL 4-file surface run (target + 3 fast-lane tests, --jobs 4, uncensored), after one recorded warm-up."
+  }
+ ]
+}

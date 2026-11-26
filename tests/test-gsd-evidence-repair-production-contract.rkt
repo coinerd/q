@@ -2,7 +2,7 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary integration
-;; @timeout 210
+;; @timeout 540 ;; CL5 P2-D: concurrency-calibrated (p95 351s at --jobs 4; see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
 ;; One real verifier/controller/audit chain; leave the second campaign to full.
 (require rackunit
          json
