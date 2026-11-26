@@ -131,7 +131,7 @@
 (test-case "the committed registry verifies"
   (check-true (file-exists? registry-path))
   (define reg (with-input-from-file registry-path read-json))
-  (check-equal? (hash-ref (verify-registry reg) 'entries) 2))
+  (check-equal? (hash-ref (verify-registry reg) 'entries) 3))
 
 (test-case "every registry entry equals the file's actual @timeout declaration"
   ;; A silent raise or a forgotten update fails here: the declaration and the
@@ -142,11 +142,12 @@
                   (hash-ref e 'limit_s)
                   (format "~a declaration != registry" (hash-ref e 'path)))))
 
-(test-case "the allow-list is exactly the two measured files"
+(test-case "the allow-list is exactly the three measured files"
   ;; The policy must not spread: adding a third entry means adding it here, in the
   ;; registry, and in the measurement record.
   (define reg (with-input-from-file registry-path read-json))
   (check-equal? (sort (hash-ref reg 'allowed_paths) string<?)
                 (sort (list "tests/test-gsd-executor-ergonomics-prompt.rkt"
-                            "tests/test-gsd-evidence-repair-production-contract.rkt")
+                            "tests/test-gsd-evidence-repair-production-contract.rkt"
+                            "tests/test-gsd-branch-delivery-verification.rkt")
                       string<?)))

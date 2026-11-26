@@ -1,6 +1,6 @@
 # CL5 P2-D — concurrency-aware timeout policy: measurement and applied limits
 
-Status: **applied.** Two `@timeout` declarations changed, both on the owner-approved formula and both
+Status: **applied.** Three `@timeout` declarations changed, both on the owner-approved formula and both
 visible in a committed registry that a test pins to the declarations. Nothing else changed: no test
 body, no fixture, no production code, no CI definition. Fail-closed behaviour is untouched (a timeout
 is still `incomplete`, an incomplete producer still derives `degraded`, and a degraded record still
@@ -31,12 +31,24 @@ the substitution.
 |---|---|---|---|---|---|---|
 | `tests/test-gsd-executor-ergonomics-prompt.rkt` | 120 s (default) | ~71 s | **215 357 ms** | 215 357 / 206 331 / 204 706 / 207 432 / 209 433 | **330 s** | 1.53× |
 | `tests/test-gsd-evidence-repair-production-contract.rkt` | 210 s | ~202 s | **350 756 ms** | 335 654 / 350 756 / 337 712 / 339 936 / 342 990 | **540 s** | 1.54× |
+| `tests/test-gsd-branch-delivery-verification.rkt` | 120 s (default) | — | **166 636 ms** | 166 636 / 164 171 / 161 857 / 165 152 / 155 190 | **270 s** | 1.62× |
 
 Warm-ups (recorded, not samples): 211 832 ms and 147 696 ms.
 
 **Concurrency inflates both files by ~1.7–3×.** Standalone timings were never a sound basis for these
 limits: the ergonomics file is 71 s alone and 215 s alongside three real tests, and the evidence-repair
 file is ~200 s alone and ~350 s in the same conditions.
+
+### The third file: found by the baseline itself
+
+The P2-E baseline passes produced the case for it. `tests/test-gsd-branch-delivery-verification.rkt`
+has no declared timeout, so it inherits 120 s, and its elapsed time under the measured surface was
+**117 790 ms, 119 825 ms, then a timeout at 120 089 ms** across the three passes — 98–100 % of its
+limit, the same signature that motivated the policy. It was measured at `--jobs 4` with the same
+protocol (warm-up 160 074 ms, samples as above) and gets 270 s.
+
+This is the policy working as intended: the guard refused the registry merge until the allow-list was
+extended deliberately, so the third file could not slip in unnoticed.
 
 ## Applied changes (the exact diff)
 
@@ -49,6 +61,11 @@ file is ~200 s alone and ~350 s in the same conditions.
  tests/test-gsd-evidence-repair-production-contract.rkt
 -;; @timeout 210
 +;; @timeout 540 ;; CL5 P2-D: concurrency-calibrated (p95 351s at --jobs 4; see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
+
+ tests/test-gsd-branch-delivery-verification.rkt
++#lang racket/base
++
++;; @timeout 270 ;; CL5 P2-D: concurrency-calibrated (p95 167s at --jobs 4; see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
 ```
 
 Registry: `docs/reports/CL5-P2D-TIMEOUT-MARGIN.json` (`cl5-slow-tests/1`), verified by
