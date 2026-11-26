@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; @timeout 270 ;; CL5 P2-D: concurrency-calibrated (p95 167s at --jobs 4; see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
+
 ;; q/tests/test-gsd-branch-delivery-verification.rkt — W7 (#9512b) of the
 ;; executor-hardening release.
 ;;

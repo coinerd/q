@@ -9,10 +9,28 @@
   "measurement": "real surface invocation: target + 3 fast-lane fillers, --jobs 4, uncensored, one recorded warm-up"
  },
  "allowed_paths": [
-  "tests/test-gsd-executor-ergonomics-prompt.rkt",
-  "tests/test-gsd-evidence-repair-production-contract.rkt"
+  "tests/test-gsd-branch-delivery-verification.rkt",
+  "tests/test-gsd-evidence-repair-production-contract.rkt",
+  "tests/test-gsd-executor-ergonomics-prompt.rkt"
  ],
  "entries": [
+  {
+   "existing_limit_s": 120,
+   "job_count": 4,
+   "limit_s": 270,
+   "margin": 1.6202981348568137,
+   "p95_ms": 166636,
+   "path": "tests/test-gsd-branch-delivery-verification.rkt",
+   "sample_count": 5,
+   "samples_ms": [
+    166636,
+    164171,
+    161857,
+    165152,
+    155190
+   ],
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty"
+  },
   {
    "path": "tests/test-gsd-evidence-repair-production-contract.rkt",
    "existing_limit_s": 210,

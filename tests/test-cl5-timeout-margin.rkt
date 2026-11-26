@@ -77,8 +77,7 @@
                   'rounding_s
                   30)
           'allowed_paths
-          (list "tests/test-gsd-executor-ergonomics-prompt.rkt"
-                "tests/test-gsd-evidence-repair-production-contract.rkt")
+          default-allowed-paths
           'entries
           entries))
 
@@ -90,6 +89,20 @@
              (lambda ()
                (verify-registry (registry #:entries
                                           (list (entry #:path "tests/test-settings.rkt")))))))
+
+(test-case "a registry may not widen its own allow-list"
+  ;; The authoritative list lives in the module; a registry that adds a path is
+  ;; refused, so the policy cannot authorise itself to cover another file.
+  (check-exn #rx"differs from the authoritative one"
+             (lambda ()
+               (verify-registry (hash-set (registry)
+                                          'allowed_paths
+                                          (cons "tests/test-settings.rkt" default-allowed-paths))))))
+
+(test-case "a margin that does not match the numbers is refused"
+  (define e (hash-set (entry) 'margin 99.0))
+  (check-exn #rx"margin 99.0 does not match"
+             (lambda () (verify-registry (registry #:entries (list e))))))
 
 (test-case "too few samples are refused (sparse data cannot derive a limit)"
   (check-exn #rx"too sparse"
@@ -131,7 +144,7 @@
 (test-case "the committed registry verifies"
   (check-true (file-exists? registry-path))
   (define reg (with-input-from-file registry-path read-json))
-  (check-equal? (hash-ref (verify-registry reg) 'entries) 2))
+  (check-equal? (hash-ref (verify-registry reg) 'entries) 3))
 
 (test-case "every registry entry equals the file's actual @timeout declaration"
   ;; A silent raise or a forgotten update fails here: the declaration and the
@@ -142,11 +155,12 @@
                   (hash-ref e 'limit_s)
                   (format "~a declaration != registry" (hash-ref e 'path)))))
 
-(test-case "the allow-list is exactly the two measured files"
+(test-case "the allow-list is exactly the three measured files"
   ;; The policy must not spread: adding a third entry means adding it here, in the
   ;; registry, and in the measurement record.
   (define reg (with-input-from-file registry-path read-json))
   (check-equal? (sort (hash-ref reg 'allowed_paths) string<?)
                 (sort (list "tests/test-gsd-executor-ergonomics-prompt.rkt"
-                            "tests/test-gsd-evidence-repair-production-contract.rkt")
+                            "tests/test-gsd-evidence-repair-production-contract.rkt"
+                            "tests/test-gsd-branch-delivery-verification.rkt")
                       string<?)))

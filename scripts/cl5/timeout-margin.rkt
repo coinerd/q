@@ -27,7 +27,8 @@
          racket/string
          racket/system)
 
-(provide percentile
+(provide default-allowed-paths
+         percentile
          ceil-to-30
          derive-limit
          registry-entry
@@ -38,6 +39,14 @@
          measure-samples)
 
 (define schema "cl5-slow-tests/1")
+
+;; The authoritative allow-list. A registry may not widen or narrow it: `--verify`
+;; compares the registry's own list against THIS one, so a registry cannot authorise
+;; itself to cover a fourth file.
+(define default-allowed-paths
+  (list "tests/test-gsd-executor-ergonomics-prompt.rkt"
+        "tests/test-gsd-evidence-repair-production-contract.rkt"
+        "tests/test-gsd-branch-delivery-verification.rkt"))
 
 ;; ---- pure policy arithmetic --------------------------------------------------------
 
@@ -112,12 +121,17 @@
 (define (refuse fmt . args)
   (error 'verify-registry (string-append "registry refused: " (apply format fmt args))))
 
-(define (verify-registry reg)
+(define (verify-registry reg #:allowed [authoritative default-allowed-paths])
   (unless (equal? (hash-ref reg 'schema #f) schema)
     (refuse "unknown schema ~s" (hash-ref reg 'schema #f)))
   (define policy (hash-ref reg 'policy (hash)))
   (define min-samples (hash-ref policy 'min_samples 5))
   (define allowed (hash-ref reg 'allowed_paths '()))
+  (unless (equal? (sort (map (lambda (x) (format "~a" x)) allowed) string<?)
+                  (sort (map (lambda (x) (format "~a" x)) authoritative) string<?))
+    (refuse "the registry's allow-list ~s differs from the authoritative one ~s"
+            allowed
+            authoritative))
   (define entries (hash-ref reg 'entries '()))
   (when (null? entries)
     (refuse "no entries"))
@@ -149,6 +163,10 @@
     (define margin (hash-ref e 'margin #f))
     (unless (and (real? margin) (>= margin 1.5))
       (refuse "entry ~s margin ~s is below 1.5x p95" path margin))
+    ;; The margin must also be the one the numbers imply, not a self-declaration.
+    (define derived-margin (/ derived (/ p95 1000.0)))
+    (unless (<= (abs (- margin derived-margin)) 1e-6)
+      (refuse "entry ~s margin ~s does not match the derived ~s" path margin derived-margin))
     (unless (and (string? (hash-ref e 'uncertainty #f))
                  (positive? (string-length (hash-ref e 'uncertainty))))
       (refuse "entry ~s does not state its measurement uncertainty" path))
@@ -294,9 +312,7 @@
 (define verify-path (make-parameter #f))
 (define existing-limit (make-parameter #f))
 (define job-count (make-parameter 4))
-(define allowed-paths
-  (make-parameter (list "tests/test-gsd-executor-ergonomics-prompt.rkt"
-                        "tests/test-gsd-evidence-repair-production-contract.rkt")))
+(define allowed-paths (make-parameter default-allowed-paths))
 
 (define (policy-hash)
   (hasheq 'formula
