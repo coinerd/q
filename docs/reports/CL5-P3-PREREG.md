@@ -1,28 +1,49 @@
 # CL5 P3 — prospective case collection: pre-registration
 
-Status: **proposal, not in force.** Collection starts only after independent review, and no case
-collected under this document may be used for a GO decision until the conditions in §6 are met.
+Status: **revision 2 — owner-authorized for collection (2026-11-25).** Revision 1 could not be
+executed as written; see §0. Collection is append-only and authorises no GO decision (§6).
 
 Context: W3.2-A established that the frozen historical corpus cannot support the W3a measurement
 (6 of 928 case trees carry the selection engine; the engine has existed for ~66 commits). Efficiency
 evidence therefore has to come from changes made *while the engine exists*. This document fixes the
 rules **before** the first case is recorded.
 
-## 1. Unit of observation
+## 0. Revision 2 — the observation unit, corrected before any case was collected
 
-One **merge commit on `main`** whose tree satisfies all eligibility conditions at observation time.
-Merges only: a squashed PR merge is one case even when it touches several commits.
+Revision 1 defined the unit as a **merge commit**. Implementing the collector showed that this
+repository lands changes as **single-parent squash commits**: `git rev-list --merges 707bf3bf..main`
+is empty, so revision 1 would have collected **zero** cases in both cohorts for a reason that has
+nothing to do with the research question.
+
+This was found **before the first case was recorded** and before any data was observed: the collection
+file did not exist. The unit is therefore corrected to *landed change*, and the eligibility rule that
+depended on it is restated. No case was selected, excluded or reclassified under revision 1.
+
+**Second amendment, same disclosure (E7).** Implementing the collector also showed that the corpus
+classifier's production universe excludes `scripts/`, `tests/`, `docs/`, `artifacts/` and
+`.github/`. A landed change that touches only those paths is therefore not a classifier case: it has
+no stratum at all. Revision 1's E1–E6 would have marked such a change *eligible with no stratum*,
+which would have polluted the per-stratum counts. E7 makes it explicit: the change must be a
+classifier case. Also found pre-collection, with zero lines in the collection file.
+
+## 1. Unit of observation (rev 2)
+
+One **landed change on `main`** = a first-parent commit on `main` (`<sha>^` for the diff), whose tree
+satisfies all eligibility conditions at observation time. In this repository a landed change is a
+squash commit (one commit per merged PR); if a true two-parent merge commit is ever landed, it is one
+landed change as well — never split into its branch commits.
 
 ## 2. Eligibility (all required; evaluated at observation, never adjusted afterwards)
 
 | # | Condition | How it is checked |
 |---|---|---|
-| E1 | Merge commit on `main` after `P3_START_SHA` (the merge commit of the PR that lands this document; recorded in `.planning/PLAN-CL5-P2-P3.md` on merge, before the first case) | `git rev-list --merges P3_START_SHA..main` |
+| E1 | Landed change on `main` after `P3_START_SHA` (the merge commit that lands this document: `d67edc7c977604ae16ddaba0d34e8d44f63cea4f`, recorded in `.planning/PLAN-CL5-P2-P3.md`) | `git rev-list --first-parent P3_START_SHA..main`, newest last |
 | E2 | Tree contains the selection engine: `qt`, `scripts/testing/quick-audit.rkt`, `scripts/testing/full-plan.rkt` | `git cat-file -e <tree>:<path>` for all three |
 | E3 | Tree contains `tests/.coverage-manifest.json` | `git cat-file -e` |
 | E4 | Tree can compute a selection: `./qt --lane fast --explain` exits 0 in a detached worktree at the tree | executed in a disposable worktree |
-| E5 | The merge has a successful comprehensive CI run for its head SHA (the producer union of `ci-producers.rkt`) | run lookup, paginated; head SHA + conclusion recorded |
-| E6 | The tree is not a version-bump-only change (every changed file ∈ `info.rkt`, `util/version.rkt`) | changed-file list from the merge diff |
+| E5 | The landed change has a successful comprehensive CI run for its own SHA: workflow `CI`, event `push`, conclusion `success`, and every required job present and green — `test (0..2)`, `test-platform`, `security`, `workflows (0..1)`, `smoke (ubuntu-latest)` | pinned job names from `required-ci-producers` in `scripts/testing/full-plan.rkt`; run lookup paginated (a first page of 10 can hide the CI run) |
+| E6 | The tree is not a version-bump-only change (every changed file ∈ `info.rkt`, `util/version.rkt`) | changed-file list from `<sha>^..<sha>` |
+| E7 | The change is a corpus-classifier **case**: at least one changed file lies in the production universe, so the classifier assigns a stratum | `scripts/cl5/w3-corpus.rkt -r <sha> -n 1` executed with the case tree as root; a `non-production`/`formatting-only` exclusion is recorded as `unavailable` with the classifier's own reason |
 
 A case failing E2–E6 is recorded as `unavailable` **with the failing condition** — the exclusion is
 evidence, not silence. No case is dropped and re-added later.
@@ -32,9 +53,9 @@ evidence, not silence. No case is dropped and re-added later.
 ```
 schema            "cl5-p3-case/1"
 merge_sha         merge commit on main
-tree_sha          tree of the merge commit
+tree_sha          tree of the landed change
 observed_at       ISO-8601 timestamp of collection
-changed_files     count + list (paths), from the merge diff
+changed_files     count + list (paths), from <sha>^..<sha>
 strata            S1/S2/S3 (corpus classifier, applied unchanged)
 version_bump_only bool (always false for eligible cases; recorded for unavailable ones)
 engine            {qt, quick-audit, full-plan} blob SHAs
@@ -43,6 +64,7 @@ ci                {run_id, head_sha, conclusion, producers_run}
 comprehensive     {unique_files, slot_count, digest} computed from the tree's lane plans
 decision          omitted at collection (measured later under an approved protocol)
 cost              omitted at collection
+stratum_source    "scripts/cl5/w3-corpus.rkt at the case tree" (classifier unchanged)
 status            "eligible" | "unavailable"
 reason            for unavailable: the first failing condition (E2..E6)
 ```
@@ -61,7 +83,9 @@ Reported counts are per stratum, never pooled into a single mean.
   by observation time).
 - Collection runs on demand. It is **not** added to CI and does not gate any merge; a failed
   collection run records nothing for that case and is retried later (idempotent by `merge_sha`).
-- Each case costs one detached worktree + one `--explain` per producer + one GitHub run lookup.
+- Each case costs one detached worktree + one `--explain` per producer + one GitHub run lookup + one
+  corpus-classifier invocation **at the case tree** (so S1/S2/S3 use that tree's own coverage manifest
+  and module graph, not today's).
   No test is executed during collection.
 - The file is append-only: an existing `merge_sha` is never rewritten; a correction is a new line
   with `supersedes: <sha>`.
@@ -102,8 +126,8 @@ the primary cohort for any efficiency claim.
 
 ## 10. Open questions for the reviewer
 
-1. Is "merge commit on main" the right unit, or should squashed PRs be identified by their merge
-   commit only (i.e. multi-commit PRs never split)? Proposal: merge commit only.
+1. ~~Is "merge commit on main" the right unit?~~ **Answered by §0**: this repository squash-merges, so
+   the unit is the landed (single-parent) commit. Confirm the wording rather than the mechanism.
 2. E4 requires executing `--explain` per producer in a disposable worktree; is a single `./qt full
    --explain` sufficient as a cheaper proxy for "selection computable"? Proposal: per-producer, because
    a lane can be broken independently of `full`.
