@@ -70,12 +70,22 @@ against the pinned workflow definition by
    completed. A censored run is **not a completed measurement** and **cannot support a GO decision**;
    it may be reported as evidence about cost.
 4. A run killed by an operator timeout is not a measurement at all.
-5. **Timeout resolution [rev2].** Before any cost-based GO, the timeouts observed on the reference
-   host must be resolved: reproducible and passing under the official surface's declared limits, or
-   the affected surface is `degraded` and therefore inadmissible for a GO. Tests are not removed,
-   timeouts are not silently extended, and the comprehensive set is not redefined to obtain a green
-   measurement. Any timeout-policy change is a separate, reviewed change
-   (`CL5-P2-TIMEOUT-RESOLUTION.md` records the reproducibility investigation).
+5. **Timeout resolution [rev2/rev3].** Before any cost-based GO, the timeouts observed on the
+   reference host must be resolved: reproducible and passing under the official surface's declared
+   limits, or the affected surface is `degraded` and therefore inadmissible for a GO. Tests are not
+   removed, timeouts are not silently extended, and the comprehensive set is not redefined to obtain a
+   green measurement. Any timeout-policy change is a separate, reviewed change
+   (`CL5-P2-TIMEOUT-RESOLUTION.md` records the reproducibility investigation;
+   `CL5-P2C-PROFILING.md` records the runtime investigation and finds no removable work;
+   `CL5-P2C-TIMEOUT-MARGIN-POLICY.md` is the proposal awaiting review, **not in force**).
+   **rev3 addition:** per-file timeouts are wall-clock limits applied under the surface's concurrency,
+   so a margin derived from standalone runs is unsound — the ergonomics file sits at 58 % of its limit
+   standalone yet exceeded it at 4 workers. Any accepted policy must derive margin at the measurement's
+   own job count.
+6. **Warm-up precondition [rev3].** A measurement session begins with one recorded successful warm-up
+   invocation of the surface. A preparation-phase failure (observed once during P2-C, from a
+   probably-stale compiled artifact) invalidates the session rather than being counted as a test
+   timeout.
 
 ## 5. Evidence and verification (unchanged mechanics, rev2 acceptance)
 
