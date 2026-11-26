@@ -57,12 +57,13 @@ protocol (warm-up 160 074 ms, samples as above) and gets 270 s.
 This is the policy working as intended: the guard refused the registry merge until the allow-list was
 extended deliberately, so the third file could not slip in unnoticed.
 
-## Applied changes (the exact diff)
+## Applied changes (the exact declaration hunks)
+
+330 s and 540 s landed in #10014; 270 s lands with this change.
 
 ```diff
  tests/test-gsd-executor-ergonomics-prompt.rkt
--;; @speed fast  ;; @suite extensions
-+;; @speed fast  ;; @suite extensions
+ ;; @speed fast  ;; @suite extensions
 +;; @timeout 330  ;; CL5 P2-D: concurrency-calibrated (p95 215s at --jobs 4; see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
 
  tests/test-gsd-evidence-repair-production-contract.rkt
@@ -70,9 +71,11 @@ extended deliberately, so the third file could not slip in unnoticed.
 +;; @timeout 540 ;; CL5 P2-D: concurrency-calibrated (p95 351s at --jobs 4; see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
 
  tests/test-gsd-branch-delivery-verification.rkt
-+#lang racket/base
-+
+ #lang racket/base
+ 
 +;; @timeout 270 ;; CL5 P2-D: concurrency-calibrated (p95 167s at --jobs 4; see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
++
+ ;; q/tests/test-gsd-branch-delivery-verification.rkt — W7 (#9512b) of the
 ```
 
 Registry: `docs/reports/CL5-P2D-TIMEOUT-MARGIN.json` (`cl5-slow-tests/1`), verified by
@@ -87,8 +90,7 @@ margin its own p95 does not support.
 
 - **Fixes:** all three files can now finish under the measured surface. The comprehensive record can
   become `ok` instead of `degraded`, which is the precondition for P2-E.
-
-**Not yet a baseline.** These are *limits derived from measurements*, not a comprehensive cost
+- **Not yet a baseline.** These are *limits derived from measurements*, not a comprehensive cost
 measurement. Each p95 is the maximum of five samples, so it is a **lower bound** on the true p95, and
 the derived limits inherit that uncertainty. The P2-E baseline must be re-measured on the remediated
 surface (warm-up + two paired passes + the CI-equivalent single-schedule runs for `C_comp` wall) before
