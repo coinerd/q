@@ -1,6 +1,7 @@
 #lang racket
 
 ;; @speed fast  ;; @suite extensions
+;; @timeout 330  ;; CL5 P2-D: concurrency-calibrated (p95 215s at --jobs 4; see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
 
 ;; tests/test-gsd-executor-ergonomics-prompt.rkt — W4 (BUG-0027, BUG-0026)
 ;;

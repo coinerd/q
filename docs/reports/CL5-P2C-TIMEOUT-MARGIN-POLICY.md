@@ -1,8 +1,8 @@
 # CL5 P2-C — timeout-margin policy: proposal for separate review
 
-Status: **proposal. Not applied.** It changes no timeout, no test and no production code. The two
-tests keep their current limits, and the comprehensive record stays `degraded` until this (or a
-runtime fix) is accepted.
+Status: **approved and applied as P2-D** (`CL5-P2D-TIMEOUT-POLICY.md`). The measured limits are
+330 s and 540 s, pinned to the declarations by `tests/test-cl5-timeout-margin.rkt`. The proposal text
+below is kept as the record of what was approved; the applied numbers supersede its estimates.
 
 Evidence: `CL5-P2C-PROFILING.md` and `CL5-P2-TIMEOUT-RESOLUTION.md`.
 
