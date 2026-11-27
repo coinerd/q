@@ -94,12 +94,19 @@
   (check-true (string-contains? workflow "budget-id"))
   (check-true (string-contains? workflow "prior-failed-run-id"))
   (check-true (string-contains? workflow "prior-failure-signature"))
-  (check-true (string-contains? workflow "--jobs 4"))
+  (check-true (string-contains? workflow "test \"$BUDGET_ID\" = 'CL5-P2F-REV1'"))
+  (check-true (string-contains?
+               workflow
+               "racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-$i.json"))
+  (check-true (string-contains? workflow "--jobs 4 --json-out \"cl5-p2f/run-$i.json\""))
   (check-true (string-contains? workflow "cl5-p2f-pilot-rev1")))
 
 (test-case "workflow tree pin, digest and trigger stay aligned with the frozen workload"
   (check-equal? (workflow-allowed-paths) (hash-ref workload 'allowed_tree_diff_paths))
   (check-equal? (sha256-hex (file->bytes workload-path)) workload-digest)
   (check-true (string-contains? workflow workload-digest))
+  (check-true (string-contains? workflow "timeout-minutes: 120"))
+  (define cpu-regex (hash-ref (hash-ref workload 'expected_host) 'cpu_class_regex))
+  (check-true (string-contains? workflow (format "*'~a '*" cpu-regex)))
   (check-true (string-contains? workflow "on:\n  workflow_dispatch:"))
   (check-false (regexp-match? #px"(?m:^  (push|pull_request):)" workflow)))

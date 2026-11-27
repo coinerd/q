@@ -1,7 +1,8 @@
 # CL5 P2-F revised feasibility pilot — pre-registration (rev 2)
 
-Status: **frozen before any revised-pilot dispatch**. This document supersedes §3, §4 and §5 of
-`CL5-P2F-DESIGN.md` for the revised pilot only. The original pilot record and its exhausted dispatch
+Status: **frozen before any revised-pilot dispatch**. This document supersedes §§3–8 of
+`CL5-P2F-DESIGN.md` for the revised pilot; §§1–2 remain as background. The original pilot record
+and its exhausted dispatch
 budget remain unchanged in `CL5-P2F-PILOT.json`.
 
 ## 1. Scope and decision point
@@ -51,8 +52,8 @@ finding; it must not be reclassified as an efficiency result.
 - Frozen workload file: `docs/reports/CL5-P2F-REVISED-WORKLOAD.json`
   (schema `cl5-p2f-workload/2`, SHA-256
   `50fbb772db8c4d6ba9a1f6b6b79a7cf7ed72352acae8ab59deaf214767260a5e`). The workflow verifies the digest, schema, pinned SHA and file count;
-  the command, budget id and allowed diff list are hardcoded in the workflow and pinned by
-  `tests/test-cl5-p2f-revised.rkt` before the eight paths are read.
+  the command, budget id, CPU gate and allowed diff list are hardcoded in the workflow and pinned
+  by `tests/test-cl5-p2f-revised.rkt` before the eight paths are read.
 - The eight test files are unchanged from the original pilot. CI reference elapsed values are taken
   from production run `46067550544` at the pinned tree, not from a local run and not from
   a retry. All eight must have passed there; a censored or missing reference aborts analysis.
@@ -120,7 +121,7 @@ exact failure signature. All are recorded in provenance.
 A repeat is allowed **only** for a qualifying infrastructure failure before any `runner.rkt`
 invocation: checkout failure, setup failure, network/cache failure, job timeout before measurement,
 or a transient Actions infrastructure error, with the failing run ID and exact signature recorded
-  as required inputs (attempt 1 must leave them empty).
+as required inputs (attempt 1 must leave them empty).
 A host mismatch is not treated as transient. A warm-up or measured behavioral failure — including
 `malformed binding datum` — stops the experiment with no repeat. Both attempts remain in the
 experimental record; the original exhausted P2-F budget remains separate and unchanged.
