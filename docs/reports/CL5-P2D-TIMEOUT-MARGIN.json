@@ -37,7 +37,8 @@
     156130,
     151696
    ],
-   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy in a sibling probe copy (only the @timeout line differs), because the declared limit would have censored every run",
+   "probe_copy": true
   },
   {
    "existing_limit_s": 120,
@@ -54,7 +55,8 @@
     150013,
     147946
    ],
-   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy in a sibling probe copy (only the @timeout line differs), because the declared limit would have censored every run",
+   "probe_copy": true
   },
   {
    "existing_limit_s": 120,
@@ -71,7 +73,8 @@
     165152,
     155190
    ],
-   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty"
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty",
+   "probe_copy": true
   },
   {
    "existing_limit_s": 120,
@@ -88,7 +91,8 @@
     126017,
     127516
    ],
-   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy in a sibling probe copy (only the @timeout line differs), because the declared limit would have censored every run",
+   "probe_copy": true
   },
   {
    "existing_limit_s": 120,
@@ -105,7 +109,8 @@
     131864,
     129296
    ],
-   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy in a sibling probe copy (only the @timeout line differs), because the declared limit would have censored every run",
+   "probe_copy": true
   },
   {
    "existing_limit_s": 120,
@@ -122,7 +127,8 @@
     181774,
     180126
    ],
-   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy in a sibling probe copy (only the @timeout line differs), because the declared limit would have censored every run",
+   "probe_copy": true
   },
   {
    "path": "tests/test-gsd-evidence-repair-production-contract.rkt",
@@ -140,7 +146,8 @@
    "limit_s": 540,
    "margin": 1.5395317542679243,
    "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count p95 equals the maximum sample, so it is a lower bound. Measured in a REAL 4-file surface run (target + 3 fast-lane tests, --jobs 4, uncensored), after one recorded warm-up.",
-   "note": "SAMPLES MEASURED ON AN IDENTICAL-BODY PROBE COPY: the adapter honours a declared @timeout over --timeout, so the 210 s declaration censored the measurement at 210 s. The probe differs from this file ONLY in the timeout declaration (raised to 1800 s for the measurement); the body is byte-identical."
+   "note": "SAMPLES MEASURED ON AN IDENTICAL-BODY PROBE COPY: the adapter honours a declared @timeout over --timeout, so the 210 s declaration censored the measurement at 210 s. The probe differs from this file ONLY in the timeout declaration (raised to 1800 s for the measurement); the body is byte-identical.",
+   "probe_copy": true
   },
   {
    "existing_limit_s": 120,
@@ -157,7 +164,8 @@
     197223,
     208533
    ],
-   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy in a sibling probe copy (only the @timeout line differs), because the declared limit would have censored every run",
+   "probe_copy": true
   },
   {
    "existing_limit_s": 120,
@@ -174,7 +182,8 @@
     159418,
     152687
    ],
-   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty"
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty",
+   "probe_copy": false
   },
   {
    "existing_limit_s": 120,
@@ -191,7 +200,8 @@
     151082,
     148577
    ],
-   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy in a sibling probe copy (only the @timeout line differs), because the declared limit would have censored every run",
+   "probe_copy": true
   },
   {
    "existing_limit_s": 120,
@@ -208,7 +218,8 @@
     148201,
     141978
    ],
-   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy in a sibling probe copy (only the @timeout line differs), because the declared limit would have censored every run",
+   "probe_copy": true
   }
  ]
 }

@@ -1,13 +1,14 @@
 {
  "schema": "cl5-surface-scan/1",
  "reference_run": {
-  "artifact": "/tmp/p2e2/schedule-warmup.json",
-  "files": null,
+  "artifact": "docs/reports/CL5-P2E-SURFACE-SCAN.json was derived from the schedule-warmup run; raw run artifact lives outside the repo (gitignored /tmp)",
+  "file_count": 1400,
   "jobs": 4,
-  "wall_ms": null,
-  "note": "single-invocation comprehensive reference (union of executed files at --jobs 4), not the eight-producer CI schedule"
+  "wall_ms": 4391651,
+  "verdict": "incomplete",
+  "note": "single-invocation comprehensive reference over the union of executed files at --jobs 4 -- NOT the eight-producer CI schedule"
  },
- "rule": "files whose effective limit is 120 s and whose reference elapsed exceeds 50% of it; the >= 100% ones already failed, and the >= 67% ones were calibrated in this change",
+ "rule": "files whose effective limit at the pre-change revision was 120 s and whose reference elapsed exceeded 50% of it; 'fraction_of_limit' >= 2/3 means the margin is below the policy's 1.5x",
  "candidates": [
   {
    "path": "tests/test-gsd-delivery-coordinator.rkt",
@@ -28,6 +29,13 @@
    "limit_s": 120,
    "reference_elapsed_ms": 110140,
    "fraction_of_limit": 0.9178,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-milestone-gate.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 95254,
+   "fraction_of_limit": 0.7938,
    "status": "pass"
   },
   {
@@ -105,69 +113,6 @@
    "limit_s": 120,
    "reference_elapsed_ms": 60934,
    "fraction_of_limit": 0.5078,
-   "status": "pass"
-  },
-  {
-   "path": "tests/test-test-gate-ownership.rkt",
-   "limit_s": 120,
-   "reference_elapsed_ms": 59416,
-   "fraction_of_limit": 0.4951,
-   "status": "pass"
-  },
-  {
-   "path": "tests/test-hotspot-report.rkt",
-   "limit_s": 120,
-   "reference_elapsed_ms": 48341,
-   "fraction_of_limit": 0.4028,
-   "status": "pass"
-  },
-  {
-   "path": "tests/test-qt.rkt",
-   "limit_s": 120,
-   "reference_elapsed_ms": 47799,
-   "fraction_of_limit": 0.3983,
-   "status": "pass"
-  },
-  {
-   "path": "tests/test-inventory-gate-string-keys.rkt",
-   "limit_s": 120,
-   "reference_elapsed_ms": 45562,
-   "fraction_of_limit": 0.3797,
-   "status": "pass"
-  },
-  {
-   "path": "tests/test-verification-job-lifecycle.rkt",
-   "limit_s": 120,
-   "reference_elapsed_ms": 45200,
-   "fraction_of_limit": 0.3767,
-   "status": "pass"
-  },
-  {
-   "path": "tests/test-gsd-supplemental-evidence-crash.rkt",
-   "limit_s": 120,
-   "reference_elapsed_ms": 42949,
-   "fraction_of_limit": 0.3579,
-   "status": "pass"
-  },
-  {
-   "path": "tests/test-run-tests-profiles.rkt",
-   "limit_s": 120,
-   "reference_elapsed_ms": 41677,
-   "fraction_of_limit": 0.3473,
-   "status": "pass"
-  },
-  {
-   "path": "tests/test-gsd-delivery-runtime.rkt",
-   "limit_s": 120,
-   "reference_elapsed_ms": 41244,
-   "fraction_of_limit": 0.3437,
-   "status": "pass"
-  },
-  {
-   "path": "tests/test-plan-validation-explain-cli.rkt",
-   "limit_s": 120,
-   "reference_elapsed_ms": 40378,
-   "fraction_of_limit": 0.3365,
    "status": "pass"
   }
  ]

@@ -185,6 +185,36 @@
   ;; An unreadable sample is treated as censored, never as a duration.
   (check-equal? (censored-samples (list (hash 'elapsed_ms 5))) (list (hash 'elapsed_ms 5))))
 
+(test-case "a probe copy replaces EVERY declaration, not just the first"
+  ;; The metadata parser keeps the last @timeout in the first 50 lines, so replacing one of
+  ;; two would leave the old -- tighter -- limit in force and censor every sample.
+  (define fixture (build-path repo-root "tests" ".cl5-probe-fixture2.rkt"))
+  (call-with-output-file
+   fixture
+   #:exists 'replace
+   (lambda (o)
+     (display
+      "#lang racket/base\n\n;; @timeout 60\n;; @suite fast\n;; @timeout 120\n\n(module+ test (void))\n"
+      o)))
+  (dynamic-wind void
+                (lambda ()
+                  (check-equal? (full-file-timeout (path->string fixture)) 120)
+                  (define copy (probe-copy-source (path->string fixture) 1800))
+                  (check-equal? (full-file-timeout (path->string copy)) 1800)
+                  (check-false (regexp-match? #rx"@timeout (60|120)" (file->string copy)))
+                  (delete-file copy))
+                (lambda ()
+                  (when (file-exists? fixture)
+                    (delete-file fixture)))))
+
+(test-case "the committed registry records how each entry was measured"
+  ;; probe_copy is part of the evidence, not a comment: an entry derived from a sibling copy
+  ;; differs from the file at that path in the @timeout line, and that must be visible.
+  (define reg (with-input-from-file registry-path read-json))
+  (for ([e (in-list (hash-ref reg 'entries))])
+    (check-true (boolean? (hash-ref e 'probe_copy (lambda () 'missing)))
+                (format "~a has no probe_copy" (hash-ref e 'path)))))
+
 (test-case "a probe copy raises the declaration instead of adding a shadowed one"
   ;; The metadata parser keeps the LAST @timeout in the first 50 lines. Inserting a line
   ;; above an existing declaration would leave the old value in force, so the copy must

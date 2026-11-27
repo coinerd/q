@@ -58,9 +58,9 @@ presented as the shard's own number.
 
 The first single-invocation reference run (1 400 files, `--jobs 4`) timed out
 `tests/test-gsd-delivery-coordinator.rkt` at 120.2 s against a 120 s limit. Enumerating every file whose
-effective limit was 120 s in that run (`docs/reports/CL5-P2E-SURFACE-SCAN.json`, committed so the rule can
-be replayed) gives 23 files above 50 % of the limit; **eight of them at 67 % or more** — i.e. a margin
-below the policy's own 1.5×, so ordinary variance can fail them. Those eight were then measured at
+effective limit was 120 s **at the pre-change revision** in that run (`docs/reports/CL5-P2E-SURFACE-SCAN.json`,
+committed so the rule can be replayed) gives 15 files above 50 % of the limit; **eight of them at two
+thirds or more** — i.e. a margin below the policy's own 1.5×, so ordinary variance can fail them. Those eight were then measured at
 `--jobs 4` with five samples each. They are listed in the table above.
 
 Seven were measured through a declaration-raised probe copy, so no sample could be censored.
@@ -71,7 +71,8 @@ entry records `probe_copy: false`.
 
 Measurement conditions (identical for all eight): `--jobs 4`, `--timeout 1800`, five samples after one
 recorded warm-up, fillers `tests/test-gsd-delivery-merge.rkt`, `tests/test-gsd-delivery-status.rkt`,
-`tests/test-gsd-evidence-authority.rkt`.
+`tests/test-gsd-evidence-authority.rkt`. The milestone-gate run additionally passed `--at-real-path`,
+which is the switch that disables the probe copy.
 
 This is the approved policy applied to the files the measurement itself flags, not a new policy: the
 120 s figure was never derived for this surface, so the timeouts were a rotating cast rather than one

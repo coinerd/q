@@ -227,10 +227,16 @@
                "--timeout"
                (number->string uncensored-timeout-s)
                file)))
+  ;; The runner's exit code is the only signal this path has: 0 finished, 2 was killed at
+  ;; the deadline, anything else failed. Map it to the same vocabulary the surface path
+  ;; reads from the artifact, so `censored-samples` means the same thing in both places.
   (hash 'file
         file
-        'status
-        status
+        'run_status
+        (cond
+          [(eqv? status 0) "pass"]
+          [(eqv? status 2) "timeout"]
+          [else "fail"])
         'elapsed_ms
         (inexact->exact (round (- (current-inexact-milliseconds) start)))))
 
@@ -302,12 +308,12 @@
                                  #:job-count [job-count 4]
                                  #:repeats [repeats 5]
                                  #:timeout [timeout 900]
-                                 #:allow-probe-copy? [allow-probe-copy? #f])
+                                 #:allow-probe-copy? [allow-probe-copy? #t])
   (define declared (full-file-timeout target))
   ;; A copy is only needed when the declaration is TIGHTER than the probe budget. At
   ;; equality the target already runs uncensored, and a copy would change the file's
   ;; path, which path-sensitive tests can fail on.
-  (define copy? (and (not (zero? declared)) (< declared timeout)))
+  (define copy? (and allow-probe-copy? (not (zero? declared)) (< declared timeout)))
   (define run-target
     (if copy?
         (path->string (probe-copy-source target timeout))
@@ -419,6 +425,7 @@
                  "[--repeats K] [--evidence OUT] [--to-registry OUT] | --verify REGISTRY~n"))
 
 (module+ main
+  (define probe-copy? #t)
   (command-line
    #:program "timeout-margin.rkt"
    #:once-each [("--measure") v "Test file to measure" (measure-path v)]
@@ -435,6 +442,9 @@
     (existing-limit (string->number v))]
    [("--evidence") v "Write raw samples here" (evidence-out v)]
    [("--to-registry") v "Merge this measurement into a registry here" (registry-out v)]
+   [("--at-real-path")
+    "Measure the file itself (no probe copy) -- for path-sensitive tests whose declaration you raised yourself"
+    (lambda () (set! probe-copy? #f))]
    [("--fillers")
     v
     "Comma-separated files run alongside the target (real surface sample)"
@@ -456,7 +466,8 @@
                                      (fillers)
                                      #:job-count (job-count)
                                      #:repeats (repeats)
-                                     #:timeout (uncensored))
+                                     #:timeout (uncensored)
+                                     #:allow-probe-copy? probe-copy?)
             (measure-samples (measure-path)
                              #:load (load)
                              #:repeats (repeats)
@@ -473,14 +484,14 @@
                         p95
                         (derive-limit (existing-limit) p95)
                         (uncertainty-text (length ms) (job-count))))
-      (define e-json (registry-entry->jsexpr e))
+      (define e-json (hash-set (registry-entry->jsexpr e) 'probe_copy (hash-ref run 'probe_copy #f)))
       (define e*
         (if (hash-ref run 'probe_copy #f)
             (hash-set e-json
                       'uncertainty
                       (string-append
                        (hash-ref e-json 'uncertainty)
-                       "; samples taken from a declaration-raised copy at the same path (only"
+                       "; samples taken from a sibling probe copy (only"
                        " the @timeout line differs), because the declared limit would have"
                        " censored every run"))
             e-json))
