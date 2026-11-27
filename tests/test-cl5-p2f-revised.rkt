@@ -37,6 +37,17 @@
 (define (string-contains* haystack needle)
   (or (string-index haystack needle) (error 'string-contains* "missing needle: ~a" needle)))
 
+(define workload-digest "50fbb772db8c4d6ba9a1f6b6b79a7cf7ed72352acae8ab59deaf214767260a5e")
+
+(define (workflow-allowed-paths)
+  (define m (regexp-match #px"allowed='([^']*)'" workflow))
+  (map string-trim
+       (filter (lambda (s) (not (string=? (string-trim s) "")))
+               (string-split (if m
+                                 (cadr m)
+                                 "")
+                             "\n"))))
+
 (test-case "revised workload pins the post-repair tree and frozen eight-file command"
   (check-equal? (hash-ref workload 'schema) "cl5-p2f-workload/2")
   (check-equal? (hash-ref workload 'budget_id) "CL5-P2F-REV1")
@@ -56,6 +67,8 @@
     (check-equal? (hash-ref h 'image_os) "ubuntu26")
     (check-equal? (hash-ref h 'image_version) "20261122.9.1")
     (check-equal? (hash-ref h 'cores) 4)
+    (check-equal? (hash-ref h 'cpu_class_regex) "AMD EPYC")
+    (check-not-false (member "AMD EPYC 7763" (hash-ref h 'observed_production_cpu_models)))
     (check-equal? (hash-ref h 'racket_exe_sha256)
                   "7674f17865fa795b21641828d839e689e01a2f17bbdd2b7d71cc59cceafa873c")))
 
@@ -69,6 +82,7 @@
                            "20261122.9.1"
                            "7674f17865fa795b21641828d839e689e01a2f17bbdd2b7d71cc59cceafa873c"
                            "Validate measured host"
+                           "AMD EPYC 7763"
                            "must not be retried"))])
     (check-true (string-contains? design needle) needle)))
 
@@ -78,4 +92,14 @@
   (check-true (< (string-contains* workflow "Validate measured host before measurement")
                  (string-contains* workflow "Materialise the frozen workload")))
   (check-true (string-contains? workflow "budget-id"))
+  (check-true (string-contains? workflow "prior-failed-run-id"))
+  (check-true (string-contains? workflow "prior-failure-signature"))
+  (check-true (string-contains? workflow "--jobs 4"))
   (check-true (string-contains? workflow "cl5-p2f-pilot-rev1")))
+
+(test-case "workflow tree pin, digest and trigger stay aligned with the frozen workload"
+  (check-equal? (workflow-allowed-paths) (hash-ref workload 'allowed_tree_diff_paths))
+  (check-equal? (sha256-hex (file->bytes workload-path)) workload-digest)
+  (check-true (string-contains? workflow workload-digest))
+  (check-true (string-contains? workflow "on:\n  workflow_dispatch:"))
+  (check-false (regexp-match? #px"(?m:^  (push|pull_request):)" workflow)))

@@ -8,7 +8,7 @@
   "run_id": 46067550544,
   "head_sha": "dd5c9995fc13bbc1253995768b2d78c4531e0a60",
   "artifact_prefix": "test-results-fast-",
-  "note": "Per-file elapsed values are read from this production run at the pinned tree. Every listed file passed there; none is censored."
+  "note": "Per-file elapsed values are read from this production run at the pinned tree. Every listed file passed there; none is censored. Its observed CPU was AMD EPYC 7763; the three fast shard artifacts do not record CPU identity."
  },
  "expected_host": {
   "os_id": "ubuntu",
@@ -18,7 +18,9 @@
   "image_version": "20261122.9.1",
   "architecture": "x86_64",
   "runner_arch": "X64",
-  "cpu_class_regex": "AMD EPYC 9V",
+  "cpu_class_regex": "AMD EPYC",
+  "observed_production_cpu_models": ["AMD EPYC 9V45", "AMD EPYC 7763"],
+  "reference_run_observed_cpu_model": "AMD EPYC 7763",
   "cores": 4,
   "memory_kb_min": 15500000,
   "memory_kb_max": 17500000,
@@ -83,7 +85,7 @@
   }
  ],
  "acceptance": {
-  "host": "every expected_host field must match measured values; label alone insufficient",
+  "host": "every expected_host field must match measured values; CPU class is AMD EPYC with exact model recorded; label alone insufficient",
   "integrity": "warm-up + five measured artifacts; exactly eight paths per run; every status pass; zero timeouts/failures/missing",
   "stability": "(max total wall - min total wall) / median total wall <= 0.15 over the five measured runs",
   "comparability": "for each file, median(pilot)/ci_elapsed in [0.5,2.0]; pooled median ratio in [0.67,1.5]",

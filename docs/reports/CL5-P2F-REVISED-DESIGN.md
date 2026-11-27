@@ -1,6 +1,6 @@
 # CL5 P2-F revised feasibility pilot — pre-registration (rev 2)
 
-Status: **frozen before any revised-pilot dispatch**. This document supersedes §3 and §5 of
+Status: **frozen before any revised-pilot dispatch**. This document supersedes §3, §4 and §5 of
 `CL5-P2F-DESIGN.md` for the revised pilot only. The original pilot record and its exhausted dispatch
 budget remain unchanged in `CL5-P2F-PILOT.json`.
 
@@ -25,6 +25,14 @@ finding; it must not be reclassified as an efficiency result.
   Verbatim evidence: `.planning/evidence/CL5-PRODUCTION-CI-OBSERVED-03fc7983.json` (SHA-256
   `743b3490991433f7d7f5ae70fb5788303920dd456499549333093cb8b5f66dbb`). The earlier `24.04`
   assertion was false. This revision is based on measured evidence, not on where the old pilot ran.
+- **Reference-timing host (pre-data provenance).** The per-file CI elapsed values below come from
+  production run `46067550544` at the pinned tree. Its `proof-bundle-fast` observation
+  (artifact `15232103954`, retained verbatim in the review record) records the same Ubuntu/image/
+  Racket/memory values but CPU **AMD EPYC 7763 64-Core Processor**, not the 9V45 seen in run
+  `46063005906`. The three `test-results-fast-*` shard artifacts record no CPU identity. Both
+  observed production hosts are AMD EPYC; the exact shard host classes are unrecorded. This is
+  disclosed before dispatch and is why the gate below pins the EPYC class and records, rather than
+  assumes, the exact model.
 - **Concurrency repair (PR #10022, merge `dd5c9995fc13bbc1253995768b2d78c4531e0a60`).**
   `racket/os`'s unsynchronized `delay-ffi-obj` promise was replaced on the staging-marker path by
   q's eager `util/lockfile` binding. No generic retry was added.
@@ -42,8 +50,9 @@ finding; it must not be reclassified as an efficiency result.
   Racket is installed.
 - Frozen workload file: `docs/reports/CL5-P2F-REVISED-WORKLOAD.json`
   (schema `cl5-p2f-workload/2`, SHA-256
-  `cdba4c1a62ac9e3c572a03fb3eb8b495eea74ce9e86b6e4e35d132e1e10abe70`). The workflow verifies its digest, schema,
-  pinned SHA, file count and command before reading the eight paths from it.
+  `50fbb772db8c4d6ba9a1f6b6b79a7cf7ed72352acae8ab59deaf214767260a5e`). The workflow verifies the digest, schema, pinned SHA and file count;
+  the command, budget id and allowed diff list are hardcoded in the workflow and pinned by
+  `tests/test-cl5-p2f-revised.rkt` before the eight paths are read.
 - The eight test files are unchanged from the original pilot. CI reference elapsed values are taken
   from production run `46067550544` at the pinned tree, not from a local run and not from
   a retry. All eight must have passed there; a censored or missing reference aborts analysis.
@@ -61,14 +70,15 @@ finding; it must not be reclassified as an efficiency result.
 
 Matching the `ubuntu-latest` label is necessary but **not sufficient**. The workflow writes the
 observed environment before measurement and rejects any mismatch in the `Validate measured host`
-step. Required values, all taken from the production observation:
+step. Required values are taken from production observations; the CPU rule is the common class of
+  the two observed production hosts (9V45 in run `46063005906`, 7763 in run `46067550544`):
 
 | Field | Required value |
 |---|---|
 | OS release ID / version / pretty name | `ubuntu` / `26.04` / `Ubuntu 26.04.1 LTS` |
 | Runner image | `ImageOS=ubuntu26`, `ImageVersion=20261122.9.1` |
 | Architecture | `uname -m = x86_64` and `RUNNER_ARCH = X64` |
-| CPU class | `model name` matches `AMD EPYC 9V…` (production 9V45; 9V74 observed in the old pilot is the same class) |
+| CPU class | `model name` matches `AMD EPYC …`; exact model is recorded. Observed production models are 9V45 and 7763; the reference shards did not record CPU identity |
 | Core allocation | `nproc = 4`; if `cpu.max` is present and not `max`, quota/period ≥ 4 |
 | Memory | `/proc/meminfo` `MemTotal` in `[15 500 000, 17 500 000] kB` (production 16 366 632 kB) |
 | Racket | version `8.10`, executable SHA-256 `7674f17865fa795b21641828d839e689e01a2f17bbdd2b7d71cc59cceafa873c` |
@@ -76,7 +86,8 @@ step. Required values, all taken from the production observation:
 The workflow records every field, plus kernel, runner name, load before/after, prepared-environment
 state, cache state, setup duration, exact argv and wall time. A missing or malformed field is a
 NO-GO. A host mismatch is a non-transient environment failure: stop and report; it does **not**
-consume the repeat slot unless the owner authorizes a new configuration.
+consume the repeat slot unless the owner authorizes a new configuration. An exact-model difference
+within the AMD EPYC class is recorded, not silently treated as the same machine.
 
 ## 5. Acceptance criteria (unchanged thresholds, updated host basis)
 
@@ -89,7 +100,10 @@ All must pass, decided only from the uploaded artifacts.
 - **A3 — stability.** `(max total wall − min total wall) / median total wall ≤ 0.15` over the five
   measured runs. No extra runs after seeing data.
 - **A4 — comparability.** For each file, `median(pilot elapsed) / CI reference elapsed ∈ [0.5, 2.0]`;
-  pooled median ratio ∈ `[0.67, 1.5]`. A single file outside its interval is a NO-GO.
+  pooled median ratio ∈ `[0.67, 1.5]`. A single file outside its interval is a NO-GO. Because the
+  reference shard CPUs are unrecorded and a second production observation used a different EPYC
+  model, A4 failure is a host-comparability finding about the reference, not pilot infrastructure;
+  it is never retried or redefined after data.
 - **A5 — isolation.** One runner process per invocation, no shards or nested runner; the only
   `.github/` addition is this dispatch-only pilot workflow (no push/PR trigger, no test selection).
   The dispatch SHA, workflow SHA and pinned SHA are recorded as distinct fields.
@@ -100,11 +114,13 @@ All must pass, decided only from the uploaded artifacts.
 ## 6. Dispatch budget
 
 Budget ID `CL5-P2F-REV1`: one initial dispatch and at most one repeat. The workflow requires the
-budget ID and an attempt number (`1` or `2`) as dispatch inputs; both are recorded in provenance.
+budget ID, an attempt number (`1` or `2`), and — for attempt 2 only — the prior failed run id and
+exact failure signature. All are recorded in provenance.
 
 A repeat is allowed **only** for a qualifying infrastructure failure before any `runner.rkt`
 invocation: checkout failure, setup failure, network/cache failure, job timeout before measurement,
-or a transient Actions infrastructure error, with the failing run ID and exact signature recorded.
+or a transient Actions infrastructure error, with the failing run ID and exact signature recorded
+  as required inputs (attempt 1 must leave them empty).
 A host mismatch is not treated as transient. A warm-up or measured behavioral failure — including
 `malformed binding datum` — stops the experiment with no repeat. Both attempts remain in the
 experimental record; the original exhausted P2-F budget remains separate and unchanged.

@@ -24,6 +24,14 @@ on:
         required: true
         type: choice
         options: ['1', '2']
+      prior-failed-run-id:
+        description: 'Prior failed run id; required only for attempt 2'
+        required: false
+        type: string
+      prior-failure-signature:
+        description: 'Exact prior failure signature; required only for attempt 2'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -36,8 +44,8 @@ concurrency:
 jobs:
   pilot:
     runs-on: ubuntu-latest
-    # Eight files sum to ~670 s of CI elapsed. Worst case (no overlap at all)
-    # six invocations are 4020 s = 67 min; 120 min leaves room without turning
+    # Eight files sum to 657.42 s of CI elapsed. Worst case (no overlap at all)
+    # six invocations are ~3945 s = 65.7 min; 120 min leaves room without turning
     # a job timeout into a measurement sample.
     timeout-minutes: 120
     steps:
@@ -53,6 +61,8 @@ jobs:
           SOURCE_SHA: ${{ inputs.source-sha }}
           BUDGET_ID: ${{ inputs.budget-id }}
           ATTEMPT: ${{ inputs.attempt }}
+          PRIOR_FAILED_RUN_ID: ${{ inputs.prior-failed-run-id }}
+          PRIOR_FAILURE_SIGNATURE: ${{ inputs.prior-failure-signature }}
           DISPATCH_SHA: ${{ github.sha }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
           PINNED_SHA: dd5c9995fc13bbc1253995768b2d78c4531e0a60
@@ -64,6 +74,13 @@ jobs:
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           test "$BUDGET_ID" = 'CL5-P2F-REV1'
           case "$ATTEMPT" in 1|2) ;; *) echo 'bad attempt' >&2; exit 1;; esac
+          if [ "$ATTEMPT" = '2' ]; then
+            echo "$PRIOR_FAILED_RUN_ID" | grep -Eq '^[0-9]+$'
+            test -n "$PRIOR_FAILURE_SIGNATURE"
+          else
+            test -z "$PRIOR_FAILED_RUN_ID"
+            test -z "$PRIOR_FAILURE_SIGNATURE"
+          fi
           git merge-base --is-ancestor "$PINNED_SHA" HEAD
           # The workflow must live on the default branch to be dispatchable by
           # filename, so the tested tree is pinned by diffing against the frozen
@@ -78,8 +95,9 @@ jobs:
           actual="$(git diff --name-only "$PINNED_SHA" HEAD)"
           test "$actual" = "$allowed"
           mkdir -p cl5-p2f
-          printf 'budget_id=%s\nattempt=%s\ndispatch_sha=%s\nworkflow_sha=%s\npinned_sha=%s\n' \
-            "$BUDGET_ID" "$ATTEMPT" "$DISPATCH_SHA" "$WORKFLOW_SHA" "$PINNED_SHA" \
+          printf 'budget_id=%s\nattempt=%s\nprior_failed_run_id=%s\nprior_failure_signature=%s\ndispatch_sha=%s\nworkflow_sha=%s\npinned_sha=%s\n' \
+            "$BUDGET_ID" "$ATTEMPT" "${PRIOR_FAILED_RUN_ID:-}" \
+            "${PRIOR_FAILURE_SIGNATURE:-}" "$DISPATCH_SHA" "$WORKFLOW_SHA" "$PINNED_SHA" \
             > cl5-p2f/provenance.txt
 
       # This isolated job has no same-run prepared-environment producer, so the
@@ -156,7 +174,7 @@ jobs:
           require "$(get racket_exe_sha256)" \
             '7674f17865fa795b21641828d839e689e01a2f17bbdd2b7d71cc59cceafa873c' \
             racket_exe_sha256
-          case "$(get cpu_model)" in *'AMD EPYC 9V'*) ;; *)
+          case "$(get cpu_model)" in *'AMD EPYC '*) ;; *)
             printf 'HOST MISMATCH cpu_model: %s\n' "$(get cpu_model)" >&2; bad=1;;
           esac
           case "$(get racket_version)" in *'8.10'*) ;; *)
@@ -179,7 +197,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "cdba4c1a62ac9e3c572a03fb3eb8b495eea74ce9e86b6e4e35d132e1e10abe70  docs/reports/CL5-P2F-REVISED-WORKLOAD.json" | sha256sum -c -
+          echo "50fbb772db8c4d6ba9a1f6b6b79a7cf7ed72352acae8ab59deaf214767260a5e  docs/reports/CL5-P2F-REVISED-WORKLOAD.json" | sha256sum -c -
           racket -e '(require json) (define d (call-with-input-file "docs/reports/CL5-P2F-REVISED-WORKLOAD.json" read-json)) (unless (equal? (hash-ref d (quote schema)) "cl5-p2f-workload/2") (error "bad workload schema")) (unless (equal? (hash-ref d (quote pinned_test_tree_sha)) "dd5c9995fc13bbc1253995768b2d78c4531e0a60") (error "bad pinned tree")) (unless (= (length (hash-ref d (quote files))) 8) (error "bad file count")) (for ([f (in-list (hash-ref d (quote files)))]) (displayln (hash-ref f (quote path))))' > cl5-p2f/files.txt
           test "$(wc -l < cl5-p2f/files.txt)" -eq 8
 
