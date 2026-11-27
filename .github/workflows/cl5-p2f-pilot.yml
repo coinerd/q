@@ -7,21 +7,38 @@ on:
         description: 'Dispatch head SHA (must match github.sha)'
         required: true
         type: string
+      budget-id:
+        description: 'Frozen dispatch budget id'
+        required: true
+        type: string
+      attempt:
+        description: 'Attempt number within the frozen budget'
+        required: true
+        type: choice
+        options: ['1', '2']
+      prior-failed-run-id:
+        description: 'Prior failed run id; required only for attempt 2'
+        required: false
+        type: string
+      prior-failure-signature:
+        description: 'Exact prior failure signature; required only for attempt 2'
+        required: false
+        type: string
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: cl5-p2f-pilot-${{ inputs.source-sha }}
+  group: cl5-p2f-pilot-rev1-${{ inputs.source-sha }}
   cancel-in-progress: false
 
 jobs:
   pilot:
     runs-on: ubuntu-latest
-    # Eight files sum to 670 s of CI elapsed. Worst case (no overlap at all) six
-    # invocations are 4020 s = 67 min, plus setup; 120 min leaves room without
-    # turning a job timeout into a measurement sample.
+    # Eight files sum to 657.42 s of CI elapsed. Worst case (no overlap at all)
+    # six invocations are ~3945 s = 65.7 min; 120 min leaves room without turning
+    # a job timeout into a measurement sample.
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
@@ -31,39 +48,57 @@ jobs:
           # history. A depth-1 checkout makes that SHA unresolvable (exit 128).
           fetch-depth: 0
 
-      - name: Bind the pinned tree
+      - name: Bind the pinned tree and budget
         env:
           SOURCE_SHA: ${{ inputs.source-sha }}
+          BUDGET_ID: ${{ inputs.budget-id }}
+          ATTEMPT: ${{ inputs.attempt }}
+          PRIOR_FAILED_RUN_ID: ${{ inputs.prior-failed-run-id }}
+          PRIOR_FAILURE_SIGNATURE: ${{ inputs.prior-failure-signature }}
           DISPATCH_SHA: ${{ github.sha }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
-          PINNED_SHA: e56b3f827bd6fbdb728babb0d2dd944da7f72c94
+          PINNED_SHA: dd5c9995fc13bbc1253995768b2d78c4531e0a60
         shell: bash
         run: |
           set -euo pipefail
           test "$SOURCE_SHA" = "$DISPATCH_SHA"
           echo "$SOURCE_SHA" | grep -Eq '^[0-9a-f]{40}$'
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$BUDGET_ID" = 'CL5-P2F-REV1'
+          case "$ATTEMPT" in 1|2) ;; *) echo 'bad attempt' >&2; exit 1;; esac
+          if [ "$ATTEMPT" = '2' ]; then
+            echo "$PRIOR_FAILED_RUN_ID" | grep -Eq '^[0-9]+$'
+            test -n "$PRIOR_FAILURE_SIGNATURE"
+            case "$PRIOR_FAILURE_SIGNATURE" in *$'\n'*)
+              echo 'signature must be single-line' >&2; exit 1;;
+            esac
+          else
+            test -z "$PRIOR_FAILED_RUN_ID"
+            test -z "$PRIOR_FAILURE_SIGNATURE"
+          fi
           git merge-base --is-ancestor "$PINNED_SHA" HEAD
           # The workflow must live on the default branch to be dispatchable by
           # filename, so the tested tree is pinned by diffing against the frozen
           # SHA instead of by checking the parent commit.
           allowed='.github/workflows/cl5-p2f-pilot.yml
           README.md
-          docs/reports/CL5-P2F-DESIGN.md
-          docs/reports/CL5-P2F-PILOT-WORKFLOW.md
-          docs/reports/CL5-P2F-WORKLOAD.json
-          scripts/ci/invocation-contract.rkt
-          tests/test-workflow-invocation-contract.rkt'
+          artifacts/tier-ownership/v1.00.32-w0/ownership-matrix.json
+          docs/reports/CL5-P2F-REVISED-DESIGN.md
+          docs/reports/CL5-P2F-REVISED-PILOT-WORKFLOW.md
+          docs/reports/CL5-P2F-REVISED-WORKLOAD.json
+          tests/test-cl5-p2f-revised.rkt'
           actual="$(git diff --name-only "$PINNED_SHA" HEAD)"
           test "$actual" = "$allowed"
           mkdir -p cl5-p2f
-          printf 'dispatch_sha=%s\nworkflow_sha=%s\npinned_sha=%s\nworkload_sha256=f06a19df9aef5840ad5314715ddde8f3f866ed8989980ae9ce4019f92e118bb4\n' \
-            "$DISPATCH_SHA" "$WORKFLOW_SHA" "$PINNED_SHA" > cl5-p2f/provenance.txt
+          printf 'budget_id=%s\nattempt=%s\nprior_failed_run_id=%s\nprior_failure_signature=%s\ndispatch_sha=%s\nworkflow_sha=%s\npinned_sha=%s\n' \
+            "$BUDGET_ID" "$ATTEMPT" "${PRIOR_FAILED_RUN_ID:-}" \
+            "${PRIOR_FAILURE_SIGNATURE:-}" "$DISPATCH_SHA" "$WORKFLOW_SHA" "$PINNED_SHA" \
+            > cl5-p2f/provenance.txt
 
       # This isolated job has no same-run prepared-environment producer, so the
-      # guarded restore would always be skipped. Opt out EXPLICITLY and record the
-      # action's own outputs; never read Q_PREPARED_ENV_* env vars that the action
-      # never exports.
+      # guarded restore would always be skipped. Opt out EXPLICITLY and record
+      # the action's own outputs; never read Q_PREPARED_ENV_* env vars that the
+      # action never exports.
       - uses: ./.github/actions/setup-racket
         id: setup
         with:
@@ -80,15 +115,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          . /etc/os-release
           {
             printf 'date=%s\n' "$(date -Is)"
             printf 'uname=%s\n' "$(uname -a)"
-            printf 'os=%s\n' "$(. /etc/os-release; echo "$PRETTY_NAME")"
+            printf 'os_id=%s\n' "$ID"
+            printf 'os_version_id=%s\n' "$VERSION_ID"
+            printf 'os_pretty_name=%s\n' "$PRETTY_NAME"
             printf 'arch=%s\n' "$(uname -m)"
+            printf 'runner_arch=%s\n' "${RUNNER_ARCH:-}"
+            printf 'runner_name=%s\n' "${RUNNER_NAME:-}"
+            printf 'image_os=%s\n' "${ImageOS:-}"
+            printf 'image_version=%s\n' "${ImageVersion:-}"
             printf 'cpu_count=%s\n' "$(nproc)"
             printf 'cpu_model=%s\n' "$(grep -m1 'model name' /proc/cpuinfo)"
-            printf 'memory=%s\n' "$(free -h | awk '/^Mem:/{print $2}')"
+            printf 'memory_kb=%s\n' "$(awk '/^MemTotal:/{print $2; exit}' /proc/meminfo)"
             printf 'cpu_max=%s\n' "$(cat /sys/fs/cgroup/cpu.max 2>/dev/null || echo unavailable)"
+            printf 'kernel_release=%s\n' "$(cat /proc/sys/kernel/osrelease)"
             printf 'load_before=%s\n' "$(cat /proc/loadavg)"
             printf 'racket_version=%s\n' "$(racket --version)"
             printf 'racket_exe_sha256=%s\n' "$(sha256sum "$(command -v racket)" | cut -d' ' -f1)"
@@ -99,12 +142,58 @@ jobs:
             printf 'racket_addon_cache_state=%s\n' "$CACHE_STATE"
           } > cl5-p2f/environment.txt
 
+      - name: Validate measured host before measurement
+        shell: bash
+        run: |
+          set -euo pipefail
+          get() {
+            awk -F= -v k="$1" '$1 == k { print substr($0, index($0, "=") + 1); exit }' \
+              cl5-p2f/environment.txt
+          }
+          bad=0
+          require() {
+            local value="$1" expected="$2" field="$3"
+            if [ "$value" != "$expected" ]; then
+              printf 'HOST MISMATCH %s: observed=%q expected=%q\n' "$field" "$value" "$expected" >&2
+              bad=1
+            fi
+          }
+          require "$(get os_id)" 'ubuntu' os_id
+          require "$(get os_version_id)" '26.04' os_version_id
+          require "$(get os_pretty_name)" 'Ubuntu 26.04.1 LTS' os_pretty_name
+          require "$(get image_os)" 'ubuntu26' image_os
+          require "$(get image_version)" '20261122.9.1' image_version
+          require "$(get arch)" 'x86_64' arch
+          require "$(get runner_arch)" 'X64' runner_arch
+          require "$(get cpu_count)" '4' cpu_count
+          require "$(get racket_exe_sha256)" \
+            '7674f17865fa795b21641828d839e689e01a2f17bbdd2b7d71cc59cceafa873c' \
+            racket_exe_sha256
+          case "$(get cpu_model)" in *'AMD EPYC '*) ;; *)
+            printf 'HOST MISMATCH cpu_model: %s\n' "$(get cpu_model)" >&2; bad=1;;
+          esac
+          case "$(get racket_version)" in *'8.10'*) ;; *)
+            printf 'HOST MISMATCH racket_version: %s\n' "$(get racket_version)" >&2; bad=1;;
+          esac
+          mem="$(get memory_kb)"
+          if ! awk -v m="$mem" 'BEGIN { exit !(m >= 15500000 && m <= 17500000) }'; then
+            printf 'HOST MISMATCH memory_kb: %s\n' "$mem" >&2; bad=1
+          fi
+          cpu_max="$(get cpu_max)"
+          if [ -n "$cpu_max" ] && [ "$cpu_max" != 'unavailable' ] && [ "$cpu_max" != 'max' ]; then
+            read -r quota period <<<"$cpu_max"
+            if ! awk -v q="$quota" -v p="$period" 'BEGIN { exit !(q / p >= 4) }'; then
+              printf 'HOST MISMATCH cpu_max: %s\n' "$cpu_max" >&2; bad=1
+            fi
+          fi
+          test "$bad" -eq 0
+
       - name: Materialise the frozen workload
         shell: bash
         run: |
           set -euo pipefail
-          echo "f06a19df9aef5840ad5314715ddde8f3f866ed8989980ae9ce4019f92e118bb4  docs/reports/CL5-P2F-WORKLOAD.json" | sha256sum -c -
-          racket -e '(require json) (define d (call-with-input-file "docs/reports/CL5-P2F-WORKLOAD.json" read-json)) (unless (equal? (hash-ref d (quote schema)) "cl5-p2f-workload/1") (error "bad workload schema")) (unless (equal? (hash-ref d (quote pinned_test_tree_sha)) "e56b3f827bd6fbdb728babb0d2dd944da7f72c94") (error "bad pinned tree")) (unless (= (length (hash-ref d (quote files))) 8) (error "bad file count")) (for ([f (in-list (hash-ref d (quote files)))]) (displayln (hash-ref f (quote path))))' > cl5-p2f/files.txt
+          echo "50fbb772db8c4d6ba9a1f6b6b79a7cf7ed72352acae8ab59deaf214767260a5e  docs/reports/CL5-P2F-REVISED-WORKLOAD.json" | sha256sum -c -
+          racket -e '(require json) (define d (call-with-input-file "docs/reports/CL5-P2F-REVISED-WORKLOAD.json" read-json)) (unless (equal? (hash-ref d (quote schema)) "cl5-p2f-workload/2") (error "bad workload schema")) (unless (equal? (hash-ref d (quote pinned_test_tree_sha)) "dd5c9995fc13bbc1253995768b2d78c4531e0a60") (error "bad pinned tree")) (unless (= (length (hash-ref d (quote files))) 8) (error "bad file count")) (for ([f (in-list (hash-ref d (quote files)))]) (displayln (hash-ref f (quote path))))' > cl5-p2f/files.txt
           test "$(wc -l < cl5-p2f/files.txt)" -eq 8
 
       - name: Warm-up and five measured invocations
@@ -133,6 +222,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: cl5-p2f-pilot
+          name: cl5-p2f-pilot-rev1
           path: cl5-p2f/
           if-no-files-found: error

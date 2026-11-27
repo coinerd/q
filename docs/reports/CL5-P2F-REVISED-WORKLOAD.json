@@ -1,0 +1,104 @@
+{
+ "schema": "cl5-p2f-workload/2",
+ "created": "2026-11-28",
+ "purpose": "Frozen eight-file workload for the revised, measured-host P2-F feasibility pilot. No result is recorded here.",
+ "budget_id": "CL5-P2F-REV1",
+ "pinned_test_tree_sha": "dd5c9995fc13bbc1253995768b2d78c4531e0a60",
+ "ci_reference": {
+  "run_id": 46067550544,
+  "head_sha": "dd5c9995fc13bbc1253995768b2d78c4531e0a60",
+  "artifact_prefix": "test-results-fast-",
+  "note": "Per-file elapsed values are read from this production run at the pinned tree. Every listed file passed there; none is censored. Its observed CPU was AMD EPYC 7763; the three fast shard artifacts do not record CPU identity."
+ },
+ "expected_host": {
+  "os_id": "ubuntu",
+  "os_version_id": "26.04",
+  "os_pretty_name": "Ubuntu 26.04.1 LTS",
+  "image_os": "ubuntu26",
+  "image_version": "20261122.9.1",
+  "architecture": "x86_64",
+  "runner_arch": "X64",
+  "cpu_class_regex": "AMD EPYC",
+  "observed_production_cpu_models": ["AMD EPYC 9V45", "AMD EPYC 7763"],
+  "reference_run_observed_cpu_model": "AMD EPYC 7763",
+  "cores": 4,
+  "memory_kb_min": 15500000,
+  "memory_kb_max": 17500000,
+  "racket_version": "8.10",
+  "racket_exe_sha256": "7674f17865fa795b21641828d839e689e01a2f17bbdd2b7d71cc59cceafa873c"
+ },
+ "command": {
+  "argv": [
+   "racket",
+   "scripts/run-tests/runner.rkt",
+   "--jobs",
+   "4",
+   "--json-out",
+   "cl5-p2f/run-<i>.json",
+   "<the eight files below>"
+  ],
+  "warmups": 1,
+  "measured_runs": 5,
+  "jobs": 4,
+  "note": "Same runner and job count as the production fast gate; NOT the shard flags. Per-file elapsed is the comparable quantity, not total CI wall."
+ },
+ "files": [
+  {
+   "path": "tests/test-gsd-evidence-repair-production-contract.rkt",
+   "ci_elapsed_ms": 154171,
+   "ci_status": "pass"
+  },
+  {
+   "path": "tests/test-full-regression-invocation.rkt",
+   "ci_elapsed_ms": 145685,
+   "ci_status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-delivery-merge.rkt",
+   "ci_elapsed_ms": 58211,
+   "ci_status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-auto-review-loop-contract.rkt",
+   "ci_elapsed_ms": 61957,
+   "ci_status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-supplemental-disposition-store.rkt",
+   "ci_elapsed_ms": 41702,
+   "ci_status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-delivery-read-ladder.rkt",
+   "ci_elapsed_ms": 95973,
+   "ci_status": "pass"
+  },
+  {
+   "path": "tests/test-milestone-gate.rkt",
+   "ci_elapsed_ms": 69708,
+   "ci_status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-go-orchestrator.rkt",
+   "ci_elapsed_ms": 30013,
+   "ci_status": "pass"
+  }
+ ],
+ "acceptance": {
+  "host": "every expected_host field must match measured values; CPU class is AMD EPYC with exact model recorded; label alone insufficient",
+  "integrity": "warm-up + five measured artifacts; exactly eight paths per run; every status pass; zero timeouts/failures/missing",
+  "stability": "(max total wall - min total wall) / median total wall <= 0.15 over the five measured runs",
+  "comparability": "for each file, median(pilot)/ci_elapsed in [0.5,2.0]; pooled median ratio in [0.67,1.5]",
+  "isolation": "one runner per invocation; no nested runner or shard flags; the only .github addition is the dispatch-only pilot workflow (no push/PR trigger, no test selection)",
+  "provenance": "cache state, preparation overhead, load, exact argv and measured host per run; warm-up excluded from statistics"
+ },
+ "allowed_tree_diff_paths": [
+  ".github/workflows/cl5-p2f-pilot.yml",
+  "README.md",
+  "artifacts/tier-ownership/v1.00.32-w0/ownership-matrix.json",
+  "docs/reports/CL5-P2F-REVISED-DESIGN.md",
+  "docs/reports/CL5-P2F-REVISED-PILOT-WORKFLOW.md",
+  "docs/reports/CL5-P2F-REVISED-WORKLOAD.json",
+  "tests/test-cl5-p2f-revised.rkt"
+ ]
+}
