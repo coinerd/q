@@ -1,11 +1,12 @@
 # CL5 P2-F feasibility pilot — evaluation-only workflow template
 
-This file is deliberately stored under `docs/reports/`, **not** under `.github/workflows/`, so it is
-inert on `main`. To run the pilot it is copied to `.github/workflows/cl5-p2f-pilot.yml` on a temporary
-feature branch based on `e56b3f82`, together with `docs/reports/CL5-P2F-WORKLOAD.json`. The branch is
-not merged. Only `workflow_dispatch` triggers it; no push or PR event runs it.
+This document is the reviewed template. GitHub resolves a dispatch by workflow filename against the
+default branch, so the executable copy is deployed at `.github/workflows/cl5-p2f-pilot.yml` on `main`
+(branch-only deployment returned 404). It has no push or PR trigger, is not a required check, and
+selects no tests; this file remains the human-readable copy.
 
-The workflow validates that the tested tree differs from the pinned SHA only by those two files, then
+The workflow validates that the tested tree differs from the pinned SHA only by its own file and the
+three `CL5-P2F-*` reports, then
 records host metadata, runs one warm-up and five measured invocations over the frozen eight-file
 workload, and uploads all artifacts. It spawns exactly one runner per invocation and never calls
 `./qt` or a nested runner.
@@ -53,13 +54,21 @@ jobs:
           test "$SOURCE_SHA" = "$DISPATCH_SHA"
           echo "$SOURCE_SHA" | grep -Eq '^[0-9a-f]{40}$'
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-          test "$(git rev-parse HEAD^)" = "$PINNED_SHA"
+          git merge-base --is-ancestor "$PINNED_SHA" HEAD
+          # The workflow must live on the default branch to be dispatchable by
+          # filename, so the tested tree is pinned by diffing against the frozen
+          # SHA instead of by checking the parent commit.
           allowed='.github/workflows/cl5-p2f-pilot.yml
-          docs/reports/CL5-P2F-WORKLOAD.json'
-          actual="$(git diff --name-only HEAD^ HEAD)"
+          README.md
+          docs/reports/CL5-P2F-DESIGN.md
+          docs/reports/CL5-P2F-PILOT-WORKFLOW.md
+          docs/reports/CL5-P2F-WORKLOAD.json
+          scripts/ci/invocation-contract.rkt
+          tests/test-workflow-invocation-contract.rkt'
+          actual="$(git diff --name-only "$PINNED_SHA" HEAD)"
           test "$actual" = "$allowed"
           mkdir -p cl5-p2f
-          printf 'dispatch_sha=%s\nworkflow_sha=%s\npinned_sha=%s\nworkload_sha256=86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0d\n' \
+          printf 'dispatch_sha=%s\nworkflow_sha=%s\npinned_sha=%s\nworkload_sha256=f06a19df9aef5840ad5314715ddde8f3f866ed8989980ae9ce4019f92e118bb4\n' \
             "$DISPATCH_SHA" "$WORKFLOW_SHA" "$PINNED_SHA" > cl5-p2f/provenance.txt
 
       # This isolated job has no same-run prepared-environment producer, so the
@@ -105,16 +114,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0d  docs/reports/CL5-P2F-WORKLOAD.json" | sha256sum -c -
-          python3 - <<'PY' > cl5-p2f/files.txt
-          import json
-          d = json.load(open('docs/reports/CL5-P2F-WORKLOAD.json'))
-          assert d['schema'] == 'cl5-p2f-workload/1'
-          assert d['pinned_test_tree_sha'] == 'e56b3f827bd6fbdb728babb0d2dd944da7f72c94'
-          assert len(d['files']) == 8
-          for f in d['files']:
-              print(f['path'])
-          PY
+          echo "f06a19df9aef5840ad5314715ddde8f3f866ed8989980ae9ce4019f92e118bb4  docs/reports/CL5-P2F-WORKLOAD.json" | sha256sum -c -
+          racket -e '(require json) (define d (call-with-input-file "docs/reports/CL5-P2F-WORKLOAD.json" read-json)) (unless (equal? (hash-ref d (quote schema)) "cl5-p2f-workload/1") (error "bad workload schema")) (unless (equal? (hash-ref d (quote pinned_test_tree_sha)) "e56b3f827bd6fbdb728babb0d2dd944da7f72c94") (error "bad pinned tree")) (unless (= (length (hash-ref d (quote files))) 8) (error "bad file count")) (for ([f (in-list (hash-ref d (quote files)))]) (displayln (hash-ref f (quote path))))' > cl5-p2f/files.txt
           test "$(wc -l < cl5-p2f/files.txt)" -eq 8
 
       - name: Warm-up and five measured invocations
