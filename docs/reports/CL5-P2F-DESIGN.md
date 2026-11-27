@@ -105,7 +105,7 @@ racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-<i>.json <th
 ```
 
 The workflow verifies the SHA-256 of `CL5-P2F-WORKLOAD.json`
-(`86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0d`) and derives the file list from
+(`3e93bd21ec840814bdd6d8c26a3ca9314602e4e9e64ef9987e46975bfd380dba`) and derives the file list from
 it; a changed workload under the same path check cannot silently pass.
 
 It uses the same runner and job count as production, but **not** the shard flags; per-file elapsed is
@@ -166,7 +166,10 @@ After dispatch, the artifacts are downloaded and reduced to `CL5-P2F-PILOT.json`
 (`cl5-p2f-pilot/1`) with: host metadata, per-run wall, per-file elapsed and status per run, per-file
 min/median/max/spread, the eight ratios, all six criteria with their observed values, and the run
 URLs. The record must be independently re-derivable from the artifacts; a verifier flag is acceptable
-only if it re-reads them rather than trusting a self-declared verdict.
+only if it re-reads them rather than trusting a self-declared verdict. Analysis also checks that
+`provenance.txt:workflow_sha` equals the reviewed deployment commit (the head of PR #10018 at merge):
+the tree pin lists the workflow itself, so its identity must be checked from the recorded SHA rather
+than from that self-referential list.
 
 The report states explicitly: which host was used, which SHAs, what was and was not reproduced from
 production CI, whether the eight-file pilot can support a paired selected/comprehensive experiment,

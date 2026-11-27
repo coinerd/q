@@ -51,7 +51,7 @@ jobs:
           actual="$(git diff --name-only "$PINNED_SHA" HEAD)"
           test "$actual" = "$allowed"
           mkdir -p cl5-p2f
-          printf 'dispatch_sha=%s\nworkflow_sha=%s\npinned_sha=%s\nworkload_sha256=86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0d\n' \
+          printf 'dispatch_sha=%s\nworkflow_sha=%s\npinned_sha=%s\nworkload_sha256=3e93bd21ec840814bdd6d8c26a3ca9314602e4e9e64ef9987e46975bfd380dba\n' \
             "$DISPATCH_SHA" "$WORKFLOW_SHA" "$PINNED_SHA" > cl5-p2f/provenance.txt
 
       # This isolated job has no same-run prepared-environment producer, so the
@@ -97,7 +97,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0d  docs/reports/CL5-P2F-WORKLOAD.json" | sha256sum -c -
+          echo "3e93bd21ec840814bdd6d8c26a3ca9314602e4e9e64ef9987e46975bfd380dba  docs/reports/CL5-P2F-WORKLOAD.json" | sha256sum -c -
           python3 - <<'PY' > cl5-p2f/files.txt
           import json
           d = json.load(open('docs/reports/CL5-P2F-WORKLOAD.json'))
