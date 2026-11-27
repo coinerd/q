@@ -83,6 +83,12 @@ inert file. It has no push/PR trigger, is not a required check, and changes no t
 tree check above is what preserves pinning. The earlier "not merged to `main`" sentence was wrong and
 is corrected here before any data was collected.
 
+Second deployment finding: the first dispatch (`46026806520`) failed before setup with
+`fatal: Not a valid commit name e56b3f82…` (exit 128), because `actions/checkout@v7` used depth 1 and
+the frozen SHA was not in the shallow clone. The checkout now uses `fetch-depth: 0` in both the
+deployed workflow and the reviewed template. That dispatch produced no measurements and is reported
+as an infrastructure failure, never a sample (§5).
+
 Pilot subset (eight files, exact list also in `CL5-P2F-WORKLOAD.json`):
 
 | File | CI elapsed (ms) at `45861840409` |
