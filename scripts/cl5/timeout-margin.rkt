@@ -426,6 +426,7 @@
 
 (module+ main
   (define probe-copy? #t)
+  (define plan? #f)
   (command-line
    #:program "timeout-margin.rkt"
    #:once-each [("--measure") v "Test file to measure" (measure-path v)]
@@ -449,6 +450,9 @@
     v
     "Comma-separated files run alongside the target (real surface sample)"
     (fillers (string-split v ","))]
+   [("--plan-only")
+    "With --measure: print whether a probe copy would be used, then exit (runs nothing)"
+    (set! plan? #t)]
    [("--verify") v "Verify an existing registry" (verify-path v)]
    #:args ()
    (cond
@@ -460,6 +464,13 @@
      [(measure-path)
       (unless (existing-limit)
         (error 'timeout-margin "--existing-limit is required (existing declarations are floors)"))
+      (when plan?
+        (define declared (full-file-timeout (measure-path)))
+        (printf "probe_copy=~a declared=~a probe_timeout=~a\n"
+                (and probe-copy? (not (zero? declared)) (< declared (uncensored)))
+                declared
+                (uncensored))
+        (exit 0))
       (define run
         (if (fillers)
             (measure-surface-samples (measure-path)
