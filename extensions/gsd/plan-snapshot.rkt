@@ -47,11 +47,16 @@
          racket/format
          racket/list
          racket/match
-         racket/os
          racket/path
          racket/port
          racket/string
          (only-in "../../util/json/checksum.rkt" sha256-string sha256-file)
+         ;; The staging marker is written concurrently by the delivery-merge
+         ;; lane pool. racket/os resolves getpid through an unsynchronized
+         ;; `delay`; a concurrent first force raises `reentrant promise
+         ;; 'delay-ffi-obj`. q's lockfile helper resolves the same symbol
+         ;; eagerly, preserving the recorded PID without that race.
+         (only-in "../../util/lockfile.rkt" getpid)
          (only-in "planning-paths.rkt"
                   campaign-dir
                   campaign-snapshot-dir

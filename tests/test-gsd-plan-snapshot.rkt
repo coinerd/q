@@ -113,6 +113,7 @@
 (define legacy-v1-w0-size 4584)
 (define-runtime-path legacy-v1-w0-fixture
                      "fixtures/plan-snapshot-legacy-v1/waves/W0-tracker-reconciliation-wiring.md")
+(define-runtime-path plan-snapshot-source "../extensions/gsd/plan-snapshot.rkt")
 (define legacy-v1-plan-text
   (string-append "# Plan\n\n" "- [Inbox] W0: Tracker reconciliation -> " legacy-v1-w0-rel "\n"))
 
@@ -863,6 +864,21 @@
                    (string-append legacy-v1-plan-text "\nAmended contract clause\n"))
       (check-exn exn:fail:gsd-frozen-contract-stale?
                  (lambda () (seed-and-bind-plan-snapshot! dir campaign-id)))
-      (delete-directory/files dir))))
+      (delete-directory/files dir))
+
+    (test-case "staging markers never force Racket's unsynchronized delayed FFI PID promise"
+      ;; `racket/os` resolves getpid through a module-level `delay`, not
+      ;; `delay/sync`. Racket's generic promise marks itself as running while
+      ;; its thunk executes and rejects a second force with
+      ;; "reentrant promise 'delay-ffi-obj". The delivery-merge test drives
+      ;; prepare jobs through a six-lane thread pool, so a first concurrent
+      ;; call from this module can abort an entire measurement warm-up.
+      ;; q's lockfile helper resolves the same FFI symbol eagerly at module
+      ;; load, preserving the recorded PID without a shared lazy promise.
+      (define source (file->string plan-snapshot-source))
+      (check-false (regexp-match? #px"(?m:^\\s*racket/os\\b)" source)
+                   "plan-snapshot must not import the delayed racket/os PID binding")
+      (check-true (regexp-match? #px"only-in +\"\\.\\./\\.\\./util/lockfile\\.rkt\" +getpid" source)
+                  "the staging marker must use the eager q-owned PID binding"))))
 
 (void (run-tests plan-snapshot-suite))
