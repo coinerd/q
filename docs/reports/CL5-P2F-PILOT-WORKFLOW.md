@@ -41,6 +41,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # The tree pin diffs against the frozen SHA, so the checkout needs its
+          # history. A depth-1 checkout makes that SHA unresolvable (exit 128).
+          fetch-depth: 0
 
       - name: Bind the pinned tree
         env:
