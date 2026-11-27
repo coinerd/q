@@ -249,6 +249,14 @@
         (dynamic-wind void (lambda () (measure-one file timeout)) (lambda () (stop-load procs))))
       (eprintf "  sample ~a: ~a ms~n" (add1 i) (hash-ref result 'elapsed_ms))
       result))
+  (define censored (censored-samples samples))
+  (when (pair? censored)
+    (error 'timeout-margin
+           (string-append "~a of ~a samples for ~a were censored: the declaration cut the"
+                          " run short, so they are not durations.")
+           (length censored)
+           (length samples)
+           file))
   (hash 'warmup_ms (hash-ref warm 'elapsed_ms) 'samples samples))
 
 ;; A faithful concurrency sample: the target runs in a REAL surface invocation with
@@ -273,7 +281,10 @@
   (define with-declaration
     (cond
       [(regexp-match? #rx"[ \t]*;+[ \t]*@timeout[ \t]+[0-9]+" text)
-       (regexp-replace #rx"[ \t]*;+[ \t]*@timeout[ \t]+[0-9]+" text raised)]
+       ;; Every declaration is replaced, not just the first: the metadata parser keeps the
+       ;; LAST match in the first 50 lines, so replacing one of two would leave the old
+       ;; limit in force.
+       (regexp-replace* #rx"[ \t]*;+[ \t]*@timeout[ \t]+[0-9]+" text raised)]
       [else
        (regexp-replace #rx"^(#lang racket[^\n]*\n)"
                        text
@@ -488,7 +499,7 @@
               (hash-ref (with-input-from-file (registry-out) read-json) 'entries '())
               '()))
         (define merged
-          (cons (registry-entry->jsexpr e)
+          (cons e*
                 (filter (lambda (x) (not (equal? (hash-ref x 'path #f) (measure-path)))) previous)))
         (define reg
           (hasheq 'schema

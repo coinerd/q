@@ -29,7 +29,7 @@ the substitution.
 
 | File | Existing limit | Standalone p95 (P2-C) | **p95 at `--jobs 4`** | Samples (ms) | Derived limit | Margin |
 |---|---|---|---|---|---|---|
-| `tests/test-gsd-executor-ergonomics-prompt.rkt` | 120 s (default) | ~71 s | **215 357 ms** | 215 357 / 206 331 / 204 706 / 207 432 / 209 433 | **330 s** | 1.53× |
+| `tests/test-gsd-executor-ergonomics-prompt.rkt` | 120 s (default) | ~71 s | **208 533 ms** | 206 397 / 202 835 / 195 005 / 197 223 / 208 533 (re-measured with the fixed probe) | **330 s** | 1.58× |
 | `tests/test-gsd-evidence-repair-production-contract.rkt` | 210 s | ~202 s | **350 756 ms** | 335 654 / 350 756 / 337 712 / 339 936 / 342 990 | **540 s** | 1.54× |
 | `tests/test-gsd-branch-delivery-verification.rkt` | 120 s (default) | — | **166 636 ms** | 166 636 / 164 171 / 161 857 / 165 152 / 155 190 | **270 s** | 1.62× |
 | `tests/test-gsd-delivery-coordinator.rkt` | 120 s (default) | 120.2 s (timed out) | **128 988 ms** | see registry | **210 s** | 1.63× |
@@ -57,10 +57,21 @@ presented as the shard's own number.
 ### The eight: the reference surface showed a systematic, not incidental, problem
 
 The first single-invocation reference run (1 400 files, `--jobs 4`) timed out
-`tests/test-gsd-delivery-coordinator.rkt` at 120.2 s against a 120 s limit. Enumerating every file at
-a 120 s limit in that run showed 24 files above 34 % of the limit and **eight below 67 %** — i.e. under
-the policy's own 1.5× margin. Those eight were measured uniformly at `--jobs 4` (five samples each,
-declaration-raised probe copies so no sample could be censored). They are listed in the table above.
+`tests/test-gsd-delivery-coordinator.rkt` at 120.2 s against a 120 s limit. Enumerating every file whose
+effective limit was 120 s in that run (`docs/reports/CL5-P2E-SURFACE-SCAN.json`, committed so the rule can
+be replayed) gives 23 files above 50 % of the limit; **eight of them at 67 % or more** — i.e. a margin
+below the policy's own 1.5×, so ordinary variance can fail them. Those eight were then measured at
+`--jobs 4` with five samples each. They are listed in the table above.
+
+Seven were measured through a declaration-raised probe copy, so no sample could be censored.
+`tests/test-milestone-gate.rkt` was measured **at its real path** with its declaration temporarily raised
+to the probe budget instead: it checks the ownership matrix, so a `tests/.cl5-probe-*` file is an unknown
+test file and it fails 5/5 under a copy. Its samples are therefore uncensored without a copy, and its
+entry records `probe_copy: false`.
+
+Measurement conditions (identical for all eight): `--jobs 4`, `--timeout 1800`, five samples after one
+recorded warm-up, fillers `tests/test-gsd-delivery-merge.rkt`, `tests/test-gsd-delivery-status.rkt`,
+`tests/test-gsd-evidence-authority.rkt`.
 
 This is the approved policy applied to the files the measurement itself flags, not a new policy: the
 120 s figure was never derived for this surface, so the timeouts were a rotating cast rather than one
@@ -76,8 +87,12 @@ broken test.
    keeps the **last** match in the first 50 lines, so an existing declaration shadows the inserted one.
    The copy now replaces it in place, and a test pins that.
 
-The probe copy keeps the file at the same path, differing only in the `@timeout` line; entries derived
-that way are recorded with `probe_copy: true` and a disclosure in their `uncertainty` field.
+The probe copy is a **sibling** file in the same directory (`tests/.cl5-probe-<name>.rkt`), so the path
+does change — which is exactly why path-sensitive tests are measured without one. The copy differs from
+the original in the `@timeout` line and nothing else; entries derived that way are recorded with
+`probe_copy: true` and a disclosure in their `uncertainty` field. A copy is used only when the file's
+declaration is strictly tighter than the probe budget, and **every** `@timeout` line in it is replaced,
+because the metadata parser keeps the last match in the first 50 lines.
 
 ### The third file: found by the baseline itself
 
@@ -112,7 +127,9 @@ extended deliberately, so the third file could not slip in unnoticed.
 ```
 
 Registry: `docs/reports/CL5-P2D-TIMEOUT-MARGIN.json` (`cl5-slow-tests/1`), verified by
-`racket scripts/cl5/timeout-margin.rkt --verify` and pinned to the declarations by
+`racket scripts/cl5/timeout-margin.rkt --verify` (which re-derives each p95 from the recorded samples, and
+each limit and margin from that p95 — a tampered sample that does not change the 5-sample maximum still
+verifies, so the samples are evidence, not a signature) and pinned to the declarations by
 `tests/test-cl5-timeout-margin.rkt` — that test fails if a declaration and its evidence drift apart,
 and it also fails if the allow-list grows beyond the eleven measured files. `--verify` additionally
 refuses a registry whose allow-list differs from the module's authoritative list, and re-derives each

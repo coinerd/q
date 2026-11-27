@@ -1,0 +1,174 @@
+{
+ "schema": "cl5-surface-scan/1",
+ "reference_run": {
+  "artifact": "/tmp/p2e2/schedule-warmup.json",
+  "files": null,
+  "jobs": 4,
+  "wall_ms": null,
+  "note": "single-invocation comprehensive reference (union of executed files at --jobs 4), not the eight-producer CI schedule"
+ },
+ "rule": "files whose effective limit is 120 s and whose reference elapsed exceeds 50% of it; the >= 100% ones already failed, and the >= 67% ones were calibrated in this change",
+ "candidates": [
+  {
+   "path": "tests/test-gsd-delivery-coordinator.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 120178,
+   "fraction_of_limit": 1.0015,
+   "status": "timeout"
+  },
+  {
+   "path": "tests/test-gsd-evidence-discovery.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 112543,
+   "fraction_of_limit": 0.9379,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-qt-lanes.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 110140,
+   "fraction_of_limit": 0.9178,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-golden-flows.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 93300,
+   "fraction_of_limit": 0.7775,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-qt-quick.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 90037,
+   "fraction_of_limit": 0.7503,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-ci-recovery-trial.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 89353,
+   "fraction_of_limit": 0.7446,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-delivery-verifier-git-contract.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 80209,
+   "fraction_of_limit": 0.6684,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-go-orchestrator.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 79185,
+   "fraction_of_limit": 0.6599,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-main-entrypoint.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 79078,
+   "fraction_of_limit": 0.659,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-delivery-verifier-decision-integration.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 72410,
+   "fraction_of_limit": 0.6034,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-delivery-publication.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 66460,
+   "fraction_of_limit": 0.5538,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-qt-full.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 64532,
+   "fraction_of_limit": 0.5378,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-delivery-controller-residuals.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 61660,
+   "fraction_of_limit": 0.5138,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-pristine-git-fixture.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 60934,
+   "fraction_of_limit": 0.5078,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-test-gate-ownership.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 59416,
+   "fraction_of_limit": 0.4951,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-hotspot-report.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 48341,
+   "fraction_of_limit": 0.4028,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-qt.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 47799,
+   "fraction_of_limit": 0.3983,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-inventory-gate-string-keys.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 45562,
+   "fraction_of_limit": 0.3797,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-verification-job-lifecycle.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 45200,
+   "fraction_of_limit": 0.3767,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-supplemental-evidence-crash.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 42949,
+   "fraction_of_limit": 0.3579,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-run-tests-profiles.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 41677,
+   "fraction_of_limit": 0.3473,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-gsd-delivery-runtime.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 41244,
+   "fraction_of_limit": 0.3437,
+   "status": "pass"
+  },
+  {
+   "path": "tests/test-plan-validation-explain-cli.rkt",
+   "limit_s": 120,
+   "reference_elapsed_ms": 40378,
+   "fraction_of_limit": 0.3365,
+   "status": "pass"
+  }
+ ]
+}
