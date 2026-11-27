@@ -144,7 +144,7 @@
 (test-case "the committed registry verifies"
   (check-true (file-exists? registry-path))
   (define reg (with-input-from-file registry-path read-json))
-  (check-equal? (hash-ref (verify-registry reg) 'entries) 3))
+  (check-equal? (hash-ref (verify-registry reg) 'entries) (length (hash-ref reg 'allowed_paths))))
 
 (test-case "every registry entry equals the file's actual @timeout declaration"
   ;; A silent raise or a forgotten update fails here: the declaration and the
@@ -155,12 +155,53 @@
                   (hash-ref e 'limit_s)
                   (format "~a declaration != registry" (hash-ref e 'path)))))
 
-(test-case "the allow-list is exactly the three measured files"
-  ;; The policy must not spread: adding a third entry means adding it here, in the
-  ;; registry, and in the measurement record.
+(test-case "the committed allow-list is exactly the measured files"
+  ;; The policy must not spread: an entry means a measurement here, in the registry and
+  ;; in the declaration. The list is asserted literally so a silent addition fails.
   (define reg (with-input-from-file registry-path read-json))
   (check-equal? (sort (hash-ref reg 'allowed_paths) string<?)
-                (sort (list "tests/test-gsd-executor-ergonomics-prompt.rkt"
+                (sort (list "tests/test-ci-recovery-trial.rkt"
+                            "tests/test-golden-flows.rkt"
+                            "tests/test-gsd-branch-delivery-verification.rkt"
+                            "tests/test-gsd-delivery-coordinator.rkt"
+                            "tests/test-gsd-delivery-verifier-git-contract.rkt"
+                            "tests/test-gsd-evidence-discovery.rkt"
                             "tests/test-gsd-evidence-repair-production-contract.rkt"
-                            "tests/test-gsd-branch-delivery-verification.rkt")
+                            "tests/test-gsd-executor-ergonomics-prompt.rkt"
+                            "tests/test-milestone-gate.rkt"
+                            "tests/test-qt-lanes.rkt"
+                            "tests/test-qt-quick.rkt")
                       string<?)))
+
+;; ---- censored samples and probe copies --------------------------------------------
+
+(test-case "censored-samples separates killed runs from durations"
+  (check-equal? (censored-samples (list (hash 'run_status "pass" 'elapsed_ms 5)
+                                        (hash 'run_status "timeout" 'elapsed_ms 120001)
+                                        (hash 'run_status "fail" 'elapsed_ms 900)))
+                (list (hash 'run_status "timeout" 'elapsed_ms 120001)
+                      (hash 'run_status "fail" 'elapsed_ms 900)))
+  (check-equal? (censored-samples (list (hash 'run_status "pass" 'elapsed_ms 5))) '())
+  ;; An unreadable sample is treated as censored, never as a duration.
+  (check-equal? (censored-samples (list (hash 'elapsed_ms 5))) (list (hash 'elapsed_ms 5))))
+
+(test-case "a probe copy raises the declaration instead of adding a shadowed one"
+  ;; The metadata parser keeps the LAST @timeout in the first 50 lines. Inserting a line
+  ;; above an existing declaration would leave the old value in force, so the copy must
+  ;; REPLACE it -- otherwise every "uncensored" sample is still taken at the old limit.
+  (define fixture (build-path repo-root "tests" ".cl5-probe-fixture.rkt"))
+  (call-with-output-file
+   fixture
+   #:exists 'replace
+   (lambda (o)
+     (display "#lang racket/base\n\n;; @suite fast\n;; @timeout 120\n\n(module+ test (void))\n" o)))
+  (dynamic-wind void
+                (lambda ()
+                  (define copy (probe-copy-source (path->string fixture) 1800))
+                  (check-equal? (full-file-timeout (path->string copy)) 1800)
+                  (define text (file->string copy))
+                  (check-false (regexp-match? #rx"@timeout 120" text))
+                  (delete-file copy))
+                (lambda ()
+                  (when (file-exists? fixture)
+                    (delete-file fixture)))))

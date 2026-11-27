@@ -2,6 +2,7 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @covers extensions/gsd/delivery-coordinator.rkt
+;; @timeout 210 ;; CL5 P2-D: concurrency-calibrated (see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
 ;; B2a: deterministic journal-driven delivery stage machine. ONE controller
 ;; effect per invocation (injectable seam; the default production seam shells
 ;; scripts/gsd-delivery.py). Every effect re-runs the receipt blocker against

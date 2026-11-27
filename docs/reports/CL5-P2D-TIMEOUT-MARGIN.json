@@ -9,11 +9,53 @@
   "measurement": "real surface invocation: target + 3 fast-lane fillers, --jobs 4, uncensored, one recorded warm-up"
  },
  "allowed_paths": [
+  "tests/test-ci-recovery-trial.rkt",
+  "tests/test-golden-flows.rkt",
   "tests/test-gsd-branch-delivery-verification.rkt",
+  "tests/test-gsd-delivery-coordinator.rkt",
+  "tests/test-gsd-delivery-verifier-git-contract.rkt",
+  "tests/test-gsd-evidence-discovery.rkt",
   "tests/test-gsd-evidence-repair-production-contract.rkt",
-  "tests/test-gsd-executor-ergonomics-prompt.rkt"
+  "tests/test-gsd-executor-ergonomics-prompt.rkt",
+  "tests/test-milestone-gate.rkt",
+  "tests/test-qt-lanes.rkt",
+  "tests/test-qt-quick.rkt"
  ],
  "entries": [
+  {
+   "existing_limit_s": 120,
+   "job_count": 4,
+   "limit_s": 240,
+   "margin": 1.51847797890581,
+   "p95_ms": 158053,
+   "path": "tests/test-ci-recovery-trial.rkt",
+   "sample_count": 5,
+   "samples_ms": [
+    155841,
+    158053,
+    153020,
+    156130,
+    151696
+   ],
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+  },
+  {
+   "existing_limit_s": 120,
+   "job_count": 4,
+   "limit_s": 240,
+   "margin": 1.5689863694309156,
+   "p95_ms": 152965,
+   "path": "tests/test-golden-flows.rkt",
+   "sample_count": 5,
+   "samples_ms": [
+    152965,
+    152533,
+    146844,
+    150013,
+    147946
+   ],
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+  },
   {
    "existing_limit_s": 120,
    "job_count": 4,
@@ -30,6 +72,57 @@
     155190
    ],
    "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty"
+  },
+  {
+   "existing_limit_s": 120,
+   "job_count": 4,
+   "limit_s": 210,
+   "margin": 1.6280584240394456,
+   "p95_ms": 128988,
+   "path": "tests/test-gsd-delivery-coordinator.rkt",
+   "sample_count": 5,
+   "samples_ms": [
+    128988,
+    124938,
+    125755,
+    126017,
+    127516
+   ],
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+  },
+  {
+   "existing_limit_s": 120,
+   "job_count": 4,
+   "limit_s": 210,
+   "margin": 1.5914516312379219,
+   "p95_ms": 131955,
+   "path": "tests/test-gsd-delivery-verifier-git-contract.rkt",
+   "sample_count": 5,
+   "samples_ms": [
+    129453,
+    131955,
+    129617,
+    131864,
+    129296
+   ],
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+  },
+  {
+   "existing_limit_s": 120,
+   "job_count": 4,
+   "limit_s": 300,
+   "margin": 1.5978184452161315,
+   "p95_ms": 187756,
+   "path": "tests/test-gsd-evidence-discovery.rkt",
+   "sample_count": 5,
+   "samples_ms": [
+    178789,
+    187756,
+    181240,
+    181774,
+    180126
+   ],
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
   },
   {
    "path": "tests/test-gsd-evidence-repair-production-contract.rkt",
@@ -65,6 +158,57 @@
    "limit_s": 330,
    "margin": 1.5323393249348756,
    "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count p95 equals the maximum sample, so it is a lower bound. Measured in a REAL 4-file surface run (target + 3 fast-lane tests, --jobs 4, uncensored), after one recorded warm-up."
+  },
+  {
+   "existing_limit_s": 120,
+   "job_count": 4,
+   "limit_s": 270,
+   "margin": 1.6679639719782053,
+   "p95_ms": 161874,
+   "path": "tests/test-milestone-gate.rkt",
+   "sample_count": 5,
+   "samples_ms": [
+    161874,
+    154210,
+    154457,
+    159418,
+    152687
+   ],
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty"
+  },
+  {
+   "existing_limit_s": 120,
+   "job_count": 4,
+   "limit_s": 240,
+   "margin": 1.5885413219311368,
+   "p95_ms": 151082,
+   "path": "tests/test-qt-lanes.rkt",
+   "sample_count": 5,
+   "samples_ms": [
+    146378,
+    150383,
+    150028,
+    151082,
+    148577
+   ],
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
+  },
+  {
+   "existing_limit_s": 120,
+   "job_count": 4,
+   "limit_s": 240,
+   "margin": 1.6194222711047834,
+   "p95_ms": 148201,
+   "path": "tests/test-qt-quick.rkt",
+   "sample_count": 5,
+   "samples_ms": [
+    147487,
+    142013,
+    147508,
+    148201,
+    141978
+   ],
+   "uncertainty": "p95 = nearest-rank of 5 samples at job count 4; with that sample count the p95 equals the maximum sample, so it is a lower bound on the true p95 and the derived limit inherits that uncertainty; samples taken from a declaration-raised copy at the same path (only the @timeout line differs), because the declared limit would have censored every run"
   }
  ]
 }

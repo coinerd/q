@@ -19,15 +19,19 @@
 ;; Evaluation-only.
 
 (require json
+         "../testing/full-plan.rkt"
          racket/cmdline
          racket/file
          racket/list
          racket/match
+         racket/path
          racket/port
          racket/string
          racket/system)
 
-(provide default-allowed-paths
+(provide probe-copy-source
+         censored-samples
+         default-allowed-paths
          percentile
          ceil-to-30
          derive-limit
@@ -42,11 +46,19 @@
 
 ;; The authoritative allow-list. A registry may not widen or narrow it: `--verify`
 ;; compares the registry's own list against THIS one, so a registry cannot authorise
-;; itself to cover a fourth file.
+;; itself to cover another file.
 (define default-allowed-paths
-  (list "tests/test-gsd-executor-ergonomics-prompt.rkt"
+  (list "tests/test-ci-recovery-trial.rkt"
+        "tests/test-golden-flows.rkt"
+        "tests/test-gsd-branch-delivery-verification.rkt"
+        "tests/test-gsd-delivery-coordinator.rkt"
+        "tests/test-gsd-delivery-verifier-git-contract.rkt"
+        "tests/test-gsd-evidence-discovery.rkt"
         "tests/test-gsd-evidence-repair-production-contract.rkt"
-        "tests/test-gsd-branch-delivery-verification.rkt"))
+        "tests/test-gsd-executor-ergonomics-prompt.rkt"
+        "tests/test-milestone-gate.rkt"
+        "tests/test-qt-lanes.rkt"
+        "tests/test-qt-quick.rkt"))
 
 ;; ---- pure policy arithmetic --------------------------------------------------------
 
@@ -243,11 +255,54 @@
 ;; `fillers` alongside it at the surface's own job count. The target's per-file
 ;; elapsed_ms is read from the run's own artifact, so the number is the adapter's,
 ;; not a shell timer's. Censoring is disabled (--timeout) so the sample is uncensored.
+;; A file whose own `@timeout` is at or below what it needs cannot be measured: the
+;; adapter honours the declaration over `--timeout`, so every sample would be the
+;; moment the harness killed it (a censored observation, not a duration). When that
+;; is the case we measure a copy whose ONLY difference is the declaration, and say so.
+(define (probe-copy-source target timeout-s)
+  (define text (file->string target))
+  (unless (regexp-match? #rx"^#lang racket" text)
+    (error 'timeout-margin "cannot build a probe copy of ~a (no #lang line)" target))
+  (define copy
+    (build-path (or (path-only (path->complete-path target)) (current-directory))
+                (format ".cl5-probe-~a" (file-name-from-path target))))
+  ;; The metadata parser keeps the LAST match in the first 50 lines, so merely inserting a
+  ;; line would be shadowed by the file's own declaration further down: replace it if present.
+  (define raised
+    (format ";; @timeout ~a ;; CL5 probe copy (declaration raised for measurement only)" timeout-s))
+  (define with-declaration
+    (cond
+      [(regexp-match? #rx"[ \t]*;+[ \t]*@timeout[ \t]+[0-9]+" text)
+       (regexp-replace #rx"[ \t]*;+[ \t]*@timeout[ \t]+[0-9]+" text raised)]
+      [else
+       (regexp-replace #rx"^(#lang racket[^\n]*\n)"
+                       text
+                       (lambda (_whole lang) (string-append lang "\n" raised "\n")))]))
+  (call-with-output-file copy #:exists 'replace (lambda (o) (write-string with-declaration o)))
+  copy)
+
+;; A sample is censored when the run did not finish on its own terms: it was killed
+;; at the declaration, so its number is the kill moment, not a duration.
+(define (censored-samples samples)
+  (filter (lambda (s) (not (equal? (hash-ref s 'run_status 'fail) "pass"))) samples))
+
 (define (measure-surface-samples target
                                  fillers
                                  #:job-count [job-count 4]
                                  #:repeats [repeats 5]
-                                 #:timeout [timeout 900])
+                                 #:timeout [timeout 900]
+                                 #:allow-probe-copy? [allow-probe-copy? #f])
+  (define declared (full-file-timeout target))
+  ;; A copy is only needed when the declaration is TIGHTER than the probe budget. At
+  ;; equality the target already runs uncensored, and a copy would change the file's
+  ;; path, which path-sensitive tests can fail on.
+  (define copy? (and (not (zero? declared)) (< declared timeout)))
+  (define run-target
+    (if copy?
+        (path->string (probe-copy-source target timeout))
+        (if (path? target)
+            (path->string target)
+            target)))
   (define (one-run)
     (define out (make-temporary-file "cl5-margin-~a.json"))
     (define status
@@ -261,16 +316,16 @@
                              (number->string job-count)
                              "--json-out"
                              (path->string out)
-                             target)
+                             run-target)
                        fillers))))
     (define artifact (with-input-from-file out read-json))
     (delete-file out)
     (define entry
       (for/first ([f (in-list (hash-ref artifact 'files '()))]
-                  #:when (equal? (hash-ref f 'path "") target))
+                  #:when (equal? run-target (hash-ref f 'path "")))
         f))
     (unless entry
-      (error 'timeout-margin "the run's artifact has no entry for ~a" target))
+      (error 'timeout-margin "the run's artifact has no entry for ~a" run-target))
     (hash 'file
           target
           'status
@@ -286,7 +341,29 @@
       (define s (one-run))
       (eprintf "  sample ~a: ~a ms~n" (add1 i) (hash-ref s 'elapsed_ms))
       s))
-  (hash 'warmup_ms
+  ;; Censored samples are not durations: a sample taken at the moment the harness
+  ;; killed the file is a lower bound, and building a p95 from it would understate
+  ;; the true p95. Refuse rather than silently derive a limit from killed runs.
+  (when (and copy? (file-exists? run-target))
+    (delete-file run-target))
+  (define censored (censored-samples samples))
+  (when (pair? censored)
+    (error
+     'timeout-margin
+     (string-append "~a of ~a samples for ~a were censored (run_status ~s at ~a ms): the declaration"
+                    " (~a s) cut the run short, so these are not durations."
+                    " Re-measure with an uncensored probe.")
+     (length censored)
+     (length samples)
+     target
+     (map (lambda (s) (hash-ref s 'run_status)) censored)
+     (map (lambda (s) (hash-ref s 'elapsed_ms)) censored)
+     declared))
+  (hash 'probe_copy
+        copy?
+        'declared_limit_s
+        declared
+        'warmup_ms
         (hash-ref warm 'elapsed_ms)
         'samples
         samples
@@ -385,12 +462,25 @@
                         p95
                         (derive-limit (existing-limit) p95)
                         (uncertainty-text (length ms) (job-count))))
+      (define e-json (registry-entry->jsexpr e))
+      (define e*
+        (if (hash-ref run 'probe_copy #f)
+            (hash-set e-json
+                      'uncertainty
+                      (string-append
+                       (hash-ref e-json 'uncertainty)
+                       "; samples taken from a declaration-raised copy at the same path (only"
+                       " the @timeout line differs), because the declared limit would have"
+                       " censored every run"))
+            e-json))
       (when (evidence-out)
         (call-with-output-file
          (evidence-out)
          #:exists 'replace
          (lambda (o)
-           (write-json (hash 'schema schema 'entry (registry-entry->jsexpr e) 'samples samples) o)
+           (write-json
+            (hash 'schema schema 'probe_copy (hash-ref run 'probe_copy #f) 'entry e* 'samples samples)
+            o)
            (newline o))))
       (when (registry-out)
         (define previous

@@ -3,6 +3,7 @@
 ;; @suite ci
 ;; @speed fast
 ;; @boundary unit
+;; @timeout 270 ;; CL5 P2-D: concurrency-calibrated (see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
 ;; tests/test-milestone-gate.rkt
 ;; W5 (#8522): Tests for milestone-gate.rkt release truth verification.
 ;;

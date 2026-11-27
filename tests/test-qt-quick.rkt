@@ -2,6 +2,7 @@
 ;; @speed fast
 ;; @suite testing
 ;; @boundary integration
+;; @timeout 240 ;; CL5 P2-D: concurrency-calibrated (see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
 (require rackunit
          racket/runtime-path)
 (define-runtime-path qt "../qt")
