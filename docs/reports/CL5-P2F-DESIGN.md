@@ -111,7 +111,7 @@ fails on this surface, host comparability is **not established** — no post-hoc
 surface.
 
 One warm-up invocation (recorded, never a sample), then five measured invocations. The eight files
-sum to 667 s of CI elapsed; with no overlap at all that is 4 002 s (67 min) for six invocations, so
+sum to 670 s of CI elapsed; with no overlap at all that is 4 020 s (67 min) for six invocations, so
 the job timeout is **120 min**. A job timeout is an infrastructure failure and is reported with both
 attempts; it is never converted into a sample. No nested runners, no shards, no retries inside the
 job, no modification of test files, timeouts, selectors or CI configuration on `main`. The workflow file is stored **inert** under `docs/reports/` and is copied to
