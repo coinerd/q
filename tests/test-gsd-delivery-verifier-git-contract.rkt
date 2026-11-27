@@ -3,7 +3,7 @@
 ;; @speed fast
 ;; @suite extensions
 ;; @boundary integration
-;; @timeout 120  ;; per-owner cap: measured cold median ~15s (the W2 measurement), 120s = default cap
+;; @timeout 210 ;; CL5 P2-D concurrency-calibrated (was 120: the "cold median ~15s per-owner cap 120s default" bound was too tight under load)
 ;;
 ;; The campaign's W2 delivery-verifier boundary extraction — OWNER 2 of 3.
 ;;

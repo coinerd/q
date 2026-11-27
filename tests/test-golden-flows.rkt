@@ -3,6 +3,7 @@
 ;; @speed fast
 ;; @suite default
 ;; @boundary integration
+;; @timeout 240 ;; CL5 P2-D: concurrency-calibrated (see docs/reports/CL5-P2D-TIMEOUT-MARGIN.json)
 
 ;; BOUNDARY: integration
 

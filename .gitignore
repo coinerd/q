@@ -95,3 +95,4 @@ artifacts/test-runtime/.probe-census.json
 # evidence-in-progress and must never be committed - a committed chain log is a
 # hygiene failure in this campaign (one was tracked at .chainlogs/w7-version-derive-tests.log).
 .chainlogs/
+tests/.cl5-probe-*.rkt

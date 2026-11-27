@@ -1,6 +1,6 @@
 # CL5 P2-D — concurrency-aware timeout policy: measurement and applied limits
 
-Status: **applied.** Three `@timeout` declarations changed, each on the owner-approved formula and each
+Status: **applied.** Eleven `@timeout` declarations changed, each on the owner-approved formula and each
 visible in a committed registry that a test pins to the declarations. Nothing else changed: no test
 body, no fixture, no production code, no CI definition. Fail-closed behaviour is untouched (a timeout
 is still `incomplete`, an incomplete producer still derives `degraded`, and a degraded record still
@@ -29,9 +29,17 @@ the substitution.
 
 | File | Existing limit | Standalone p95 (P2-C) | **p95 at `--jobs 4`** | Samples (ms) | Derived limit | Margin |
 |---|---|---|---|---|---|---|
-| `tests/test-gsd-executor-ergonomics-prompt.rkt` | 120 s (default) | ~71 s | **215 357 ms** | 215 357 / 206 331 / 204 706 / 207 432 / 209 433 | **330 s** | 1.53× |
+| `tests/test-gsd-executor-ergonomics-prompt.rkt` | 120 s (default) | ~71 s | **208 533 ms** | 206 397 / 202 835 / 195 005 / 197 223 / 208 533 (re-measured with the fixed probe) | **330 s** | 1.58× |
 | `tests/test-gsd-evidence-repair-production-contract.rkt` | 210 s | ~202 s | **350 756 ms** | 335 654 / 350 756 / 337 712 / 339 936 / 342 990 | **540 s** | 1.54× |
 | `tests/test-gsd-branch-delivery-verification.rkt` | 120 s (default) | — | **166 636 ms** | 166 636 / 164 171 / 161 857 / 165 152 / 155 190 | **270 s** | 1.62× |
+| `tests/test-gsd-delivery-coordinator.rkt` | 120 s (default) | 120.2 s (timed out) | **128 988 ms** | see registry | **210 s** | 1.63× |
+| `tests/test-gsd-evidence-discovery.rkt` | 120 s (declared) | 112.5 s | **187 756 ms** | see registry | **300 s** | 1.60× |
+| `tests/test-qt-lanes.rkt` | 120 s (default) | 110.1 s | **151 082 ms** | see registry | **240 s** | 1.59× |
+| `tests/test-milestone-gate.rkt` | 120 s (default) | 95.3 s | **161 874 ms** | see registry | **270 s** | 1.67× |
+| `tests/test-golden-flows.rkt` | 120 s (default) | 93.3 s | **152 965 ms** | see registry | **240 s** | 1.57× |
+| `tests/test-qt-quick.rkt` | 120 s (default) | 90.0 s | **148 201 ms** | see registry | **240 s** | 1.62× |
+| `tests/test-ci-recovery-trial.rkt` | 120 s (default) | 89.4 s | **158 053 ms** | see registry | **240 s** | 1.52× |
+| `tests/test-gsd-delivery-verifier-git-contract.rkt` | 120 s (declared) | 80.2 s | **131 955 ms** | see registry | **210 s** | 1.59× |
 
 Warm-ups (recorded, not samples): 211 832 ms, 147 696 ms and 160 074 ms.
 
@@ -45,6 +53,50 @@ case*: the target always has three heavy neighbours, which a random slot in a 45
 guarantee. It therefore yields a larger p95 than the shard passes (167 s vs 118–120 s for the branch
 file) — conservative for a limit, but it is a **different surface** and is labelled as such rather than
 presented as the shard's own number.
+
+### The eight: the reference surface showed a systematic, not incidental, problem
+
+The first single-invocation reference run (1 400 files, `--jobs 4`) timed out
+`tests/test-gsd-delivery-coordinator.rkt` at 120.2 s against a 120 s limit. Enumerating every file whose
+effective limit was 120 s **at the pre-change revision** in that run (`docs/reports/CL5-P2E-SURFACE-SCAN.json`,
+committed so the rule can be replayed) gives 15 files above 50 % of the limit; **eight of them at two
+thirds or more** — i.e. a margin below the policy's own 1.5×, so ordinary variance can fail them. Those eight were then measured at
+`--jobs 4` with five samples each. They are listed in the table above.
+
+Seven were measured through a declaration-raised probe copy, so no sample could be censored.
+`tests/test-milestone-gate.rkt` was measured **at its real path** with its declaration temporarily raised
+to the probe budget instead: it checks the ownership matrix, so a `tests/.cl5-probe-*` file is an unknown
+test file and it fails 5/5 under a copy. Its samples are therefore uncensored without a copy, and its
+entry records `probe_copy: false`.
+
+Measurement conditions (identical for all eight): `--jobs 4`, `--timeout 1800`, five samples after one
+recorded warm-up, fillers `tests/test-gsd-delivery-merge.rkt`, `tests/test-gsd-delivery-status.rkt`,
+`tests/test-gsd-evidence-authority.rkt`. The milestone-gate run also set `--at-real-path` (the switch that
+disables the probe copy). That run's own mechanism was simpler still: its declaration had been raised to
+the probe budget beforehand, so no copy was needed either way — the two conditions agree, and the switch
+exists so the same measurement can be repeated without editing the file again. A test pins it, because a
+flag whose body is merely evaluated (a lambda) would leave it inert and silently measure a copy.
+
+This is the approved policy applied to the files the measurement itself flags, not a new policy: the
+120 s figure was never derived for this surface, so the timeouts were a rotating cast rather than one
+broken test.
+
+### Two tool defects found while measuring (both fixed here)
+
+1. `--timeout` was documented as an "uncensored per-file timeout", but the runner honours a file's own
+   declaration, so for files at a 120 s limit **every sample was the moment the harness killed them**
+   (five samples inside 60 ms, all at ~120.1 s) and the p95 was computed from those kill times. Censored
+   samples are now detected and **refused** — a killed run is a lower bound, not a duration.
+2. Building an "uncensored copy" by *inserting* a raised `@timeout` is not enough: the metadata parser
+   keeps the **last** match in the first 50 lines, so an existing declaration shadows the inserted one.
+   The copy now replaces it in place, and a test pins that.
+
+The probe copy is a **sibling** file in the same directory (`tests/.cl5-probe-<name>.rkt`), so the path
+does change — which is exactly why path-sensitive tests are measured without one. The copy differs from
+the original in the `@timeout` line and nothing else; entries derived that way are recorded with
+`probe_copy: true` and a disclosure in their `uncertainty` field. A copy is used only when the file's
+declaration is strictly tighter than the probe budget, and **every** `@timeout` line in it is replaced,
+because the metadata parser keeps the last match in the first 50 lines.
 
 ### The third file: found by the baseline itself
 
@@ -79,16 +131,18 @@ extended deliberately, so the third file could not slip in unnoticed.
 ```
 
 Registry: `docs/reports/CL5-P2D-TIMEOUT-MARGIN.json` (`cl5-slow-tests/1`), verified by
-`racket scripts/cl5/timeout-margin.rkt --verify` and pinned to the declarations by
+`racket scripts/cl5/timeout-margin.rkt --verify` (which re-derives each p95 from the recorded samples, and
+each limit and margin from that p95 — a tampered sample that does not change the 5-sample maximum still
+verifies, so the samples are evidence, not a signature) and pinned to the declarations by
 `tests/test-cl5-timeout-margin.rkt` — that test fails if a declaration and its evidence drift apart,
-and it also fails if the allow-list grows beyond the three measured files. `--verify` additionally
+and it also fails if the allow-list grows beyond the eleven measured files. `--verify` additionally
 refuses a registry whose allow-list differs from the module's authoritative list, and re-derives each
 margin from the numbers, so a registry cannot authorise itself to cover a fourth file or declare a
 margin its own p95 does not support.
 
 ## What this does and does not fix
 
-- **Fixes:** all three files can now finish under the measured surface. The comprehensive record can
+- **Fixes:** all eleven files can now finish under the measured surface. The comprehensive record can
   become `ok` instead of `degraded`, which is the precondition for P2-E.
 - **Not yet a baseline.** These are *limits derived from measurements*, not a comprehensive cost
 measurement. Each p95 is the maximum of five samples, so it is a **lower bound** on the true p95, and
@@ -96,7 +150,7 @@ the derived limits inherit that uncertainty. The P2-E baseline must be re-measur
 surface (warm-up + two paired passes + the CI-equivalent single-schedule runs for `C_comp` wall) before
 any number from it is used.
 - **Does not fix:** the wall time itself. A shard containing these files can now spend up to 330 s,
-  540 s or 270 s on one file in the worst case instead of failing at 120 s or 210 s. The typical case is
+  540 s, 300 s or 210–270 s on one file in the worst case instead of failing at 120 s or 210 s. The typical case is
   unchanged (the file takes what it takes); only the tail bound moves.
 - **Deliberately not done:** no timeout was raised anywhere else, no cap was changed (7 200 s per C
   producer and 14 400 s for L remain), no test body was touched, and no CI definition changed.
