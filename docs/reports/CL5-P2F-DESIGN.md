@@ -42,8 +42,9 @@ acceptance inputs):
 
 Consequences already observed:
 - locally calibrated limits are conservative for CI on these files, but that is **not** a guarantee —
-  individual CI workloads can behave differently, and two files above were fine locally yet sat at
-  their limits on CI;
+  individual CI workloads can behave differently; `test-gsd-delivery-binding.rkt` and
+  `test-gsd-go-orchestrator.rkt` were well under their local limits in the reference run yet sat at
+  180 s and 120 s in CI shards (`45969460888`, attempts 1–2);
 - nested measurement runners inside a 4-job shard made co-scheduled heavy files time out twice
   (`45969460888` attempts 1–2), so instrumentation must be isolated in its own job;
 - a flag can be correctly documented and completely inert (`--at-real-path`, PR #10016, review
@@ -96,12 +97,24 @@ Pilot command, identical for every run:
 racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-<i>.json <the eight files>
 ```
 
-It uses the same runner and job count as production, but **not** the shard flags; per-file elapsed is
-the comparable quantity, not total CI wall. That difference is recorded, not glossed over.
+The workflow verifies the SHA-256 of `CL5-P2F-WORKLOAD.json`
+(`86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0`) and derives the file list from
+it; a changed workload under the same path check cannot silently pass.
 
-One warm-up invocation (recorded, never a sample), then five measured invocations. No nested runners,
-no shards, no retries inside the job, no modification of test files, timeouts, selectors or CI
-configuration on `main`. The workflow file is stored **inert** under `docs/reports/` and is copied to
+It uses the same runner and job count as production, but **not** the shard flags; per-file elapsed is
+the comparable quantity, not total CI wall. Two further differences are recorded rather than hidden:
+(a) the isolated job has no same-run prepared-environment producer, so `setup-racket` is called with
+`prepared-environment: off` and its own outputs (`prepared-env-state`, cache state, setup duration)
+are recorded — this affects preparation overhead, not the runner's per-file elapsed; (b) a production
+shard co-schedules ~452 files while this pilot co-schedules 8, so contention density differs. If A4
+fails on this surface, host comparability is **not established** — no post-hoc redefinition of the
+surface.
+
+One warm-up invocation (recorded, never a sample), then five measured invocations. The eight files
+sum to 667 s of CI elapsed; with no overlap at all that is 4 002 s (67 min) for six invocations, so
+the job timeout is **120 min**. A job timeout is an infrastructure failure and is reported with both
+attempts; it is never converted into a sample. No nested runners, no shards, no retries inside the
+job, no modification of test files, timeouts, selectors or CI configuration on `main`. The workflow file is stored **inert** under `docs/reports/` and is copied to
 `.github/workflows/` only on a temporary feature branch; it is not merged to `main`.
 
 The eventual comprehensive workload is defined here but not executed: enumerate the complete union of
