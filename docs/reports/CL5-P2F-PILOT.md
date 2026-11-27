@@ -51,8 +51,10 @@ uses, and re-pre-registers the criterion before any further measurement.
 The warm-up failure was `tests/test-gsd-delivery-merge.rkt`:
 `exn:fail: force: reentrant promise 'delay-ffi-obj'`. The same file and exception failed CI run
 `46012479816` attempt 1 and passed attempt 2 (and the pilot workflow's own first attempt passed its
-workflow checks after a full rerun). It is a pre-existing flake, not a property of the measured host,
-but it stopped the protocol before any sample.
+workflow checks after a full rerun). The attempt-1 exception text is no longer retrievable — that
+artifact was superseded — so only the **same file and same failure shape** (assertion failure,
+9 passed / 1 failed) is independently verified. It is a pre-existing flake, not a property of the
+measured host, but it stopped the protocol before any sample.
 
 Fixing that test is a separate workstream with its own review; it changes a measured file and would
 require re-freezing the workload. It is **not** done here.

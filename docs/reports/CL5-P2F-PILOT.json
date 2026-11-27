@@ -69,7 +69,7 @@
   "passed": 9,
   "failed": 1,
   "exception": "prepare self-resolves the merged pr raised unexpectedly: \"exn:fail: force: reentrant promise `delay-ffi-obj'\"",
-  "known_flake": "the same file and exception failed CI run 46012479816 attempt 1 and passed attempt 2; the failure is unrelated to the measured host"
+  "known_flake": "the same file failed CI run 46012479816 attempt 1 with the same failure shape (ASSERTION_FAILURE, 9 passed / 1 failed) and passed attempt 2; the attempt-1 exception text is not retrievable from the superseded artifact, so only the failure shape is verified here"
  },
  "not_claimed": [
   "no comprehensive cost baseline",
