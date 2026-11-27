@@ -68,11 +68,18 @@ of each invocation. All of it is uploaded as an artifact alongside the per-file 
 
 ## 4. Frozen workload
 
-Pinned test tree: `e56b3f82` (the main head when this design was frozen). The pilot branch is based on
-that commit and may add **only** the inert workflow template and the workload JSON. The workflow must
-verify that `git rev-parse HEAD^` equals the pinned SHA and that `git diff --name-only HEAD^ HEAD`
-contains no path other than those two; it records the dispatch SHA, the workflow SHA and the pinned
-SHA as distinct fields. Any other difference aborts before Racket is installed.
+Pinned test tree: `e56b3f82` (the main head when this design was frozen). The dispatch SHA must equal
+`github.sha` and the checked-out HEAD. The workflow verifies that the pinned SHA is an ancestor and
+that `git diff --name-only e56b3f82 HEAD` contains **only** these four paths: the workflow file and the
+three `docs/reports/CL5-P2F-*` files. Every test file, runner module and production CI definition is
+therefore byte-identical to the frozen tree; any other difference aborts before Racket is installed.
+
+Amendment after design approval (demonstrated blocker): the first deployment put the workflow only on
+a feature branch, and dispatch by workflow filename returned **404 Not Found** — GitHub resolves the
+workflow against the default branch. The workflow is therefore merged to `main` as a dispatch-only,
+inert file. It has no push/PR trigger, is not a required check, and changes no test selection; the
+tree check above is what preserves pinning. The earlier "not merged to `main`" sentence was wrong and
+is corrected here before any data was collected.
 
 Pilot subset (eight files, exact list also in `CL5-P2F-WORKLOAD.json`):
 
@@ -114,8 +121,9 @@ One warm-up invocation (recorded, never a sample), then five measured invocation
 sum to 670 s of CI elapsed; with no overlap at all that is 4 020 s (67 min) for six invocations, so
 the job timeout is **120 min**. A job timeout is an infrastructure failure and is reported with both
 attempts; it is never converted into a sample. No nested runners, no shards, no retries inside the
-job, no modification of test files, timeouts, selectors or CI configuration on `main`. The workflow file is stored **inert** under `docs/reports/` and is copied to
-`.github/workflows/` only on a temporary feature branch; it is not merged to `main`.
+job, no modification of test files, timeouts, selectors or production CI configuration. The workflow
+is stored as a reviewed template under `docs/reports/` and deployed as a dispatch-only file at
+`.github/workflows/cl5-p2f-pilot.yml`; it has no push/PR trigger (see the amendment in §4).
 
 The eventual comprehensive workload is defined here but not executed: enumerate the complete union of
 the eight CI producers at one pinned revision with `./qt --lane … --explain`, record its digest, count
@@ -143,9 +151,11 @@ No extra runs are added after seeing the data, so the threshold cannot be tuned 
 pilot p95 equals the maximum, so it is a lower bound and is reported but not used as a gate. A single
 file outside its interval is a NO-GO with that file named — no averaging away an outlier.
 
-**A5 — isolation.** The job contains exactly one runner process per invocation, no `./qt` shards, no
-nested runner, and no change to any file under `.github/` on `main`. The workflow revision and tested
-tree are recorded as distinct SHAs. A violation is NO-GO regardless of timings.
+**A5 — isolation.** The job contains exactly one runner process per invocation, no `./qt` shards and
+no nested runner. The only `.github/` addition is the dispatch-only pilot workflow itself: it has no
+push/PR trigger, is not a required check, and selects no tests. The four-path tree diff pins the
+tested tree; the dispatch SHA, workflow SHA and pinned SHA are recorded as distinct fields. A
+violation is NO-GO regardless of timings.
 
 **A6 — provenance.** Cache state, preparation overhead, load and exact argv are recorded for each
 run; warm-up is excluded from all statistics. Missing provenance is NO-GO.
@@ -164,10 +174,10 @@ and what remains unmeasured. No baseline, no selected-arm result, no efficiency 
 
 ## 7. Authorized and not authorized
 
-Authorized: this pre-registration; the inert workflow template; one dispatch of the eight-file pilot
+Authorized: this pre-registration; the inert workflow template and its dispatch-only deployment; one dispatch of the eight-file pilot
 (and one repeat only if the run itself failed for infrastructure reasons, with both runs reported);
 artifact analysis; independent review of both the design and the result.
 
-Not authorized: restarting P2-E locally; any comprehensive comprehensive-cost run; a selected arm;
+Not authorized: restarting P2-E locally; any comprehensive-cost run; a selected arm;
 changes to production test selection, CI definition, timeout policy, or P3 eligibility; P1; W3.3;
 any efficiency claim.
