@@ -98,15 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "3e93bd21ec840814bdd6d8c26a3ca9314602e4e9e64ef9987e46975bfd380dba  docs/reports/CL5-P2F-WORKLOAD.json" | sha256sum -c -
-          python3 - <<'PY' > cl5-p2f/files.txt
-          import json
-          d = json.load(open('docs/reports/CL5-P2F-WORKLOAD.json'))
-          assert d['schema'] == 'cl5-p2f-workload/1'
-          assert d['pinned_test_tree_sha'] == 'e56b3f827bd6fbdb728babb0d2dd944da7f72c94'
-          assert len(d['files']) == 8
-          for f in d['files']:
-              print(f['path'])
-          PY
+          racket -e '(require json) (define d (call-with-input-file "docs/reports/CL5-P2F-WORKLOAD.json" read-json)) (unless (equal? (hash-ref d (quote schema)) "cl5-p2f-workload/1") (error "bad workload schema")) (unless (equal? (hash-ref d (quote pinned_test_tree_sha)) "e56b3f827bd6fbdb728babb0d2dd944da7f72c94") (error "bad pinned tree")) (unless (= (length (hash-ref d (quote files))) 8) (error "bad file count")) (for ([f (in-list (hash-ref d (quote files)))]) (displayln (hash-ref f (quote path))))' > cl5-p2f/files.txt
           test "$(wc -l < cl5-p2f/files.txt)" -eq 8
 
       - name: Warm-up and five measured invocations
