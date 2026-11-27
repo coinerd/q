@@ -71,8 +71,11 @@ entry records `probe_copy: false`.
 
 Measurement conditions (identical for all eight): `--jobs 4`, `--timeout 1800`, five samples after one
 recorded warm-up, fillers `tests/test-gsd-delivery-merge.rkt`, `tests/test-gsd-delivery-status.rkt`,
-`tests/test-gsd-evidence-authority.rkt`. The milestone-gate run additionally passed `--at-real-path`,
-which is the switch that disables the probe copy.
+`tests/test-gsd-evidence-authority.rkt`. The milestone-gate run also set `--at-real-path` (the switch that
+disables the probe copy). That run's own mechanism was simpler still: its declaration had been raised to
+the probe budget beforehand, so no copy was needed either way — the two conditions agree, and the switch
+exists so the same measurement can be repeated without editing the file again. A test pins it, because a
+flag whose body is merely evaluated (a lambda) would leave it inert and silently measure a copy.
 
 This is the approved policy applied to the files the measurement itself flags, not a new policy: the
 120 s figure was never derived for this surface, so the timeouts were a rotating cast rather than one

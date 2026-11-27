@@ -207,6 +207,42 @@
                   (when (file-exists? fixture)
                     (delete-file fixture)))))
 
+(test-case "--at-real-path really measures the file itself"
+  ;; The flag is what makes a path-sensitive measurement reproducible; a body that is only
+  ;; evaluated (a lambda) leaves it inert and silently measures a copy.
+  (define ev (make-temporary-file "cl5-at-real-~a.json"))
+  (define (run extra)
+    (parameterize ([current-directory (path->string repo-root)])
+      (apply system*/exit-code
+             (append (list (path->string (find-executable-path "racket"))
+                           "scripts/cl5/timeout-margin.rkt"
+                           "--measure"
+                           "tests/test-cl5-task-spec.rkt"
+                           "--existing-limit"
+                           "120"
+                           "--job-count"
+                           "1"
+                           "--repeats"
+                           "1"
+                           "--timeout"
+                           "900"
+                           "--fillers"
+                           "tests/test-cl5-contract-layer.rkt"
+                           "--evidence"
+                           (path->string ev))
+                     extra))))
+  (define (recorded)
+    (with-input-from-file ev read-json))
+  (dynamic-wind void
+                (lambda ()
+                  (check-equal? (run (list "--at-real-path")) 0)
+                  (check-false (hash-ref (recorded) 'probe_copy))
+                  (check-equal? (run '()) 0)
+                  (check-true (hash-ref (recorded) 'probe_copy)))
+                (lambda ()
+                  (when (file-exists? ev)
+                    (delete-file ev)))))
+
 (test-case "the committed registry records how each entry was measured"
   ;; probe_copy is part of the evidence, not a comment: an entry derived from a sibling copy
   ;; differs from the file at that path in the @timeout line, and that must be visible.

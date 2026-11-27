@@ -222,11 +222,11 @@
   (define start (current-inexact-milliseconds))
   (define status
     (parameterize ([current-output-port (open-output-nowhere)])
-      (system* (path->string (find-executable-path "racket"))
-               "scripts/run-tests/runner.rkt"
-               "--timeout"
-               (number->string uncensored-timeout-s)
-               file)))
+      (system*/exit-code (path->string (find-executable-path "racket"))
+                         "scripts/run-tests/runner.rkt"
+                         "--timeout"
+                         (number->string uncensored-timeout-s)
+                         file)))
   ;; The runner's exit code is the only signal this path has: 0 finished, 2 was killed at
   ;; the deadline, anything else failed. Map it to the same vocabulary the surface path
   ;; reads from the artifact, so `censored-samples` means the same thing in both places.
@@ -444,7 +444,7 @@
    [("--to-registry") v "Merge this measurement into a registry here" (registry-out v)]
    [("--at-real-path")
     "Measure the file itself (no probe copy) -- for path-sensitive tests whose declaration you raised yourself"
-    (lambda () (set! probe-copy? #f))]
+    (set! probe-copy? #f)]
    [("--fillers")
     v
     "Comma-separated files run alongside the target (real surface sample)"
