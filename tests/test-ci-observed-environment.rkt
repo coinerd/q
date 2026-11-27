@@ -44,7 +44,7 @@
               ("RUNNER_ARCH" . "X64")
               ("RUNNER_NAME" . "runnervm-observed")
               ("GITHUB_SHA" . "0123456789abcdef0123456789abcdef01234567")
-              ("GITHUB_WORKFLOW_SHA" . "fedcba9876543210fedcba9876543210fedcba98")
+              ("CL5_OBSERVED_WORKFLOW_SHA" . "fedcba9876543210fedcba9876543210fedcba98")
               ("CL5_OBSERVED_WORKFLOW_BLOB_SHA" . "aaaabbbbccccddddeeeeffff0000111122223333"))))
 
 (define (env-without name)
@@ -56,7 +56,7 @@
                       ("RUNNER_ARCH" . "X64")
                       ("RUNNER_NAME" . "runnervm-observed")
                       ("GITHUB_SHA" . "0123456789abcdef0123456789abcdef01234567")
-                      ("GITHUB_WORKFLOW_SHA" . "fedcba9876543210fedcba9876543210fedcba98")
+                      ("CL5_OBSERVED_WORKFLOW_SHA" . "fedcba9876543210fedcba9876543210fedcba98")
                       ("CL5_OBSERVED_WORKFLOW_BLOB_SHA"
                        . "aaaabbbbccccddddeeeeffff0000111122223333")))))
 
@@ -135,7 +135,7 @@
                    ("RUNNER_ARCH" . "X64")
                    ("RUNNER_NAME" . "runnervm-observed")
                    ("GITHUB_SHA" . "0123456789abcdef0123456789abcdef01234567")
-                   ("GITHUB_WORKFLOW_SHA" . "not-a-sha")
+                   ("CL5_OBSERVED_WORKFLOW_SHA" . "not-a-sha")
                    ("CL5_OBSERVED_WORKFLOW_BLOB_SHA" . "aaaabbbbccccddddeeeeffff0000111122223333"))))
      (check-exn exn:fail?
                 (lambda () (observe-in root bad-env))
@@ -161,13 +161,14 @@
 (test-case "production workflow records observations without changing reuse inputs"
   (define block (job-block ci-text "test-aggregate"))
   (define runs-on (regexp-match #px"(?m:^    runs-on: +([^ ]+) *$)" block))
-  (define label (regexp-match #px"CL5_OBSERVED_RUNS_ON_LABEL=([^ ]+)" block))
+  (define label (regexp-match #px"(?m:CL5_OBSERVED_RUNS_ON_LABEL: +([^ ]+) *$)" block))
   (check-not-false runs-on "test-aggregate has no runs-on label")
   (check-not-false label "the observed runs-on label is not declared")
   (check-equal? (cadr label) (cadr runs-on))
   (check-true (string-contains? block "racket scripts/ci/observed-environment.rkt"))
   (check-true (string-contains? block "--out artifacts-run/observed-environment.json"))
-  (check-true (string-contains? block "CL5_OBSERVED_WORKFLOW_BLOB_SHA=\"$WF_REVISION\""))
+  (check-true (string-contains? block "CL5_OBSERVED_WORKFLOW_SHA: ${{ github.workflow_sha }}"))
+  (check-true (string-contains? block "export CL5_OBSERVED_WORKFLOW_BLOB_SHA=\"$WF_REVISION\""))
   (check-true (string-contains? ci-text "\"os_version\": \"24.04\""))
   (check-true (string-contains? ci-text "\"runner_image\": \"ubuntu-24.04\""))
   (check-true (string-contains? ci-text "observed_environment"))

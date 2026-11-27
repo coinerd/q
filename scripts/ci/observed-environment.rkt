@@ -14,7 +14,7 @@
 ;;
 ;; Required environment variables (fail closed when absent):
 ;;   ImageOS, ImageVersion, RUNNER_OS, RUNNER_ARCH, RUNNER_NAME,
-;;   GITHUB_SHA, GITHUB_WORKFLOW_SHA, CL5_OBSERVED_RUNS_ON_LABEL,
+;;   GITHUB_SHA, CL5_OBSERVED_WORKFLOW_SHA, CL5_OBSERVED_RUNS_ON_LABEL,
 ;;   CL5_OBSERVED_WORKFLOW_BLOB_SHA
 ;;
 ;; The tree SHA is derived from the checked-out HEAD with `git rev-parse
@@ -175,7 +175,7 @@
                   'tree_sha
                   (required-sha tree-sha "HEAD tree")
                   'workflow_sha
-                  (required-sha (env-ref "GITHUB_WORKFLOW_SHA") "GITHUB_WORKFLOW_SHA")
+                  (required-sha (env-ref "CL5_OBSERVED_WORKFLOW_SHA") "CL5_OBSERVED_WORKFLOW_SHA")
                   'workflow_blob_sha
                   (required-sha (env-ref "CL5_OBSERVED_WORKFLOW_BLOB_SHA")
                                 "CL5_OBSERVED_WORKFLOW_BLOB_SHA"))))
