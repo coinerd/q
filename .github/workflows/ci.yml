@@ -1095,6 +1095,22 @@ jobs:
             -e "s|@@COMPLETED_AT@@|${COMPLETED_AT}|g" \
             -e "s|@@ELAPSED_MS@@|${ELAPSED_MS}|g" \
             artifacts-run/claim.json
+          # CL5 observed environment (additive evidence only): the recorder
+          # reads the ACTUAL host from /etc/os-release, /proc, the runner
+          # environment and git. It never changes the claim's environment
+          # fields, so proof-bundle reuse and required checks are unchanged.
+          # This literal must match this job's runs-on label (pinned below by
+          # tests/test-ci-observed-environment.rkt).
+          CL5_OBSERVED_RUNS_ON_LABEL=ubuntu-latest \
+          GITHUB_WORKFLOW_SHA='${{ github.workflow_sha }}' \
+          CL5_OBSERVED_WORKFLOW_BLOB_SHA="$WF_REVISION" \
+            racket scripts/ci/observed-environment.rkt \
+              --out artifacts-run/observed-environment.json
+          jq --slurpfile observed artifacts-run/observed-environment.json \
+            '. + {observed_environment: $observed[0]}' \
+            artifacts-run/claim.json > artifacts-run/claim.with-observed.json
+          mv artifacts-run/claim.with-observed.json artifacts-run/claim.json
+          cp artifacts-run/observed-environment.json proof-bundle/observed-environment.json
           racket scripts/proof-bundle/consume.rkt write \
             --claims-json artifacts-run/claim.json \
             --producer-identity "ci.yml:test-aggregate" \
@@ -1115,6 +1131,7 @@ jobs:
           path: |
             proof-bundle/bundle.json
             proof-bundle/claim.json
+            proof-bundle/observed-environment.json
           if-no-files-found: ignore
           retention-days: 14
 
