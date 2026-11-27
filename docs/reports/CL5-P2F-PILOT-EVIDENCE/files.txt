@@ -1,0 +1,8 @@
+tests/test-gsd-evidence-repair-production-contract.rkt
+tests/test-full-regression-invocation.rkt
+tests/test-gsd-delivery-merge.rkt
+tests/test-gsd-auto-review-loop-contract.rkt
+tests/test-gsd-supplemental-disposition-store.rkt
+tests/test-gsd-delivery-read-ladder.rkt
+tests/test-milestone-gate.rkt
+tests/test-gsd-go-orchestrator.rkt

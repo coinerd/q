@@ -1,0 +1,3 @@
+load_before_run_0=3.61 2.12 0.90 1/265 2504
+argv_run_0=racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-0.json tests/test-gsd-evidence-repair-production-contract.rkt tests/test-full-regression-invocation.rkt tests/test-gsd-delivery-merge.rkt tests/test-gsd-auto-review-loop-contract.rkt tests/test-gsd-supplemental-disposition-store.rkt tests/test-gsd-delivery-read-ladder.rkt tests/test-milestone-gate.rkt tests/test-gsd-go-orchestrator.rkt
+run=0 wall_ms=157451 rc=1
