@@ -76,8 +76,11 @@
  },
  "allowed_tree_diff_paths": [
   ".github/workflows/cl5-p2f-pilot.yml",
+  "README.md",
   "docs/reports/CL5-P2F-DESIGN.md",
   "docs/reports/CL5-P2F-PILOT-WORKFLOW.md",
-  "docs/reports/CL5-P2F-WORKLOAD.json"
+  "docs/reports/CL5-P2F-WORKLOAD.json",
+  "scripts/ci/invocation-contract.rkt",
+  "tests/test-workflow-invocation-contract.rkt"
  ]
 }

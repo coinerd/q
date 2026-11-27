@@ -70,9 +70,11 @@ of each invocation. All of it is uploaded as an artifact alongside the per-file 
 
 Pinned test tree: `e56b3f82` (the main head when this design was frozen). The dispatch SHA must equal
 `github.sha` and the checked-out HEAD. The workflow verifies that the pinned SHA is an ancestor and
-that `git diff --name-only e56b3f82 HEAD` contains **only** these four paths: the workflow file and the
-three `docs/reports/CL5-P2F-*` files. Every test file, runner module and production CI definition is
-therefore byte-identical to the frozen tree; any other difference aborts before Racket is installed.
+that `git diff --name-only e56b3f82 HEAD` contains **only** the seven paths recorded in
+`CL5-P2F-WORKLOAD.json`: the dispatch-only workflow, the three `CL5-P2F-*` reports, and the reviewed
+invocation-contract fix (tool, its test, and the README metric sync) that was required to make the
+pilot's direct runner declaration validate. No measured test, runner module or production CI lane is
+changed; any other difference aborts before Racket is installed.
 
 Amendment after design approval (demonstrated blocker): the first deployment put the workflow only on
 a feature branch, and dispatch by workflow filename returned **404 Not Found** — GitHub resolves the
@@ -105,7 +107,7 @@ racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-<i>.json <th
 ```
 
 The workflow verifies the SHA-256 of `CL5-P2F-WORKLOAD.json`
-(`3e93bd21ec840814bdd6d8c26a3ca9314602e4e9e64ef9987e46975bfd380dba`) and derives the file list from
+(`f06a19df9aef5840ad5314715ddde8f3f866ed8989980ae9ce4019f92e118bb4`) and derives the file list from
 it; a changed workload under the same path check cannot silently pass.
 
 It uses the same runner and job count as production, but **not** the shard flags; per-file elapsed is
@@ -153,7 +155,7 @@ file outside its interval is a NO-GO with that file named — no averaging away 
 
 **A5 — isolation.** The job contains exactly one runner process per invocation, no `./qt` shards and
 no nested runner. The only `.github/` addition is the dispatch-only pilot workflow itself: it has no
-push/PR trigger, is not a required check, and selects no tests. The four-path tree diff pins the
+push/PR trigger, is not a required check, and selects no tests. The seven-path tree diff pins the
 tested tree; the dispatch SHA, workflow SHA and pinned SHA are recorded as distinct fields. A
 violation is NO-GO regardless of timings.
 
