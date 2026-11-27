@@ -1,0 +1,16 @@
+date=2026-11-27T16:26:26+00:00
+uname=Linux runnervm3lb7s 7.0.0-1020-azure #21-Ubuntu SMP PREEMPT Tue Oct 27 22:34:38 UTC 2026 x86_64 GNU/Linux
+os=Ubuntu 26.04.1 LTS
+arch=x86_64
+cpu_count=4
+cpu_model=model name	: AMD EPYC 9V74 80-Core Processor
+memory=15Gi
+cpu_max=unavailable
+load_before=3.61 2.12 0.90 1/265 2491
+racket_version=Welcome to Racket v8.10 [cs].
+racket_exe_sha256=7674f17865fa795b21641828d839e689e01a2f17bbdd2b7d71cc59cceafa873c
+prepared_env_state=unavailable
+prepared_restore_ms=empty
+prepared_fallback_ms=256000
+setup_duration_s=256
+racket_addon_cache_state=warm

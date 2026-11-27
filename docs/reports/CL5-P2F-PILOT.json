@@ -1,0 +1,80 @@
+{
+ "schema": "cl5-p2f-pilot/1",
+ "created": "2026-11-27",
+ "verdict": "NO-GO",
+ "verdict_basis": "A1 (host) and A2 (integrity) failed. No measured observation exists; A3 and A4 were not evaluated. This is a feasibility finding, not an efficiency or negative result.",
+ "design": "docs/reports/CL5-P2F-DESIGN.md",
+ "workload": "docs/reports/CL5-P2F-WORKLOAD.json",
+ "workload_sha256": "f06a19df9aef5840ad5314715ddde8f3f866ed8989980ae9ce4019f92e118bb4",
+ "pinned_test_tree_sha": "e56b3f827bd6fbdb728babb0d2dd944da7f72c94",
+ "dispatch_budget": {
+  "rule": "one dispatch plus one repeat only for an infrastructure failure; both reported",
+  "used": 2,
+  "further_dispatch_authorized": false
+ },
+ "runs": [
+  {
+   "run_id": 46026806520,
+   "url": "https://github.com/coinerd/q/actions/runs/46026806520",
+   "dispatch_sha": "6bcff268121f4393db9d7116731a5b10866df86b",
+   "outcome": "infrastructure-failure-before-setup",
+   "evidence": "bind step: fatal: Not a valid commit name e56b3f827bd6fbdb728babb0d2dd944da7f72c94 (exit 128); depth-1 checkout; zero artifacts",
+   "samples": 0
+  },
+  {
+   "run_id": 46032975158,
+   "url": "https://github.com/coinerd/q/actions/runs/46032975158",
+   "dispatch_sha": "5f4e39404f518d936e99ed55781dabb67c616f1f",
+   "outcome": "failed-at-warm-up",
+   "evidence": "tree pin, setup, workload materialisation and provenance completed; warm-up run 0 exited 1 on tests/test-gsd-delivery-merge.rkt; the job's `test rc -eq 0` stopped before runs 1-5",
+   "samples": 0,
+   "artifact": "cl5-p2f-pilot (4 165 bytes)",
+   "artifact_files": [
+    {"name": "environment.txt", "sha256": "0c0f09a0d0315650f90e660fe13d3c54e8fa3cd89901a92321654c4e173f17c4"},
+    {"name": "files.txt", "sha256": "7fffbce7691592eb171db47501aae541f1b2d8eb3eabf18aec13a073ce23bbd0"},
+    {"name": "provenance.txt", "sha256": "fd51ba8e5eead2d6e0fa921c147ccb89beabbfd31cea8fcacdf117b8967a0acf"},
+    {"name": "run-0.json", "sha256": "9e0648798ec27a44f7af2690d27f0e5582e3e8ba49f54818beae868999882875"},
+    {"name": "run-0.log", "sha256": "a548cd92bd2f41af4f1d875eb79aa54a7c896abd20ab17bd31afc64da3054eb6"},
+    {"name": "schedule.txt", "sha256": "975c64078431d0a46451c0f29346cd42ba5ba88601961a68965ba722aba82621"}
+   ],
+   "evidence_copy": "docs/reports/CL5-P2F-PILOT-EVIDENCE/"
+  }
+ ],
+ "observed_host": {
+  "os_from_os_release": "Ubuntu 26.04.1 LTS",
+  "kernel": "Linux 7.0.0-1020-azure x86_64",
+  "cpu_count": 4,
+  "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+  "memory": "15Gi",
+  "racket_version": "8.10 [cs]",
+  "racket_exe_sha256": "7674f17865fa795b21641828d839e689e01a2f17bbdd2b7d71cc59cceafa873c",
+  "prepared_env_state": "unavailable (explicit opt-out; no same-run producer)",
+  "setup_duration_s": 256,
+  "racket_addon_cache_state": "warm",
+  "load_before_first_run": "3.61 2.12 0.90 1/265 2491"
+ },
+ "criteria": {
+  "A1_host": {"result": "FAIL", "observed": "Ubuntu 26.04.1 LTS, x86_64, Racket 8.10, 4 CPUs; pre-registered requirement was Ubuntu 24.04", "note": "The 24.04 value came from ci.yml's asserted provenance. The live ubuntu-latest runner reports 26.04.1; production CI's proof bundle asserts 24.04 but does not record a measured /etc/os-release, so this cannot be resolved retroactively."},
+  "A2_integrity": {"result": "FAIL", "observed": "zero measured artifacts; warm-up run 0 had tests/test-gsd-delivery-merge.rkt status=fail (1 of 8 files, 1 of 245 tests)"},
+  "A3_stability": {"result": "NOT_EVALUATED", "observed": "no measured wall timings"},
+  "A4_comparability": {"result": "NOT_EVALUATED", "observed": "no per-file distributions"},
+  "A5_isolation": {"result": "PASS", "observed": "dispatch_sha == workflow_sha == 5f4e3940; pinned tree verified by the seven-path diff; one runner per invocation; no nested runner, ./qt shard or test-selection change"},
+  "A6_provenance": {"result": "PASS", "observed": "environment.txt, provenance.txt, files.txt, schedule.txt and exact argv recorded; warm-up excluded from all statistics"}
+ },
+ "warm_up_failure": {
+  "file": "tests/test-gsd-delivery-merge.rkt",
+  "status": "fail",
+  "exit_code": 1,
+  "elapsed_ms": 66017,
+  "passed": 9,
+  "failed": 1,
+  "exception": "prepare self-resolves the merged pr raised unexpectedly: \"exn:fail: force: reentrant promise `delay-ffi-obj'\"",
+  "known_flake": "the same file failed CI run 46012479816 attempt 1 with the same failure shape (ASSERTION_FAILURE, 9 passed / 1 failed) and passed attempt 2; the attempt-1 exception text is not retrievable from the superseded artifact, so only the failure shape is verified here"
+ },
+ "not_claimed": [
+  "no comprehensive cost baseline",
+  "no selected-arm measurement",
+  "no speedup or 40 percent claim",
+  "no environment accepted as CI-matched"
+ ]
+}
