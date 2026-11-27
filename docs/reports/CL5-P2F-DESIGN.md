@@ -98,7 +98,7 @@ racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-<i>.json <th
 ```
 
 The workflow verifies the SHA-256 of `CL5-P2F-WORKLOAD.json`
-(`86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0`) and derives the file list from
+(`86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0d`) and derives the file list from
 it; a changed workload under the same path check cannot silently pass.
 
 It uses the same runner and job count as production, but **not** the shard flags; per-file elapsed is

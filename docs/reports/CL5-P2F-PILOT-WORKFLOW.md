@@ -32,8 +32,8 @@ concurrency:
 jobs:
   pilot:
     runs-on: ubuntu-latest
-    # Eight files sum to 667 s of CI elapsed. Worst case (no overlap at all) six
-    # invocations are 4002 s = 67 min, plus setup; 120 min leaves room without
+    # Eight files sum to 670 s of CI elapsed. Worst case (no overlap at all) six
+    # invocations are 4020 s = 67 min, plus setup; 120 min leaves room without
     # turning a job timeout into a measurement sample.
     timeout-minutes: 120
     steps:
@@ -59,10 +59,10 @@ jobs:
           actual="$(git diff --name-only HEAD^ HEAD)"
           test "$actual" = "$allowed"
           mkdir -p cl5-p2f
-          printf 'dispatch_sha=%s\nworkflow_sha=%s\npinned_sha=%s\nworkload_sha256=86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0\n' \
+          printf 'dispatch_sha=%s\nworkflow_sha=%s\npinned_sha=%s\nworkload_sha256=86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0d\n' \
             "$DISPATCH_SHA" "$WORKFLOW_SHA" "$PINNED_SHA" > cl5-p2f/provenance.txt
 
-# This isolated job has no same-run prepared-environment producer, so the
+      # This isolated job has no same-run prepared-environment producer, so the
       # guarded restore would always be skipped. Opt out EXPLICITLY and record the
       # action's own outputs; never read Q_PREPARED_ENV_* env vars that the action
       # never exports.
@@ -77,7 +77,7 @@ jobs:
           SETUP_STATE: ${{ steps.setup.outputs.prepared-env-state }}
           SETUP_RESTORE_MS: ${{ steps.setup.outputs.prepared-env-restore-ms }}
           SETUP_FALLBACK_MS: ${{ steps.setup.outputs.prepared-env-fallback-ms }}
-          SETUP_DURATION_S: ${{ steps.setup.outputs.setup-duration-s }}
+          SETUP_DURATION_S: ${{ steps.setup.outputs.eager-setup-seconds }}
           CACHE_STATE: ${{ steps.setup.outputs.cache-state }}
         shell: bash
         run: |
@@ -105,7 +105,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0  docs/reports/CL5-P2F-WORKLOAD.json" | sha256sum -c -
+          echo "86d3a712f195bd7870dd59486f5fdcf4f4087c75c98ad3551335a529388e5c0d  docs/reports/CL5-P2F-WORKLOAD.json" | sha256sum -c -
           python3 - <<'PY' > cl5-p2f/files.txt
           import json
           d = json.load(open('docs/reports/CL5-P2F-WORKLOAD.json'))
