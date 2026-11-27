@@ -88,9 +88,7 @@
 ;; (`STRICT_TEST_RUNNER=1 racket …`), which is how every CI lane sets the
 ;; strict mode; those declarations must be covered too, not skipped.
 (define (invocation-mention? s)
-  (regexp-match?
-   #rx"(^|[;&|(]|\\$\\() *([A-Za-z_][A-Za-z0-9_]*=[^ ]+ +)*(racket|raco|[.]/qt) "
-   s))
+  (regexp-match? #rx"(^|[;&|(]|\\$\\() *([A-Za-z_][A-Za-z0-9_]*=[^ ]+ +)*(racket|raco|[.]/qt) " s))
 
 ;; Logical lines of a YAML script body: backslash-continuations joined
 ;; into one line, carrying the line number of the FIRST fragment so a
@@ -154,8 +152,7 @@
 ;; A token that ends the invocation and starts a different command,
 ;; redirect or substitution.
 (define (stop-token? t)
-  (or (member t '("|" "||" "&&" ";" "&" "--"))
-      (regexp-match? #rx"[<>]" t)))
+  (or (member t '("|" "||" "&&" ";" "&" "--")) (regexp-match? #rx"[<>]" t)))
 
 (define (option-flag? t)
   (and (string? t) (regexp-match? #rx"^--" t) (not (string=? t "--"))))
@@ -187,7 +184,8 @@
       ;; declaration (the compiled-root launcher's child argv is exactly that
       ;; shape, and the child is validated as its own declaration).
       (define argv
-        (let loop ([xs after] [acc '()])
+        (let loop ([xs after]
+                   [acc '()])
           (cond
             [(or (null? xs) (stop-token? (car xs))) (reverse acc)]
             [else (loop (cdr xs) (cons (car xs) acc))])))
@@ -308,7 +306,11 @@
   ;; require list: real require lists put one path per line, so anchoring on
   ;; `(require "` would see just the first module and miss the sibling that
   ;; actually declares the option table.
-  (for/list ([rel (in-list (regexp-match* #rx"\"([A-Za-z0-9_][A-Za-z0-9_./-]*\\.rktl?)\""
+  ;; `../` relatives are local too: `scripts/run-tests/runner.rkt` puts its CLI
+  ;; table in `../testing/runner-cli.rkt`, so excluding them made every direct
+  ;; runner invocation look like an unverifiable target even though the flag is
+  ;; declared in a module the file requires. Absolute paths stay excluded.
+  (for/list ([rel (in-list (regexp-match* #rx"\"([.A-Za-z0-9_][A-Za-z0-9_./-]*\\.rktl?)\""
                                           text
                                           #:match-select cadr))]
              #:unless (regexp-match? #rx"^/" rel))

@@ -155,3 +155,10 @@
   (check-equal? (apply + (hash-values status-counts)) (hash-ref matrix 'invocation-count))
   (check-equal? (hash-ref status-counts 'ok)
                 (for/sum ([row (in-list rows)] #:when (equal? (hash-ref row 'status) "ok")) 1)))
+
+(test-case "a locally required parent-relative CLI module contributes its flags"
+  ;; runner.rkt declares its option table in ../testing/runner-cli.rkt. Excluding
+  ;; `../` relatives made a direct, correct runner invocation look unverifiable.
+  (define runner (build-path repo-root "scripts" "run-tests" "runner.rkt"))
+  (check-true (not (not (member "--jobs" (script-flag-vocabulary runner)))))
+  (check-true (not (not (member "--json-out" (script-flag-vocabulary runner))))))
