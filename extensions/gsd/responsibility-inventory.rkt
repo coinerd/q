@@ -1145,13 +1145,13 @@
                '("racket/file" "racket/format"
                                "racket/list"
                                "racket/match"
-                               "racket/os"
                                "racket/path"
                                "racket/port"
                                "racket/string"
                                "planning-artifact-ownership"
                                "planning-paths"
-                               "../../util/json/checksum"))
+                               "../../util/json/checksum"
+                               "../../util/lockfile"))
    ;; W4 (GSD-SIMPLIFICATION-PLAN): the ONE authentic ownership-marker
    ;; predicate. A pure READ shell by contract: it opens no output port, renames
    ;; nothing and deletes nothing — every destructive consumer asks it first.
