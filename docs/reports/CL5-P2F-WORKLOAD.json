@@ -1,0 +1,49 @@
+{
+ "schema": "cl5-p2f-workload/1",
+ "created": "2026-11-27",
+ "purpose": "Frozen eight-file workload for the P2-F host-comparability pilot. No result is recorded here.",
+ "pinned_test_tree_sha": "e56b3f827bd6fbdb728babb0d2dd944da7f72c94",
+ "pilot_branch_only_files": [
+  ".github/workflows/cl5-p2f-pilot.yml",
+  "docs/reports/CL5-P2F-WORKLOAD.json"
+ ],
+ "ci_reference": {
+  "run_id": 45861840409,
+  "head_sha": "61af492cab67ada4221b877119e659ee338fb6ab",
+  "artifact_prefix": "test-results-fast-",
+  "note": "Per-file elapsed values are read from that run's per-shard artifacts. Every listed file passed there; none is censored."
+ },
+ "command": {
+  "argv": [
+   "racket",
+   "scripts/run-tests/runner.rkt",
+   "--jobs",
+   "4",
+   "--json-out",
+   "cl5-p2f/run-<i>.json",
+   "<the eight files below>"
+  ],
+  "warmups": 1,
+  "measured_runs": 5,
+  "jobs": 4,
+  "note": "Same runner and job count as the production fast gate; NOT the shard flags. Per-file elapsed is the comparable quantity, not total CI wall."
+ },
+ "files": [
+  {"path": "tests/test-gsd-evidence-repair-production-contract.rkt", "ci_elapsed_ms": 131906, "ci_status": "pass"},
+  {"path": "tests/test-full-regression-invocation.rkt", "ci_elapsed_ms": 120390, "ci_status": "pass"},
+  {"path": "tests/test-gsd-delivery-merge.rkt", "ci_elapsed_ms": 88002, "ci_status": "pass"},
+  {"path": "tests/test-gsd-auto-review-loop-contract.rkt", "ci_elapsed_ms": 85687, "ci_status": "pass"},
+  {"path": "tests/test-gsd-supplemental-disposition-store.rkt", "ci_elapsed_ms": 79339, "ci_status": "pass"},
+  {"path": "tests/test-gsd-delivery-read-ladder.rkt", "ci_elapsed_ms": 76426, "ci_status": "pass"},
+  {"path": "tests/test-milestone-gate.rkt", "ci_elapsed_ms": 55927, "ci_status": "pass"},
+  {"path": "tests/test-gsd-go-orchestrator.rkt", "ci_elapsed_ms": 32234, "ci_status": "pass"}
+ ],
+ "acceptance": {
+  "host": "ubuntu 24.04, x86_64, racket 8.10, jobs 4, all recorded fields present",
+  "integrity": "warm-up + five measured artifacts; exactly eight paths per run; every status pass; zero timeouts/failures/missing",
+  "stability": "(max total wall - min total wall) / median total wall <= 0.15 over the five measured runs",
+  "comparability": "for each file, median(pilot)/ci_elapsed in [0.5,2.0]; pooled median ratio in [0.67,1.5]",
+  "isolation": "one runner per invocation; no nested runner, no shard flags, no main-branch CI change",
+  "provenance": "cache state, preparation overhead, load and exact argv per run; warm-up excluded from statistics"
+ }
+}
