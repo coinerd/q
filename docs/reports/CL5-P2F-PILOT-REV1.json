@@ -1,0 +1,409 @@
+{
+  "schema": "cl5-p2f-pilot-rev1/1",
+  "created": "2026-11-28",
+  "verdict": "NO-GO",
+  "budget_id": "CL5-P2F-REV1",
+  "dispatch": {
+    "run_id": 46078773729,
+    "url": "https://github.com/coinerd/q/actions/runs/46078773729",
+    "attempt": 1,
+    "source_sha": "e117e145c57ce224169d0af4fbfca64a2ca11fd2",
+    "workflow_sha": "e117e145c57ce224169d0af4fbfca64a2ca11fd2",
+    "pinned_test_tree_sha": "dd5c9995fc13bbc1253995768b2d78c4531e0a60",
+    "workload_sha256": "50fbb772db8c4d6ba9a1f6b6b79a7cf7ed72352acae8ab59deaf214767260a5e",
+    "artifact_name": "cl5-p2f-pilot-rev1",
+    "artifact_id": 15236718857,
+    "artifact_zip_sha256": "7ba7416d4f154b22b26605c85ab2b32880ccd58df496e101fc0a002953638904"
+  },
+  "ci_reference": {
+    "run_id": 46067550544,
+    "head_sha": "dd5c9995fc13bbc1253995768b2d78c4531e0a60",
+    "artifact_prefix": "test-results-fast-",
+    "note": "Per-file elapsed values are read from this production run at the pinned tree. Every listed file passed there; none is censored. Its observed CPU was AMD EPYC 7763; the three fast shard artifacts do not record CPU identity."
+  },
+  "observed_host": {
+    "os_id": "ubuntu",
+    "os_version_id": "26.04",
+    "os_pretty_name": "Ubuntu 26.04.1 LTS",
+    "image_os": "ubuntu26",
+    "image_version": "20261122.9.1",
+    "architecture": "x86_64",
+    "runner_arch": "X64",
+    "cpu_model": "AMD EPYC 7763 64-Core Processor",
+    "cpu_count": 4,
+    "memory_kb": 16366632,
+    "cpu_max": "unavailable",
+    "kernel_release": "7.0.0-1020-azure",
+    "runner_name": "GitHub Actions 1000085746",
+    "racket_version": "Welcome to Racket v8.10 [cs].",
+    "racket_exe_sha256": "7674f17865fa795b21641828d839e689e01a2f17bbdd2b7d71cc59cceafa873c",
+    "prepared_env_state": "unavailable",
+    "racket_addon_cache_state": "warm",
+    "setup_duration_s": 318,
+    "prepared_fallback_ms": "318000",
+    "load_before": "3.68 2.49 1.13 1/274 3243",
+    "load_after": "5.61 6.83 5.54 1/272 46023"
+  },
+  "runs": [
+    {
+      "index": 0,
+      "role": "warm-up",
+      "wall_ms": 199560,
+      "rc": 0,
+      "json_elapsed_ms": 199084,
+      "summary": {
+        "files_failed": 0,
+        "files_passed": 8,
+        "files_skipped_by_profile": 0,
+        "files_timeout": 0,
+        "files_total": 8,
+        "tests_failed": 0,
+        "tests_passed": 245,
+        "tests_total": 245
+      },
+      "file_count": 8,
+      "file_paths_match_workload": true
+    },
+    {
+      "index": 1,
+      "role": "measured",
+      "wall_ms": 200605,
+      "rc": 0,
+      "json_elapsed_ms": 200146,
+      "summary": {
+        "files_failed": 0,
+        "files_passed": 8,
+        "files_skipped_by_profile": 0,
+        "files_timeout": 0,
+        "files_total": 8,
+        "tests_failed": 0,
+        "tests_passed": 245,
+        "tests_total": 245
+      },
+      "file_count": 8,
+      "file_paths_match_workload": true
+    },
+    {
+      "index": 2,
+      "role": "measured",
+      "wall_ms": 200743,
+      "rc": 0,
+      "json_elapsed_ms": 200287,
+      "summary": {
+        "files_failed": 0,
+        "files_passed": 8,
+        "files_skipped_by_profile": 0,
+        "files_timeout": 0,
+        "files_total": 8,
+        "tests_failed": 0,
+        "tests_passed": 245,
+        "tests_total": 245
+      },
+      "file_count": 8,
+      "file_paths_match_workload": true
+    },
+    {
+      "index": 3,
+      "role": "measured",
+      "wall_ms": 201552,
+      "rc": 0,
+      "json_elapsed_ms": 201095,
+      "summary": {
+        "files_failed": 0,
+        "files_passed": 8,
+        "files_skipped_by_profile": 0,
+        "files_timeout": 0,
+        "files_total": 8,
+        "tests_failed": 0,
+        "tests_passed": 245,
+        "tests_total": 245
+      },
+      "file_count": 8,
+      "file_paths_match_workload": true
+    },
+    {
+      "index": 4,
+      "role": "measured",
+      "wall_ms": 200694,
+      "rc": 0,
+      "json_elapsed_ms": 200233,
+      "summary": {
+        "files_failed": 0,
+        "files_passed": 8,
+        "files_skipped_by_profile": 0,
+        "files_timeout": 0,
+        "files_total": 8,
+        "tests_failed": 0,
+        "tests_passed": 245,
+        "tests_total": 245
+      },
+      "file_count": 8,
+      "file_paths_match_workload": true
+    },
+    {
+      "index": 5,
+      "role": "measured",
+      "wall_ms": 200993,
+      "rc": 0,
+      "json_elapsed_ms": 200535,
+      "summary": {
+        "files_failed": 0,
+        "files_passed": 8,
+        "files_skipped_by_profile": 0,
+        "files_timeout": 0,
+        "files_total": 8,
+        "tests_failed": 0,
+        "tests_passed": 245,
+        "tests_total": 245
+      },
+      "file_count": 8,
+      "file_paths_match_workload": true
+    }
+  ],
+  "file_statistics": [
+    {
+      "path": "tests/test-gsd-evidence-repair-production-contract.rkt",
+      "ci_reference_ms": 154171,
+      "samples_ms": [
+        162939,
+        160976,
+        161169,
+        159423,
+        160557
+      ],
+      "min_ms": 159423,
+      "median_ms": 160976,
+      "max_ms": 162939,
+      "ratio_median_over_ci": 1.044139,
+      "within_band": true
+    },
+    {
+      "path": "tests/test-full-regression-invocation.rkt",
+      "ci_reference_ms": 145685,
+      "samples_ms": [
+        156918,
+        157636,
+        160374,
+        158969,
+        157724
+      ],
+      "min_ms": 156918,
+      "median_ms": 157724,
+      "max_ms": 160374,
+      "ratio_median_over_ci": 1.082637,
+      "within_band": true
+    },
+    {
+      "path": "tests/test-gsd-delivery-merge.rkt",
+      "ci_reference_ms": 58211,
+      "samples_ms": [
+        81459,
+        84187,
+        79169,
+        80885,
+        79626
+      ],
+      "min_ms": 79169,
+      "median_ms": 80885,
+      "max_ms": 84187,
+      "ratio_median_over_ci": 1.389514,
+      "within_band": true
+    },
+    {
+      "path": "tests/test-gsd-auto-review-loop-contract.rkt",
+      "ci_reference_ms": 61957,
+      "samples_ms": [
+        84733,
+        84904,
+        84388,
+        85581,
+        85972
+      ],
+      "min_ms": 84388,
+      "median_ms": 84904,
+      "max_ms": 85972,
+      "ratio_median_over_ci": 1.37037,
+      "within_band": true
+    },
+    {
+      "path": "tests/test-gsd-supplemental-disposition-store.rkt",
+      "ci_reference_ms": 41702,
+      "samples_ms": [
+        87395,
+        88144,
+        87926,
+        87936,
+        87149
+      ],
+      "min_ms": 87149,
+      "median_ms": 87926,
+      "max_ms": 88144,
+      "ratio_median_over_ci": 2.108436,
+      "within_band": false
+    },
+    {
+      "path": "tests/test-gsd-delivery-read-ladder.rkt",
+      "ci_reference_ms": 95973,
+      "samples_ms": [
+        94116,
+        96387,
+        94478,
+        95329,
+        94983
+      ],
+      "min_ms": 94116,
+      "median_ms": 94983,
+      "max_ms": 96387,
+      "ratio_median_over_ci": 0.989685,
+      "within_band": true
+    },
+    {
+      "path": "tests/test-milestone-gate.rkt",
+      "ci_reference_ms": 69708,
+      "samples_ms": [
+        40844,
+        40295,
+        38354,
+        38896,
+        40416
+      ],
+      "min_ms": 38354,
+      "median_ms": 40295,
+      "max_ms": 40844,
+      "ratio_median_over_ci": 0.578054,
+      "within_band": true
+    },
+    {
+      "path": "tests/test-gsd-go-orchestrator.rkt",
+      "ci_reference_ms": 30013,
+      "samples_ms": [
+        21274,
+        22506,
+        21252,
+        23088,
+        21805
+      ],
+      "min_ms": 21252,
+      "median_ms": 21805,
+      "max_ms": 23088,
+      "ratio_median_over_ci": 0.726519,
+      "within_band": true
+    }
+  ],
+  "criteria": {
+    "A1_host_identity": {
+      "status": "PASS",
+      "checks": {
+        "os_id": true,
+        "os_version_id": true,
+        "os_pretty_name": true,
+        "image_os": true,
+        "image_version": true,
+        "architecture": true,
+        "runner_arch": true,
+        "cpu_class": true,
+        "cores": true,
+        "memory_band": true,
+        "racket_version": true,
+        "racket_exe_sha256": true
+      }
+    },
+    "A2_integrity": {
+      "status": "PASS",
+      "warmups": 1,
+      "measured": 5,
+      "all_rc_zero": true,
+      "all_eight_pass": true
+    },
+    "A3_stability": {
+      "status": "PASS",
+      "measured_wall_ms": [
+        200605,
+        200743,
+        201552,
+        200694,
+        200993
+      ],
+      "median_ms": 200743,
+      "spread": 0.004717,
+      "limit": 0.15
+    },
+    "A4_comparability": {
+      "status": "FAIL",
+      "per_file": {
+        "tests/test-gsd-evidence-repair-production-contract.rkt": 1.044139,
+        "tests/test-full-regression-invocation.rkt": 1.082637,
+        "tests/test-gsd-delivery-merge.rkt": 1.389514,
+        "tests/test-gsd-auto-review-loop-contract.rkt": 1.37037,
+        "tests/test-gsd-supplemental-disposition-store.rkt": 2.108436,
+        "tests/test-gsd-delivery-read-ladder.rkt": 0.989685,
+        "tests/test-milestone-gate.rkt": 0.578054,
+        "tests/test-gsd-go-orchestrator.rkt": 0.726519
+      },
+      "pooled_median_ratio": 1.063388,
+      "outside_band": [
+        "tests/test-gsd-supplemental-disposition-store.rkt"
+      ]
+    },
+    "A5_isolation": {
+      "status": "PASS",
+      "pilot_jobs": 1,
+      "runner_invocations_per_run": 1,
+      "no_nested_runner": true,
+      "dispatch_only_workflow": true,
+      "tree_pin_verified_in_workflow": true
+    },
+    "A6_provenance": {
+      "status": "PASS",
+      "files_present": [
+        "environment.txt",
+        "files.txt",
+        "provenance.txt",
+        "run-0.json",
+        "run-0.log",
+        "run-1.json",
+        "run-1.log",
+        "run-2.json",
+        "run-2.log",
+        "run-3.json",
+        "run-3.log",
+        "run-4.json",
+        "run-4.log",
+        "run-5.json",
+        "run-5.log",
+        "schedule.txt"
+      ]
+    },
+    "budget_compliance": {
+      "status": "PASS",
+      "attempt": 1,
+      "prior_failed_run_id": "",
+      "prior_failure_signature": "",
+      "no_repeat_used": true
+    }
+  },
+  "evidence_sha256": {
+    "environment.txt": "497e00edb7d84167c045d0f5076837ee84222243a5bbeab97efc75b637159f2d",
+    "files.txt": "7fffbce7691592eb171db47501aae541f1b2d8eb3eabf18aec13a073ce23bbd0",
+    "provenance.txt": "98f5bac1be4d7af2d3f72fcd1b5bd9ce4bd8e805375363394fa73505496f8480",
+    "run-0.json": "6597f2ac2bb1b0d4746107bc9e69a8ad9202fd08376ac4efff8b33e9897b7d53",
+    "run-0.log": "6d90d9676a1789a08f681e8dd7c548baa3af09369874e1460e1bdf28bc2a7bdb",
+    "run-1.json": "e7b833378d82a70f4a2b77123c3e09fefed495050e60fc856d20947888720d24",
+    "run-1.log": "878936a8e926b9837dc3743cb88454eec78a690424487613b855bef6b4d8d9ca",
+    "run-2.json": "43551fec0f1d2611d648a64640ad3bf6124624320e081883ab4147c32eb52d8e",
+    "run-2.log": "54cc8461d97c26e2c7cfeb0f47f43461db6318cff7f1b2cabb79f99207a6eced",
+    "run-3.json": "fd01a594f4baf27fdba66ab1c3fcb1e50aafe664faf0a524f4dae6633d7e74c9",
+    "run-3.log": "038843c6d751fdaa1df81fb2bd5cb082afe64bc4df96c7cf0348b0e7fb67eaf2",
+    "run-4.json": "bccc9519341477434931ce7ef46d45fabf835b4c3121fa800d370166e9d36960",
+    "run-4.log": "6980b2fafcf3acb703a6f2531e67132d48c1e2fcc396a6e5eefae384936f1275",
+    "run-5.json": "cf94709c937aca88989e69003b4e957b6806da4c8b4743c8ae19f5b7762612b7",
+    "run-5.log": "4c9c8463c0e488df5050d86c2f9278edb71f9396769e14154a3cc5bf8619a2e9",
+    "schedule.txt": "bb654c5a8d8c4a3dd4fa0350360d636fa11d29feababd18be14cae66cc0416e2"
+  },
+  "notes": [
+    "Observed CPU is AMD EPYC 7763, matching reference run 46067550544, not the earlier 9V45 production observation; the pre-registered AMD EPYC class gate accepts it and the exact model is recorded.",
+    "The residual malformed-binding-datum failure did not appear; all six invocations passed all 245 tests with zero failures and zero timeouts.",
+    "A4 fails on tests/test-gsd-supplemental-disposition-store.rkt (2.108436 > 2.0). This is a host-comparability finding about the reference, not a pilot infrastructure failure; no retry or threshold change is authorized.",
+    "This is a feasibility NO-GO. No baseline, selected arm, speedup or 40% claim is established."
+  ]
+}

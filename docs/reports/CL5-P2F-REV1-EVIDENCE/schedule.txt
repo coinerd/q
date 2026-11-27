@@ -1,0 +1,19 @@
+load_before_run_0=3.68 2.49 1.13 2/275 3272
+argv_run_0=racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-0.json tests/test-gsd-evidence-repair-production-contract.rkt tests/test-full-regression-invocation.rkt tests/test-gsd-delivery-merge.rkt tests/test-gsd-auto-review-loop-contract.rkt tests/test-gsd-supplemental-disposition-store.rkt tests/test-gsd-delivery-read-ladder.rkt tests/test-milestone-gate.rkt tests/test-gsd-go-orchestrator.rkt
+run=0 wall_ms=199560 rc=0
+load_before_run_1=6.01 4.98 2.44 1/275 10408
+argv_run_1=racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-1.json tests/test-gsd-evidence-repair-production-contract.rkt tests/test-full-regression-invocation.rkt tests/test-gsd-delivery-merge.rkt tests/test-gsd-auto-review-loop-contract.rkt tests/test-gsd-supplemental-disposition-store.rkt tests/test-gsd-delivery-read-ladder.rkt tests/test-milestone-gate.rkt tests/test-gsd-go-orchestrator.rkt
+run=1 wall_ms=200605 rc=0
+load_before_run_2=5.44 5.80 3.31 1/272 17524
+argv_run_2=racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-2.json tests/test-gsd-evidence-repair-production-contract.rkt tests/test-full-regression-invocation.rkt tests/test-gsd-delivery-merge.rkt tests/test-gsd-auto-review-loop-contract.rkt tests/test-gsd-supplemental-disposition-store.rkt tests/test-gsd-delivery-read-ladder.rkt tests/test-milestone-gate.rkt tests/test-gsd-go-orchestrator.rkt
+run=2 wall_ms=200743 rc=0
+load_before_run_3=5.58 6.38 4.08 1/273 24635
+argv_run_3=racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-3.json tests/test-gsd-evidence-repair-production-contract.rkt tests/test-full-regression-invocation.rkt tests/test-gsd-delivery-merge.rkt tests/test-gsd-auto-review-loop-contract.rkt tests/test-gsd-supplemental-disposition-store.rkt tests/test-gsd-delivery-read-ladder.rkt tests/test-milestone-gate.rkt tests/test-gsd-go-orchestrator.rkt
+run=3 wall_ms=201552 rc=0
+load_before_run_4=5.47 6.69 4.71 1/272 31746
+argv_run_4=racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-4.json tests/test-gsd-evidence-repair-production-contract.rkt tests/test-full-regression-invocation.rkt tests/test-gsd-delivery-merge.rkt tests/test-gsd-auto-review-loop-contract.rkt tests/test-gsd-supplemental-disposition-store.rkt tests/test-gsd-delivery-read-ladder.rkt tests/test-milestone-gate.rkt tests/test-gsd-go-orchestrator.rkt
+run=4 wall_ms=200694 rc=0
+load_before_run_5=5.46 6.61 5.11 1/272 38914
+argv_run_5=racket scripts/run-tests/runner.rkt --jobs 4 --json-out cl5-p2f/run-5.json tests/test-gsd-evidence-repair-production-contract.rkt tests/test-full-regression-invocation.rkt tests/test-gsd-delivery-merge.rkt tests/test-gsd-auto-review-loop-contract.rkt tests/test-gsd-supplemental-disposition-store.rkt tests/test-gsd-delivery-read-ladder.rkt tests/test-milestone-gate.rkt tests/test-gsd-go-orchestrator.rkt
+run=5 wall_ms=200993 rc=0
+load_after=5.61 6.83 5.54 1/272 46023

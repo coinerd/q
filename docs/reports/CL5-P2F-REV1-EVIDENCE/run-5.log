@@ -1,0 +1,15 @@
+;; run-tests: suite=all files=8 jobs=4 sequential=#f repeat=1 mode=subprocess profile=local
+
+;; run-tests: preparation ok — targets=8 closure=486 excluded=0 identity=0508b4263fd9 (2307 ms)
+........
+═══════════════════════════════════════════════════════════
+                    TEST SUMMARY
+═══════════════════════════════════════════════════════════
+  Files:     8 total, 8 passed, 0 failed, 0 timeouts
+  Tests:     245 total, 245 passed, 0 failed
+  Category:  PASS=8
+  Elapsed:   3m 20.535s
+═══════════════════════════════════════════════════════════
+  VERDICT:   ✅ PASS
+═══════════════════════════════════════════════════════════
+RUN-SUMMARY runner-version=1.00.32 suite=all profile=local shard=none execution-mode=subprocess file-count=8 pass=8 fail=0 timeout=0 skip=0 wall-clock-seconds=200.535 metadata-completeness=explicit:8/heuristic:0/missing:0
