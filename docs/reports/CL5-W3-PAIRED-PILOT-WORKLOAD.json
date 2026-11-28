@@ -1,0 +1,70 @@
+{
+ "schema": "cl5-w3-paired-pilot/1",
+ "created": "2026-11-28",
+ "purpose": "Reduced-surface same-runner paired measurement feasibility pilot. Methodological pilot only; not production-equivalent CI and not a W3.2 campaign.",
+ "pinned_test_tree_sha": "ecb92a5e846a48ee710d9e5b9bed9ca0b0631d5b",
+ "case": {
+  "id": "D5",
+  "changed_files": ["extensions/gsd/wave-status.rkt"],
+  "selection_layer": "scripts/cl5/contract-escalation.rkt at the pinned revision",
+  "decision_sha256": "9fbdaef393654416434d1c85127e1f9a4ff54e848e189785da5f0df022862c94",
+  "expected_verdict": "escalate",
+  "expected_escalations": ["no-consumer-detector"],
+  "full_required_count": 23,
+  "note": "A real contract decision on the pinned tree. Full selected arm would be required union comprehensive; this pilot projects both arms onto the frozen reduced surface below."
+ },
+ "comprehensive_reduced_files": [
+  "tests/test-gsd-evidence-repair-production-contract.rkt",
+  "tests/test-full-regression-invocation.rkt",
+  "tests/test-gsd-delivery-merge.rkt",
+  "tests/test-gsd-auto-review-loop-contract.rkt",
+  "tests/test-gsd-supplemental-disposition-store.rkt",
+  "tests/test-gsd-delivery-read-ladder.rkt",
+  "tests/test-milestone-gate.rkt",
+  "tests/test-gsd-go-orchestrator.rkt"
+ ],
+ "selected_projected_files": [
+  "tests/test-gsd-auto-review-loop-contract.rkt",
+  "tests/test-gsd-go-orchestrator.rkt"
+ ],
+ "command": {
+  "runner": "racket scripts/run-tests/runner.rkt",
+  "jobs": 4,
+  "json_out": "cl5-w3-paired/run-<arm>-<i>.json",
+  "selection_script": "racket scripts/cl5/paired-pilot-selection.rkt --workload docs/reports/CL5-W3-PAIRED-PILOT-WORKLOAD.json --out cl5-w3-paired/selection-<i>.json"
+ },
+ "schedule": {
+  "warmups_per_arm": 1,
+  "measured_pairs": 3,
+  "order": ["selected-comprehensive", "comprehensive-selected", "selected-comprehensive"],
+  "selection_overhead_added_to_selected_arm": true
+ },
+ "controls": {
+  "cache": "warm package cache, explicitly recorded",
+  "prepared_environment": "off, explicitly recorded",
+  "concurrency": "--jobs 4 for both arms",
+  "host_validation": "before any runner invocation; fail closed",
+  "alternating_order": true,
+  "no_repeat": true
+ },
+ "criteria": {
+  "host": "measured production class: Ubuntu 26.04.1, image ubuntu26:20261122.9.1, x86_64/X64, AMD EPYC, 4 cores, memory in [15500000,17500000] kB, Racket 8.10 SHA-256 7674f17865fa795b21641828d839e689e01a2f17bbdd2b7d71cc59cceafa873c",
+  "integrity": "every invocation rc=0; selected arm exactly the two projected files; comprehensive arm exactly the eight frozen files; all statuses pass; zero timeouts/failures/missing",
+  "pairing": "one warm-up per arm plus three measured pairs in the frozen alternating order; all individual walls, selection overheads, test counts and statuses recorded",
+  "isolation": "one runner process per invocation, no shards, no nested runner, dispatch-only workflow",
+  "provenance": "host identity, cache state, preparation, exact argv, per-run wall, load and selection decision digest recorded",
+  "analysis": "report S = 1 - (selected wall + selection overhead) / comprehensive wall for every pair; no threshold or GO from S; incomplete or degraded observations remain unavailable"
+ },
+ "allowed_tree_diff_paths": [
+  ".github/workflows/cl5-w3-paired-pilot.yml",
+  "README.md",
+  "artifacts/tier-ownership/v1.00.32-w0/ownership-matrix.json",
+  "docs/architecture/subsystem-manifest.rktd",
+  "docs/reports/CL5-W3-PAIRED-PILOT-DESIGN.md",
+  "docs/reports/CL5-W3-PAIRED-PILOT-WORKFLOW.md",
+  "docs/reports/CL5-W3-PAIRED-PILOT-WORKLOAD.json",
+  "scripts/cl5/paired-pilot-selection.rkt",
+  "tests/.coverage-manifest.json",
+  "tests/test-cl5-w3-paired-pilot.rkt"
+ ]
+}
