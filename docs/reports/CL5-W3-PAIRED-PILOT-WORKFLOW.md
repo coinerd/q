@@ -155,7 +155,7 @@ jobs:
           set -euo pipefail
           : > cl5-w3-paired/schedule.txt
           run_arm() {
-            local arm="$1" label="$2" out="$3"
+            local arm="$1" label="$2"
             local overhead=0 start end rc
             if [ "$arm" = selected ]; then
               start=$(date +%s%3N)

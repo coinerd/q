@@ -3,8 +3,11 @@
 (require json
          rackunit
          racket/file
+         racket/list
+         racket/port
          racket/runtime-path
          racket/string
+         racket/system
          "../scripts/cl5/contract-escalation.rkt"
          "../scripts/cl5/paired-pilot-selection.rkt")
 
@@ -75,3 +78,158 @@
                                             "comprehensive pair3"))])
     (check-true (string-contains? workflow needle) needle))
   (check-false (regexp-match? #px"(?i:retry)" workflow)))
+
+(test-case "local preflight executes the deployed shell function with lightweight stubs"
+  (define lines (string-split workflow "\n"))
+  (define start-index
+    (for/first ([line (in-list lines)]
+                [i (in-naturals)]
+                #:when (regexp-match? #px"^          run_arm\\(\\) \\{" line))
+      i))
+  (define end-index
+    (for/first ([line (in-list lines)]
+                [i (in-naturals)]
+                #:when (and start-index (> i start-index) (string=? line "          }")))
+      i))
+  (check-not-false start-index "deployed run_arm definition")
+  (check-not-false end-index "deployed run_arm closing brace")
+  (define shell-function
+    (string-join (for/list ([i (in-range start-index (add1 end-index))])
+                   (list-ref lines i))
+                 "\n"))
+  (define calls
+    (for/list ([line (in-list (drop lines (add1 end-index)))]
+               #:when (regexp-match? #px"^          run_arm [a-z]+ [a-z0-9]+$" line))
+      (string-trim line)))
+  (define expected-calls
+    '("run_arm selected warm0" "run_arm comprehensive warm0"
+                               "run_arm selected pair1"
+                               "run_arm comprehensive pair1"
+                               "run_arm comprehensive pair2"
+                               "run_arm selected pair2"
+                               "run_arm selected pair3"
+                               "run_arm comprehensive pair3"))
+  (check-equal? calls expected-calls)
+  (define expected-invocations
+    '("selected-warm0" "comprehensive-warm0"
+                       "selected-pair1"
+                       "comprehensive-pair1"
+                       "comprehensive-pair2"
+                       "selected-pair2"
+                       "selected-pair3"
+                       "comprehensive-pair3"))
+  (define stub-racket
+    (string-join (list "#!/usr/bin/env bash"
+                       "set -euo pipefail"
+                       "case \"${1:-}\" in"
+                       "  */paired-pilot-selection.rkt)"
+                       "    while [ \"$#\" -gt 0 ]; do"
+                       "      case \"$1\" in"
+                       "        --out) printf '{}\\n' > \"$2\"; shift 2;;"
+                       "        *) shift;;"
+                       "      esac"
+                       "    done"
+                       "    ;;"
+                       "  */runner.rkt)"
+                       "    while [ \"$#\" -gt 0 ]; do"
+                       "      case \"$1\" in"
+                       "        --json-out) printf '{}\\n' > \"$2\"; shift 2;;"
+                       "        *) shift;;"
+                       "      esac"
+                       "    done"
+                       "    ;;"
+                       "  *) printf 'unexpected racket invocation: %s\\n' \"$*\" >&2; exit 2;;"
+                       "esac")
+                 "\n"))
+  (define stub-date (string-join '("#!/usr/bin/env bash" "printf '1000\\n'") "\n"))
+  (define stub-cat
+    (string-join '("#!/usr/bin/env bash" "printf '0.00 0.00 0.00 1/100 12345\\n'") "\n"))
+  (define bash-path (find-executable-path "bash"))
+  (check-not-false bash-path)
+  (define (write-stub! bin name content)
+    (define p (build-path bin name))
+    (call-with-output-file p #:exists 'replace (lambda (o) (display content o)))
+    (check-true (system (format "chmod +x ~a" (path->string p))) "stub chmod"))
+  (define (prepare-root! root)
+    (make-directory* (build-path root "cl5-w3-paired"))
+    (define bin (build-path root "bin"))
+    (make-directory* bin)
+    (write-stub! bin "racket" stub-racket)
+    (write-stub! bin "date" stub-date)
+    (write-stub! bin "cat" stub-cat))
+  (define (run-shell! root script)
+    (define env (environment-variables-copy (current-environment-variables)))
+    (environment-variables-set!
+     env
+     #"PATH"
+     (string->bytes/utf-8
+      (string-append (path->string (build-path root "bin")) ":" (or (getenv "PATH") ""))))
+    (define-values (proc out in err)
+      (parameterize ([current-environment-variables env])
+        (subprocess #f #f #f bash-path "-c" script)))
+    (close-output-port in)
+    (define stdout (port->string out))
+    (define stderr (port->string err))
+    (subprocess-wait proc)
+    (values (subprocess-status proc) stdout stderr))
+  (define root (make-temporary-directory "cl5-paired-preflight-~a"))
+  (dynamic-wind
+   void
+   (lambda ()
+     (prepare-root! root)
+     (define script
+       (string-join
+        (list
+         "set -euo pipefail"
+         (format "cd ~a" (path->string root))
+         "for arm in selected comprehensive; do printf 'tests/fake-%s.rkt\\n' \"$arm\" > cl5-w3-paired/files-$arm.txt; done"
+         shell-function
+         (string-join calls "\n")
+         "printf 'load_after=%s\\n' \"$(cat /proc/loadavg)\" >> cl5-w3-paired/schedule.txt")
+        "\n"))
+     (define-values (rc _stdout stderr) (run-shell! root script))
+     (check-equal? rc 0 (format "preflight failed: ~a" stderr))
+     (define schedule-path (build-path root "cl5-w3-paired" "schedule.txt"))
+     (check-true (file-exists? schedule-path))
+     (define schedule-lines (string-split (file->string schedule-path) "\n"))
+     (define invocations (filter (lambda (l) (string-prefix? l "invocation=")) schedule-lines))
+     (define results (filter (lambda (l) (string-prefix? l "result=")) schedule-lines))
+     (check-equal? (length invocations) 8)
+     (check-equal? (length results) 8)
+     (check-equal? (for/list ([line (in-list invocations)])
+                     (cadr (regexp-match #px"^invocation=([^ ]+)" line)))
+                   expected-invocations)
+     (check-true (andmap (lambda (l) (string-contains? l "rc=0")) results))
+     (check-equal? (length (filter (lambda (l) (string-prefix? l "load_before=")) schedule-lines)) 8)
+     (check-equal? (length (filter (lambda (l) (string-prefix? l "load_after=")) schedule-lines)) 1)
+     (define artifacts (directory-list (build-path root "cl5-w3-paired")))
+     (check-equal? (length (filter (lambda (p)
+                                     (regexp-match? #px"^selection-.*\\.json$" (path->string p)))
+                                   artifacts))
+                   4)
+     (check-equal? (length (filter (lambda (p) (regexp-match? #px"^run-.*\\.json$" (path->string p)))
+                                   artifacts))
+                   8))
+   (lambda () (delete-directory/files root)))
+  ;; Negative control: the historical third-parameter bug must fail under `set -u`.
+  (define broken-function
+    (string-replace shell-function
+                    "local arm=\"$1\" label=\"$2\""
+                    "local arm=\"$1\" label=\"$2\" out=\"$3\""))
+  (check-not-false (regexp-match? #px"out=\"\\$3\"" broken-function))
+  (define bad-root (make-temporary-directory "cl5-paired-preflight-bad-~a"))
+  (dynamic-wind
+   void
+   (lambda ()
+     (prepare-root! bad-root)
+     (define script
+       (string-join (list "set -euo pipefail"
+                          (format "cd ~a" (path->string bad-root))
+                          "printf 'tests/fake-selected.rkt\\n' > cl5-w3-paired/files-selected.txt"
+                          broken-function
+                          "run_arm selected warm0")
+                    "\n"))
+     (define-values (rc _stdout stderr) (run-shell! bad-root script))
+     (check-false (= rc 0) "broken shell preflight must fail")
+     (check-true (string-contains? stderr "unbound variable") stderr))
+   (lambda () (delete-directory/files bad-root))))
