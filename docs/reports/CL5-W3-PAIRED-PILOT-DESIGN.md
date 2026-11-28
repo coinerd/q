@@ -91,3 +91,27 @@ after results.
 Not authorized: P2-F retry or threshold change; P2-E baseline; W3.2 campaign; W3.3 mutation
 execution; production selector/CI/admission/scheduler change; timeout change; generic retry;
 production selection; any efficiency or 40 % claim.
+
+## 7. Revision 2 — workflow execution correction only
+
+Attempt 1 (run `46123138578`) is retained as **unavailable**: the job failed before the first runner
+invocation because `run_arm()` read an undeclared third shell parameter under `set -u`. No tests
+ran, no timings were collected, and none of M1–M5 was evaluated. It is not excluded from the record
+and is not a continuation point.
+
+The owner authorized one fresh dispatch after a workflow-execution-only correction. Revision 2
+changes only:
+
+- removal of the unused `out="$3"` binding from `run_arm()` in the deployed workflow and its
+  reviewed template;
+- a lightweight local preflight in `tests/test-cl5-w3-paired-pilot.rkt` that extracts the deployed
+  shell function, executes it under `set -euo pipefail` with stubbed `racket`/`date`/`cat`, verifies
+  every scheduled call and its output contract, and demonstrates that the historical `out="$3"`
+  form fails under `set -u`;
+- this amendment recording the new attempt identity and preserving the original registration.
+
+Revision 2 does **not** change the workload digest, pinned revision, case, decision script, host
+requirements, preparation, cache assumption, concurrency, warm-up count, alternating order,
+timing calculations, selection-overhead treatment, M1–M5 criteria, or the no-repeat rule. Attempt 2
+is a distinct dispatch with its own SHA and run identifier. Success remains feasibility evidence
+only; it is not a 40 % claim, a W3.2 campaign, or proof of general safety.
